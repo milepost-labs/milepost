@@ -221,3 +221,8 @@ changes.
 ## Licence
 
 Apache-2.0
+
+
+## One-command quickstart: build, deploy and seed
+
+Documentation reference and guidelines for #2.
