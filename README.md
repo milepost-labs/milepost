@@ -221,3 +221,5 @@ changes.
 ## Licence
 
 Apache-2.0
+
+- [Error Code Reference](docs/error-codes.md) — Comprehensive reference of all contract error variants, root causes, and remedies.
