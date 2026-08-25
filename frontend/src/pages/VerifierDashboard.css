@@ -66,6 +66,30 @@
   width: 100%;
 }
 
+.reviewer-console {
+  align-items: flex-start;
+}
+
+.vote-spread,
+.review-form {
+  display: flex;
+  gap: 0.75rem;
+  align-items: flex-end;
+  flex-wrap: wrap;
+}
+
+.vote-median {
+  border: 2px solid var(--color-success);
+}
+
+.median-result {
+  margin: 0;
+}
+
+.review-form {
+  margin-top: 0.5rem;
+}
+
 @media (max-width: 768px) {
   .queue-item {
     flex-direction: column;
