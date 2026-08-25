@@ -185,6 +185,11 @@ cargo build --target wasm32v1-none --release
 Build the wasm before running tests: `registry`'s tests instantiate a programme
 from its built artifact, the same way the registry does on-chain.
 
+### API docs
+
+Published automatically on every push to `main`:
+**[GitHub Pages](https://milepost-labs.github.io/milepost/)**
+
 ## Seeding a scenario
 
 ```sh
