@@ -1,0 +1,76 @@
+name: release
+
+# A pushed tag is the only release trigger. Nothing here bumps
+# `workspace.package.version` automatically — that stays a deliberate, reviewed
+# edit in the PR that precedes the tag, because a Soroban contract's version is
+# part of what a deployed wasm hash means to the teams depending on it.
+on:
+  push:
+    tags:
+      - "v*"
+
+permissions:
+  contents: write
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: wasm32v1-none
+          components: rustfmt, clippy
+      - uses: Swatinem/rust-cache@v2
+
+      # Same gate CI runs on every push. A tag is not exempt from being a good
+      # commit — if this fails, the tag gets deleted and re-pushed once fixed
+      # rather than shipping a release built from broken wasm.
+      - name: Format
+        run: cargo fmt --all --check
+      - name: Clippy
+        run: cargo clippy --all-targets --all-features -- -D warnings
+      - name: Test
+        run: cargo test --all-features
+
+      - name: Build wasm
+        run: cargo build --target wasm32v1-none --release
+
+      # The wasm hash is what a programme is instantiated from on-chain, so it
+      # is the part of a release other teams actually pin against — the
+      # checksums file, not the tag name, is the artifact of record.
+      - name: Checksum artifacts
+        run: |
+          cd target/wasm32v1-none/release
+          sha256sum *.wasm | tee checksums.txt
+          echo "| contract | sha256 |" >> "$GITHUB_STEP_SUMMARY"
+          echo "| --- | --- |" >> "$GITHUB_STEP_SUMMARY"
+          while read -r hash name; do
+            printf '| %s | `%s` |\n' "$name" "$hash" >> "$GITHUB_STEP_SUMMARY"
+          done < checksums.txt
+
+      # Tags containing a hyphen (v0.1.1-rc.1) publish as a pre-release. This
+      # is how the release process itself gets verified end to end before a
+      # real version number is spent on it.
+      - name: Determine prerelease
+        id: prerelease
+        run: |
+          if [[ "${{ github.ref_name }}" == *-* ]]; then
+            echo "value=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "value=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Create release
+        uses: softprops/action-gh-release@v2
+        with:
+          name: ${{ github.ref_name }}
+          prerelease: ${{ steps.prerelease.outputs.value }}
+          generate_release_notes: true
+          files: |
+            target/wasm32v1-none/release/*.wasm
+            target/wasm32v1-none/release/checksums.txt

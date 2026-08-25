@@ -1,0 +1,19 @@
+# Consumed by the "Create release" step in release.yml, which sets
+# generate_release_notes: true. GitHub groups merged PRs into these
+# categories by label when it builds the changelog for a tag.
+changelog:
+  categories:
+    - title: "⚠ Breaking Changes"
+      labels:
+        - breaking-change
+    - title: "Features"
+      labels:
+        - enhancement
+        - feature
+    - title: "Fixes"
+      labels:
+        - bug
+        - fix
+    - title: "Other Changes"
+      labels:
+        - "*"

@@ -10,6 +10,7 @@ Welcome, and thank you for your interest in contributing to Milepost! This guide
 5. [Documentation Standards](#5-documentation-standards)
 6. [Issue and PR Workflow](#6-issue-and-pr-workflow)
 7. [Error Code Stability Policy](#7-error-code-stability-policy)
+8. [Release Process](#8-release-process)
 
 ---
 
@@ -141,3 +142,29 @@ If you are modifying the Soroban smart contracts, error codes are part of the co
 3. **Always assign new variants the next available integer.** Do not insert variants mid-sequence; append them at the end of the enum.
 
 Why this matters: Stellar contract error codes propagate as `u32` values in the transaction result. If we reused a previously published discriminant, an indexer or bot that matches on that numeric value could silently misinterpret a new error as an old, unrelated one.
+
+---
+
+## 8. Release Process
+
+Releases are tag-triggered. Pushing a tag matching `v*` runs `.github/workflows/release.yml`, which re-runs the full CI gate (`fmt`, `clippy`, `test`), builds the wasm for every contract, and publishes a GitHub Release containing:
+
+* the `.wasm` file for each contract,
+* a `checksums.txt` with the sha256 of each, and
+* changelog notes generated from merged PRs since the previous tag.
+
+**The wasm hash, not the tag, is what other teams should pin against.** A programme is instantiated on-chain from an uploaded wasm hash, so `checksums.txt` is the part of a release that matters for interop — verify a contract you depend on by its hash, not by trusting the tag name.
+
+**Versioning**
+Bumping `workspace.package.version` in the root `Cargo.toml` is a manual, reviewed part of the PR that precedes a release tag — it is not automated. Use semver:
+* patch/minor for internal changes that do not affect any deployed contract's interface,
+* a major bump for anything that changes a contract's interface, storage layout, or upgrade behavior, since a deployed contract cannot be patched and stale client bindings fail at runtime.
+
+**Marking interface-breaking changes**
+If your PR changes a contract's interface, storage layout, or upgrade path, label the PR `breaking-change`. The release workflow files merged PRs with that label under a dedicated "⚠ Breaking Changes" heading in the generated changelog (see `.github/release.yml`), separate from ordinary fixes and features.
+
+**Verifying a release**
+Before cutting a real version, verify the pipeline with a pre-release tag, e.g. `v0.1.1-rc.1`. Any tag containing a hyphen publishes as a GitHub pre-release rather than a full release, so it can be inspected and deleted without affecting the "latest" release teams may be watching.
+
+**crates.io**
+The contracts are not published to crates.io. Consumers depend on a deployed instance's wasm hash, not on the Rust crate — Cargo semver-checks a library API, but a Soroban contract's real interface is its ABI on-chain, which crates.io has no way to represent. If that changes (e.g. a shared client crate emerges), raise it as a new issue rather than folding it into this workflow.
