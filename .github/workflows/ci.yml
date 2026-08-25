@@ -32,6 +32,15 @@ jobs:
       - name: Build wasm
         run: cargo build --target wasm32v1-none --release
 
+      # Bindings in packages/ are generated from this wasm and checked in. If a
+      # contract interface changes and nobody regenerates them, the frontend
+      # only finds out after a transaction is already submitted. Fail here
+      # instead. `networks.testnet` on the four singletons is ignored so a
+      # wasm-only regeneration cannot fail for the missing address.
+      - uses: stellar/stellar-cli@v23.1.4
+      - name: Check TypeScript bindings
+        run: ./scripts/check-bindings.sh
+
       - name: Clippy
         run: cargo clippy --all-targets --all-features -- -D warnings
 
