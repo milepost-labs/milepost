@@ -139,6 +139,16 @@ a:hover {
   min-height: calc(100vh - 80px);
 }
 
+@media (max-width: 640px) {
+  .container {
+    padding: 0 1rem;
+  }
+
+  .page-wrapper {
+    padding: 2rem 0;
+  }
+}
+
 /* Micro-animations */
 @keyframes fadeUp {
   from { opacity: 0; transform: translateY(15px); }
