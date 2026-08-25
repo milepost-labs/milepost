@@ -200,6 +200,10 @@ awards, and a real attestation under a restricted schema.
 
 Accounts and ids land in `deployments/<network>.seed.json`.
 
+## Error Reference
+
+For a full list of error codes, causes, and recommended actions across all five contracts, see [docs/error-code-reference.md](docs/error-code-reference.md).
+
 ## TypeScript bindings
 
 `packages/` holds generated clients, checked in so a frontend can build without
