@@ -812,6 +812,14 @@
                         }
                       ]
                     }
+                  },
+                  {
+                    "key": {
+                      "symbol": "withdrawn"
+                    },
+                    "val": {
+                      "bool": false
+                    }
                   }
                 ]
               }

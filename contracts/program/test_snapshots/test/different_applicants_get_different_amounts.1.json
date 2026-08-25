@@ -775,6 +775,14 @@
                         }
                       ]
                     }
+                  },
+                  {
+                    "key": {
+                      "symbol": "withdrawn"
+                    },
+                    "val": {
+                      "bool": false
+                    }
                   }
                 ]
               }
@@ -857,6 +865,14 @@
                           "i128": "5000"
                         }
                       ]
+                    }
+                  },
+                  {
+                    "key": {
+                      "symbol": "withdrawn"
+                    },
+                    "val": {
+                      "bool": false
                     }
                   }
                 ]

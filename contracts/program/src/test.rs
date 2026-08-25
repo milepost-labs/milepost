@@ -1314,3 +1314,160 @@ fn the_payee_registry_rejects_duplicates_and_unknowns() {
     f.client.deny_payee(&school);
     assert_eq!(f.client.try_deny_payee(&school), Err(Ok(Error::NotPayee)));
 }
+
+// ---- withdrawal ----
+
+#[test]
+fn an_applicant_can_withdraw_before_finalisation() {
+    let f = setup(2, 3);
+    let applicant = Address::generate(&f.env);
+    f.client.apply(&applicant, &5_000, &hash(&f.env, 1));
+
+    f.client.withdraw(&applicant);
+
+    let a = f.client.get_application(&applicant);
+    assert!(a.withdrawn);
+}
+
+#[test]
+fn withdrawal_during_review_phase() {
+    let f = setup(2, 3);
+    let applicant = Address::generate(&f.env);
+    f.client.apply(&applicant, &5_000, &hash(&f.env, 1));
+    to_review(&f);
+
+    f.client.withdraw(&applicant);
+    assert!(f.client.get_application(&applicant).withdrawn);
+}
+
+#[test]
+fn review_on_a_withdrawn_application_is_rejected() {
+    let f = setup(2, 3);
+    let applicant = Address::generate(&f.env);
+    f.client.apply(&applicant, &5_000, &hash(&f.env, 1));
+    to_review(&f);
+    f.client.withdraw(&applicant);
+
+    assert_eq!(
+        f.client
+            .try_review(&f.reviewers.get(0).unwrap(), &applicant, &1_000),
+        Err(Ok(Error::Withdrawn))
+    );
+}
+
+#[test]
+fn finalize_on_a_withdrawn_application_is_rejected() {
+    let f = setup(2, 3);
+    let applicant = Address::generate(&f.env);
+    let donor = funded_donor(&f, 100_000);
+    f.client.contribute(&donor, &100_000);
+    f.client.apply(&applicant, &1_000, &hash(&f.env, 1));
+    to_review(&f);
+    for i in 0..2u32 {
+        f.client
+            .review(&f.reviewers.get(i).unwrap(), &applicant, &1_000);
+    }
+    f.client.withdraw(&applicant);
+
+    let payee = Address::generate(&f.env);
+    f.client.allow_payee(&payee);
+    assert_eq!(
+        f.client.try_finalize(&applicant, &payee, &Mode::Direct),
+        Err(Ok(Error::Withdrawn))
+    );
+}
+
+#[test]
+fn reapplication_after_withdrawal_is_rejected() {
+    let f = setup(2, 3);
+    let applicant = Address::generate(&f.env);
+    f.client.apply(&applicant, &5_000, &hash(&f.env, 1));
+    f.client.withdraw(&applicant);
+
+    assert_eq!(
+        f.client.try_apply(&applicant, &3_000, &hash(&f.env, 2)),
+        Err(Ok(Error::AlreadyApplied))
+    );
+}
+
+#[test]
+fn withdrawal_after_finalisation_is_rejected() {
+    let f = setup(2, 3);
+    let applicant = Address::generate(&f.env);
+    awarded(&f, &applicant, 1_000, &[1_000, 1_000]);
+
+    assert_eq!(
+        f.client.try_withdraw(&applicant),
+        Err(Ok(Error::AlreadyFinalized))
+    );
+}
+
+#[test]
+fn withdrawing_twice_is_rejected() {
+    let f = setup(2, 3);
+    let applicant = Address::generate(&f.env);
+    f.client.apply(&applicant, &5_000, &hash(&f.env, 1));
+    f.client.withdraw(&applicant);
+    assert_eq!(f.client.try_withdraw(&applicant), Err(Ok(Error::Withdrawn)));
+}
+
+// ---- batch payees ----
+
+#[test]
+fn batch_allow_adds_multiple_payees() {
+    let f = setup(2, 3);
+    let a = Address::generate(&f.env);
+    let b = Address::generate(&f.env);
+    let c = Address::generate(&f.env);
+
+    f.client
+        .allow_payees(&vec![&f.env, a.clone(), b.clone(), c.clone()]);
+
+    assert!(f.client.is_payee(&a));
+    assert!(f.client.is_payee(&b));
+    assert!(f.client.is_payee(&c));
+}
+
+#[test]
+fn batch_deny_removes_multiple_payees() {
+    let f = setup(2, 3);
+    let a = Address::generate(&f.env);
+    let b = Address::generate(&f.env);
+    f.client.allow_payee(&a);
+    f.client.allow_payee(&b);
+
+    f.client.deny_payees(&vec![&f.env, a.clone(), b.clone()]);
+
+    assert!(!f.client.is_payee(&a));
+    assert!(!f.client.is_payee(&b));
+}
+
+#[test]
+fn batch_allow_skips_duplicates() {
+    let f = setup(2, 3);
+    let a = Address::generate(&f.env);
+    f.client.allow_payee(&a);
+
+    f.client.allow_payees(&vec![&f.env, a.clone()]);
+    assert!(f.client.is_payee(&a));
+}
+
+#[test]
+fn batch_deny_skips_unknowns() {
+    let f = setup(2, 3);
+    let unknown = Address::generate(&f.env);
+    f.client.deny_payees(&vec![&f.env, unknown]);
+}
+
+#[test]
+fn batch_exceeding_max_is_rejected() {
+    let f = setup(2, 3);
+    let mut payees = Vec::new(&f.env);
+    for _ in 0..=MAX_PAYEE_BATCH {
+        payees.push_back(Address::generate(&f.env));
+    }
+    assert_eq!(
+        f.client.try_allow_payees(&payees),
+        Err(Ok(Error::BatchTooLarge))
+    );
+}

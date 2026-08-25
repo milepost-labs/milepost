@@ -108,6 +108,8 @@ pub const MAX_QUORUM: u32 = 16;
 /// Protocol fee ceiling, in basis points. A programme cannot be created with a
 /// fee above this no matter what the registry says.
 pub const MAX_FEE_BPS: u32 = 1_000;
+/// Maximum number of payees in a single batch operation.
+pub const MAX_PAYEE_BATCH: u32 = 50;
 const BPS_DENOMINATOR: i128 = 10_000;
 
 #[contracterror]
@@ -162,6 +164,10 @@ pub enum Error {
     PolicyNotInstalled = 34,
     /// Allocations can no longer be directed once the sweep window opens.
     SpendWindowClosed = 35,
+    /// The batch exceeds the maximum allowed size.
+    BatchTooLarge = 36,
+    /// The application has been withdrawn.
+    Withdrawn = 37,
 }
 
 /// Where a tranche is paid, in descending order of how hard the restriction is
@@ -219,6 +225,7 @@ pub struct Application {
     /// Approved amounts, kept in ascending order so the median is a lookup.
     pub votes: Vec<i128>,
     pub finalized: bool,
+    pub withdrawn: bool,
 }
 
 #[contracttype]
@@ -331,6 +338,13 @@ pub struct UnclaimedSwept {
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct ProgrammeCancelled {
     pub at: u64,
+}
+
+#[contractevent(topics = ["withdrawn"], data_format = "single-value")]
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct ApplicationWithdrawn {
+    #[topic]
+    pub applicant: Address,
 }
 
 #[contracttype]
@@ -480,6 +494,7 @@ impl Programme {
             submitted_at: env.ledger().timestamp(),
             votes: Vec::new(&env),
             finalized: false,
+            withdrawn: false,
         };
         env.storage().persistent().set(&key, &application);
         env.storage()
@@ -527,6 +542,9 @@ impl Programme {
             .ok_or(Error::ApplicationNotFound)?;
         if application.finalized {
             return Err(Error::AlreadyFinalized);
+        }
+        if application.withdrawn {
+            return Err(Error::Withdrawn);
         }
         if approved <= 0 {
             return Err(Error::InvalidAmount);
@@ -589,6 +607,9 @@ impl Programme {
             .ok_or(Error::ApplicationNotFound)?;
         if application.finalized {
             return Err(Error::AlreadyFinalized);
+        }
+        if application.withdrawn {
+            return Err(Error::Withdrawn);
         }
 
         let config = Self::config(&env)?;
@@ -687,6 +708,88 @@ impl Programme {
             verified: false,
         }
         .publish(&env);
+        Ok(())
+    }
+
+    /// Add multiple verified payees in a single call. Duplicates within the
+    /// batch or against already-verified payees are skipped, not rejected — the
+    /// caller is batching for convenience, not precision.
+    pub fn allow_payees(env: Env, payees: Vec<Address>) -> Result<(), Error> {
+        if payees.len() > MAX_PAYEE_BATCH {
+            return Err(Error::BatchTooLarge);
+        }
+        Self::config(&env)?.creator.require_auth();
+
+        for payee in payees.iter() {
+            let key = Key::Payee(payee.clone());
+            if env.storage().persistent().has(&key) {
+                continue;
+            }
+            env.storage().persistent().set(&key, &true);
+            env.storage()
+                .persistent()
+                .extend_ttl(&key, BUMP_THRESHOLD, BUMP_LEDGERS);
+
+            PayeeChanged {
+                payee,
+                verified: true,
+            }
+            .publish(&env);
+        }
+        Ok(())
+    }
+
+    /// Remove multiple payees in a single call. Payees not currently verified
+    /// are skipped, not rejected.
+    pub fn deny_payees(env: Env, payees: Vec<Address>) -> Result<(), Error> {
+        if payees.len() > MAX_PAYEE_BATCH {
+            return Err(Error::BatchTooLarge);
+        }
+        Self::config(&env)?.creator.require_auth();
+
+        for payee in payees.iter() {
+            let key = Key::Payee(payee.clone());
+            if !env.storage().persistent().has(&key) {
+                continue;
+            }
+            env.storage().persistent().remove(&key);
+
+            PayeeChanged {
+                payee,
+                verified: false,
+            }
+            .publish(&env);
+        }
+        Ok(())
+    }
+
+    /// Withdraw an application before finalisation. Withdrawal is final for
+    /// this programme — the applicant may not reapply. The application record
+    /// is marked, not deleted, so history stays auditable. Votes already cast
+    /// are left in place but can never produce an award.
+    pub fn withdraw(env: Env, applicant: Address) -> Result<(), Error> {
+        applicant.require_auth();
+
+        let key = Key::Application(applicant.clone());
+        let mut application: Application = env
+            .storage()
+            .persistent()
+            .get(&key)
+            .ok_or(Error::ApplicationNotFound)?;
+        if application.finalized {
+            return Err(Error::AlreadyFinalized);
+        }
+        if application.withdrawn {
+            return Err(Error::Withdrawn);
+        }
+
+        application.withdrawn = true;
+        env.storage().persistent().set(&key, &application);
+        env.storage()
+            .persistent()
+            .extend_ttl(&key, BUMP_THRESHOLD, BUMP_LEDGERS);
+
+        ApplicationWithdrawn { applicant }.publish(&env);
         Ok(())
     }
 

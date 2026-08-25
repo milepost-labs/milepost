@@ -439,6 +439,14 @@
                     "val": {
                       "vec": []
                     }
+                  },
+                  {
+                    "key": {
+                      "symbol": "withdrawn"
+                    },
+                    "val": {
+                      "bool": false
+                    }
                   }
                 ]
               }
