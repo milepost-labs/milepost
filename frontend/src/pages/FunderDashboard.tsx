@@ -1,3 +1,4 @@
+import { useState } from 'react';
 import { Link } from 'react-router-dom';
 import './FunderDashboard.css';
 import { TrendingUp, CheckCircle, Activity, WalletCards, Plus } from 'lucide-react';
@@ -5,6 +6,7 @@ import { useContractRead, useContractResult, useProgramme } from '../hooks';
 import { AsyncView } from '../components/state/AsyncStates';
 import { PhaseBadge } from '../components/ui';
 import { formatAmount, percentOf } from '../lib/amount';
+import { ContributeModal } from '../components/ContributeModal';
 
 interface BudgetBreakdown {
   budget: bigint;
@@ -22,14 +24,16 @@ const formatXlm = (amount: bigint) => formatAmount(amount, { asset: 'XLM' });
 const formatPercent = (value: number) => `${value.toFixed(2)}%`;
 
 export const FunderDashboard = () => {
-  const { client: programme } = useProgramme();
+  const { id: programmeId, client: programme } = useProgramme();
+  const [contributeOpen, setContributeOpen] = useState(false);
+  const [refetchKey, setRefetchKey] = useState(0);
 
-  const budget = useContractResult(() => programme.budget(), [programme]);
-  const fee = useContractResult(() => programme.fee(), [programme]);
-  const contributed = useContractRead(() => programme.total_contributed(), [programme]);
-  const granted = useContractRead(() => programme.total_granted(), [programme]);
-  const released = useContractRead(() => programme.total_released(), [programme]);
-  const phase = useContractResult(() => programme.get_phase(), [programme]);
+  const budget = useContractResult(() => programme.budget(), [programme, refetchKey]);
+  const fee = useContractResult(() => programme.fee(), [programme, refetchKey]);
+  const contributed = useContractRead(() => programme.total_contributed(), [programme, refetchKey]);
+  const granted = useContractRead(() => programme.total_granted(), [programme, refetchKey]);
+  const released = useContractRead(() => programme.total_released(), [programme, refetchKey]);
+  const phase = useContractResult(() => programme.get_phase(), [programme, refetchKey]);
 
   const breakdown: BudgetBreakdown | null =
     budget.data !== null &&
@@ -71,14 +75,25 @@ export const FunderDashboard = () => {
           <h1>Funder Dashboard</h1>
           <p className="typo-text text-muted">Manage your committed funds and track disbursement milestones.</p>
         </div>
-        <Link
-          to="/funders/create"
-          className="btn-primary"
-          aria-label="Create a new programme"
-          style={{ display: 'inline-flex', alignItems: 'center', gap: '0.5rem', whiteSpace: 'nowrap' }}
-        >
-          <Plus size={16} /> Create Programme
-        </Link>
+        <div style={{ display: 'flex', gap: 'var(--space-2)' }}>
+          <button
+            type="button"
+            className="btn-primary"
+            onClick={() => setContributeOpen(true)}
+            aria-label="Contribute funds to this programme"
+            style={{ display: 'inline-flex', alignItems: 'center', gap: '0.5rem', whiteSpace: 'nowrap' }}
+          >
+            Contribute
+          </button>
+          <Link
+            to="/funders/create"
+            className="btn-secondary"
+            aria-label="Create a new programme"
+            style={{ display: 'inline-flex', alignItems: 'center', gap: '0.5rem', whiteSpace: 'nowrap' }}
+          >
+            <Plus size={16} /> Create Programme
+          </Link>
+        </div>
       </header>
 
       <section className="stats-grid animate-fade-up" style={{ animationDelay: '100ms' }}>
@@ -235,11 +250,18 @@ export const FunderDashboard = () => {
 
             <div className="program-actions">
               <button type="button" className="btn-secondary" aria-label="View details for CS Scholarship 2026">View Details</button>
-              <button type="button" className="btn-primary" aria-label="Commit more funds to CS Scholarship 2026">Commit More Funds</button>
+              <button type="button" className="btn-primary" onClick={() => setContributeOpen(true)} aria-label="Contribute funds to this programme">Contribute</button>
             </div>
           </div>
         </div>
       </section>
+
+      <ContributeModal
+        open={contributeOpen}
+        onClose={() => setContributeOpen(false)}
+        onSuccess={() => setRefetchKey((k) => k + 1)}
+        programmeId={programmeId}
+      />
     </div>
   );
 };
