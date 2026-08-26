@@ -10,6 +10,7 @@ Welcome, and thank you for your interest in contributing to Milepost! This guide
 5. [Documentation Standards](#5-documentation-standards)
 6. [Issue and PR Workflow](#6-issue-and-pr-workflow)
 7. [Error Code Stability Policy](#7-error-code-stability-policy)
+8. [Release Process](#8-release-process)
 
 ---
 
@@ -141,3 +142,91 @@ If you are modifying the Soroban smart contracts, error codes are part of the co
 3. **Always assign new variants the next available integer.** Do not insert variants mid-sequence; append them at the end of the enum.
 
 Why this matters: Stellar contract error codes propagate as `u32` values in the transaction result. If we reused a previously published discriminant, an indexer or bot that matches on that numeric value could silently misinterpret a new error as an old, unrelated one.
+
+---
+
+## 8. Release Process
+
+A release is a git tag. Pushing a tag matching `vX.Y.Z` (or a pre-release like
+`v0.1.0-rc.1`) triggers [`.github/workflows/release.yml`](.github/workflows/release.yml),
+which:
+
+1. Builds every contract to `wasm32v1-none` release wasm — the same build CI
+   already verified on the PR that merged.
+2. Hashes each `.wasm` with SHA-256 (`checksums.txt`). A programme is
+   instantiated from a wasm hash (see the root [README](README.md#deployed-testnet)),
+   so the hash *is* what downstream teams pin to — not a crate version.
+3. Generates a changelog from the commits since the previous tag
+   ([git-cliff](https://git-cliff.org/), configured in [`cliff.toml`](cliff.toml)) and
+   publishes a GitHub Release with the wasm files, `checksums.txt`, and the
+   changelog as the release body. `v*-*` tags (e.g. `-rc.1`, `-beta.2`) are
+   published as pre-releases.
+
+Nothing in the workflow edits `Cargo.toml` or commits back to the repo —
+tagging is a manual, deliberate act, not an automated bump.
+
+### Tagging a release
+
+```sh
+git tag v0.2.0
+git push origin v0.2.0
+```
+
+Pick the version by ordinary semver judgement (see below); nothing derives it
+for you from commit history.
+
+### Marking interface-breaking changes
+
+Commit subjects already follow `<type>(<scope>): <description>`. To flag a
+commit as breaking a contract's public interface — its client-facing
+functions, its error codes (section 7), or its storage/upgrade layout — do
+either of:
+
+* Append `!` after the type/scope: `feat(program)!: change award() signature`
+* Add a `BREAKING CHANGE: <explanation>` footer to the commit body.
+
+Either form makes git-cliff place that commit in its own "⚠ Breaking changes"
+section at the top of the release notes, separate from ordinary `Features`/
+`Fixes` entries, so a downstream integrator scanning a release can see at a
+glance whether upgrading is safe. A deployed Soroban contract can't be
+patched in place — a breaking release means existing callers need to
+re-integrate against a new deployment, so treat this marker as required, not
+decorative.
+
+### Versioning crates vs. tagging releases
+
+The workspace's crates all share `version = "0.1.0"` in the root
+`Cargo.toml` and none are bumped automatically by this workflow — the git
+tag, not the crate version field, is the source of truth for what a release
+is. Bump the workspace version by hand when a tag represents a meaningful
+jump (e.g. the first `1.0.0`), but a mismatch between the tag and the crate
+field is expected and not a bug: contracts here are consumed as compiled
+wasm pinned by hash and as the generated TypeScript bindings in `packages/`
+(see the [README](README.md#typescript-bindings)), not as a Rust library
+dependency.
+
+### Why these crates are not published to crates.io
+
+This release process produces GitHub Release artifacts only; nothing here
+publishes to crates.io. That's a deliberate choice, not a gap:
+
+* `milepost-policy-spend` depends on `smart-wallet-interface` pinned to a git
+  revision (see its `Cargo.toml`) because that crate isn't published either —
+  crates.io rejects git dependencies, so this crate can't be published as-is.
+* The actual integration surface for another Stellar team is a deployed wasm
+  hash plus the generated TS bindings, not `cargo add milepost-attest`. None
+  of the five contracts expose a Rust API meant to be depended on externally.
+* All crates are pre-1.0 and workspace-versioned together; publishing now
+  would mean maintaining crates.io semver guarantees before the interfaces
+  (and this release process itself) have stabilized.
+
+If a real Rust-dependency use case shows up later, revisit this — starting
+with `milepost-types`, the one crate with no unpublished dependency in its
+way — but raise it as its own issue rather than folding it into this
+workflow.
+
+### Verifying the workflow
+
+Push a pre-release tag (`vX.Y.Z-rc.N`) on your own fork before trusting a
+change to this workflow, and check the Actions run produces a pre-release
+with wasm files, `checksums.txt`, and a non-empty changelog attached.
