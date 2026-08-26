@@ -324,3 +324,8 @@
     font-size: var(--text-lg);
   }
 }
+
+.cancelled-banner {
+  border-left: 4px solid var(--color-error);
+  background-color: rgba(239, 68, 68, 0.05);
+}

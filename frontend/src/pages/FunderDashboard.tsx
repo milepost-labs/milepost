@@ -1,10 +1,13 @@
+import { useState } from 'react';
 import './FunderDashboard.css';
-import { TrendingUp, CheckCircle, Activity, WalletCards } from 'lucide-react';
+import { TrendingUp, CheckCircle, Activity, WalletCards, AlertTriangle } from 'lucide-react';
 import { Link } from 'react-router-dom';
-import { useContractRead, useContractResult, useProgramme } from '../hooks';
+import { useContractRead, useContractResult, useProgramme, useTransaction, phaseLabel } from '../hooks';
+import { useWallet } from '../context/useWallet';
 import { AsyncView } from '../components/state/AsyncStates';
-import { PhaseBadge } from '../components/ui';
+import { Button, Card, Modal, PhaseBadge } from '../components/ui';
 import { formatAmount, percentOf } from '../lib/amount';
+import { explain } from '../lib/errors';
 import { RefundsAndSweepsSection } from '../components/funder/RefundsAndSweepsSection';
 
 interface BudgetBreakdown {
@@ -17,20 +20,28 @@ interface BudgetBreakdown {
 
 const ZERO = 0n;
 
-const maxBigint = (value: bigint, minimum: bigint) => value > minimum ? value : minimum;
-const minBigint = (value: bigint, maximum: bigint) => value < maximum ? value : maximum;
+const maxBigint = (value: bigint, minimum: bigint) => (value > minimum ? value : minimum);
+const minBigint = (value: bigint, maximum: bigint) => (value < maximum ? value : maximum);
 const formatXlm = (amount: bigint) => formatAmount(amount, { asset: 'XLM' });
 const formatPercent = (value: number) => `${value.toFixed(2)}%`;
 
 export const FunderDashboard = () => {
+  const { address: walletAddress } = useWallet();
   const { client: programme } = useProgramme();
 
+  const config = useContractResult(() => programme.get_config(), [programme]);
   const budget = useContractResult(() => programme.budget(), [programme]);
   const fee = useContractResult(() => programme.fee(), [programme]);
   const contributed = useContractRead(() => programme.total_contributed(), [programme]);
   const granted = useContractRead(() => programme.total_granted(), [programme]);
   const released = useContractRead(() => programme.total_released(), [programme]);
   const phase = useContractResult(() => programme.get_phase(), [programme]);
+
+  const cancelTx = useTransaction({ contract: 'program' });
+  const [cancelModalOpen, setCancelModalOpen] = useState(false);
+
+  const isCreator = Boolean(walletAddress && config.data && walletAddress === config.data.creator);
+  const isCancelled = phase.data?.tag === 'Cancelled';
 
   const breakdown: BudgetBreakdown | null =
     budget.data !== null &&
@@ -65,12 +76,59 @@ export const FunderDashboard = () => {
   const committedSegment = breakdown ? minBigint(committedUnreleased, maxBigint(breakdown.budget - releasedSegment, ZERO)) : ZERO;
   const unallocatedSegment = breakdown ? maxBigint(breakdown.budget - releasedSegment - committedSegment, ZERO) : ZERO;
 
+  const handleCancelConfirm = async () => {
+    const result = await cancelTx.send(async () => {
+      const tx = await programme.cancel();
+      return {
+        signAndSend: async (options: Parameters<typeof tx.signAndSend>[0]) => {
+          const sent = await tx.signAndSend(options);
+          return { result: sent.result.unwrap() };
+        },
+      };
+    });
+
+    if (result !== null) {
+      setCancelModalOpen(false);
+      phase.refetch();
+      config.refetch();
+    }
+  };
+
+  const cancelErrorExplained = cancelTx.error ? explain(cancelTx.error, 'program') : null;
+
   return (
     <div className="dashboard-container">
       <header className="dashboard-header animate-fade-up">
-        <h1>Funder Dashboard</h1>
-        <p className="typo-text text-muted">Manage your committed funds and track disbursement milestones.</p>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+          <div>
+            <h1>Funder Dashboard</h1>
+            <p className="typo-text text-muted">Manage your committed funds and track disbursement milestones.</p>
+          </div>
+          {isCreator && !isCancelled && (
+            <Button
+              variant="secondary"
+              style={{ color: 'var(--color-error)', borderColor: 'var(--color-error)' }}
+              onClick={() => setCancelModalOpen(true)}
+            >
+              Cancel programme
+            </Button>
+          )}
+        </div>
       </header>
+
+      {isCancelled && (
+        <Card className="cancelled-banner">
+          <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
+            <AlertTriangle style={{ color: 'var(--color-error)' }} size={24} />
+            <div>
+              <h3 style={{ margin: 0, color: 'var(--color-error)' }}>Programme Cancelled</h3>
+              <p style={{ margin: '0.25rem 0 0', fontSize: '0.875rem' }}>
+                This programme has been cancelled by its creator. No further contributions or awards can be made. Donors can claim refunds below.
+              </p>
+            </div>
+          </div>
+        </Card>
+      )}
 
       <section className="stats-grid animate-fade-up" style={{ animationDelay: '100ms' }}>
         <div className="stat-card glass-panel">
@@ -219,15 +277,61 @@ export const FunderDashboard = () => {
 
             <div className="program-actions">
               <Link to="/programme" className="btn-secondary">View Details</Link>
-              <button type="button" className="btn-primary">Commit More Funds</button>
+              {!isCancelled && <button type="button" className="btn-primary">Commit More Funds</button>}
             </div>
           </div>
         </div>
       </section>
+
       <div style={{ marginTop: '2rem' }}>
         <RefundsAndSweepsSection />
       </div>
+
+      <Modal
+        open={cancelModalOpen}
+        onClose={() => !cancelTx.busy && setCancelModalOpen(false)}
+        title="Cancel programme"
+        busy={cancelTx.busy}
+        footer={
+          <>
+            <Button
+              variant="secondary"
+              onClick={() => setCancelModalOpen(false)}
+              disabled={cancelTx.busy}
+            >
+              Back
+            </Button>
+            <Button
+              style={{ backgroundColor: 'var(--color-error)', color: '#fff' }}
+              onClick={handleCancelConfirm}
+              loading={cancelTx.busy}
+              loadingLabel={phaseLabel(cancelTx.phase) || 'Cancelling…'}
+            >
+              Confirm cancel programme
+            </Button>
+          </>
+        }
+      >
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
+          <p style={{ margin: 0, fontWeight: 600, color: 'var(--color-error)' }}>
+            Are you sure you want to cancel this programme?
+          </p>
+          <p className="typo-text text-muted" style={{ margin: 0 }}>
+            Cancelling is permanent. Contributed funds will be available for donors to reclaim via the refund path. Submitted applications will not be reviewed or awarded. A programme can only be cancelled while no funds are contributed and no awards have been granted.
+          </p>
+
+          {cancelErrorExplained && (
+            <div style={{ padding: '0.75rem', backgroundColor: 'rgba(239, 68, 68, 0.1)', border: '1px solid var(--color-error)', borderRadius: 'var(--radius-md)' }}>
+              <p style={{ margin: 0, fontWeight: 600, color: 'var(--color-error)' }}>{cancelErrorExplained.message}</p>
+              {cancelErrorExplained.action && (
+                <p style={{ margin: '0.25rem 0 0', fontSize: '0.875rem', color: 'var(--color-muted)' }}>{cancelErrorExplained.action}</p>
+              )}
+            </div>
+          )}
+        </div>
+      </Modal>
     </div>
   );
 };
+
 

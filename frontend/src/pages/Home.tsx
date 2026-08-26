@@ -42,7 +42,7 @@ export const Home: React.FC = () => {
             Milepost is conditional disbursement infrastructure on Stellar. Money moves at each milepost, and only at each milepost. We replace lump-sum transfers with milestone tranches and policy-restricted spending.
           </p>
           <div className="hero-actions animate-fade-up" style={{ animationDelay: '400ms' }}>
-            <Link to="/funders" className="btn-primary btn-large">
+            <Link to="/directory" className="btn-primary btn-large">
               Explore Programs <ArrowRight size={20} />
             </Link>
             <a href="https://github.com/gbemi-dev/milepost" target="_blank" rel="noreferrer" className="btn-secondary btn-large">

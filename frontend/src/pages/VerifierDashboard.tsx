@@ -125,7 +125,8 @@ export const VerifierDashboard = () => {
               const median = currentApplication.votes.length > medianIndex
                 ? currentApplication.votes[medianIndex]
                 : null;
-              const canReview = reviewer.data === true && !currentApplication.finalized;
+              const isWithdrawn = currentApplication.withdrawn;
+              const canReview = reviewer.data === true && !currentApplication.finalized && !isWithdrawn;
 
               return (
                 <div className="queue-item glass-panel reviewer-console">
@@ -133,39 +134,53 @@ export const VerifierDashboard = () => {
                   <div className="queue-item-content">
                     <div className="queue-item-header">
                       <h3>Application review</h3>
-                      <span className="badge badge-pending">
-                        {currentApplication.votes.length} / {quorum} votes
-                      </span>
+                      {isWithdrawn ? (
+                        <span className="badge badge-pending" style={{ backgroundColor: 'var(--color-error)' }}>
+                          Withdrawn
+                        </span>
+                      ) : (
+                        <span className="badge badge-pending">
+                          {currentApplication.votes.length} / {quorum} votes
+                        </span>
+                      )}
                     </div>
                     <p className="typo-text text-muted">
                       Requested: <strong>{formatAmount(currentApplication.requested)} XLM</strong>
                     </p>
-                    <div className="vote-spread" aria-label="Sorted reviewer approvals">
-                      {currentApplication.votes.map((vote, index) => (
-                        <span key={`${vote}-${index}`} className={`badge${index === medianIndex ? ' vote-median' : ''}`}>
-                          {formatAmount(vote)} XLM{index === medianIndex ? ' · median' : ''}
-                        </span>
-                      ))}
-                    </div>
-                    {median !== null && <p className="median-result">Settling award: <strong>{formatAmount(median)} XLM</strong></p>}
-                    {!address && <p className="text-warning">Connect a wallet to review.</p>}
-                    {address && reviewer.data === false && <p className="text-warning">This wallet is not a registered reviewer.</p>}
-                    {canReview && (
-                      <form className="review-form" onSubmit={submitReview}>
-                        <Field
-                          label="Your approval"
-                          value={approved}
-                          onChange={(event) => setApproved(event.target.value)}
-                          onBlur={() => approved && setAmountError(tryParseAmount(approved).ok ? null : 'Enter a valid amount')}
-                          placeholder="300"
-                          inputMode="decimal"
-                          suffix="XLM"
-                          error={amountError}
-                          hint={`Up to ${formatAmount(currentApplication.requested)} XLM`}
-                        />
-                        <Button loading={review.busy} type="submit">Submit review</Button>
-                        {review.error && <p className="ui-field__message ui-field__message--error" role="alert">{review.error.message}</p>}
-                      </form>
+                    {isWithdrawn ? (
+                      <p className="text-warning" style={{ color: 'var(--color-error)' }}>
+                        This application has been withdrawn by the applicant and cannot be reviewed or finalized.
+                      </p>
+                    ) : (
+                      <>
+                        <div className="vote-spread" aria-label="Sorted reviewer approvals">
+                          {currentApplication.votes.map((vote, index) => (
+                            <span key={`${vote}-${index}`} className={`badge${index === medianIndex ? ' vote-median' : ''}`}>
+                              {formatAmount(vote)} XLM{index === medianIndex ? ' · median' : ''}
+                            </span>
+                          ))}
+                        </div>
+                        {median !== null && <p className="median-result">Settling award: <strong>{formatAmount(median)} XLM</strong></p>}
+                        {!address && <p className="text-warning">Connect a wallet to review.</p>}
+                        {address && reviewer.data === false && <p className="text-warning">This wallet is not a registered reviewer.</p>}
+                        {canReview && (
+                          <form className="review-form" onSubmit={submitReview}>
+                            <Field
+                              label="Your approval"
+                              value={approved}
+                              onChange={(event) => setApproved(event.target.value)}
+                              onBlur={() => approved && setAmountError(tryParseAmount(approved).ok ? null : 'Enter a valid amount')}
+                              placeholder="300"
+                              inputMode="decimal"
+                              suffix="XLM"
+                              error={amountError}
+                              hint={`Up to ${formatAmount(currentApplication.requested)} XLM`}
+                            />
+                            <Button loading={review.busy} type="submit">Submit review</Button>
+                            {review.error && <p className="ui-field__message ui-field__message--error" role="alert">{review.error.message}</p>}
+                          </form>
+                        )}
+                      </>
                     )}
                   </div>
                 </div>

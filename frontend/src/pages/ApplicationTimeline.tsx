@@ -1,9 +1,10 @@
 import { useState } from 'react';
-import { useContractResult, useProgramme } from '../hooks';
+import { useContractResult, useProgramme, useTransaction, phaseLabel } from '../hooks';
 import { AsyncView, ErrorState } from '../components/state/AsyncStates';
-import { Badge, Button, Card, Field, type BadgeTone } from '../components/ui';
+import { Badge, Button, Card, Field, Modal, type BadgeTone } from '../components/ui';
 import { useWallet } from '../context/useWallet';
 import { formatAmount } from '../lib/amount';
+import { explain } from '../lib/errors';
 import './ApplicationTimeline.css';
 
 /** Seeded testnet applicant (Ada) — carries an application through every real state. */
@@ -23,6 +24,7 @@ interface Step {
 
 const formatXlm = (amount: bigint) => formatAmount(amount, { asset: 'XLM' });
 const formatDate = (seconds: bigint) => new Date(Number(seconds) * 1000).toLocaleString();
+const shorten = (address: string) => `${address.slice(0, 4)}…${address.slice(-4)}`;
 
 const STATUS_TONE: Record<StepStatus, BadgeTone> = {
   done: 'success',
@@ -45,6 +47,7 @@ export const ApplicationTimeline = () => {
   const [subjectInput, setSubjectInput] = useState(walletAddress ?? DEMO_APPLICANT);
   const [subject, setSubject] = useState(walletAddress ?? DEMO_APPLICANT);
   const [inputError, setInputError] = useState<string | null>(null);
+  const [withdrawModalOpen, setWithdrawModalOpen] = useState(false);
 
   const application = useContractResult(
     () => programme.get_application({ applicant: subject }),
@@ -56,6 +59,8 @@ export const ApplicationTimeline = () => {
     [programme, subject],
     { enabled: application.data?.finalized === true },
   );
+
+  const withdrawTx = useTransaction({ contract: 'program' });
 
   const handleLookup = () => {
     const address = subjectInput.trim();
@@ -72,6 +77,23 @@ export const ApplicationTimeline = () => {
     setSubjectInput(walletAddress);
     setInputError(null);
     setSubject(walletAddress);
+  };
+
+  const handleWithdrawConfirm = async () => {
+    const result = await withdrawTx.send(async () => {
+      const tx = await programme.withdraw({ applicant: subject });
+      return {
+        signAndSend: async (options: Parameters<typeof tx.signAndSend>[0]) => {
+          const sent = await tx.signAndSend(options);
+          return { result: sent.result.unwrap() };
+        },
+      };
+    });
+
+    if (result !== null) {
+      setWithdrawModalOpen(false);
+      application.refetch();
+    }
   };
 
   return (
@@ -120,7 +142,10 @@ export const ApplicationTimeline = () => {
               const now = BigInt(Math.floor(Date.now() / 1000));
               const quorumMet = app.votes.length >= cfg.quorum;
               const reviewClosed = now >= cfg.review_deadline;
-              const notAwarded = !app.finalized && reviewClosed && !quorumMet;
+              const isWithdrawn = app.withdrawn;
+              const notAwarded = !isWithdrawn && !app.finalized && reviewClosed && !quorumMet;
+
+              const canWithdraw = !app.finalized && !app.withdrawn;
 
               const steps: Step[] = [
                 {
@@ -132,39 +157,43 @@ export const ApplicationTimeline = () => {
                 {
                   key: 'review',
                   label: 'Under review',
-                  status: app.finalized ? 'done' : notAwarded ? 'blocked' : 'current',
-                  detail: app.finalized
-                    ? `Reviewed by ${app.votes.length} reviewer${app.votes.length === 1 ? '' : 's'}; settled at the median vote.`
-                    : notAwarded
-                      ? `Only ${app.votes.length} of ${cfg.quorum} required reviewer votes came in before the review window closed.`
-                      : quorumMet
-                        ? `Quorum reached (${app.votes.length}/${cfg.quorum}) — waiting on anyone to trigger finalization.`
-                        : `${app.votes.length} of ${cfg.quorum} required reviewer votes in.`,
-                  deadline: app.finalized ? undefined : `Review closes ${formatDate(cfg.review_deadline)}`,
+                  status: isWithdrawn ? 'blocked' : app.finalized ? 'done' : notAwarded ? 'blocked' : 'current',
+                  detail: isWithdrawn
+                    ? 'Application was withdrawn by the applicant.'
+                    : app.finalized
+                      ? `Reviewed by ${app.votes.length} reviewer${app.votes.length === 1 ? '' : 's'}; settled at the median vote.`
+                      : notAwarded
+                        ? `Only ${app.votes.length} of ${cfg.quorum} required reviewer votes came in before the review window closed.`
+                        : quorumMet
+                          ? `Quorum reached (${app.votes.length}/${cfg.quorum}) — waiting on anyone to trigger finalization.`
+                          : `${app.votes.length} of ${cfg.quorum} required reviewer votes in.`,
+                  deadline: isWithdrawn || app.finalized ? undefined : `Review closes ${formatDate(cfg.review_deadline)}`,
                 },
                 {
                   key: 'awarded',
                   label: 'Awarded',
-                  status: notAwarded ? 'blocked' : app.finalized ? 'done' : 'pending',
-                  detail: notAwarded
-                    ? 'This application will not be awarded — quorum was not reached before reviewing closed.'
-                    : app.finalized && award.data
-                      ? `Granted ${formatXlm(award.data.granted)} of the ${formatXlm(app.requested)} requested, paid via ${award.data.mode.tag} mode.`
-                      : app.finalized
-                        ? 'Finalized — award details are loading.'
-                        : 'Waiting on quorum, then anyone to finalize.',
+                  status: isWithdrawn || notAwarded ? 'blocked' : app.finalized ? 'done' : 'pending',
+                  detail: isWithdrawn
+                    ? 'Withdrawn applications will not receive an award.'
+                    : notAwarded
+                      ? 'This application will not be awarded — quorum was not reached before reviewing closed.'
+                      : app.finalized && award.data
+                        ? `Granted ${formatXlm(award.data.granted)} of the ${formatXlm(app.requested)} requested, paid via ${award.data.mode.tag} mode.`
+                        : app.finalized
+                          ? 'Finalized — award details are loading.'
+                          : 'Waiting on quorum, then anyone to finalize.',
                 },
                 {
                   key: 'releasing',
                   label: 'Releasing',
-                  status: notAwarded
+                  status: isWithdrawn || notAwarded
                     ? 'blocked'
                     : !app.finalized
                       ? 'pending'
                       : award.data && award.data.tranches_released >= award.data.tranches
                         ? 'done'
                         : 'current',
-                  detail: notAwarded
+                  detail: isWithdrawn || notAwarded
                     ? 'No award, so nothing to release.'
                     : !app.finalized
                       ? 'Starts once the application is finalized into an award.'
@@ -172,14 +201,25 @@ export const ApplicationTimeline = () => {
                         ? `${award.data.tranches_released} of ${award.data.tranches} tranches released — ${formatXlm(award.data.released)} of ${formatXlm(award.data.granted)} paid so far.`
                         : 'Award details are loading.',
                   deadline:
-                    !notAwarded && app.finalized
+                    !isWithdrawn && !notAwarded && app.finalized
                       ? `Releases close ${formatDate(cfg.release_deadline)} — anything unreleased after that becomes refundable to donors`
                       : undefined,
                 },
               ];
 
+              const withdrawError = withdrawTx.error ? explain(withdrawTx.error, 'program') : null;
+
               return (
                 <>
+                  {isWithdrawn && (
+                    <Card className="timeline-outcome">
+                      <Badge tone="danger">Withdrawn</Badge>
+                      <p className="typo-text" style={{ marginTop: '0.5rem' }}>
+                        This application has been withdrawn by the applicant. Withdrawal is final and re-application to this programme is rejected.
+                      </p>
+                    </Card>
+                  )}
+
                   {notAwarded && (
                     <Card className="timeline-outcome">
                       <Badge tone="danger">Not awarded</Badge>
@@ -191,7 +231,21 @@ export const ApplicationTimeline = () => {
                     </Card>
                   )}
 
-                  <Card title="Timeline">
+                  <Card
+                    title="Timeline"
+                    aside={
+                      canWithdraw ? (
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          style={{ color: 'var(--color-error)' }}
+                          onClick={() => setWithdrawModalOpen(true)}
+                        >
+                          Withdraw application
+                        </Button>
+                      ) : null
+                    }
+                  >
                     <ol className="timeline">
                       {steps.map((step) => (
                         <li key={step.key} className={`timeline-step timeline-step--${step.status}`}>
@@ -214,6 +268,46 @@ export const ApplicationTimeline = () => {
                       <ErrorState error={award.error} contract="program" onRetry={award.refetch} />
                     </Card>
                   )}
+
+                  <Modal
+                    open={withdrawModalOpen}
+                    onClose={() => !withdrawTx.busy && setWithdrawModalOpen(false)}
+                    title="Withdraw application"
+                    busy={withdrawTx.busy}
+                    footer={
+                      <>
+                        <Button
+                          variant="secondary"
+                          onClick={() => setWithdrawModalOpen(false)}
+                          disabled={withdrawTx.busy}
+                        >
+                          Cancel
+                        </Button>
+                        <Button
+                          style={{ backgroundColor: 'var(--color-error)', color: '#fff' }}
+                          onClick={handleWithdrawConfirm}
+                          loading={withdrawTx.busy}
+                          loadingLabel={phaseLabel(withdrawTx.phase) || 'Withdrawing…'}
+                        >
+                          Confirm withdrawal
+                        </Button>
+                      </>
+                    }
+                  >
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
+                      <p style={{ margin: 0 }}>
+                        Are you sure you want to withdraw your application ({shorten(subject)})?
+                      </p>
+                      <p className="typo-text text-muted" style={{ margin: 0 }}>
+                        Withdrawal is final and cannot be undone. You will not be able to re-apply to this programme, and reviewers will no longer be able to review or finalize this application.
+                      </p>
+                      {withdrawError && (
+                        <div style={{ padding: '0.5rem', backgroundColor: 'rgba(239,68,68,0.1)', color: 'var(--color-error)', borderRadius: 'var(--radius-md)' }}>
+                          {withdrawError.message} {withdrawError.action}
+                        </div>
+                      )}
+                    </div>
+                  </Modal>
                 </>
               );
             }}
@@ -223,3 +317,4 @@ export const ApplicationTimeline = () => {
     </div>
   );
 };
+

@@ -20,6 +20,7 @@ export const Navbar = () => {
         </div>
         
         <nav className="navbar-links">
+          <Link to="/directory" className="nav-link">Directory</Link>
           <Link to="/programme" className="nav-link">Programme</Link>
           <Link to="/funders" className="nav-link">Funders</Link>
           <Link to="/recipients" className="nav-link">Recipients</Link>
