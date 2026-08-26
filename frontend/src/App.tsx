@@ -7,6 +7,7 @@ import { TransactionAnnouncer } from './components/state/TransactionAnnouncer';
 import { Home } from './pages/Home';
 import { FunderDashboard } from './pages/FunderDashboard';
 import { CreateProgramme } from './pages/CreateProgramme';
+import { PayeeManager } from './pages/PayeeManager';
 import { RecipientDashboard } from './pages/RecipientDashboard';
 import { VerifierDashboard } from './pages/VerifierDashboard';
 
@@ -22,6 +23,7 @@ function App() {
               <Route index element={<Home />} />
               <Route path="funders" element={<FunderDashboard />} />
               <Route path="funders/create" element={<CreateProgramme />} />
+              <Route path="funders/payees" element={<PayeeManager />} />
               <Route path="recipients" element={<RecipientDashboard />} />
               <Route path="verifiers" element={<VerifierDashboard />} />
             </Route>

@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { Link } from 'react-router-dom';
 import './FunderDashboard.css';
-import { TrendingUp, CheckCircle, Activity, WalletCards, Plus } from 'lucide-react';
+import { TrendingUp, CheckCircle, Activity, WalletCards, Plus, Users } from 'lucide-react';
 import { useContractRead, useContractResult, useProgramme } from '../hooks';
 import { AsyncView } from '../components/state/AsyncStates';
 import { PhaseBadge } from '../components/ui';
@@ -85,6 +85,14 @@ export const FunderDashboard = () => {
           >
             Contribute
           </button>
+          <Link
+            to="/funders/payees"
+            className="btn-secondary"
+            aria-label="Manage verified payees"
+            style={{ display: 'inline-flex', alignItems: 'center', gap: '0.5rem', whiteSpace: 'nowrap' }}
+          >
+            <Users size={16} /> Manage Payees
+          </Link>
           <Link
             to="/funders/create"
             className="btn-secondary"
