@@ -33,6 +33,13 @@ if (typeof window !== "undefined") {
 
 
 
+export const networks = {
+  testnet: {
+    networkPassphrase: "Test SDF Network ; September 2015",
+    contractId: "CA7HUSERUURI6OIV7T22RI3J2BB2BIGC3A7QZCVLY2EKDZANYEDIAHUQ",
+  }
+} as const
+
 export const Errors = {
   1: {message:"NotAuthorized"},
   2: {message:"FeeTooHigh"},
