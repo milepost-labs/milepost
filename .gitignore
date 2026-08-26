@@ -18,3 +18,8 @@ docs/frontend-integration.md
 
 # Issue drafts under review — not repository documentation.
 drafts/
+
+# Soroban writes a ledger-state JSON per test run. They regenerate on every
+# `cargo test`, and one parameterised test can emit hundreds, so tracking them
+# means constant churn for no review value.
+test_snapshots/

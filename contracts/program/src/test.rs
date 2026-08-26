@@ -566,6 +566,205 @@ fn awards_cannot_exceed_the_budget() {
     assert_eq!(f.client.total_granted(), 800);
 }
 
+// ---- oversubscription ----
+//
+// `finalize` is permissionless and settles first-finalized-first-served, so
+// when approved amounts exceed the budget, calling order decides who is
+// funded — see "Oversubscription" in the module docs. These tests pin down
+// what is guaranteed regardless of that order: the budget is never exceeded,
+// a refusal never mutates state, and nothing can be finalized twice.
+
+/// Applies and unanimously reviews each `(applicant, amount)` pair at
+/// `amount`, leaving every one eligible to be finalized, in any order.
+fn ready_applicants(f: &Fixture, applicants: &[(Address, i128)]) {
+    for (applicant, amount) in applicants {
+        f.client.apply(applicant, amount, &hash(&f.env, 1));
+    }
+    to_review(f);
+    for (applicant, amount) in applicants {
+        for i in 0..f.client.get_config().quorum {
+            f.client
+                .review(&f.reviewers.get(i).unwrap(), applicant, amount);
+        }
+    }
+}
+
+#[test]
+fn the_same_application_can_be_refused_in_one_order_and_funded_in_the_reverse() {
+    // Not a hypothetical: this is what "permissionless, first-finalized-first-
+    // served" actually means under oversubscription. Same two applicants, same
+    // amounts, same budget — only the call order changes, and it decides who
+    // is funded. A refusal here is not permanent: it only reflects what had
+    // already been committed at the moment it was attempted.
+    let run = |a_first: bool| -> (bool, bool) {
+        let f = setup(2, 3);
+        let donor = funded_donor(&f, 1_000);
+        f.client.contribute(&donor, &1_000); // budget is 900 after the 10% fee
+
+        let a = Address::generate(&f.env);
+        let b = Address::generate(&f.env);
+        ready_applicants(&f, &[(a.clone(), 800), (b.clone(), 800)]);
+        let payee = Address::generate(&f.env);
+        f.client.allow_payee(&payee);
+
+        let (first, second) = if a_first { (&a, &b) } else { (&b, &a) };
+        let first_ok = f.client.try_finalize(first, &payee, &Mode::Direct).is_ok();
+        let second_ok = f.client.try_finalize(second, &payee, &Mode::Direct).is_ok();
+        (first_ok, second_ok)
+    };
+
+    let (a_funded_when_first, b_funded_when_second) = run(true);
+    let (b_funded_when_first, a_funded_when_second) = run(false);
+
+    assert!(a_funded_when_first, "called first, a must be funded");
+    assert!(
+        !b_funded_when_second,
+        "called second against a's commitment, b must be refused"
+    );
+    assert!(b_funded_when_first, "called first, b must be funded");
+    assert!(
+        !a_funded_when_second,
+        "called second against b's commitment, a must be refused"
+    );
+}
+
+#[test]
+fn a_refused_finalization_leaves_the_application_completely_unchanged() {
+    let f = setup(2, 3);
+    let donor = funded_donor(&f, 1_000);
+    f.client.contribute(&donor, &1_000); // budget is 900 after the 10% fee
+
+    let a = Address::generate(&f.env);
+    let b = Address::generate(&f.env);
+    ready_applicants(&f, &[(a.clone(), 800), (b.clone(), 800)]);
+
+    let payee = Address::generate(&f.env);
+    f.client.allow_payee(&payee);
+    f.client.finalize(&a, &payee, &Mode::Direct);
+
+    let before = f.client.get_application(&b);
+    assert_eq!(
+        f.client.try_finalize(&b, &payee, &Mode::Direct),
+        Err(Ok(Error::InsufficientBudget))
+    );
+
+    let after = f.client.get_application(&b);
+    assert_eq!(
+        before, after,
+        "a refused finalization must not touch the application at all"
+    );
+    assert!(!after.finalized);
+    assert_eq!(
+        f.client.try_get_award(&b),
+        Err(Ok(Error::AwardNotFound)),
+        "no award may exist for a refused finalization"
+    );
+
+    // Retryable and deterministic: the identical call, against the identical
+    // unchanged state, fails the identical way rather than something else.
+    assert_eq!(
+        f.client.try_finalize(&b, &payee, &Mode::Direct),
+        Err(Ok(Error::InsufficientBudget))
+    );
+    assert_eq!(f.client.get_application(&b), after);
+}
+
+#[test]
+fn finalize_never_exceeds_the_budget_under_any_ordering() {
+    // 900 budget, four equal 400 requests: exactly two can ever fit. Every one
+    // of the 4! orderings finalize could be called in is exercised, not just a
+    // couple of hand-picked cases.
+    #[rustfmt::skip]
+    const PERMUTATIONS: [[usize; 4]; 24] = [
+        [0, 1, 2, 3], [0, 1, 3, 2], [0, 2, 1, 3], [0, 2, 3, 1], [0, 3, 1, 2], [0, 3, 2, 1],
+        [1, 0, 2, 3], [1, 0, 3, 2], [1, 2, 0, 3], [1, 2, 3, 0], [1, 3, 0, 2], [1, 3, 2, 0],
+        [2, 0, 1, 3], [2, 0, 3, 1], [2, 1, 0, 3], [2, 1, 3, 0], [2, 3, 0, 1], [2, 3, 1, 0],
+        [3, 0, 1, 2], [3, 0, 2, 1], [3, 1, 0, 2], [3, 1, 2, 0], [3, 2, 0, 1], [3, 2, 1, 0],
+    ];
+
+    for order in PERMUTATIONS {
+        let f = setup(2, 3);
+        let donor = funded_donor(&f, 1_000);
+        f.client.contribute(&donor, &1_000); // budget is 900 after the 10% fee
+
+        let applicants = [
+            Address::generate(&f.env),
+            Address::generate(&f.env),
+            Address::generate(&f.env),
+            Address::generate(&f.env),
+        ];
+        ready_applicants(
+            &f,
+            &[
+                (applicants[0].clone(), 400),
+                (applicants[1].clone(), 400),
+                (applicants[2].clone(), 400),
+                (applicants[3].clone(), 400),
+            ],
+        );
+        let payee = Address::generate(&f.env);
+        f.client.allow_payee(&payee);
+
+        // Finalize in this permutation's order. The first two committed
+        // always fit (400 + 400 = 800 <= 900); the third would not
+        // (1_200 > 900), so it and the fourth must be refused, regardless of
+        // which applicants happen to occupy which position.
+        for (position, &index) in order.iter().enumerate() {
+            let result = f
+                .client
+                .try_finalize(&applicants[index], &payee, &Mode::Direct);
+            if position < 2 {
+                match result {
+                    Ok(award) => assert_eq!(award.unwrap().granted, 400),
+                    Err(e) => panic!(
+                        "expected success at position {position} in order {order:?}, got {e:?}"
+                    ),
+                }
+            } else {
+                assert_eq!(
+                    result,
+                    Err(Ok(Error::InsufficientBudget)),
+                    "expected refusal at position {position} in order {order:?}"
+                );
+            }
+        }
+
+        assert_eq!(
+            f.client.total_granted(),
+            800,
+            "exactly two of four 400-requests must fit a 900 budget, in order {order:?}"
+        );
+        assert!(
+            f.client.total_granted() <= f.client.budget(),
+            "the budget must never be exceeded, in order {order:?}"
+        );
+
+        // No ordering double-commits an already-funded application.
+        for &index in order[..2].iter() {
+            assert_eq!(
+                f.client
+                    .try_finalize(&applicants[index], &payee, &Mode::Direct),
+                Err(Ok(Error::AlreadyFinalized)),
+                "re-finalizing an already-funded application must be rejected, in order {order:?}"
+            );
+        }
+        // A refusal is retryable and deterministic, not a one-way trap.
+        for &index in order[2..].iter() {
+            assert_eq!(
+                f.client
+                    .try_finalize(&applicants[index], &payee, &Mode::Direct),
+                Err(Ok(Error::InsufficientBudget)),
+                "retrying a refusal must fail the same way, in order {order:?}"
+            );
+        }
+        assert_eq!(
+            f.client.total_granted(),
+            800,
+            "none of the retries may change the committed total, in order {order:?}"
+        );
+    }
+}
+
 #[test]
 fn finalize_carries_the_payee_and_mode() {
     let f = setup(2, 3);
@@ -1470,4 +1669,130 @@ fn batch_exceeding_max_is_rejected() {
         f.client.try_allow_payees(&payees),
         Err(Ok(Error::BatchTooLarge))
     );
+}
+
+// ---- property tests for the median award mechanism ----
+
+mod proptests {
+    use super::*;
+    use proptest::prelude::*;
+
+    fn run_award(f: &Fixture, requested: i128, votes: &[i128]) -> i128 {
+        let applicant = Address::generate(&f.env);
+        let donor = funded_donor(f, 100_000);
+        f.client.contribute(&donor, &100_000);
+        f.client.apply(&applicant, &requested, &hash(&f.env, 1));
+        to_review(f);
+        for (i, v) in votes.iter().enumerate() {
+            f.client
+                .review(&f.reviewers.get(i as u32).unwrap(), &applicant, v);
+        }
+        let payee = Address::generate(&f.env);
+        f.client.allow_payee(&payee);
+        f.client.finalize(&applicant, &payee, &Mode::Direct).granted
+    }
+
+    proptest! {
+        #[test]
+        fn award_in_bounding_box(
+            mut votes in prop::collection::vec(1i128..=10_000i128, 3..=16),
+        ) {
+            votes.sort();
+            let requested = *votes.last().unwrap();
+            let f = setup(votes.len() as u32, votes.len() as u32);
+            let granted = run_award(&f, requested, &votes);
+            prop_assert!(
+                granted >= *votes.first().unwrap() && granted <= *votes.last().unwrap(),
+            );
+        }
+    }
+
+    proptest! {
+        #[test]
+        fn award_never_exceeds_requested(
+            votes in prop::collection::vec(1i128..=10_000i128, 3..=16),
+            requested in 10_000i128..=100_000i128,
+        ) {
+            let f = setup(votes.len() as u32, votes.len() as u32);
+            let granted = run_award(&f, requested, &votes);
+            prop_assert!(granted <= requested);
+        }
+    }
+
+    proptest! {
+        #[test]
+        fn median_more_robust_than_mean(
+            base_votes in prop::collection::vec(100i128..=9_000i128, 3..=15),
+            extreme in prop_oneof![Just(1i128), Just(10_000i128)],
+        ) {
+            prop_assume!(base_votes.len() < MAX_QUORUM as usize);
+
+            let mut sorted = base_votes.clone();
+            sorted.sort();
+            let requested = *sorted.last().unwrap().max(&extreme);
+
+            let f_base = setup(sorted.len() as u32, sorted.len() as u32);
+            let median_before = run_award(&f_base, requested, &sorted);
+
+            let mut with_extreme = sorted.clone();
+            with_extreme.push(extreme);
+            with_extreme.sort();
+            let f_ext = setup(with_extreme.len() as u32, with_extreme.len() as u32);
+            let median_after = run_award(&f_ext, requested, &with_extreme);
+
+            let median_shift = (median_after - median_before).unsigned_abs();
+
+            // The median's influence from a single vote is bounded by the gap
+            // between the two order statistics it can jump between.  This is the
+            // core robustness property the issue asks for: no single vote can
+            // move the median by more than one "step" in the sorted list,
+            // whereas the mean is pulled proportionally to the outlier's
+            // distance from the centre.
+            let max_gap = sorted.windows(2)
+                .map(|w| (w[1] - w[0]).unsigned_abs())
+                .max()
+                .unwrap_or(0);
+            prop_assert!(
+                median_shift <= max_gap,
+                "median shift {median_shift} must be bounded by max gap {max_gap}",
+            );
+        }
+    }
+
+    proptest! {
+        #[test]
+        fn order_independent(
+            votes in prop::collection::vec(1i128..=10_000i128, 3..=16),
+        ) {
+            let requested = *votes.iter().max().unwrap();
+            let n = votes.len() as u32;
+
+            let f1 = setup(n, n);
+            let g1 = run_award(&f1, requested, &votes);
+
+            let mut reversed = votes.clone();
+            reversed.reverse();
+            let f2 = setup(n, n);
+            let g2 = run_award(&f2, requested, &reversed);
+
+            prop_assert_eq!(g1, g2);
+        }
+    }
+
+    proptest! {
+        #[test]
+        fn identical_votes_yields_that_value(
+            value in 1i128..=10_000i128,
+            n in 3u32..=16u32,
+        ) {
+            let f = setup(n, n);
+            // Build a stack-allocated slice to avoid soroban_sdk::Vec aliasing.
+            let mut buf = [0i128; 16];
+            for slot in buf.iter_mut().take(n as usize) {
+                *slot = value;
+            }
+            let granted = run_award(&f, value, &buf[..n as usize]);
+            prop_assert_eq!(granted, value);
+        }
+    }
 }

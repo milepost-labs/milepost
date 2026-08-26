@@ -39,6 +39,35 @@
 //! first finalised first served. A programme that over-approves will find later
 //! finalisations rejected rather than silently over-committing money it does not
 //! have.
+//!
+//! ## Oversubscription: order decides, and that is deliberate
+//!
+//! [`Programme::finalize`] is permissionless — anyone may call it once quorum is
+//! reached, on purpose, so no privileged party can strand an applicant by simply
+//! not pressing a button. That same permissionlessness means that when the
+//! programme is oversubscribed (approved amounts exceed what remains of the
+//! budget), **whoever calls `finalize` first decides who gets funded**. A
+//! reviewer panel approving three applicants for more than the budget covers
+//! does not decide which two are funded; the order finalisations happen to
+//! arrive in does.
+//!
+//! This is a documented limitation, not a bug, and fixing it — priority,
+//! queueing, a fairer allocation rule — is a separate decision from the three
+//! guarantees this contract actually makes about it, all covered by tests in
+//! `test.rs`:
+//!
+//! - **The budget is never exceeded**, under any ordering. A finalisation that
+//!   would over-commit is rejected with [`Error::InsufficientBudget`] rather
+//!   than accepted and squeezing a later payout.
+//! - **A rejected finalisation is a pure read.** Nothing is written before the
+//!   budget check, so a refused application is untouched — same `finalized:
+//!   false`, same votes, no [`Award`] created — and stays finalisable exactly
+//!   as before. If whatever consumed the budget the first time around is never
+//!   finalised (or is finalised for less), the identical call against the
+//!   identical application can still succeed later.
+//! - **No ordering double-commits.** Once an application is finalised, every
+//!   further `finalize` call against it fails with [`Error::AlreadyFinalized`]
+//!   before the budget is touched again, regardless of who calls it or when.
 
 use soroban_sdk::{
     contract, contractclient, contracterror, contractevent, contractimpl, contracttype, token,
@@ -587,6 +616,10 @@ impl Programme {
     ///
     /// `payee` is where tranches are paid. In [`Mode::Direct`] that is a verified
     /// institution rather than the recipient.
+    ///
+    /// When the programme is oversubscribed, being permissionless means calling
+    /// order decides who is funded — see "Oversubscription" in the module docs
+    /// for what is and is not guaranteed about that.
     pub fn finalize(
         env: Env,
         applicant: Address,
@@ -1182,7 +1215,7 @@ impl Programme {
         env.storage()
             .persistent()
             .get(&Key::Award(recipient))
-            .ok_or(Error::ApplicationNotFound)
+            .ok_or(Error::AwardNotFound)
     }
 
     pub fn contributed_by(env: Env, donor: Address) -> i128 {

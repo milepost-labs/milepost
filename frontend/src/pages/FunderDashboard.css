@@ -304,7 +304,8 @@
   margin-top: auto;
 }
 
-.program-actions button {
+.program-actions button,
+.program-actions a {
   flex: 1;
   justify-content: center;
 }

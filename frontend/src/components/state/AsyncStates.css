@@ -70,3 +70,21 @@
 .state-error__retry:hover {
   background: var(--surface-hover);
 }
+
+.state-success {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--space-4);
+  padding: var(--space-4) var(--space-5);
+  border-radius: var(--radius-md);
+  border: 1px solid color-mix(in srgb, var(--success) 35%, transparent);
+  background: color-mix(in srgb, var(--success) 8%, transparent);
+}
+.state-success__text { flex: 1; }
+.state-success__title { font-weight: var(--weight-medium); color: var(--text-main); }
+.state-success__description { margin-top: var(--space-1); font-size: var(--text-sm); color: var(--text-muted); }
+.state-success__dismiss {
+  border: 0; background: transparent; cursor: pointer;
+  color: var(--text-muted); font-size: var(--text-lg); line-height: 1;
+  min-width: 44px; min-height: 44px;
+}

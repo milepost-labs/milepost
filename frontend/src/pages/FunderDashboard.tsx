@@ -1,9 +1,11 @@
 import './FunderDashboard.css';
 import { TrendingUp, CheckCircle, Activity, WalletCards } from 'lucide-react';
+import { Link } from 'react-router-dom';
 import { useContractRead, useContractResult, useProgramme } from '../hooks';
 import { AsyncView } from '../components/state/AsyncStates';
 import { PhaseBadge } from '../components/ui';
 import { formatAmount, percentOf } from '../lib/amount';
+import { RefundsAndSweepsSection } from '../components/funder/RefundsAndSweepsSection';
 
 interface BudgetBreakdown {
   budget: bigint;
@@ -216,12 +218,16 @@ export const FunderDashboard = () => {
             </div>
 
             <div className="program-actions">
-              <button type="button" className="btn-secondary">View Details</button>
+              <Link to="/programme" className="btn-secondary">View Details</Link>
               <button type="button" className="btn-primary">Commit More Funds</button>
             </div>
           </div>
         </div>
       </section>
+      <div style={{ marginTop: '2rem' }}>
+        <RefundsAndSweepsSection />
+      </div>
     </div>
   );
 };
+
