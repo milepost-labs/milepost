@@ -1,5 +1,6 @@
+import { Link } from 'react-router-dom';
 import './FunderDashboard.css';
-import { TrendingUp, CheckCircle, Activity, WalletCards } from 'lucide-react';
+import { TrendingUp, CheckCircle, Activity, WalletCards, Plus } from 'lucide-react';
 import { useContractRead, useContractResult, useProgramme } from '../hooks';
 import { AsyncView } from '../components/state/AsyncStates';
 import { PhaseBadge } from '../components/ui';
@@ -65,9 +66,19 @@ export const FunderDashboard = () => {
 
   return (
     <div className="dashboard-container">
-      <header className="dashboard-header animate-fade-up">
-        <h1>Funder Dashboard</h1>
-        <p className="typo-text text-muted">Manage your committed funds and track disbursement milestones.</p>
+      <header className="dashboard-header animate-fade-up" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+        <div>
+          <h1>Funder Dashboard</h1>
+          <p className="typo-text text-muted">Manage your committed funds and track disbursement milestones.</p>
+        </div>
+        <Link
+          to="/funders/create"
+          className="btn-primary"
+          aria-label="Create a new programme"
+          style={{ display: 'inline-flex', alignItems: 'center', gap: '0.5rem', whiteSpace: 'nowrap' }}
+        >
+          <Plus size={16} /> Create Programme
+        </Link>
       </header>
 
       <section className="stats-grid animate-fade-up" style={{ animationDelay: '100ms' }}>
