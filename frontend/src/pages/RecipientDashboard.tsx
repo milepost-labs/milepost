@@ -1,4 +1,5 @@
 import { useEffect, useState, useMemo } from 'react';
+import { Link } from 'react-router-dom';
 import { useContractRead, useContractResult, useProgramme, useTransaction, phaseLabel } from '../hooks';
 import { AsyncView, Empty } from '../components/state/AsyncStates';
 import { Badge, Button, Card, Field, Modal, Stat } from '../components/ui';
@@ -187,6 +188,23 @@ export const RecipientDashboard = () => {
         )}
         <p className="typo-text text-muted">Track your award and direct your allocation to a verified payee.</p>
       </header>
+
+      <Card title="Recipient views">
+        <p className="typo-text text-muted recipient-views__intro">
+          Look up standing, award progress, and application status for this programme.
+        </p>
+        <div className="recipient-views__links">
+          <Link to="/recipients/standing" className="btn-secondary">
+            Standing
+          </Link>
+          <Link to="/recipients/award-progress" className="btn-secondary">
+            Award progress
+          </Link>
+          <Link to="/recipients/application-timeline" className="btn-secondary">
+            Application timeline
+          </Link>
+        </div>
+      </Card>
 
       <AsyncView
         {...award}

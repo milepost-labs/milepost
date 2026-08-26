@@ -9,6 +9,9 @@ import { ProgrammeDetail } from './pages/ProgrammeDetail';
 import { RecipientDashboard } from './pages/RecipientDashboard';
 import { VerifierDashboard } from './pages/VerifierDashboard';
 import { FinalizeAwards } from './pages/FinalizeAwards';
+import { Standing } from './pages/Standing';
+import { AwardProgress } from './pages/AwardProgress';
+import { ApplicationTimeline } from './pages/ApplicationTimeline';
 
 function App() {
   return (
@@ -23,6 +26,9 @@ function App() {
               <Route path="programme" element={<ProgrammeDetail />} />
               <Route path="programme/:programmeId" element={<ProgrammeDetail />} />
               <Route path="recipients" element={<RecipientDashboard />} />
+              <Route path="recipients/standing" element={<Standing />} />
+              <Route path="recipients/award-progress" element={<AwardProgress />} />
+              <Route path="recipients/application-timeline" element={<ApplicationTimeline />} />
               <Route path="verifiers" element={<VerifierDashboard />} />
               <Route path="finalize" element={<FinalizeAwards />} />
             </Route>

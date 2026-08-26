@@ -14,6 +14,16 @@
   margin: 0;
 }
 
+.recipient-views__intro {
+  margin: 0 0 var(--space-4);
+}
+
+.recipient-views__links {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-3);
+}
+
 .stats-grid {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
