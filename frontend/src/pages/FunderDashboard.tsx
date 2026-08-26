@@ -72,10 +72,10 @@ export const FunderDashboard = () => {
 
       <section className="stats-grid animate-fade-up" style={{ animationDelay: '100ms' }}>
         <div className="stat-card glass-panel">
-          <div className="stat-icon"><TrendingUp size={24} /></div>
+          <div className="stat-icon" aria-hidden="true"><TrendingUp size={24} /></div>
           <div className="stat-content">
             <span className="stat-label">Net Budget (After Fees)</span>
-            <span className="stat-value numeric">
+            <span className="stat-value numeric" aria-label="Net budget after fees">
               <AsyncView {...budget} onRetry={budget.refetch}>
                 {(value) => formatXlm(value)}
               </AsyncView>
@@ -83,10 +83,10 @@ export const FunderDashboard = () => {
           </div>
         </div>
         <div className="stat-card glass-panel">
-          <div className="stat-icon"><Activity size={24} /></div>
+          <div className="stat-icon" aria-hidden="true"><Activity size={24} /></div>
           <div className="stat-content">
             <span className="stat-label">Total Contributed</span>
-            <span className="stat-value numeric">
+            <span className="stat-value numeric" aria-label="Total contributed">
               <AsyncView {...contributed} onRetry={contributed.refetch}>
                 {(value) => formatXlm(value)}
               </AsyncView>
@@ -94,10 +94,10 @@ export const FunderDashboard = () => {
           </div>
         </div>
         <div className="stat-card glass-panel">
-          <div className="stat-icon"><CheckCircle size={24} /></div>
+          <div className="stat-icon" aria-hidden="true"><CheckCircle size={24} /></div>
           <div className="stat-content">
             <span className="stat-label">Total Released</span>
-            <span className="stat-value numeric">
+            <span className="stat-value numeric" aria-label="Total released">
               <AsyncView {...released} onRetry={released.refetch}>
                 {(value) => formatXlm(value)}
               </AsyncView>
@@ -112,7 +112,7 @@ export const FunderDashboard = () => {
             <span className="stat-label">Programme funds</span>
             <h2>Budget and fee breakdown</h2>
           </div>
-          <div className="budget-panel-icon">
+          <div className="budget-panel-icon" aria-hidden="true">
             <WalletCards size={24} />
           </div>
         </div>
@@ -207,17 +207,24 @@ export const FunderDashboard = () => {
 
             <div className="progress-container">
               <div className="progress-labels">
-                <span>Disbursement Progress</span>
-                <span>40%</span>
+                <span id="progress-label">Disbursement Progress</span>
+                <span aria-hidden="true">40%</span>
               </div>
-              <div className="progress-bar">
+              <div
+                className="progress-bar"
+                role="progressbar"
+                aria-valuenow={40}
+                aria-valuemin={0}
+                aria-valuemax={100}
+                aria-labelledby="progress-label"
+              >
                 <div className="progress-fill" style={{ width: '40%' }}></div>
               </div>
             </div>
 
             <div className="program-actions">
-              <button type="button" className="btn-secondary">View Details</button>
-              <button type="button" className="btn-primary">Commit More Funds</button>
+              <button type="button" className="btn-secondary" aria-label="View details for CS Scholarship 2026">View Details</button>
+              <button type="button" className="btn-primary" aria-label="Commit more funds to CS Scholarship 2026">Commit More Funds</button>
             </div>
           </div>
         </div>

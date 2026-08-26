@@ -27,13 +27,13 @@ export const Navbar = () => {
 
         <div className="navbar-actions">
           {address ? (
-            <div className="badge-pill connected-badge" style={{ backgroundColor: 'var(--surface-hover)', border: '1px solid var(--surface-border)' }}>
-              <span className="pulse-dot" style={{ backgroundColor: 'var(--color-success)' }}></span>
+            <div className="badge-pill connected-badge" style={{ backgroundColor: 'var(--surface-hover)', border: '1px solid var(--surface-border)' }} aria-label={`Connected wallet: ${address}`}>
+              <span className="pulse-dot" style={{ backgroundColor: 'var(--color-success)' }} aria-hidden="true"></span>
               {truncate(address)}
             </div>
           ) : (
             <button onClick={connectWallet} className="btn-primary connect-wallet-btn">
-              <Wallet size={18} />
+              <Wallet size={18} aria-hidden="true" />
               Connect Wallet
             </button>
           )}

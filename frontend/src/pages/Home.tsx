@@ -43,10 +43,10 @@ export const Home: React.FC = () => {
           </p>
           <div className="hero-actions animate-fade-up" style={{ animationDelay: '400ms' }}>
             <Link to="/funders" className="btn-primary btn-large">
-              Explore Programs <ArrowRight size={20} />
+              Explore Programs <ArrowRight size={20} aria-hidden="true" />
             </Link>
             <a href="https://github.com/gbemi-dev/milepost" target="_blank" rel="noreferrer" className="btn-secondary btn-large">
-              Read the Docs <ArrowUpRight size={18} />
+              Read the Docs <ArrowUpRight size={18} aria-hidden="true" />
             </a>
           </div>
         </div>
@@ -60,7 +60,7 @@ export const Home: React.FC = () => {
             </div>
             <div className="abstract-body">
               <div className="ui-row">
-                <div className="ui-icon"><CheckCircle size={16}/></div>
+                <div className="ui-icon" aria-hidden="true"><CheckCircle size={16}/></div>
                 <div className="ui-text">
                   <div className="ui-line skeleton" style={{ width: '80%' }}></div>
                   <div className="ui-line skeleton-sub" style={{ width: '40%' }}></div>
@@ -68,7 +68,7 @@ export const Home: React.FC = () => {
                 <div className="ui-amount">$1,500</div>
               </div>
               <div className="ui-row locked">
-                <div className="ui-icon"><Lock size={16}/></div>
+                <div className="ui-icon" aria-hidden="true"><Lock size={16}/></div>
                 <div className="ui-text">
                   <div className="ui-line skeleton" style={{ width: '60%' }}></div>
                   <div className="ui-line skeleton-sub" style={{ width: '50%' }}></div>
@@ -90,7 +90,7 @@ export const Home: React.FC = () => {
         <div className="compare-bento">
           <div className="bento-card old-way glass-panel">
             <div className="bento-header">
-              <Lock size={20} className="text-error" />
+              <Lock size={20} className="text-error" aria-hidden="true" />
               <h3>The Old Way</h3>
             </div>
             <p className="text-muted">Lump sums, zero accountability after transfer, and high gas fees that price out micro-philanthropy.</p>
@@ -98,7 +98,7 @@ export const Home: React.FC = () => {
           
           <div className="bento-card new-way glass-panel">
             <div className="bento-header">
-              <Unlock size={20} className="text-success" />
+              <Unlock size={20} className="text-success" aria-hidden="true" />
               <h3>The Milepost Way</h3>
             </div>
             <ul className="bento-list">
@@ -153,7 +153,7 @@ export const Home: React.FC = () => {
                   <div className="doc-line short"></div>
                 </div>
                 <div className="doc-seal">
-                  <Shield size={20} className="seal-icon" />
+                  <Shield size={20} className="seal-icon" aria-hidden="true" />
                   <span>Attested</span>
                 </div>
               </div>
@@ -169,7 +169,7 @@ export const Home: React.FC = () => {
             <div className="grid-visual glass-panel">
               <div className="mini-ui tranche-ui">
                 <div className="tranche-item">
-                  <div className="tranche-icon success"><Unlock size={16} /></div>
+                  <div className="tranche-icon success" aria-hidden="true"><Unlock size={16} /></div>
                   <div className="tranche-details">
                     <div className="tranche-name">Tuition</div>
                     <div className="tranche-amount text-success">$1,500 Disbursed</div>
@@ -177,7 +177,7 @@ export const Home: React.FC = () => {
                 </div>
                 <div className="tranche-line"></div>
                 <div className="tranche-item locked">
-                  <div className="tranche-icon"><Lock size={16} /></div>
+                  <div className="tranche-icon" aria-hidden="true"><Lock size={16} /></div>
                   <div className="tranche-details">
                     <div className="tranche-name">Stipend</div>
                     <div className="tranche-amount">$1,000 Locked</div>
@@ -200,7 +200,7 @@ export const Home: React.FC = () => {
           </div>
           <div className="infra-action">
              <Link to="/funders" className="btn-primary btn-large btn-inverted">
-              View Dashboard <Zap size={18} />
+              View Dashboard <Zap size={18} aria-hidden="true" />
             </Link>
           </div>
         </div>

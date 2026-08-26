@@ -3,6 +3,7 @@ import { ThemeProvider } from './context/ThemeContext';
 import { SorobanProvider } from './context/SorobanContext';
 import { WalletProvider } from './context/WalletContext';
 import { Layout } from './components/layout/Layout';
+import { TransactionAnnouncer } from './components/state/TransactionAnnouncer';
 import { Home } from './pages/Home';
 import { FunderDashboard } from './pages/FunderDashboard';
 import { RecipientDashboard } from './pages/RecipientDashboard';
@@ -14,6 +15,7 @@ function App() {
       <WalletProvider>
         <SorobanProvider>
         <Router>
+          <TransactionAnnouncer />
           <Routes>
             <Route path="/" element={<Layout />}>
               <Route index element={<Home />} />

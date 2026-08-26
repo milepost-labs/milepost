@@ -3,7 +3,7 @@ import './RecipientDashboard.css';
 import { Award, Unlock, FileText, AlertCircle } from 'lucide-react';
 import { useSoroban } from '../context/useSoroban';
 import { useWallet } from '../context/useWallet';
-import { formatAmount } from '../lib/amount';
+import { formatAmount, describeAmount } from '../lib/amount';
 import type { Award as AwardData, Application } from '@milepost/program';
 
 // Seeded testnet recipient (Ada) for demo purposes
@@ -55,7 +55,7 @@ export const RecipientDashboard = () => {
           {isDemo && <p className="text-warning">Viewing Demo Address</p>}
         </header>
         <div className="glass-panel" style={{ padding: '2rem', textAlign: 'center' }}>
-          <AlertCircle size={48} style={{ margin: '0 auto', color: 'var(--text-muted)' }} />
+          <AlertCircle size={48} style={{ margin: '0 auto', color: 'var(--text-muted)' }} aria-hidden="true" />
           <h3 style={{ marginTop: '1rem' }}>No Application Found</h3>
           <p className="text-muted">The connected wallet is not a registered applicant for this programme.</p>
         </div>
@@ -73,24 +73,30 @@ export const RecipientDashboard = () => {
 
       <section className="stats-grid animate-fade-up" style={{ animationDelay: '100ms' }}>
         <div className="stat-card glass-panel">
-          <div className="stat-icon"><Award size={24} /></div>
+          <div className="stat-icon" aria-hidden="true"><Award size={24} /></div>
           <div className="stat-content">
             <span className="stat-label">Total Awarded</span>
-            <span className="stat-value">{award ? `${formatAmount(award.granted)} XLM` : 'Pending'}</span>
+            <span className="stat-value" aria-label={award ? `Total awarded: ${describeAmount(award.granted)}` : 'Total awarded: pending'}>
+              {award ? `${formatAmount(award.granted)} XLM` : 'Pending'}
+            </span>
           </div>
         </div>
         <div className="stat-card glass-panel">
-          <div className="stat-icon"><FileText size={24} /></div>
+          <div className="stat-icon" aria-hidden="true"><FileText size={24} /></div>
           <div className="stat-content">
             <span className="stat-label">Requested Amount</span>
-            <span className="stat-value">{formatAmount(application.requested)} XLM</span>
+            <span className="stat-value" aria-label={`Requested: ${describeAmount(application.requested)}`}>
+              {formatAmount(application.requested)} XLM
+            </span>
           </div>
         </div>
         <div className="stat-card glass-panel">
-          <div className="stat-icon"><Unlock size={24} /></div>
+          <div className="stat-icon" aria-hidden="true"><Unlock size={24} /></div>
           <div className="stat-content">
             <span className="stat-label">Tranches Released</span>
-            <span className="stat-value">{award ? `${award.tranches_released} / ${award.tranches}` : '0 / 0'}</span>
+            <span className="stat-value" aria-label={award ? `${award.tranches_released} of ${award.tranches} tranches released` : 'No tranches released yet'}>
+              {award ? `${award.tranches_released} / ${award.tranches}` : '0 / 0'}
+            </span>
           </div>
         </div>
       </section>
@@ -100,7 +106,7 @@ export const RecipientDashboard = () => {
         <div className="milestones-timeline">
           
           <div className="milestone-card glass-panel unlocked">
-            <div className="milestone-icon">
+            <div className="milestone-icon" aria-hidden="true">
               <AlertCircle size={20} />
             </div>
             <div className="milestone-details">
@@ -116,7 +122,7 @@ export const RecipientDashboard = () => {
                   <div style={{ display: 'flex', gap: '0.5rem' }}>
                     {application.votes.map((v: bigint, i: number) => (
                       <span key={i} className="badge" style={{ backgroundColor: 'var(--surface)', border: '1px solid var(--surface-border)' }}>
-                        {formatAmount(v)} XLM
+                        {describeAmount(v)}
                       </span>
                     ))}
                   </div>
