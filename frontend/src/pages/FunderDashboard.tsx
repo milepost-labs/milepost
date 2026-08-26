@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { Link } from 'react-router-dom';
 import './FunderDashboard.css';
 import { TrendingUp, CheckCircle, Activity, WalletCards, Plus, Users } from 'lucide-react';
+import { Link } from 'react-router-dom';
 import { useContractRead, useContractResult, useProgramme } from '../hooks';
 import { AsyncView } from '../components/state/AsyncStates';
 import { PhaseBadge } from '../components/ui';
@@ -259,6 +260,8 @@ export const FunderDashboard = () => {
             <div className="program-actions">
               <button type="button" className="btn-secondary" aria-label="View details for CS Scholarship 2026">View Details</button>
               <button type="button" className="btn-primary" onClick={() => setContributeOpen(true)} aria-label="Contribute funds to this programme">Contribute</button>
+              <Link to="/programme" className="btn-secondary">View Details</Link>
+              <button type="button" className="btn-primary">Commit More Funds</button>
             </div>
           </div>
         </div>

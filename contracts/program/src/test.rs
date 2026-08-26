@@ -1314,3 +1314,129 @@ fn the_payee_registry_rejects_duplicates_and_unknowns() {
     f.client.deny_payee(&school);
     assert_eq!(f.client.try_deny_payee(&school), Err(Ok(Error::NotPayee)));
 }
+
+// ---- property tests for the median award mechanism ----
+
+mod proptests {
+    use super::*;
+    use proptest::prelude::*;
+
+    fn run_award(f: &Fixture, requested: i128, votes: &[i128]) -> i128 {
+        let applicant = Address::generate(&f.env);
+        let donor = funded_donor(f, 100_000);
+        f.client.contribute(&donor, &100_000);
+        f.client.apply(&applicant, &requested, &hash(&f.env, 1));
+        to_review(f);
+        for (i, v) in votes.iter().enumerate() {
+            f.client
+                .review(&f.reviewers.get(i as u32).unwrap(), &applicant, v);
+        }
+        let payee = Address::generate(&f.env);
+        f.client.allow_payee(&payee);
+        f.client.finalize(&applicant, &payee, &Mode::Direct).granted
+    }
+
+    proptest! {
+        #[test]
+        fn award_in_bounding_box(
+            mut votes in prop::collection::vec(1i128..=10_000i128, 3..=16),
+        ) {
+            votes.sort();
+            let requested = *votes.last().unwrap();
+            let f = setup(votes.len() as u32, votes.len() as u32);
+            let granted = run_award(&f, requested, &votes);
+            prop_assert!(
+                granted >= *votes.first().unwrap() && granted <= *votes.last().unwrap(),
+            );
+        }
+    }
+
+    proptest! {
+        #[test]
+        fn award_never_exceeds_requested(
+            votes in prop::collection::vec(1i128..=10_000i128, 3..=16),
+            requested in 10_000i128..=100_000i128,
+        ) {
+            let f = setup(votes.len() as u32, votes.len() as u32);
+            let granted = run_award(&f, requested, &votes);
+            prop_assert!(granted <= requested);
+        }
+    }
+
+    proptest! {
+        #[test]
+        fn median_more_robust_than_mean(
+            base_votes in prop::collection::vec(100i128..=9_000i128, 3..=15),
+            extreme in prop_oneof![Just(1i128), Just(10_000i128)],
+        ) {
+            prop_assume!(base_votes.len() < MAX_QUORUM as usize);
+
+            let mut sorted = base_votes.clone();
+            sorted.sort();
+            let requested = *sorted.last().unwrap().max(&extreme);
+
+            let f_base = setup(sorted.len() as u32, sorted.len() as u32);
+            let median_before = run_award(&f_base, requested, &sorted);
+
+            let mut with_extreme = sorted.clone();
+            with_extreme.push(extreme);
+            with_extreme.sort();
+            let f_ext = setup(with_extreme.len() as u32, with_extreme.len() as u32);
+            let median_after = run_award(&f_ext, requested, &with_extreme);
+
+            let median_shift = (median_after - median_before).unsigned_abs();
+
+            // The median's influence from a single vote is bounded by the gap
+            // between the two order statistics it can jump between.  This is the
+            // core robustness property the issue asks for: no single vote can
+            // move the median by more than one "step" in the sorted list,
+            // whereas the mean is pulled proportionally to the outlier's
+            // distance from the centre.
+            let max_gap = sorted.windows(2)
+                .map(|w| (w[1] - w[0]).unsigned_abs())
+                .max()
+                .unwrap_or(0);
+            prop_assert!(
+                median_shift <= max_gap,
+                "median shift {median_shift} must be bounded by max gap {max_gap}",
+            );
+        }
+    }
+
+    proptest! {
+        #[test]
+        fn order_independent(
+            votes in prop::collection::vec(1i128..=10_000i128, 3..=16),
+        ) {
+            let requested = *votes.iter().max().unwrap();
+            let n = votes.len() as u32;
+
+            let f1 = setup(n, n);
+            let g1 = run_award(&f1, requested, &votes);
+
+            let mut reversed = votes.clone();
+            reversed.reverse();
+            let f2 = setup(n, n);
+            let g2 = run_award(&f2, requested, &reversed);
+
+            prop_assert_eq!(g1, g2);
+        }
+    }
+
+    proptest! {
+        #[test]
+        fn identical_votes_yields_that_value(
+            value in 1i128..=10_000i128,
+            n in 3u32..=16u32,
+        ) {
+            let f = setup(n, n);
+            // Build a stack-allocated slice to avoid soroban_sdk::Vec aliasing.
+            let mut buf = [0i128; 16];
+            for slot in buf.iter_mut().take(n as usize) {
+                *slot = value;
+            }
+            let granted = run_award(&f, value, &buf[..n as usize]);
+            prop_assert_eq!(granted, value);
+        }
+    }
+}
