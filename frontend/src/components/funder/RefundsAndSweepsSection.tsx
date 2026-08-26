@@ -8,7 +8,6 @@ import { Card, Stat } from '../ui/Card';
 import { Badge } from '../ui/Badge';
 import { formatAmount } from '../../lib/amount';
 import { explain } from '../../lib/errors';
-import type { Client as ProgrammeClient } from '@milepost/program';
 
 const NOW = BigInt(Math.floor(Date.now() / 1000));
 
@@ -16,28 +15,21 @@ export function RefundsAndSweepsSection() {
   const { address: donorAddress } = useWallet();
   const { client: programme } = useProgramme();
 
-  const releaseDeadlineReq = useContractRead(() => programme.release_deadline(), [programme]);
-  const sweepDeadlineReq = useContractRead(() => programme.sweep_deadline(), [programme]);
+  const configReq = useContractRead(() => programme.config(), [programme]);
   const totalContributedReq = useContractRead(() => programme.total_contributed(), [programme]);
   const totalReleasedReq = useContractRead(() => programme.total_released(), [programme]);
   
   const donorAllocationReq = useContractRead(
-    () => (donorAddress ? programme.allocation_of({ donor: donorAddress }) : Promise.resolve(0n)),
+    () => {
+      if (!donorAddress) return Promise.resolve({ result: 0n });
+      return programme.allocation_of({ recipient: donorAddress });
+    },
     [programme, donorAddress]
   );
 
-  const refundTx = useTransaction(
-    () => programme.refund({ donor: donorAddress! }), 
-    { contract: 'program' }
-  );
-  const sweepFeeTx = useTransaction(
-    () => programme.sweep_fee(),
-    { contract: 'program' }
-  );
-  const sweepUnclaimedTx = useTransaction(
-    () => programme.sweep_unclaimed(),
-    { contract: 'program' }
-  );
+  const refundTx = useTransaction({ contract: 'program' });
+  const sweepFeeTx = useTransaction({ contract: 'program' });
+  const sweepUnclaimedTx = useTransaction({ contract: 'program' });
 
   return (
     <div className="refunds-sweeps-section" style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>
@@ -48,20 +40,27 @@ export function RefundsAndSweepsSection() {
           {!donorAddress ? (
             <p style={{ fontSize: '0.875rem', color: 'var(--color-muted)' }}>Connect your wallet to view your contribution and claimable refund.</p>
           ) : (
-            <AsyncView result={releaseDeadlineReq}>
-              {(releaseDeadline) => (
-                <AsyncView result={donorAllocationReq}>
-                  {(allocation) => (
-                    <AsyncView result={totalContributedReq}>
-                      {(totalContributed) => (
-                        <AsyncView result={totalReleasedReq}>
-                          {(totalReleased) => {
-                            const isPastRelease = NOW >= releaseDeadline;
+            <AsyncView {...configReq} onRetry={configReq.refetch}>
+              {/* eslint-disable-next-line @typescript-eslint/no-explicit-any */}
+              {(config: any) => (
+                <AsyncView {...donorAllocationReq} onRetry={donorAllocationReq.refetch}>
+                  {/* eslint-disable-next-line @typescript-eslint/no-explicit-any */}
+                  {(allocation: any) => (
+                    <AsyncView {...totalContributedReq} onRetry={totalContributedReq.refetch}>
+                      {/* eslint-disable-next-line @typescript-eslint/no-explicit-any */}
+                      {(totalContributed: any) => (
+                        <AsyncView {...totalReleasedReq} onRetry={totalReleasedReq.refetch}>
+                          {/* eslint-disable-next-line @typescript-eslint/no-explicit-any */}
+                          {(totalReleased: any) => {
+                            const releaseDeadline = config.release_deadline;
+                            const isPastRelease = NOW >= BigInt(releaseDeadline);
                             const deadlineDate = new Date(Number(releaseDeadline) * 1000).toLocaleDateString();
                             
-                            const unreleased = totalContributed - totalReleased;
-                            const estimatedRefund = totalContributed > 0n 
-                              ? (allocation * unreleased) / totalContributed 
+                            const unreleased = BigInt(totalContributed) - BigInt(totalReleased);
+                            const alloc = BigInt(allocation);
+                            const totalContr = BigInt(totalContributed);
+                            const estimatedRefund = totalContr > 0n 
+                              ? (alloc * unreleased) / totalContr 
                               : 0n;
 
                             const refundError = refundTx.error ? explain(refundTx.error, 'program') : null;
@@ -69,7 +68,7 @@ export function RefundsAndSweepsSection() {
                             return (
                               <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
                                 <div style={{ display: 'flex', gap: '2rem' }}>
-                                  <Stat label="Your Contribution" value={formatAmount(allocation, { asset: 'XLM' })} />
+                                  <Stat label="Your Contribution" value={formatAmount(alloc, { asset: 'XLM' })} />
                                   <Stat label="Estimated Refund" value={formatAmount(estimatedRefund, { asset: 'XLM' })} />
                                 </div>
                                 
@@ -86,7 +85,7 @@ export function RefundsAndSweepsSection() {
                                     <Button 
                                       loading={refundTx.busy}
                                       disabled={!isPastRelease || refundTx.busy || estimatedRefund === 0n}
-                                      onClick={() => refundTx.send()}
+                                      onClick={() => refundTx.send(() => programme.refund({ donor: donorAddress }))}
                                     >
                                       {isPastRelease ? "Claim Refund" : `Claimable on ${deadlineDate}`}
                                     </Button>
@@ -119,9 +118,11 @@ export function RefundsAndSweepsSection() {
             Sweeps return unclaimed funds to donors or transfer fees to the treasury. These actions are permissionless.
           </p>
 
-          <AsyncView result={sweepDeadlineReq}>
-            {(sweepDeadline) => {
-              const isPastSweep = NOW >= sweepDeadline;
+          <AsyncView {...configReq} onRetry={configReq.refetch}>
+            {/* eslint-disable-next-line @typescript-eslint/no-explicit-any */}
+            {(config: any) => {
+              const sweepDeadline = config.sweep_deadline;
+              const isPastSweep = NOW >= BigInt(sweepDeadline);
               const sweepDate = new Date(Number(sweepDeadline) * 1000).toLocaleDateString();
 
               return (
@@ -131,7 +132,7 @@ export function RefundsAndSweepsSection() {
                     <p style={{ fontSize: '0.875rem', color: 'var(--color-muted)', flex: 1, margin: 0 }}>Transfers accumulated protocol fees to the treasury destination.</p>
                     <Button 
                       loading={sweepFeeTx.busy}
-                      onClick={() => sweepFeeTx.send()}
+                      onClick={() => sweepFeeTx.send(() => programme.sweep_fee())}
                     >
                       Sweep Fees
                     </Button>
@@ -147,7 +148,7 @@ export function RefundsAndSweepsSection() {
                     <Button 
                       loading={sweepUnclaimedTx.busy}
                       disabled={!isPastSweep || sweepUnclaimedTx.busy}
-                      onClick={() => sweepUnclaimedTx.send()}
+                      onClick={() => sweepUnclaimedTx.send(() => programme.sweep_unclaimed())}
                     >
                       {isPastSweep ? "Sweep Unclaimed" : `Available on ${sweepDate}`}
                     </Button>
