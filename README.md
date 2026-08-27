@@ -223,6 +223,10 @@ awards, and a real attestation under a restricted schema.
 
 Accounts and ids land in `deployments/<network>.seed.json`.
 
+For prerequisites, why the steps above are ordered the way they are, how to
+verify each one, and what to do when one fails partway, see
+[docs/deployment-runbook.md](docs/deployment-runbook.md).
+
 ## Error Reference
 
 For a full list of error codes, causes, and recommended actions across all five contracts, see [docs/error-code-reference.md](docs/error-code-reference.md).
