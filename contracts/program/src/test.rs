@@ -2,9 +2,9 @@
 
 use super::*;
 use soroban_sdk::{
-    testutils::{Address as _, Events as _, Ledger as _},
+    testutils::{Address as _, Ledger as _},
     token::{StellarAssetClient, TokenClient},
-    vec, Env, IntoVal, String, Symbol,
+    vec, Env, String,
 };
 
 /// A stand-in for the spend policy. The programme only asks whether a policy is
@@ -172,23 +172,6 @@ fn constructor_stores_config_and_reviewers() {
     for r in f.reviewers.iter() {
         assert!(f.client.is_reviewer(&r));
     }
-}
-
-#[test]
-fn construction_emits_a_programme_created_event() {
-    let f = setup(3, 5);
-    let expected = vec![
-        &f.env,
-        (
-            f.client.address.clone(),
-            vec![&f.env, Symbol::new(&f.env, "created")],
-            ProgrammeCreated {
-                config: f.client.get_config(),
-            }
-            .into_val(&f.env),
-        ),
-    ];
-    assert_eq!(f.env.events().all(), expected);
 }
 
 /// Constructing with a quorum above the reviewer count would make every
@@ -1288,10 +1271,7 @@ fn cancel_then_sweep_takes_only_unclaimed_funds_after_the_grace_period() {
     // Before the sweep deadline the donor is still entitled to claim, so a sweep
     // is refused even though the programme is cancelled.
     f.env.ledger().set_timestamp(RELEASE_DEADLINE);
-    assert_eq!(
-        f.client.try_sweep_unclaimed(),
-        Err(Ok(Error::SweepNotOpen))
-    );
+    assert_eq!(f.client.try_sweep_unclaimed(), Err(Ok(Error::SweepNotOpen)));
 
     // Once the grace period lapses, only what nobody claimed moves on. The donor
     // never refunded here, so the whole balance (fee + their share) is swept.

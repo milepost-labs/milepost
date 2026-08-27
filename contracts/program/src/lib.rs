@@ -374,6 +374,9 @@ pub struct ProgrammeCancelled {
 /// otherwise cheaply obtain — the deadlines, quorum, tranches, fee and the
 /// addresses the programme is wired to. Mirrors the existing convention of
 /// publishing the whole struct rather than a projection of it.
+/// Not asserted in tests: the Soroban test environment does not record events
+/// emitted during construction, whether the contract is registered directly or
+/// deployed through the registry. The event is emitted on-chain regardless.
 #[contractevent(topics = ["created"], data_format = "single-value")]
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct ProgrammeCreated {
@@ -595,9 +598,11 @@ impl Programme {
         }
         // Read on every review; bump it so the trust set survives a long review
         // window without a separate keepalive.
-        env.storage()
-            .persistent()
-            .extend_ttl(&Key::Reviewer(reviewer.clone()), BUMP_THRESHOLD, BUMP_LEDGERS);
+        env.storage().persistent().extend_ttl(
+            &Key::Reviewer(reviewer.clone()),
+            BUMP_THRESHOLD,
+            BUMP_LEDGERS,
+        );
 
         let vote_key = Key::Voted(applicant.clone(), reviewer.clone());
         if env.storage().persistent().has(&vote_key) {
@@ -953,9 +958,11 @@ impl Programme {
         }
         // Read on every release; bump it so a trusted verifier stays resolvable
         // for the full life of a long-running programme.
-        env.storage()
-            .persistent()
-            .extend_ttl(&Key::Verifier(attester.clone()), BUMP_THRESHOLD, BUMP_LEDGERS);
+        env.storage().persistent().extend_ttl(
+            &Key::Verifier(attester.clone()),
+            BUMP_THRESHOLD,
+            BUMP_LEDGERS,
+        );
 
         // One proof, one tranche. Without this a single attestation would
         // unlock the whole award.
