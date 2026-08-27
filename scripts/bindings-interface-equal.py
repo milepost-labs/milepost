@@ -26,12 +26,28 @@ NETWORKS_RE = re.compile(
 )
 
 
+SPEC_ENTRY_RE = re.compile(r'"[A-Za-z0-9+/=]{16,}"')
+
+
+def normalise_spec_order(text: str) -> str:
+    """Sort the ContractSpec base64 entries.
+
+    The generator emits one base64 XDR entry per function, type and event, and
+    the order it chooses has changed between CLI versions. Order carries no
+    meaning — the spec is a set — so comparing it as a sequence reports drift
+    for bindings that are semantically identical. Sorting still catches an
+    entry being added, removed or altered, which is the thing we care about.
+    """
+    entries = sorted(SPEC_ENTRY_RE.findall(text))
+    return SPEC_ENTRY_RE.sub("\x00SPEC\x00", text) + "\n" + "\n".join(entries)
+
+
 def interface_body(text: str) -> str:
     text = text.replace("\r\n", "\n")
     match = HEADER_RE.search(text)
     rest = text[match.end() :] if match else text
     rest = NETWORKS_RE.sub("\n\n", rest, count=1)
-    return rest.lstrip("\n")
+    return normalise_spec_order(rest.lstrip("\n"))
 
 
 def main() -> int:

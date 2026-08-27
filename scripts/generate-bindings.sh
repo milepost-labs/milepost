@@ -79,15 +79,19 @@ generate() {
     echo "error: missing $wasm — run: cargo build --target wasm32v1-none --release" >&2
     exit 1
   }
-  local dest
-  dest="$(mktemp -d "${TMPDIR:-/tmp}/milepost-gen.XXXXXX")"
+  local scratch dest
+  scratch="$(mktemp -d "${TMPDIR:-/tmp}/milepost-gen.XXXXXX")"
+  # stellar 27 validates the output directory's basename as an npm package
+  # name, and mktemp's suffix contains uppercase. Generate into a lowercase
+  # subdirectory named for the package instead.
+  dest="$scratch/$pkg"
   stellar contract bindings typescript \
     --wasm "$wasm" \
     --output-dir "$dest" \
     --overwrite
   mkdir -p "$ROOT/packages/$pkg/src"
   cp "$dest/src/index.ts" "$ROOT/packages/$pkg/src/index.ts"
-  rm -rf "$dest"
+  rm -rf "$scratch"
 }
 
 echo "==> Generating TypeScript bindings from wasm"

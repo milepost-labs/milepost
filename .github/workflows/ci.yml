@@ -37,7 +37,7 @@ jobs:
       # only finds out after a transaction is already submitted. Fail here
       # instead. `networks.testnet` on the four singletons is ignored so a
       # wasm-only regeneration cannot fail for the missing address.
-      - uses: stellar/stellar-cli@v23.1.4
+      - uses: stellar/stellar-cli@v27.1.0
       - name: Check TypeScript bindings
         run: ./scripts/check-bindings.sh
 

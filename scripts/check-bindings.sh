@@ -33,7 +33,7 @@ EOF
 
 need_stellar() {
   if ! command -v stellar >/dev/null 2>&1; then
-    echo "error: stellar CLI not found on PATH (need 23.x to generate bindings)" >&2
+    echo "error: stellar CLI not found on PATH (need 27.x to generate bindings)" >&2
     exit 1
   fi
 }
@@ -71,6 +71,44 @@ CONTRACTS=(
   "policy_spend:policy-spend"
 )
 
+# The four singleton contracts embed their deployed address as
+# `networks.testnet`; `program` does not, because every programme is its own
+# contract. The interface comparison deliberately ignores that block so a
+# wasm-only regeneration cannot fail for a missing address — but that also
+# means deleting the block entirely compares equal.
+#
+# That is not hypothetical. A regeneration from `--wasm` alone dropped
+# `networks` from packages/registry, and the frontend shipped unable to reach
+# the registry at all. So check presence separately from content.
+SINGLETONS=(attest record registry policy-spend)
+
+check_networks_present() {
+  local missing=0
+  echo "==> Checking singleton bindings still carry their deployed address"
+  for pkg in "${SINGLETONS[@]}"; do
+    if grep -q '^export const networks = {' "$ROOT/packages/$pkg/src/index.ts"; then
+      echo "    $pkg"
+    else
+      echo "    MISSING networks: packages/$pkg/src/index.ts" >&2
+      missing=1
+    fi
+  done
+  if [[ "$missing" -ne 0 ]]; then
+    cat >&2 <<'EOF'
+
+error: a singleton binding has lost its `networks` export.
+
+Bindings generated from `--wasm` alone carry no network information, so the
+block is dropped along with the deployed contract id. The frontend reads
+`networks.testnet`, and without it cannot reach the contract at all.
+
+Regenerate with the deployed id, or restore the block from git history.
+
+EOF
+    exit 1
+  fi
+}
+
 need_stellar
 
 TMP="$(mktemp -d "${TMPDIR:-/tmp}/milepost-bindings.XXXXXX")"
@@ -101,5 +139,7 @@ done
 if [[ "$mismatched" -ne 0 ]]; then
   fail
 fi
+
+check_networks_present
 
 echo "==> Bindings match the built contracts"
