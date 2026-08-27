@@ -44,6 +44,11 @@ def normalise_spec_order(text: str) -> str:
 
 def interface_body(text: str) -> str:
     text = text.replace("\r\n", "\n")
+    # `policy__` takes Vec<Context>, and Context lives in the smart wallet's
+    # spec rather than this contract's, so the generator emits a type it never
+    # declares. generate-bindings.sh widens it to `any` so the package
+    # compiles; normalise both sides here so that is not read as drift.
+    text = text.replace("contexts: Array<Context>", "contexts: Array<any>")
     match = HEADER_RE.search(text)
     rest = text[match.end() :] if match else text
     rest = NETWORKS_RE.sub("\n\n", rest, count=1)

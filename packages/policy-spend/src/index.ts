@@ -322,7 +322,7 @@ export interface Client {
    * transaction is checked, so a caller cannot smuggle a forbidden call
    * through by bundling it with a permitted one.
    */
-  policy__: ({source, signer, contexts}: {source: string, signer: SignerKey, contexts: Array<Context>}, options?: MethodOptions) => Promise<AssembledTransaction<null>>
+  policy__: ({source, signer, contexts}: {source: string, signer: SignerKey, contexts: Array<any>}, options?: MethodOptions) => Promise<AssembledTransaction<null>>
 
   /**
    * Construct and simulate a configure transaction. Returns an `AssembledTransaction` object which will have a `result` field containing the result of the simulation. If this transaction changes contract state, you will need to call `signAndSend()` on the returned object.

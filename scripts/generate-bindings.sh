@@ -109,4 +109,15 @@ generate program program
 generate policy_spend policy-spend
 graft_networks "$ROOT/packages/policy-spend/src/index.ts" "$(id_for policy_spend)"
 
+# `policy_spend` implements the smart wallet's PolicyInterface, whose
+# `policy__` takes `Vec<Context>`. `Context` is defined in the wallet's own
+# spec, not this contract's, so the generator emits `Array<Context>` and never
+# declares the type — the package then fails to compile. Widen it to `any`,
+# which is what the committed bindings have always carried.
+# scripts/bindings-interface-equal.py applies the same substitution so the
+# drift check does not report this as a mismatch.
+sed -i.bak 's/contexts: Array<Context>/contexts: Array<any>/' \
+  "$ROOT/packages/policy-spend/src/index.ts"
+rm -f "$ROOT/packages/policy-spend/src/index.ts.bak"
+
 echo "==> Wrote packages/*/src/index.ts (singleton networks.testnet restored from packages/testnet.json)"
