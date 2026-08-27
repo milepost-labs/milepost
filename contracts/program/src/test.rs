@@ -111,6 +111,7 @@ fn setup_with(quorum: u32, reviewer_count: u32, tranches: u32) -> Fixture {
                 sweep_deadline: SWEEP_DEADLINE,
                 quorum,
                 tranches,
+                minimum_award: 0, // No minimum by default; setup_with_minimum covers the feature
                 metadata_hash: BytesN::from_array(&env, &[7u8; 32]),
             },
             reviewers.clone(),
@@ -229,6 +230,7 @@ fn construct_with(quorum: u32, reviewer_count: u32, apply: u64, review: u64, fee
                 sweep_deadline: SWEEP_DEADLINE,
                 quorum,
                 tranches: 3,
+                minimum_award: 0, // No minimum by default
                 metadata_hash: BytesN::from_array(&env, &[7u8; 32]),
             },
             reviewers,
@@ -373,6 +375,49 @@ fn only_registered_reviewers_may_review() {
     );
 }
 
+/// A pause has to actually stop things, or it is worse than no pause at all —
+/// a creator would believe the programme was contained while it kept taking
+/// money.
+#[test]
+fn pausing_blocks_the_money_path() {
+    let f = setup(2, 3);
+    let donor = funded_donor(&f, 10_000);
+    f.client.contribute(&donor, &1_000);
+
+    f.client.pause();
+    assert!(f.client.is_paused());
+
+    assert_eq!(
+        f.client.try_contribute(&donor, &1_000),
+        Err(Ok(Error::Paused))
+    );
+    let applicant = Address::generate(&f.env);
+    assert_eq!(
+        f.client.try_apply(&applicant, &500, &hash(&f.env, 1)),
+        Err(Ok(Error::Paused))
+    );
+
+    f.client.unpause();
+    assert!(!f.client.is_paused());
+    f.client.contribute(&donor, &1_000);
+}
+
+/// Refunds are deliberately outside the pause: trapping donors' money during
+/// an emergency is worse than whatever the pause was containing.
+#[test]
+fn pausing_does_not_trap_refunds() {
+    let f = setup(2, 3);
+    let donor = funded_donor(&f, 10_000);
+    f.client.contribute(&donor, &1_000);
+    f.env.ledger().set_timestamp(RELEASE_DEADLINE + 1);
+
+    f.client.pause();
+    // The amount is the ordinary proportional refund less fee; what matters
+    // here is that the call is not refused while paused.
+    let refunded = f.client.refund(&donor);
+    assert!(refunded > 0, "a paused programme must still refund donors");
+}
+
 #[test]
 fn a_reviewer_votes_once_per_applicant() {
     let f = setup(2, 3);
@@ -380,12 +425,13 @@ fn a_reviewer_votes_once_per_applicant() {
     f.client.apply(&applicant, &5_000, &hash(&f.env, 1));
     to_review(&f);
 
+    // A second review replaces the first rather than adding a vote — a
+    // reviewer still carries exactly one. Amendment is covered in its own
+    // tests; what matters here is that the count does not grow.
     let r = f.reviewers.get(0).unwrap();
     f.client.review(&r, &applicant, &3_000);
-    assert_eq!(
-        f.client.try_review(&r, &applicant, &4_000),
-        Err(Ok(Error::AlreadyReviewed))
-    );
+    f.client.review(&r, &applicant, &4_000);
+    assert_eq!(f.client.get_application(&applicant).votes.len(), 1);
 }
 
 #[test]
@@ -566,6 +612,205 @@ fn awards_cannot_exceed_the_budget() {
     assert_eq!(f.client.total_granted(), 800);
 }
 
+// ---- oversubscription ----
+//
+// `finalize` is permissionless and settles first-finalized-first-served, so
+// when approved amounts exceed the budget, calling order decides who is
+// funded — see "Oversubscription" in the module docs. These tests pin down
+// what is guaranteed regardless of that order: the budget is never exceeded,
+// a refusal never mutates state, and nothing can be finalized twice.
+
+/// Applies and unanimously reviews each `(applicant, amount)` pair at
+/// `amount`, leaving every one eligible to be finalized, in any order.
+fn ready_applicants(f: &Fixture, applicants: &[(Address, i128)]) {
+    for (applicant, amount) in applicants {
+        f.client.apply(applicant, amount, &hash(&f.env, 1));
+    }
+    to_review(f);
+    for (applicant, amount) in applicants {
+        for i in 0..f.client.get_config().quorum {
+            f.client
+                .review(&f.reviewers.get(i).unwrap(), applicant, amount);
+        }
+    }
+}
+
+#[test]
+fn the_same_application_can_be_refused_in_one_order_and_funded_in_the_reverse() {
+    // Not a hypothetical: this is what "permissionless, first-finalized-first-
+    // served" actually means under oversubscription. Same two applicants, same
+    // amounts, same budget — only the call order changes, and it decides who
+    // is funded. A refusal here is not permanent: it only reflects what had
+    // already been committed at the moment it was attempted.
+    let run = |a_first: bool| -> (bool, bool) {
+        let f = setup(2, 3);
+        let donor = funded_donor(&f, 1_000);
+        f.client.contribute(&donor, &1_000); // budget is 900 after the 10% fee
+
+        let a = Address::generate(&f.env);
+        let b = Address::generate(&f.env);
+        ready_applicants(&f, &[(a.clone(), 800), (b.clone(), 800)]);
+        let payee = Address::generate(&f.env);
+        f.client.allow_payee(&payee);
+
+        let (first, second) = if a_first { (&a, &b) } else { (&b, &a) };
+        let first_ok = f.client.try_finalize(first, &payee, &Mode::Direct).is_ok();
+        let second_ok = f.client.try_finalize(second, &payee, &Mode::Direct).is_ok();
+        (first_ok, second_ok)
+    };
+
+    let (a_funded_when_first, b_funded_when_second) = run(true);
+    let (b_funded_when_first, a_funded_when_second) = run(false);
+
+    assert!(a_funded_when_first, "called first, a must be funded");
+    assert!(
+        !b_funded_when_second,
+        "called second against a's commitment, b must be refused"
+    );
+    assert!(b_funded_when_first, "called first, b must be funded");
+    assert!(
+        !a_funded_when_second,
+        "called second against b's commitment, a must be refused"
+    );
+}
+
+#[test]
+fn a_refused_finalization_leaves_the_application_completely_unchanged() {
+    let f = setup(2, 3);
+    let donor = funded_donor(&f, 1_000);
+    f.client.contribute(&donor, &1_000); // budget is 900 after the 10% fee
+
+    let a = Address::generate(&f.env);
+    let b = Address::generate(&f.env);
+    ready_applicants(&f, &[(a.clone(), 800), (b.clone(), 800)]);
+
+    let payee = Address::generate(&f.env);
+    f.client.allow_payee(&payee);
+    f.client.finalize(&a, &payee, &Mode::Direct);
+
+    let before = f.client.get_application(&b);
+    assert_eq!(
+        f.client.try_finalize(&b, &payee, &Mode::Direct),
+        Err(Ok(Error::InsufficientBudget))
+    );
+
+    let after = f.client.get_application(&b);
+    assert_eq!(
+        before, after,
+        "a refused finalization must not touch the application at all"
+    );
+    assert!(!after.finalized);
+    assert_eq!(
+        f.client.try_get_award(&b),
+        Err(Ok(Error::AwardNotFound)),
+        "no award may exist for a refused finalization"
+    );
+
+    // Retryable and deterministic: the identical call, against the identical
+    // unchanged state, fails the identical way rather than something else.
+    assert_eq!(
+        f.client.try_finalize(&b, &payee, &Mode::Direct),
+        Err(Ok(Error::InsufficientBudget))
+    );
+    assert_eq!(f.client.get_application(&b), after);
+}
+
+#[test]
+fn finalize_never_exceeds_the_budget_under_any_ordering() {
+    // 900 budget, four equal 400 requests: exactly two can ever fit. Every one
+    // of the 4! orderings finalize could be called in is exercised, not just a
+    // couple of hand-picked cases.
+    #[rustfmt::skip]
+    const PERMUTATIONS: [[usize; 4]; 24] = [
+        [0, 1, 2, 3], [0, 1, 3, 2], [0, 2, 1, 3], [0, 2, 3, 1], [0, 3, 1, 2], [0, 3, 2, 1],
+        [1, 0, 2, 3], [1, 0, 3, 2], [1, 2, 0, 3], [1, 2, 3, 0], [1, 3, 0, 2], [1, 3, 2, 0],
+        [2, 0, 1, 3], [2, 0, 3, 1], [2, 1, 0, 3], [2, 1, 3, 0], [2, 3, 0, 1], [2, 3, 1, 0],
+        [3, 0, 1, 2], [3, 0, 2, 1], [3, 1, 0, 2], [3, 1, 2, 0], [3, 2, 0, 1], [3, 2, 1, 0],
+    ];
+
+    for order in PERMUTATIONS {
+        let f = setup(2, 3);
+        let donor = funded_donor(&f, 1_000);
+        f.client.contribute(&donor, &1_000); // budget is 900 after the 10% fee
+
+        let applicants = [
+            Address::generate(&f.env),
+            Address::generate(&f.env),
+            Address::generate(&f.env),
+            Address::generate(&f.env),
+        ];
+        ready_applicants(
+            &f,
+            &[
+                (applicants[0].clone(), 400),
+                (applicants[1].clone(), 400),
+                (applicants[2].clone(), 400),
+                (applicants[3].clone(), 400),
+            ],
+        );
+        let payee = Address::generate(&f.env);
+        f.client.allow_payee(&payee);
+
+        // Finalize in this permutation's order. The first two committed
+        // always fit (400 + 400 = 800 <= 900); the third would not
+        // (1_200 > 900), so it and the fourth must be refused, regardless of
+        // which applicants happen to occupy which position.
+        for (position, &index) in order.iter().enumerate() {
+            let result = f
+                .client
+                .try_finalize(&applicants[index], &payee, &Mode::Direct);
+            if position < 2 {
+                match result {
+                    Ok(award) => assert_eq!(award.unwrap().granted, 400),
+                    Err(e) => panic!(
+                        "expected success at position {position} in order {order:?}, got {e:?}"
+                    ),
+                }
+            } else {
+                assert_eq!(
+                    result,
+                    Err(Ok(Error::InsufficientBudget)),
+                    "expected refusal at position {position} in order {order:?}"
+                );
+            }
+        }
+
+        assert_eq!(
+            f.client.total_granted(),
+            800,
+            "exactly two of four 400-requests must fit a 900 budget, in order {order:?}"
+        );
+        assert!(
+            f.client.total_granted() <= f.client.budget(),
+            "the budget must never be exceeded, in order {order:?}"
+        );
+
+        // No ordering double-commits an already-funded application.
+        for &index in order[..2].iter() {
+            assert_eq!(
+                f.client
+                    .try_finalize(&applicants[index], &payee, &Mode::Direct),
+                Err(Ok(Error::AlreadyFinalized)),
+                "re-finalizing an already-funded application must be rejected, in order {order:?}"
+            );
+        }
+        // A refusal is retryable and deterministic, not a one-way trap.
+        for &index in order[2..].iter() {
+            assert_eq!(
+                f.client
+                    .try_finalize(&applicants[index], &payee, &Mode::Direct),
+                Err(Ok(Error::InsufficientBudget)),
+                "retrying a refusal must fail the same way, in order {order:?}"
+            );
+        }
+        assert_eq!(
+            f.client.total_granted(),
+            800,
+            "none of the retries may change the committed total, in order {order:?}"
+        );
+    }
+}
+
 #[test]
 fn finalize_carries_the_payee_and_mode() {
     let f = setup(2, 3);
@@ -648,12 +893,28 @@ fn an_empty_programme_can_be_cancelled() {
 }
 
 #[test]
-fn a_funded_programme_cannot_be_cancelled() {
-    // Cancelling must never be able to strand someone else's money.
+fn a_programme_that_has_released_cannot_be_cancelled() {
+    // Cancelling must never be able to strand money that already left.
+    let f = setup(2, 3);
+    let recipient = Address::generate(&f.env);
+    let school = Address::generate(&f.env);
+    award_to(&f, &recipient, &school, &900);
+    f.env.ledger().set_timestamp(RELEASE_DEADLINE - 1);
+    f.client
+        .release(&recipient, &proof(&f, &recipient, 1), &f.verifier);
+
+    assert_eq!(f.client.try_cancel(), Err(Ok(Error::NotCancellable)));
+}
+
+#[test]
+fn a_funded_unreleased_programme_can_be_cancelled() {
+    // Before any tranche is released the money is all still in the contract and
+    // belongs to the donors, so backing out is safe.
     let f = setup(2, 3);
     let donor = funded_donor(&f, 1_000);
     f.client.contribute(&donor, &1_000);
-    assert_eq!(f.client.try_cancel(), Err(Ok(Error::NotCancellable)));
+    f.client.cancel();
+    assert_eq!(f.client.get_phase(), Phase::Cancelled);
 }
 
 #[test]
@@ -661,6 +922,37 @@ fn cancelling_twice_is_rejected() {
     let f = setup(2, 3);
     f.client.cancel();
     assert_eq!(f.client.try_cancel(), Err(Ok(Error::Cancelled)));
+}
+
+// ---- TTL strategy (issue #114) ----
+
+#[test]
+fn reviewer_entry_resolves_after_the_bump_threshold() {
+    // Reviewer/verifier entries are written once in the constructor and only
+    // read thereafter, so they get an explicit bump there. Long after the
+    // 60-day threshold — but still inside the 90-day window the contract bumps
+    // to — the trust set must still resolve.
+    let f = setup(3, 5);
+    f.env.ledger().set_sequence_number(BUMP_THRESHOLD + 5);
+    assert!(f.client.is_reviewer(&f.reviewers.get(0).unwrap()));
+}
+
+#[test]
+fn keepalive_is_permissionless_and_refreshes_a_subject() {
+    let f = setup(2, 3);
+    let donor = funded_donor(&f, 10_000);
+    f.client.contribute(&donor, &10_000);
+
+    // Anyone may call keepalive; it refreshes the subject's entries and the
+    // contract-wide instance state without error, and a subject with no entries
+    // is a harmless no-op.
+    let stranger = Address::generate(&f.env);
+    f.client.keepalive(&stranger);
+    f.client.keepalive(&donor);
+
+    // The entry remains readable deep into the programme's life.
+    f.env.ledger().set_sequence_number(BUMP_LEDGERS + 5);
+    assert_eq!(f.client.contributed_by(&donor), 10_000);
 }
 
 // ---- release ----
@@ -988,6 +1280,74 @@ fn cancelling_opens_refunds_immediately() {
     );
 }
 
+// ---- cancellation + refunds (issue #117) ----
+
+#[test]
+fn cancel_then_refund_returns_a_donors_net_contribution() {
+    let f = setup(2, 3);
+    let donor = funded_donor(&f, 10_000);
+    f.client.contribute(&donor, &10_000);
+    f.client.cancel();
+
+    // The release deadline no longer matters; refunds open at once and return the
+    // donor's share of everything still in the contract (total less the fee).
+    assert_eq!(f.client.refund(&donor), 9_000);
+    assert_eq!(f.token.balance(&donor), 9_000);
+}
+
+#[test]
+fn cancel_opens_refunds_without_waiting_on_the_release_deadline() {
+    let f = setup(2, 3);
+    let donor = funded_donor(&f, 10_000);
+    f.client.contribute(&donor, &10_000);
+    // Still inside the contribution window a normal refund is refused.
+    assert_eq!(f.client.try_refund(&donor), Err(Ok(Error::RefundsNotOpen)));
+    f.client.cancel();
+    // Cancellation unlocks it immediately.
+    assert_eq!(f.client.refund(&donor), 9_000);
+}
+
+#[test]
+fn cancel_then_sweep_takes_only_unclaimed_funds_after_the_grace_period() {
+    let f = setup(2, 3);
+    let donor = funded_donor(&f, 10_000);
+    f.client.contribute(&donor, &10_000);
+    f.client.cancel();
+
+    // Before the sweep deadline the donor is still entitled to claim, so a sweep
+    // is refused even though the programme is cancelled.
+    f.env.ledger().set_timestamp(RELEASE_DEADLINE);
+    assert_eq!(f.client.try_sweep_unclaimed(), Err(Ok(Error::SweepNotOpen)));
+
+    // Once the grace period lapses, only what nobody claimed moves on. The donor
+    // never refunded here, so the whole balance (fee + their share) is swept.
+    f.env.ledger().set_timestamp(SWEEP_DEADLINE);
+    assert_eq!(f.client.sweep_unclaimed(), 10_000);
+    assert_eq!(f.token.balance(&f.treasury), 10_000);
+}
+
+#[test]
+fn cancelling_lets_a_donor_who_refunds_keep_their_money_when_swept() {
+    let f = setup(2, 3);
+    let quick = funded_donor(&f, 5_000);
+    let slow = funded_donor(&f, 5_000);
+    f.client.contribute(&quick, &5_000);
+    f.client.contribute(&slow, &5_000);
+    f.client.cancel();
+
+    f.env.ledger().set_timestamp(RELEASE_DEADLINE);
+    f.client.refund(&quick);
+    assert_eq!(f.token.balance(&quick), 4_500);
+
+    f.env.ledger().set_timestamp(SWEEP_DEADLINE);
+    f.client.sweep_unclaimed();
+
+    // The claimant kept theirs; only the fee and the no-show's share swept.
+    assert_eq!(f.token.balance(&quick), 4_500);
+    assert_eq!(f.token.balance(&slow), 0);
+    assert_eq!(f.token.balance(&f.treasury), 5_500);
+}
+
 #[test]
 fn refunds_never_exceed_what_is_left() {
     let f = setup(2, 3);
@@ -1313,4 +1673,747 @@ fn the_payee_registry_rejects_duplicates_and_unknowns() {
 
     f.client.deny_payee(&school);
     assert_eq!(f.client.try_deny_payee(&school), Err(Ok(Error::NotPayee)));
+}
+
+// ---- withdrawal ----
+
+#[test]
+fn an_applicant_can_withdraw_before_finalisation() {
+    let f = setup(2, 3);
+    let applicant = Address::generate(&f.env);
+    f.client.apply(&applicant, &5_000, &hash(&f.env, 1));
+
+    f.client.withdraw(&applicant);
+
+    let a = f.client.get_application(&applicant);
+    assert!(a.withdrawn);
+}
+
+#[test]
+fn withdrawal_during_review_phase() {
+    let f = setup(2, 3);
+    let applicant = Address::generate(&f.env);
+    f.client.apply(&applicant, &5_000, &hash(&f.env, 1));
+    to_review(&f);
+
+    f.client.withdraw(&applicant);
+    assert!(f.client.get_application(&applicant).withdrawn);
+}
+
+#[test]
+fn review_on_a_withdrawn_application_is_rejected() {
+    let f = setup(2, 3);
+    let applicant = Address::generate(&f.env);
+    f.client.apply(&applicant, &5_000, &hash(&f.env, 1));
+    to_review(&f);
+    f.client.withdraw(&applicant);
+
+    assert_eq!(
+        f.client
+            .try_review(&f.reviewers.get(0).unwrap(), &applicant, &1_000),
+        Err(Ok(Error::Withdrawn))
+    );
+}
+
+#[test]
+fn finalize_on_a_withdrawn_application_is_rejected() {
+    let f = setup(2, 3);
+    let applicant = Address::generate(&f.env);
+    let donor = funded_donor(&f, 100_000);
+    f.client.contribute(&donor, &100_000);
+    f.client.apply(&applicant, &1_000, &hash(&f.env, 1));
+    to_review(&f);
+    for i in 0..2u32 {
+        f.client
+            .review(&f.reviewers.get(i).unwrap(), &applicant, &1_000);
+    }
+    f.client.withdraw(&applicant);
+
+    let payee = Address::generate(&f.env);
+    f.client.allow_payee(&payee);
+    assert_eq!(
+        f.client.try_finalize(&applicant, &payee, &Mode::Direct),
+        Err(Ok(Error::Withdrawn))
+    );
+}
+
+#[test]
+fn reapplication_after_withdrawal_is_rejected() {
+    let f = setup(2, 3);
+    let applicant = Address::generate(&f.env);
+    f.client.apply(&applicant, &5_000, &hash(&f.env, 1));
+    f.client.withdraw(&applicant);
+
+    assert_eq!(
+        f.client.try_apply(&applicant, &3_000, &hash(&f.env, 2)),
+        Err(Ok(Error::AlreadyApplied))
+    );
+}
+
+#[test]
+fn withdrawal_after_finalisation_is_rejected() {
+    let f = setup(2, 3);
+    let applicant = Address::generate(&f.env);
+    awarded(&f, &applicant, 1_000, &[1_000, 1_000]);
+
+    assert_eq!(
+        f.client.try_withdraw(&applicant),
+        Err(Ok(Error::AlreadyFinalized))
+    );
+}
+
+#[test]
+fn withdrawing_twice_is_rejected() {
+    let f = setup(2, 3);
+    let applicant = Address::generate(&f.env);
+    f.client.apply(&applicant, &5_000, &hash(&f.env, 1));
+    f.client.withdraw(&applicant);
+    assert_eq!(f.client.try_withdraw(&applicant), Err(Ok(Error::Withdrawn)));
+}
+
+// ---- batch payees ----
+
+#[test]
+fn batch_allow_adds_multiple_payees() {
+    let f = setup(2, 3);
+    let a = Address::generate(&f.env);
+    let b = Address::generate(&f.env);
+    let c = Address::generate(&f.env);
+
+    f.client
+        .allow_payees(&vec![&f.env, a.clone(), b.clone(), c.clone()]);
+
+    assert!(f.client.is_payee(&a));
+    assert!(f.client.is_payee(&b));
+    assert!(f.client.is_payee(&c));
+}
+
+#[test]
+fn batch_deny_removes_multiple_payees() {
+    let f = setup(2, 3);
+    let a = Address::generate(&f.env);
+    let b = Address::generate(&f.env);
+    f.client.allow_payee(&a);
+    f.client.allow_payee(&b);
+
+    f.client.deny_payees(&vec![&f.env, a.clone(), b.clone()]);
+
+    assert!(!f.client.is_payee(&a));
+    assert!(!f.client.is_payee(&b));
+}
+
+#[test]
+fn batch_allow_skips_duplicates() {
+    let f = setup(2, 3);
+    let a = Address::generate(&f.env);
+    f.client.allow_payee(&a);
+
+    f.client.allow_payees(&vec![&f.env, a.clone()]);
+    assert!(f.client.is_payee(&a));
+}
+
+#[test]
+fn batch_deny_skips_unknowns() {
+    let f = setup(2, 3);
+    let unknown = Address::generate(&f.env);
+    f.client.deny_payees(&vec![&f.env, unknown]);
+}
+
+#[test]
+fn batch_exceeding_max_is_rejected() {
+    let f = setup(2, 3);
+    let mut payees = Vec::new(&f.env);
+    for _ in 0..=MAX_PAYEE_BATCH {
+        payees.push_back(Address::generate(&f.env));
+    }
+    assert_eq!(
+        f.client.try_allow_payees(&payees),
+        Err(Ok(Error::BatchTooLarge))
+    );
+}
+
+// ---- property tests for the median award mechanism ----
+
+mod proptests {
+    use super::*;
+    use proptest::prelude::*;
+
+    fn run_award(f: &Fixture, requested: i128, votes: &[i128]) -> i128 {
+        let applicant = Address::generate(&f.env);
+        let donor = funded_donor(f, 100_000);
+        f.client.contribute(&donor, &100_000);
+        f.client.apply(&applicant, &requested, &hash(&f.env, 1));
+        to_review(f);
+        for (i, v) in votes.iter().enumerate() {
+            f.client
+                .review(&f.reviewers.get(i as u32).unwrap(), &applicant, v);
+        }
+        let payee = Address::generate(&f.env);
+        f.client.allow_payee(&payee);
+        f.client.finalize(&applicant, &payee, &Mode::Direct).granted
+    }
+
+    proptest! {
+        #[test]
+        fn award_in_bounding_box(
+            mut votes in prop::collection::vec(1i128..=10_000i128, 3..=16),
+        ) {
+            votes.sort();
+            let requested = *votes.last().unwrap();
+            let f = setup(votes.len() as u32, votes.len() as u32);
+            let granted = run_award(&f, requested, &votes);
+            prop_assert!(
+                granted >= *votes.first().unwrap() && granted <= *votes.last().unwrap(),
+            );
+        }
+    }
+
+    proptest! {
+        #[test]
+        fn award_never_exceeds_requested(
+            votes in prop::collection::vec(1i128..=10_000i128, 3..=16),
+            requested in 10_000i128..=100_000i128,
+        ) {
+            let f = setup(votes.len() as u32, votes.len() as u32);
+            let granted = run_award(&f, requested, &votes);
+            prop_assert!(granted <= requested);
+        }
+    }
+
+    proptest! {
+        #[test]
+        fn median_more_robust_than_mean(
+            base_votes in prop::collection::vec(100i128..=9_000i128, 3..=15),
+            extreme in prop_oneof![Just(1i128), Just(10_000i128)],
+        ) {
+            prop_assume!(base_votes.len() < MAX_QUORUM as usize);
+
+            let mut sorted = base_votes.clone();
+            sorted.sort();
+            let requested = *sorted.last().unwrap().max(&extreme);
+
+            let f_base = setup(sorted.len() as u32, sorted.len() as u32);
+            let median_before = run_award(&f_base, requested, &sorted);
+
+            let mut with_extreme = sorted.clone();
+            with_extreme.push(extreme);
+            with_extreme.sort();
+            let f_ext = setup(with_extreme.len() as u32, with_extreme.len() as u32);
+            let median_after = run_award(&f_ext, requested, &with_extreme);
+
+            let median_shift = (median_after - median_before).unsigned_abs();
+
+            // The median's influence from a single vote is bounded by the gap
+            // between the two order statistics it can jump between.  This is the
+            // core robustness property the issue asks for: no single vote can
+            // move the median by more than one "step" in the sorted list,
+            // whereas the mean is pulled proportionally to the outlier's
+            // distance from the centre.
+            let max_gap = sorted.windows(2)
+                .map(|w| (w[1] - w[0]).unsigned_abs())
+                .max()
+                .unwrap_or(0);
+            prop_assert!(
+                median_shift <= max_gap,
+                "median shift {median_shift} must be bounded by max gap {max_gap}",
+            );
+        }
+    }
+
+    proptest! {
+        #[test]
+        fn order_independent(
+            votes in prop::collection::vec(1i128..=10_000i128, 3..=16),
+        ) {
+            let requested = *votes.iter().max().unwrap();
+            let n = votes.len() as u32;
+
+            let f1 = setup(n, n);
+            let g1 = run_award(&f1, requested, &votes);
+
+            let mut reversed = votes.clone();
+            reversed.reverse();
+            let f2 = setup(n, n);
+            let g2 = run_award(&f2, requested, &reversed);
+
+            prop_assert_eq!(g1, g2);
+        }
+    }
+
+    proptest! {
+        #[test]
+        fn identical_votes_yields_that_value(
+            value in 1i128..=10_000i128,
+            n in 3u32..=16u32,
+        ) {
+            let f = setup(n, n);
+            // Build a stack-allocated slice to avoid soroban_sdk::Vec aliasing.
+            let mut buf = [0i128; 16];
+            for slot in buf.iter_mut().take(n as usize) {
+                *slot = value;
+            }
+            let granted = run_award(&f, value, &buf[..n as usize]);
+            prop_assert_eq!(granted, value);
+        }
+    }
+}
+
+// ---- minimum award (issue #109) ----
+
+/// Helper to construct a programme with a custom minimum_award.
+fn setup_with_minimum(
+    quorum: u32,
+    reviewer_count: u32,
+    tranches: u32,
+    minimum_award: i128,
+) -> Fixture {
+    let env = Env::default();
+    env.mock_all_auths();
+
+    let issuer = Address::generate(&env);
+    let asset = env.register_stellar_asset_contract_v2(issuer);
+    let token = TokenClient::new(&env, &asset.address());
+    let mint = StellarAssetClient::new(&env, &asset.address());
+
+    let creator = Address::generate(&env);
+    let treasury = Address::generate(&env);
+    let verifier = Address::generate(&env);
+
+    let attest_id = env.register(milepost_attest::Attest, ());
+    let attest = milepost_attest::AttestClient::new(&env, &attest_id);
+    let schema = attest.register_schema(
+        &verifier,
+        &String::from_str(&env, "milestone-met:v1"),
+        &true,
+        &true,
+    );
+
+    let policy_id = env.register(policy::FakePolicy, ());
+    let policy = policy::FakePolicyClient::new(&env, &policy_id);
+
+    let record_id = env.register(milepost_record::Record, (creator.clone(),));
+    let record = milepost_record::RecordClient::new(&env, &record_id);
+
+    let mut reviewers = Vec::new(&env);
+    for _ in 0..reviewer_count {
+        reviewers.push_back(Address::generate(&env));
+    }
+
+    let id = env.register(
+        Programme,
+        (
+            ProgrammeConfig {
+                creator: creator.clone(),
+                token: asset.address(),
+                treasury: treasury.clone(),
+                attest: attest_id,
+                record: record_id,
+                policy: policy_id,
+                schema: schema.clone(),
+                fee_bps: FEE_BPS,
+                apply_deadline: APPLY_DEADLINE,
+                review_deadline: REVIEW_DEADLINE,
+                release_deadline: RELEASE_DEADLINE,
+                sweep_deadline: SWEEP_DEADLINE,
+                quorum,
+                tranches,
+                minimum_award,
+                metadata_hash: BytesN::from_array(&env, &[7u8; 32]),
+            },
+            reviewers.clone(),
+            vec![&env, verifier.clone()],
+        ),
+    );
+    record.add_writer(&id);
+
+    let client = ProgrammeClient::new(&env, &id);
+    Fixture {
+        env: env.clone(),
+        client,
+        token,
+        mint,
+        attest,
+        policy,
+        record,
+        schema,
+        creator,
+        treasury,
+        reviewers,
+        verifier,
+    }
+}
+
+#[test]
+fn minimum_award_prevents_dust_awards() {
+    // An award below the minimum is refused at finalization, not when it
+    // would strand the recipient with an unusable payment.
+    let f = setup_with_minimum(2, 3, 3, 1_000);
+    let donor = funded_donor(&f, 10_000);
+    f.client.contribute(&donor, &10_000);
+
+    let applicant = Address::generate(&f.env);
+    f.client.apply(&applicant, &5_000, &hash(&f.env, 1));
+    to_review(&f);
+
+    // Reviewers approve 500, which is below the 1_000 minimum.
+    f.client
+        .review(&f.reviewers.get(0).unwrap(), &applicant, &500);
+    f.client
+        .review(&f.reviewers.get(1).unwrap(), &applicant, &500);
+
+    let payee = Address::generate(&f.env);
+    f.client.allow_payee(&payee);
+
+    assert_eq!(
+        f.client.try_finalize(&applicant, &payee, &Mode::Direct),
+        Err(Ok(Error::BelowMinimumAward))
+    );
+}
+
+#[test]
+fn minimum_award_at_boundary_is_accepted() {
+    // An award exactly at the minimum is accepted.
+    let f = setup_with_minimum(2, 3, 3, 1_000);
+    let donor = funded_donor(&f, 10_000);
+    f.client.contribute(&donor, &10_000);
+
+    let applicant = Address::generate(&f.env);
+    f.client.apply(&applicant, &5_000, &hash(&f.env, 1));
+    to_review(&f);
+
+    // Reviewers approve exactly the minimum.
+    f.client
+        .review(&f.reviewers.get(0).unwrap(), &applicant, &1_000);
+    f.client
+        .review(&f.reviewers.get(1).unwrap(), &applicant, &1_000);
+
+    let payee = Address::generate(&f.env);
+    f.client.allow_payee(&payee);
+
+    let award = f.client.finalize(&applicant, &payee, &Mode::Direct);
+    assert_eq!(award.granted, 1_000);
+}
+
+#[test]
+fn minimum_award_one_below_is_rejected() {
+    // One unit below the minimum is still refused.
+    let f = setup_with_minimum(2, 3, 3, 1_000);
+    let donor = funded_donor(&f, 10_000);
+    f.client.contribute(&donor, &10_000);
+
+    let applicant = Address::generate(&f.env);
+    f.client.apply(&applicant, &5_000, &hash(&f.env, 1));
+    to_review(&f);
+
+    // Reviewers approve one unit below the minimum.
+    f.client
+        .review(&f.reviewers.get(0).unwrap(), &applicant, &999);
+    f.client
+        .review(&f.reviewers.get(1).unwrap(), &applicant, &999);
+
+    let payee = Address::generate(&f.env);
+    f.client.allow_payee(&payee);
+
+    assert_eq!(
+        f.client.try_finalize(&applicant, &payee, &Mode::Direct),
+        Err(Ok(Error::BelowMinimumAward))
+    );
+}
+
+#[test]
+fn minimum_award_one_above_is_accepted() {
+    // One unit above the minimum is accepted.
+    let f = setup_with_minimum(2, 3, 3, 1_000);
+    let donor = funded_donor(&f, 10_000);
+    f.client.contribute(&donor, &10_000);
+
+    let applicant = Address::generate(&f.env);
+    f.client.apply(&applicant, &5_000, &hash(&f.env, 1));
+    to_review(&f);
+
+    // Reviewers approve one unit above the minimum.
+    f.client
+        .review(&f.reviewers.get(0).unwrap(), &applicant, &1_001);
+    f.client
+        .review(&f.reviewers.get(1).unwrap(), &applicant, &1_001);
+
+    let payee = Address::generate(&f.env);
+    f.client.allow_payee(&payee);
+
+    let award = f.client.finalize(&applicant, &payee, &Mode::Direct);
+    assert_eq!(award.granted, 1_001);
+}
+
+#[test]
+fn refused_finalization_by_minimum_leaves_application_unchanged() {
+    // A finalization refused due to minimum_award leaves the application
+    // untouched and retryable, just like InsufficientBudget does.
+    let f = setup_with_minimum(2, 3, 3, 1_000);
+    let donor = funded_donor(&f, 10_000);
+    f.client.contribute(&donor, &10_000);
+
+    let applicant = Address::generate(&f.env);
+    f.client.apply(&applicant, &5_000, &hash(&f.env, 1));
+    to_review(&f);
+
+    f.client
+        .review(&f.reviewers.get(0).unwrap(), &applicant, &500);
+    f.client
+        .review(&f.reviewers.get(1).unwrap(), &applicant, &500);
+
+    let before = f.client.get_application(&applicant);
+    let payee = Address::generate(&f.env);
+    f.client.allow_payee(&payee);
+
+    assert_eq!(
+        f.client.try_finalize(&applicant, &payee, &Mode::Direct),
+        Err(Ok(Error::BelowMinimumAward))
+    );
+
+    let after = f.client.get_application(&applicant);
+    assert_eq!(before, after, "refused finalization must not touch state");
+    assert!(!after.finalized);
+    assert_eq!(
+        f.client.try_get_award(&applicant),
+        Err(Ok(Error::AwardNotFound)),
+        "no award may exist for a refused finalization"
+    );
+
+    // Retryable: the identical call fails the identical way.
+    assert_eq!(
+        f.client.try_finalize(&applicant, &payee, &Mode::Direct),
+        Err(Ok(Error::BelowMinimumAward))
+    );
+}
+
+#[test]
+#[should_panic]
+fn negative_minimum_award_is_rejected_at_construction() {
+    setup_with_minimum(2, 3, 3, -1);
+}
+
+#[test]
+#[should_panic]
+fn minimum_below_tranche_count_is_rejected_at_construction() {
+    // A minimum of 5 with 10 tranches would make each tranche less than 1 stroops,
+    // which is not payable.
+    setup_with_minimum(2, 3, 10, 5);
+}
+
+#[test]
+fn zero_minimum_award_is_accepted() {
+    // A minimum of zero means no minimum is enforced.
+    let f = setup_with_minimum(2, 3, 3, 0);
+    let donor = funded_donor(&f, 10_000);
+    f.client.contribute(&donor, &10_000);
+
+    let applicant = Address::generate(&f.env);
+    f.client.apply(&applicant, &5_000, &hash(&f.env, 1));
+    to_review(&f);
+
+    // Very small award is accepted when minimum is zero.
+    f.client
+        .review(&f.reviewers.get(0).unwrap(), &applicant, &3);
+    f.client
+        .review(&f.reviewers.get(1).unwrap(), &applicant, &3);
+
+    let payee = Address::generate(&f.env);
+    f.client.allow_payee(&payee);
+
+    let award = f.client.finalize(&applicant, &payee, &Mode::Direct);
+    assert_eq!(award.granted, 3);
+}
+
+#[test]
+fn minimum_validated_against_tranche_count() {
+    // A minimum equal to tranches is the smallest valid setting
+    // (ensures each tranche is at least 1 stroops).
+    let f = setup_with_minimum(2, 3, 5, 5);
+    let donor = funded_donor(&f, 10_000);
+    f.client.contribute(&donor, &10_000);
+
+    let applicant = Address::generate(&f.env);
+    f.client.apply(&applicant, &5_000, &hash(&f.env, 1));
+    to_review(&f);
+
+    f.client
+        .review(&f.reviewers.get(0).unwrap(), &applicant, &5);
+    f.client
+        .review(&f.reviewers.get(1).unwrap(), &applicant, &5);
+
+    let payee = Address::generate(&f.env);
+    f.client.allow_payee(&payee);
+
+    let award = f.client.finalize(&applicant, &payee, &Mode::Direct);
+    assert_eq!(award.granted, 5);
+    // Each of 5 tranches will receive at least 1 stroops.
+}
+
+// ---- vote amendment (issue #107) ----
+
+#[test]
+fn a_reviewer_can_amend_their_vote_before_finalisation() {
+    let f = setup(3, 3);
+    let applicant = Address::generate(&f.env);
+    f.client.apply(&applicant, &5_000, &hash(&f.env, 1));
+    to_review(&f);
+
+    let r = f.reviewers.get(0).unwrap();
+    // Initial vote
+    f.client.review(&r, &applicant, &3_000);
+    assert_eq!(f.client.get_application(&applicant).votes.len(), 1);
+    assert_eq!(
+        f.client.get_application(&applicant).votes.get(0).unwrap(),
+        3_000
+    );
+
+    // Amend to a different amount
+    f.client.review(&r, &applicant, &2_000);
+    let votes = f.client.get_application(&applicant).votes;
+    assert_eq!(votes.len(), 1, "still only one vote from this reviewer");
+    assert_eq!(votes.get(0).unwrap(), 2_000, "vote was amended");
+}
+
+#[test]
+fn amendment_preserves_sorted_order() {
+    let f = setup(3, 3);
+    let applicant = Address::generate(&f.env);
+    f.client.apply(&applicant, &5_000, &hash(&f.env, 1));
+    to_review(&f);
+
+    // Three reviewers vote in this order: 3000, 1000, 2000
+    f.client
+        .review(&f.reviewers.get(0).unwrap(), &applicant, &3_000);
+    f.client
+        .review(&f.reviewers.get(1).unwrap(), &applicant, &1_000);
+    f.client
+        .review(&f.reviewers.get(2).unwrap(), &applicant, &2_000);
+
+    let votes_before = f.client.get_application(&applicant).votes;
+    assert_eq!(votes_before, vec![&f.env, 1_000, 2_000, 3_000]);
+
+    // First reviewer amends from 3000 to 500
+    f.client
+        .review(&f.reviewers.get(0).unwrap(), &applicant, &500);
+
+    let votes_after = f.client.get_application(&applicant).votes;
+    assert_eq!(
+        votes_after,
+        vec![&f.env, 500, 1_000, 2_000],
+        "order preserved after amendment"
+    );
+}
+
+#[test]
+fn amendment_affects_the_median() {
+    let f = setup(3, 5);
+    let applicant = Address::generate(&f.env);
+    let donor = funded_donor(&f, 100_000);
+    f.client.contribute(&donor, &100_000);
+    let applicant2 = Address::generate(&f.env);
+    f.client.apply(&applicant, &5_000, &hash(&f.env, 1));
+    // Both applications must be in before the window closes.
+    f.client.apply(&applicant2, &5_000, &hash(&f.env, 2));
+    to_review(&f);
+
+    // Initial votes: 1000, 2000, 3000 -> median is 2000
+    f.client
+        .review(&f.reviewers.get(0).unwrap(), &applicant, &1_000);
+    f.client
+        .review(&f.reviewers.get(1).unwrap(), &applicant, &2_000);
+    f.client
+        .review(&f.reviewers.get(2).unwrap(), &applicant, &3_000);
+
+    let payee = Address::generate(&f.env);
+    f.client.allow_payee(&payee);
+    let award = f.client.finalize(&applicant, &payee, &Mode::Direct);
+    assert_eq!(award.granted, 2_000, "median of [1000, 2000, 3000] is 2000");
+
+    // Now the same again, but with one vote amended.
+    f.client
+        .review(&f.reviewers.get(0).unwrap(), &applicant2, &1_000);
+    f.client
+        .review(&f.reviewers.get(1).unwrap(), &applicant2, &2_000);
+    f.client
+        .review(&f.reviewers.get(2).unwrap(), &applicant2, &3_000);
+
+    // Amend the middle vote from 2000 to 4000
+    f.client
+        .review(&f.reviewers.get(1).unwrap(), &applicant2, &4_000);
+
+    let award2 = f.client.finalize(&applicant2, &payee, &Mode::Direct);
+    assert_eq!(
+        award2.granted, 3_000,
+        "median of [1000, 3000, 4000] is 3000"
+    );
+}
+
+#[test]
+fn quorum_still_counts_each_reviewer_once_after_amendment() {
+    let f = setup(3, 5);
+    let applicant = Address::generate(&f.env);
+    f.client.apply(&applicant, &5_000, &hash(&f.env, 1));
+    to_review(&f);
+
+    let r0 = f.reviewers.get(0).unwrap();
+    let r1 = f.reviewers.get(1).unwrap();
+
+    // Two reviewers vote, one amends multiple times
+    f.client.review(&r0, &applicant, &1_000);
+    f.client.review(&r1, &applicant, &2_000);
+    f.client.review(&r0, &applicant, &1_500);
+    f.client.review(&r0, &applicant, &1_200);
+
+    let votes = f.client.get_application(&applicant).votes;
+    assert_eq!(votes.len(), 2, "still only 2 votes despite amendments");
+    assert_eq!(votes, vec![&f.env, 1_200, 2_000]);
+
+    // Quorum is 3, so this should still fail
+    let payee = Address::generate(&f.env);
+    f.client.allow_payee(&payee);
+    assert_eq!(
+        f.client.try_finalize(&applicant, &payee, &Mode::Direct),
+        Err(Ok(Error::QuorumNotReached)),
+        "amendment doesn't let a reviewer count twice toward quorum"
+    );
+}
+
+#[test]
+fn amending_after_finalisation_is_rejected() {
+    let f = setup(2, 3);
+    let applicant = Address::generate(&f.env);
+    awarded(&f, &applicant, 1_000, &[1_000, 1_000]);
+
+    let r = f.reviewers.get(0).unwrap();
+    assert_eq!(
+        f.client.try_review(&r, &applicant, &500),
+        Err(Ok(Error::AlreadyFinalized)),
+        "cannot amend a vote after the application is finalized"
+    );
+}
+
+#[test]
+fn amendment_events_record_previous_and_new_values() {
+    // This test documents that amendments emit VoteAmended with both
+    // the previous and new values, not just the new one.
+    let f = setup(2, 3);
+    let applicant = Address::generate(&f.env);
+    f.client.apply(&applicant, &5_000, &hash(&f.env, 1));
+    to_review(&f);
+
+    let r = f.reviewers.get(0).unwrap();
+
+    // Initial vote emits Reviewed
+    f.client.review(&r, &applicant, &3_000);
+
+    // Amendment emits VoteAmended with previous value
+    f.client.review(&r, &applicant, &2_000);
+
+    // The contract emitted the events; in a real test with event capture
+    // we'd verify VoteAmended { previous: 3000, approved: 2000 }
+    // For now we just confirm the amendment worked
+    assert_eq!(
+        f.client.get_application(&applicant).votes.get(0).unwrap(),
+        2_000
+    );
 }

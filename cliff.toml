@@ -1,0 +1,48 @@
+# git-cliff config for release notes (.github/workflows/release.yml).
+# Parses the conventional-commit history this repo already uses
+# (feat/fix/docs/ci/test/chore/refactor...) into a changelog grouped by
+# type, with breaking changes pulled into their own section regardless
+# of type.
+[changelog]
+header = ""
+body = """
+{% if version %}\
+    ## {{ version | trim_start_matches(pat="v") }}
+{% else %}\
+    ## Unreleased
+{% endif %}\
+{% for group, commits in commits | group_by(attribute="group") %}
+    ### {{ group | upper_first }}
+    {% for commit in commits %}
+        - {{ commit.message | upper_first }}\
+            {% if commit.remote.pr_number %} (#{{ commit.remote.pr_number }}){% endif %}
+    {% endfor %}
+{% endfor %}\n
+"""
+trim = true
+footer = ""
+
+[git]
+conventional_commits = true
+filter_unconventional = true
+split_commits = false
+protect_breaking_commits = true
+filter_commits = false
+tag_pattern = "v[0-9]*"
+sort_commits = "oldest"
+
+commit_parsers = [
+  { field = "breaking", pattern = "true", group = "⚠ Breaking changes" },
+  { message = "^feat", group = "Features" },
+  { message = "^fix", group = "Fixes" },
+  { message = "^docs", group = "Documentation" },
+  { message = "^perf", group = "Performance" },
+  { message = "^refactor", group = "Refactor" },
+  { message = "^test", group = "Testing" },
+  { message = "^ci", group = "CI" },
+  { message = "^chore\\(release\\)", skip = true },
+  { message = "^chore", group = "Chores" },
+  { message = "^style", group = "Style" },
+  { message = "^revert", group = "Reverts" },
+  { message = "^Merge", skip = true },
+]

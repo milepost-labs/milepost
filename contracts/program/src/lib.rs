@@ -39,6 +39,35 @@
 //! first finalised first served. A programme that over-approves will find later
 //! finalisations rejected rather than silently over-committing money it does not
 //! have.
+//!
+//! ## Oversubscription: order decides, and that is deliberate
+//!
+//! [`Programme::finalize`] is permissionless — anyone may call it once quorum is
+//! reached, on purpose, so no privileged party can strand an applicant by simply
+//! not pressing a button. That same permissionlessness means that when the
+//! programme is oversubscribed (approved amounts exceed what remains of the
+//! budget), **whoever calls `finalize` first decides who gets funded**. A
+//! reviewer panel approving three applicants for more than the budget covers
+//! does not decide which two are funded; the order finalisations happen to
+//! arrive in does.
+//!
+//! This is a documented limitation, not a bug, and fixing it — priority,
+//! queueing, a fairer allocation rule — is a separate decision from the three
+//! guarantees this contract actually makes about it, all covered by tests in
+//! `test.rs`:
+//!
+//! - **The budget is never exceeded**, under any ordering. A finalisation that
+//!   would over-commit is rejected with [`Error::InsufficientBudget`] rather
+//!   than accepted and squeezing a later payout.
+//! - **A rejected finalisation is a pure read.** Nothing is written before the
+//!   budget check, so a refused application is untouched — same `finalized:
+//!   false`, same votes, no [`Award`] created — and stays finalisable exactly
+//!   as before. If whatever consumed the budget the first time around is never
+//!   finalised (or is finalised for less), the identical call against the
+//!   identical application can still succeed later.
+//! - **No ordering double-commits.** Once an application is finalised, every
+//!   further `finalize` call against it fails with [`Error::AlreadyFinalized`]
+//!   before the budget is touched again, regardless of who calls it or when.
 
 use soroban_sdk::{
     contract, contractclient, contracterror, contractevent, contractimpl, contracttype, token,
@@ -108,6 +137,8 @@ pub const MAX_QUORUM: u32 = 16;
 /// Protocol fee ceiling, in basis points. A programme cannot be created with a
 /// fee above this no matter what the registry says.
 pub const MAX_FEE_BPS: u32 = 1_000;
+/// Maximum number of payees in a single batch operation.
+pub const MAX_PAYEE_BATCH: u32 = 50;
 const BPS_DENOMINATOR: i128 = 10_000;
 
 #[contracterror]
@@ -162,6 +193,14 @@ pub enum Error {
     PolicyNotInstalled = 34,
     /// Allocations can no longer be directed once the sweep window opens.
     SpendWindowClosed = 35,
+    /// The batch exceeds the maximum allowed size.
+    BatchTooLarge = 36,
+    /// The application has been withdrawn.
+    Withdrawn = 37,
+    /// The award is below the programme's configured minimum and cannot be finalised.
+    BelowMinimumAward = 38,
+    /// The programme is paused and this operation cannot proceed.
+    Paused = 39,
 }
 
 /// Where a tranche is paid, in descending order of how hard the restriction is
@@ -219,6 +258,7 @@ pub struct Application {
     /// Approved amounts, kept in ascending order so the median is a lookup.
     pub votes: Vec<i128>,
     pub finalized: bool,
+    pub withdrawn: bool,
 }
 
 #[contracttype]
@@ -257,6 +297,17 @@ pub struct Reviewed {
     pub applicant: Address,
     #[topic]
     pub reviewer: Address,
+    pub approved: i128,
+}
+
+#[contractevent(topics = ["vote_amended"])]
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct VoteAmended {
+    #[topic]
+    pub applicant: Address,
+    #[topic]
+    pub reviewer: Address,
+    pub previous: i128,
     pub approved: i128,
 }
 
@@ -333,11 +384,56 @@ pub struct ProgrammeCancelled {
     pub at: u64,
 }
 
+/// Emitted once, at construction, so an observer rebuilding programme history
+/// from events has a starting point. Carries the full terms an observer cannot
+/// otherwise cheaply obtain — the deadlines, quorum, tranches, fee and the
+/// addresses the programme is wired to. Mirrors the existing convention of
+/// publishing the whole struct rather than a projection of it.
+/// Not asserted in tests: the Soroban test environment does not record events
+/// emitted during construction, whether the contract is registered directly or
+/// deployed through the registry. The event is emitted on-chain regardless.
+#[contractevent(topics = ["created"], data_format = "single-value")]
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct ProgrammeCreated {
+    pub config: ProgrammeConfig,
+}
+
+/// A permissionless nudge that keeps the contract's long-lived entries from
+/// being archived. See [`Programme::keepalive`] for the rationale; the struct
+/// exists so the event can be published here too when that path is exercised.
+#[contractevent(topics = ["kept"], data_format = "single-value")]
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct KeptAlive {
+    pub subject: Address,
+}
+
+#[contractevent(topics = ["paused"])]
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct Paused {
+    #[topic]
+    pub by: Address,
+}
+
+#[contractevent(topics = ["unpaused"])]
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct Unpaused {
+    #[topic]
+    pub by: Address,
+}
+
+#[contractevent(topics = ["withdrawn"], data_format = "single-value")]
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct ApplicationWithdrawn {
+    #[topic]
+    pub applicant: Address,
+}
+
 #[contracttype]
 #[derive(Clone)]
 enum Key {
     Config,
     Cancelled,
+    Paused,
     Contributed,
     Granted,
     Released,
@@ -398,29 +494,67 @@ impl Programme {
         if config.tranches == 0 {
             return Err(Error::InvalidAmount);
         }
+        // Minimum award must be non-negative and sensible relative to tranches.
+        // Each tranche must be at least 1 stroops to be payable.
+        if config.minimum_award < 0 {
+            return Err(Error::InvalidAmount);
+        }
+        // If minimum_award is set, it must be at least tranches count to ensure
+        // each tranche is at least 1 stroops (the smallest unit).
+        if config.minimum_award > 0 && config.minimum_award < config.tranches as i128 {
+            return Err(Error::InvalidAmount);
+        }
 
         for reviewer in reviewers.iter() {
+            let key = Key::Reviewer(reviewer.clone());
+            env.storage().persistent().set(&key, &true);
+            // Written once here and only read thereafter, so without an explicit
+            // bump it would archive while the programme is still live.
             env.storage()
                 .persistent()
-                .set(&Key::Reviewer(reviewer), &true);
+                .extend_ttl(&key, BUMP_THRESHOLD, BUMP_LEDGERS);
         }
         for verifier in verifiers.iter() {
+            let key = Key::Verifier(verifier.clone());
+            env.storage().persistent().set(&key, &true);
             env.storage()
                 .persistent()
-                .set(&Key::Verifier(verifier), &true);
+                .extend_ttl(&key, BUMP_THRESHOLD, BUMP_LEDGERS);
         }
 
         env.storage().instance().set(&Key::Config, &config);
         env.storage().instance().set(&Key::Contributed, &0i128);
         env.storage().instance().set(&Key::Granted, &0i128);
         env.storage().instance().set(&Key::Released, &0i128);
+        // The contract-wide instance entries back every view and refund, so keep
+        // them alive from the start rather than relying on the first write.
+        env.storage()
+            .instance()
+            .extend_ttl(BUMP_THRESHOLD, BUMP_LEDGERS);
+
+        ProgrammeCreated {
+            config: config.clone(),
+        }
+        .publish(&env);
         Ok(())
     }
 
     /// Put money in. Contributions close when applications do, so the budget is
     /// fixed before anyone reviews against it — a reviewer approving an amount
     /// should not have the ground move underneath them.
+    /// Reject when the programme is paused.
+    ///
+    /// Deliberately not part of `phase`: pausing is orthogonal to the deadline
+    /// timeline, and refund and sweep must keep working while paused.
+    fn require_not_paused(env: &Env) -> Result<(), Error> {
+        if env.storage().instance().get::<_, bool>(&Key::Paused) == Some(true) {
+            return Err(Error::Paused);
+        }
+        Ok(())
+    }
+
     pub fn contribute(env: Env, donor: Address, amount: i128) -> Result<(), Error> {
+        Self::require_not_paused(&env)?;
         donor.require_auth();
         Self::require_phase(&env, Phase::Open)?;
         if amount <= 0 {
@@ -462,6 +596,7 @@ impl Programme {
         requested: i128,
         metadata_hash: BytesN<32>,
     ) -> Result<(), Error> {
+        Self::require_not_paused(&env)?;
         applicant.require_auth();
         Self::require_phase(&env, Phase::Open)?;
         if requested <= 0 {
@@ -480,6 +615,7 @@ impl Programme {
             submitted_at: env.ledger().timestamp(),
             votes: Vec::new(&env),
             finalized: false,
+            withdrawn: false,
         };
         env.storage().persistent().set(&key, &application);
         env.storage()
@@ -498,12 +634,17 @@ impl Programme {
     /// application should be rejected simply does not vote — there is no
     /// "approve zero", because a zero-value award is just a rejection with extra
     /// storage.
+    ///
+    /// A reviewer can amend their vote before finalisation by calling this
+    /// again with a different amount. The sorted order is preserved and quorum
+    /// still counts each reviewer once.
     pub fn review(
         env: Env,
         reviewer: Address,
         applicant: Address,
         approved: i128,
     ) -> Result<(), Error> {
+        Self::require_not_paused(&env)?;
         reviewer.require_auth();
         Self::require_phase(&env, Phase::Review)?;
         if !env
@@ -513,11 +654,13 @@ impl Programme {
         {
             return Err(Error::NotAuthorized);
         }
-
-        let vote_key = Key::Voted(applicant.clone(), reviewer.clone());
-        if env.storage().persistent().has(&vote_key) {
-            return Err(Error::AlreadyReviewed);
-        }
+        // Read on every review; bump it so the trust set survives a long review
+        // window without a separate keepalive.
+        env.storage().persistent().extend_ttl(
+            &Key::Reviewer(reviewer.clone()),
+            BUMP_THRESHOLD,
+            BUMP_LEDGERS,
+        );
 
         let key = Key::Application(applicant.clone());
         let mut application: Application = env
@@ -528,6 +671,9 @@ impl Programme {
         if application.finalized {
             return Err(Error::AlreadyFinalized);
         }
+        if application.withdrawn {
+            return Err(Error::Withdrawn);
+        }
         if approved <= 0 {
             return Err(Error::InvalidAmount);
         }
@@ -535,31 +681,80 @@ impl Programme {
             return Err(Error::ExceedsRequested);
         }
 
-        // Inserted in sorted position so the median never needs a sort pass.
-        let mut at = application.votes.len();
-        for (i, existing) in application.votes.iter().enumerate() {
-            if approved < existing {
-                at = i as u32;
-                break;
+        let vote_key = Key::Voted(applicant.clone(), reviewer.clone());
+        let is_amendment = env.storage().persistent().has(&vote_key);
+
+        if is_amendment {
+            // This is an amendment: find and remove the old vote, keeping sorted order.
+            let old_vote: i128 = env
+                .storage()
+                .persistent()
+                .get(&vote_key)
+                .unwrap_or(approved);
+
+            // Remove one instance of the old vote, keeping sorted order. The
+            // break makes it exactly one, so no flag is needed to track it.
+            for i in 0..application.votes.len() {
+                if application.votes.get(i).unwrap() == old_vote {
+                    application.votes.remove(i);
+                    break;
+                }
             }
-        }
-        application.votes.insert(at, approved);
 
-        env.storage().persistent().set(&key, &application);
-        env.storage()
-            .persistent()
-            .extend_ttl(&key, BUMP_THRESHOLD, BUMP_LEDGERS);
-        env.storage().persistent().set(&vote_key, &true);
-        env.storage()
-            .persistent()
-            .extend_ttl(&vote_key, BUMP_THRESHOLD, BUMP_LEDGERS);
+            // Insert the new vote in sorted position.
+            let mut at = application.votes.len();
+            for (i, existing) in application.votes.iter().enumerate() {
+                if approved < existing {
+                    at = i as u32;
+                    break;
+                }
+            }
+            application.votes.insert(at, approved);
 
-        Reviewed {
-            applicant,
-            reviewer,
-            approved,
+            env.storage().persistent().set(&key, &application);
+            env.storage()
+                .persistent()
+                .extend_ttl(&key, BUMP_THRESHOLD, BUMP_LEDGERS);
+            env.storage().persistent().set(&vote_key, &approved);
+            env.storage()
+                .persistent()
+                .extend_ttl(&vote_key, BUMP_THRESHOLD, BUMP_LEDGERS);
+
+            VoteAmended {
+                applicant,
+                reviewer,
+                previous: old_vote,
+                approved,
+            }
+            .publish(&env);
+        } else {
+            // This is a new vote: insert in sorted position.
+            let mut at = application.votes.len();
+            for (i, existing) in application.votes.iter().enumerate() {
+                if approved < existing {
+                    at = i as u32;
+                    break;
+                }
+            }
+            application.votes.insert(at, approved);
+
+            env.storage().persistent().set(&key, &application);
+            env.storage()
+                .persistent()
+                .extend_ttl(&key, BUMP_THRESHOLD, BUMP_LEDGERS);
+            env.storage().persistent().set(&vote_key, &approved);
+            env.storage()
+                .persistent()
+                .extend_ttl(&vote_key, BUMP_THRESHOLD, BUMP_LEDGERS);
+
+            Reviewed {
+                applicant,
+                reviewer,
+                approved,
+            }
+            .publish(&env);
         }
-        .publish(&env);
+
         Ok(())
     }
 
@@ -569,12 +764,17 @@ impl Programme {
     ///
     /// `payee` is where tranches are paid. In [`Mode::Direct`] that is a verified
     /// institution rather than the recipient.
+    ///
+    /// When the programme is oversubscribed, being permissionless means calling
+    /// order decides who is funded — see "Oversubscription" in the module docs
+    /// for what is and is not guaranteed about that.
     pub fn finalize(
         env: Env,
         applicant: Address,
         payee: Address,
         mode: Mode,
     ) -> Result<Award, Error> {
+        Self::require_not_paused(&env)?;
         match Self::phase(&env)? {
             Phase::Review | Phase::Settled => {}
             Phase::Cancelled => return Err(Error::Cancelled),
@@ -590,6 +790,9 @@ impl Programme {
         if application.finalized {
             return Err(Error::AlreadyFinalized);
         }
+        if application.withdrawn {
+            return Err(Error::Withdrawn);
+        }
 
         let config = Self::config(&env)?;
         if application.votes.len() < config.quorum {
@@ -603,6 +806,14 @@ impl Programme {
             .votes
             .get((config.quorum - 1) / 2)
             .ok_or(Error::QuorumNotReached)?;
+
+        // Refuse to finalise if the award is below the configured minimum.
+        // This prevents awards smaller than the fee taken from them, or so small
+        // that splitting into tranches produces payments worth less than the
+        // transaction cost. The application remains untouched and retryable.
+        if granted < config.minimum_award {
+            return Err(Error::BelowMinimumAward);
+        }
 
         // A Direct award names its payee now and pays them without further
         // consent, so the payee has to be one this programme stands behind.
@@ -690,6 +901,88 @@ impl Programme {
         Ok(())
     }
 
+    /// Add multiple verified payees in a single call. Duplicates within the
+    /// batch or against already-verified payees are skipped, not rejected — the
+    /// caller is batching for convenience, not precision.
+    pub fn allow_payees(env: Env, payees: Vec<Address>) -> Result<(), Error> {
+        if payees.len() > MAX_PAYEE_BATCH {
+            return Err(Error::BatchTooLarge);
+        }
+        Self::config(&env)?.creator.require_auth();
+
+        for payee in payees.iter() {
+            let key = Key::Payee(payee.clone());
+            if env.storage().persistent().has(&key) {
+                continue;
+            }
+            env.storage().persistent().set(&key, &true);
+            env.storage()
+                .persistent()
+                .extend_ttl(&key, BUMP_THRESHOLD, BUMP_LEDGERS);
+
+            PayeeChanged {
+                payee,
+                verified: true,
+            }
+            .publish(&env);
+        }
+        Ok(())
+    }
+
+    /// Remove multiple payees in a single call. Payees not currently verified
+    /// are skipped, not rejected.
+    pub fn deny_payees(env: Env, payees: Vec<Address>) -> Result<(), Error> {
+        if payees.len() > MAX_PAYEE_BATCH {
+            return Err(Error::BatchTooLarge);
+        }
+        Self::config(&env)?.creator.require_auth();
+
+        for payee in payees.iter() {
+            let key = Key::Payee(payee.clone());
+            if !env.storage().persistent().has(&key) {
+                continue;
+            }
+            env.storage().persistent().remove(&key);
+
+            PayeeChanged {
+                payee,
+                verified: false,
+            }
+            .publish(&env);
+        }
+        Ok(())
+    }
+
+    /// Withdraw an application before finalisation. Withdrawal is final for
+    /// this programme — the applicant may not reapply. The application record
+    /// is marked, not deleted, so history stays auditable. Votes already cast
+    /// are left in place but can never produce an award.
+    pub fn withdraw(env: Env, applicant: Address) -> Result<(), Error> {
+        applicant.require_auth();
+
+        let key = Key::Application(applicant.clone());
+        let mut application: Application = env
+            .storage()
+            .persistent()
+            .get(&key)
+            .ok_or(Error::ApplicationNotFound)?;
+        if application.finalized {
+            return Err(Error::AlreadyFinalized);
+        }
+        if application.withdrawn {
+            return Err(Error::Withdrawn);
+        }
+
+        application.withdrawn = true;
+        env.storage().persistent().set(&key, &application);
+        env.storage()
+            .persistent()
+            .extend_ttl(&key, BUMP_THRESHOLD, BUMP_LEDGERS);
+
+        ApplicationWithdrawn { applicant }.publish(&env);
+        Ok(())
+    }
+
     /// Direct part of an allocation to a verified payee.
     ///
     /// This is what gives an `Allocated` recipient agency: they choose which
@@ -701,6 +994,7 @@ impl Programme {
         payee: Address,
         amount: i128,
     ) -> Result<i128, Error> {
+        Self::require_not_paused(&env)?;
         recipient.require_auth();
         let config = Self::config(&env)?;
 
@@ -759,6 +1053,7 @@ impl Programme {
         attestation: BytesN<32>,
         attester: Address,
     ) -> Result<i128, Error> {
+        Self::require_not_paused(&env)?;
         let config = Self::config(&env)?;
         if Self::phase(&env)? == Phase::Cancelled {
             return Err(Error::Cancelled);
@@ -774,6 +1069,13 @@ impl Programme {
         {
             return Err(Error::NotAuthorized);
         }
+        // Read on every release; bump it so a trusted verifier stays resolvable
+        // for the full life of a long-running programme.
+        env.storage().persistent().extend_ttl(
+            &Key::Verifier(attester.clone()),
+            BUMP_THRESHOLD,
+            BUMP_LEDGERS,
+        );
 
         // One proof, one tranche. Without this a single attestation would
         // unlock the whole award.
@@ -1012,9 +1314,14 @@ impl Programme {
         Ok(remaining)
     }
 
-    /// Abandon a programme before it has taken on any obligations. Only possible
-    /// while nothing has been contributed and nothing awarded, so this can never
-    /// strand someone else's money.
+    /// Abandon a programme before any tranche has reached a recipient.
+    ///
+    /// Once money has been released, those payouts are final and the programme
+    /// cannot be unwound. Before that, every unspent token is still in the
+    /// contract and belongs to the donors, so stepping back and returning it is
+    /// the right call rather than stranding someone else's money. Cancelling
+    /// opens refunds immediately (see [`Programme::refund`]), so a donor need
+    /// not wait out a release deadline that no longer means anything.
     pub fn cancel(env: Env) -> Result<(), Error> {
         let config = Self::config(&env)?;
         config.creator.require_auth();
@@ -1022,9 +1329,11 @@ impl Programme {
         if env.storage().instance().get::<_, bool>(&Key::Cancelled) == Some(true) {
             return Err(Error::Cancelled);
         }
-        let contributed: i128 = env.storage().instance().get(&Key::Contributed).unwrap_or(0);
-        let granted: i128 = env.storage().instance().get(&Key::Granted).unwrap_or(0);
-        if contributed != 0 || granted != 0 {
+        // Safe only while nothing has actually left the contract. A released
+        // tranche is a payout that cannot be clawed back, so we refuse rather
+        // than leave a recipient who earned money empty-handed.
+        let released: i128 = env.storage().instance().get(&Key::Released).unwrap_or(0);
+        if released != 0 {
             return Err(Error::NotCancellable);
         }
 
@@ -1033,6 +1342,85 @@ impl Programme {
             at: env.ledger().timestamp(),
         }
         .publish(&env);
+        Ok(())
+    }
+
+    /// Keep the contract's long-lived entries from being archived.
+    ///
+    /// Permissionless, mirroring `keepalive` on the attestation and standing
+    /// contracts: anyone may pay the gas to extend TTL so a programme's history,
+    /// and the money still tied to it, does not silently rot away.
+    ///
+    /// `subject` scopes the bump to the entries one observer cares about — an
+    /// application, its award, any escrowed allocation, and that person's
+    /// contribution and refund marker. These are exactly the entries that have
+    /// no write of their own once the programme settles, so they are the ones
+    /// most likely to archive unnoticed. The contract-wide instance state
+    /// (config, the running totals, the cancellation flag) is bumped on every
+    /// call as well, since views and refunds depend on it and it has no subject.
+    ///
+    /// Bumping is capped at [`BUMP_LEDGERS`] from now, so calling this in a loop
+    /// cannot push an entry's TTL out without bound — there is no griefing path.
+    pub fn keepalive(env: Env, subject: Address) -> Result<(), Error> {
+        env.storage()
+            .instance()
+            .extend_ttl(BUMP_THRESHOLD, BUMP_LEDGERS);
+        for key in [
+            Key::Application(subject.clone()),
+            Key::Award(subject.clone()),
+            Key::Allocation(subject.clone()),
+            Key::Donor(subject.clone()),
+            Key::Refunded(subject.clone()),
+        ] {
+            if env.storage().persistent().has(&key) {
+                env.storage()
+                    .persistent()
+                    .extend_ttl(&key, BUMP_THRESHOLD, BUMP_LEDGERS);
+            }
+        }
+
+        KeptAlive { subject }.publish(&env);
+        Ok(())
+    }
+
+    /// Emergency pause: temporarily halt money-forward operations while leaving
+    /// refund and sweep paths open so donors are never trapped.
+    ///
+    /// Covers: contribute, apply, review, finalize, spend, release.
+    /// Does NOT cover: refund, sweep_fee, sweep_unclaimed (donors must always
+    /// be able to reclaim their money, even during an emergency).
+    ///
+    /// Only the creator may pause. This is deliberate: the creator funds and
+    /// oversees the programme, and pausing is a reversible containment action,
+    /// not a permanent shutdown like cancel.
+    pub fn pause(env: Env) -> Result<(), Error> {
+        let config = Self::config(&env)?;
+        config.creator.require_auth();
+
+        if env.storage().instance().get::<_, bool>(&Key::Paused) == Some(true) {
+            return Err(Error::Paused);
+        }
+        if env.storage().instance().get::<_, bool>(&Key::Cancelled) == Some(true) {
+            return Err(Error::Cancelled);
+        }
+
+        env.storage().instance().set(&Key::Paused, &true);
+        Paused { by: config.creator }.publish(&env);
+        Ok(())
+    }
+
+    /// Lift the pause and resume normal operation.
+    /// Only the creator may unpause.
+    pub fn unpause(env: Env) -> Result<(), Error> {
+        let config = Self::config(&env)?;
+        config.creator.require_auth();
+
+        if env.storage().instance().get::<_, bool>(&Key::Paused) != Some(true) {
+            return Ok(()); // Already unpaused, no-op
+        }
+
+        env.storage().instance().remove(&Key::Paused);
+        Unpaused { by: config.creator }.publish(&env);
         Ok(())
     }
 
@@ -1047,6 +1435,12 @@ impl Programme {
 
     pub fn get_config(env: Env) -> Result<ProgrammeConfig, Error> {
         Self::config(&env)
+    }
+
+    /// Whether the programme is paused. Readable so a caller can tell an
+    /// emergency stop apart from an ordinary phase refusal.
+    pub fn is_paused(env: Env) -> bool {
+        env.storage().instance().get::<_, bool>(&Key::Paused) == Some(true)
     }
 
     pub fn phase(env: &Env) -> Result<Phase, Error> {
@@ -1079,7 +1473,7 @@ impl Programme {
         env.storage()
             .persistent()
             .get(&Key::Award(recipient))
-            .ok_or(Error::ApplicationNotFound)
+            .ok_or(Error::AwardNotFound)
     }
 
     pub fn contributed_by(env: Env, donor: Address) -> i128 {
