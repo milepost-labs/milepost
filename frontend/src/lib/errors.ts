@@ -76,6 +76,8 @@ const PROGRAM: Table = {
   33: { kind: 'invalid', message: 'That is more than you have available to direct.' },
   34: { kind: 'blocked', message: 'This award pays into a wallet with no spend policy installed.', action: 'The policy must be installed before a restricted tranche can be released.' },
   35: { kind: 'blocked', message: 'Allocations can no longer be directed — the sweep window has opened.' },
+  36: { kind: 'invalid', message: 'The payee batch size is too large.' },
+  37: { kind: 'conflict', message: 'This application has been withdrawn.', action: 'Withdrawn applications cannot be reviewed, finalized, or re-applied.' },
 };
 
 const ATTEST: Table = {

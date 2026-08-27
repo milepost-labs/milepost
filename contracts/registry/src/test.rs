@@ -224,3 +224,34 @@ fn changing_the_wasm_does_not_disturb_existing_programmes() {
         before_config
     );
 }
+
+#[test]
+fn nonce_starts_at_zero_and_increments() {
+    let f = setup();
+    assert_eq!(f.client.nonce(), 0);
+    create(&f, &Address::generate(&f.env));
+    assert_eq!(f.client.nonce(), 1);
+    create(&f, &Address::generate(&f.env));
+    assert_eq!(f.client.nonce(), 2);
+}
+
+#[test]
+fn programme_address_matches_actual_deployment() {
+    let f = setup();
+    let creator = Address::generate(&f.env);
+
+    let first = create(&f, &creator);
+    let second = create(&f, &creator);
+
+    assert_eq!(f.client.programme_address(&0), first);
+    assert_eq!(f.client.programme_address(&1), second);
+}
+
+#[test]
+fn programme_address_is_deterministic() {
+    let f = setup();
+    assert_eq!(
+        f.client.programme_address(&0),
+        f.client.programme_address(&0)
+    );
+}

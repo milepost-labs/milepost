@@ -45,3 +45,44 @@ jobs:
           for f in target/wasm32v1-none/release/*.wasm; do
             printf '| %s | %s |\n' "$(basename "$f" .wasm)" "$(stat -c%s "$f")" >> "$GITHUB_STEP_SUMMARY"
           done
+
+  frontend:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
+        with:
+          # eslint requires ^20.19 || ^22.13 || >=24; vite wants >=22.12.
+          node-version: 24
+          cache: npm
+          cache-dependency-path: "**/package-lock.json"
+
+      # `packages/*/dist` is gitignored, so a fresh checkout cannot resolve
+      # `@milepost/*` at all. The frontend imports its contract types from
+      # these, and without them tsc fails on a missing module rather than on
+      # anything real — which would make every other step here meaningless.
+      # Each package carries its own lockfile, so `npm ci` is exact.
+      - name: Build bindings
+        run: |
+          for p in attest policy-spend program record registry; do
+            npm ci --prefix "packages/$p"
+            npm run build --prefix "packages/$p"
+          done
+
+      - name: Install
+        run: npm ci --prefix frontend
+
+      # `tsc -b && vite build`. This step is the reason the job exists: until
+      # now CI ran cargo only, so a PR touching nothing but .tsx went green
+      # without a line of TypeScript being compiled.
+      - name: Build
+        run: npm run build --prefix frontend
+
+      # Not cosmetic. The React Compiler rules here catch render-purity and
+      # cascading-setState bugs that type-check cleanly and misbehave at
+      # runtime.
+      - name: Lint
+        run: npm run lint --prefix frontend
+
+      - name: Test
+        run: npm test --prefix frontend

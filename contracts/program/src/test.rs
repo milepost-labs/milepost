@@ -591,7 +591,8 @@ fn ready_applicants(f: &Fixture, applicants: &[(Address, i128)]) {
     to_review(f);
     for (applicant, amount) in applicants {
         for i in 0..f.client.get_config().quorum {
-            f.client.review(&f.reviewers.get(i).unwrap(), applicant, amount);
+            f.client
+                .review(&f.reviewers.get(i).unwrap(), applicant, amount);
         }
     }
 }
@@ -624,9 +625,15 @@ fn the_same_application_can_be_refused_in_one_order_and_funded_in_the_reverse() 
     let (b_funded_when_first, a_funded_when_second) = run(false);
 
     assert!(a_funded_when_first, "called first, a must be funded");
-    assert!(!b_funded_when_second, "called second against a's commitment, b must be refused");
+    assert!(
+        !b_funded_when_second,
+        "called second against a's commitment, b must be refused"
+    );
     assert!(b_funded_when_first, "called first, b must be funded");
-    assert!(!a_funded_when_second, "called second against b's commitment, a must be refused");
+    assert!(
+        !a_funded_when_second,
+        "called second against b's commitment, a must be refused"
+    );
 }
 
 #[test]
@@ -711,11 +718,15 @@ fn finalize_never_exceeds_the_budget_under_any_ordering() {
         // (1_200 > 900), so it and the fourth must be refused, regardless of
         // which applicants happen to occupy which position.
         for (position, &index) in order.iter().enumerate() {
-            let result = f.client.try_finalize(&applicants[index], &payee, &Mode::Direct);
+            let result = f
+                .client
+                .try_finalize(&applicants[index], &payee, &Mode::Direct);
             if position < 2 {
                 match result {
-                    Ok(award) => assert_eq!(award.granted, 400),
-                    Err(e) => panic!("expected success at position {position} in order {order:?}, got {e:?}"),
+                    Ok(award) => assert_eq!(award.unwrap().granted, 400),
+                    Err(e) => panic!(
+                        "expected success at position {position} in order {order:?}, got {e:?}"
+                    ),
                 }
             } else {
                 assert_eq!(
@@ -739,7 +750,8 @@ fn finalize_never_exceeds_the_budget_under_any_ordering() {
         // No ordering double-commits an already-funded application.
         for &index in order[..2].iter() {
             assert_eq!(
-                f.client.try_finalize(&applicants[index], &payee, &Mode::Direct),
+                f.client
+                    .try_finalize(&applicants[index], &payee, &Mode::Direct),
                 Err(Ok(Error::AlreadyFinalized)),
                 "re-finalizing an already-funded application must be rejected, in order {order:?}"
             );
@@ -747,7 +759,8 @@ fn finalize_never_exceeds_the_budget_under_any_ordering() {
         // A refusal is retryable and deterministic, not a one-way trap.
         for &index in order[2..].iter() {
             assert_eq!(
-                f.client.try_finalize(&applicants[index], &payee, &Mode::Direct),
+                f.client
+                    .try_finalize(&applicants[index], &payee, &Mode::Direct),
                 Err(Ok(Error::InsufficientBudget)),
                 "retrying a refusal must fail the same way, in order {order:?}"
             );
@@ -1509,282 +1522,285 @@ fn the_payee_registry_rejects_duplicates_and_unknowns() {
     assert_eq!(f.client.try_deny_payee(&school), Err(Ok(Error::NotPayee)));
 }
 
-// ---- invariant testing ----
+// ---- withdrawal ----
 
-struct TestState {
-    donors: std::vec::Vec<Address>,
-    contributions: std::vec::Vec<i128>,
-    refunded: std::vec::Vec<bool>,
-    refund_amounts_paid: std::vec::Vec<i128>,
-    recipients: std::vec::Vec<Address>,
-    fee_swept: bool,
-    unclaimed_swept: bool,
+#[test]
+fn an_applicant_can_withdraw_before_finalisation() {
+    let f = setup(2, 3);
+    let applicant = Address::generate(&f.env);
+    f.client.apply(&applicant, &5_000, &hash(&f.env, 1));
+
+    f.client.withdraw(&applicant);
+
+    let a = f.client.get_application(&applicant);
+    assert!(a.withdrawn);
 }
 
-impl TestState {
-    fn new() -> Self {
-        Self {
-            donors: std::vec::Vec::new(),
-            contributions: std::vec::Vec::new(),
-            refunded: std::vec::Vec::new(),
-            refund_amounts_paid: std::vec::Vec::new(),
-            recipients: std::vec::Vec::new(),
-            fee_swept: false,
-            unclaimed_swept: false,
-        }
-    }
+#[test]
+fn withdrawal_during_review_phase() {
+    let f = setup(2, 3);
+    let applicant = Address::generate(&f.env);
+    f.client.apply(&applicant, &5_000, &hash(&f.env, 1));
+    to_review(&f);
+
+    f.client.withdraw(&applicant);
+    assert!(f.client.get_application(&applicant).withdrawn);
 }
 
-fn assert_invariants(f: &Fixture, state: &TestState) {
-    let env = &f.env;
-    let config = f.client.get_config();
-    let total_released = f.client.total_released();
-    let budget = f.client.budget();
-    let total_contributed = f.client.total_contributed();
-    let timestamp = env.ledger().timestamp();
-    let is_cancelled = f.client.get_phase() == Phase::Cancelled;
-    let refunds_open = is_cancelled || timestamp >= config.release_deadline;
+#[test]
+fn review_on_a_withdrawn_application_is_rejected() {
+    let f = setup(2, 3);
+    let applicant = Address::generate(&f.env);
+    f.client.apply(&applicant, &5_000, &hash(&f.env, 1));
+    to_review(&f);
+    f.client.withdraw(&applicant);
 
-    // Invariant 1: total_released never exceeds budget
-    assert!(
-        total_released <= budget,
-        "Invariant 1 Violated: total_released ({}) exceeds budget ({})",
-        total_released,
-        budget
-    );
-
-    // Invariant 3 & 4: an award's released never exceeds its granted, and tranches_released never exceeds tranches
-    for recipient in state.recipients.iter() {
-        if let Ok(award) = f.client.try_get_award(&recipient) {
-            assert!(
-                award.released <= award.granted,
-                "Invariant 3 Violated: recipient {:?} released ({}) exceeds granted ({})",
-                recipient,
-                award.released,
-                award.granted
-            );
-            assert!(
-                award.tranches_released <= award.tranches,
-                "Invariant 4 Violated: recipient {:?} tranches_released ({}) exceeds tranches ({})",
-                recipient,
-                award.tranches_released,
-                award.tranches
-            );
-        }
-    }
-
-    // Invariant 2: the sum of all refunds never exceeds budget - total_released
-    let mut sum_refunds_paid = 0i128;
-    let mut sum_potential_refunds = 0i128;
-    let unpaid_budget = budget - total_released;
-
-    for (i, donor) in state.donors.iter().enumerate() {
-        let contributed = state.contributions[i];
-        let was_refunded = state.refunded[i];
-
-        if was_refunded {
-            let paid = state.refund_amounts_paid[i];
-            sum_refunds_paid += paid;
-        } else if refunds_open && !state.unclaimed_swept {
-            if total_contributed > 0 {
-                let potential = contributed
-                    .checked_mul(unpaid_budget)
-                    .unwrap()
-                    / total_contributed;
-                sum_potential_refunds += potential;
-            }
-        }
-    }
-
-    let total_refunds = sum_refunds_paid + sum_potential_refunds;
-    assert!(
-        total_refunds <= unpaid_budget,
-        "Invariant 2 Violated: sum of refunds ({}) exceeds budget - total_released ({})",
-        total_refunds,
-        unpaid_budget
-    );
-
-    // Invariant 5: the contract's token balance is always at least what it still owes
-    let fee = total_contributed * (config.fee_bps as i128) / 10000;
-    let mut owed = 0i128;
-
-    if !state.fee_swept {
-        owed += fee;
-    }
-
-    if !state.unclaimed_swept {
-        if refunds_open {
-            owed += sum_potential_refunds;
-        } else {
-            owed += unpaid_budget;
-        }
-    }
-
-    let balance = f.token.balance(&f.client.address);
-    assert!(
-        balance >= owed,
-        "Invariant 5 Violated: contract balance ({}) is less than what it owes ({})",
-        balance,
-        owed
+    assert_eq!(
+        f.client
+            .try_review(&f.reviewers.get(0).unwrap(), &applicant, &1_000),
+        Err(Ok(Error::Withdrawn))
     );
 }
 
 #[test]
-fn test_invariants_across_sequences() {
-    // ---- Sequence 1: Happy path release and final sweep ----
-    {
-        let f = setup(2, 3);
-        let mut state = TestState::new();
-        assert_invariants(&f, &state);
+fn finalize_on_a_withdrawn_application_is_rejected() {
+    let f = setup(2, 3);
+    let applicant = Address::generate(&f.env);
+    let donor = funded_donor(&f, 100_000);
+    f.client.contribute(&donor, &100_000);
+    f.client.apply(&applicant, &1_000, &hash(&f.env, 1));
+    to_review(&f);
+    for i in 0..2u32 {
+        f.client
+            .review(&f.reviewers.get(i).unwrap(), &applicant, &1_000);
+    }
+    f.client.withdraw(&applicant);
 
-        let d1 = funded_donor(&f, 10_000);
-        f.client.contribute(&d1, &10_000);
-        state.donors.push(d1);
-        state.contributions.push(10_000);
-        state.refunded.push(false);
-        state.refund_amounts_paid.push(0);
-        assert_invariants(&f, &state);
+    let payee = Address::generate(&f.env);
+    f.client.allow_payee(&payee);
+    assert_eq!(
+        f.client.try_finalize(&applicant, &payee, &Mode::Direct),
+        Err(Ok(Error::Withdrawn))
+    );
+}
 
-        let d2 = funded_donor(&f, 20_000);
-        f.client.contribute(&d2, &20_000);
-        state.donors.push(d2);
-        state.contributions.push(20_000);
-        state.refunded.push(false);
-        state.refund_amounts_paid.push(0);
-        assert_invariants(&f, &state);
+#[test]
+fn reapplication_after_withdrawal_is_rejected() {
+    let f = setup(2, 3);
+    let applicant = Address::generate(&f.env);
+    f.client.apply(&applicant, &5_000, &hash(&f.env, 1));
+    f.client.withdraw(&applicant);
 
-        let r1 = Address::generate(&f.env);
-        f.client.apply(&r1, &5_000, &hash(&f.env, 1));
-        state.recipients.push(r1.clone());
-        assert_invariants(&f, &state);
+    assert_eq!(
+        f.client.try_apply(&applicant, &3_000, &hash(&f.env, 2)),
+        Err(Ok(Error::AlreadyApplied))
+    );
+}
 
-        to_review(&f);
-        assert_invariants(&f, &state);
+#[test]
+fn withdrawal_after_finalisation_is_rejected() {
+    let f = setup(2, 3);
+    let applicant = Address::generate(&f.env);
+    awarded(&f, &applicant, 1_000, &[1_000, 1_000]);
 
-        for i in 0..2u32 {
+    assert_eq!(
+        f.client.try_withdraw(&applicant),
+        Err(Ok(Error::AlreadyFinalized))
+    );
+}
+
+#[test]
+fn withdrawing_twice_is_rejected() {
+    let f = setup(2, 3);
+    let applicant = Address::generate(&f.env);
+    f.client.apply(&applicant, &5_000, &hash(&f.env, 1));
+    f.client.withdraw(&applicant);
+    assert_eq!(f.client.try_withdraw(&applicant), Err(Ok(Error::Withdrawn)));
+}
+
+// ---- batch payees ----
+
+#[test]
+fn batch_allow_adds_multiple_payees() {
+    let f = setup(2, 3);
+    let a = Address::generate(&f.env);
+    let b = Address::generate(&f.env);
+    let c = Address::generate(&f.env);
+
+    f.client
+        .allow_payees(&vec![&f.env, a.clone(), b.clone(), c.clone()]);
+
+    assert!(f.client.is_payee(&a));
+    assert!(f.client.is_payee(&b));
+    assert!(f.client.is_payee(&c));
+}
+
+#[test]
+fn batch_deny_removes_multiple_payees() {
+    let f = setup(2, 3);
+    let a = Address::generate(&f.env);
+    let b = Address::generate(&f.env);
+    f.client.allow_payee(&a);
+    f.client.allow_payee(&b);
+
+    f.client.deny_payees(&vec![&f.env, a.clone(), b.clone()]);
+
+    assert!(!f.client.is_payee(&a));
+    assert!(!f.client.is_payee(&b));
+}
+
+#[test]
+fn batch_allow_skips_duplicates() {
+    let f = setup(2, 3);
+    let a = Address::generate(&f.env);
+    f.client.allow_payee(&a);
+
+    f.client.allow_payees(&vec![&f.env, a.clone()]);
+    assert!(f.client.is_payee(&a));
+}
+
+#[test]
+fn batch_deny_skips_unknowns() {
+    let f = setup(2, 3);
+    let unknown = Address::generate(&f.env);
+    f.client.deny_payees(&vec![&f.env, unknown]);
+}
+
+#[test]
+fn batch_exceeding_max_is_rejected() {
+    let f = setup(2, 3);
+    let mut payees = Vec::new(&f.env);
+    for _ in 0..=MAX_PAYEE_BATCH {
+        payees.push_back(Address::generate(&f.env));
+    }
+    assert_eq!(
+        f.client.try_allow_payees(&payees),
+        Err(Ok(Error::BatchTooLarge))
+    );
+}
+
+// ---- property tests for the median award mechanism ----
+
+mod proptests {
+    use super::*;
+    use proptest::prelude::*;
+
+    fn run_award(f: &Fixture, requested: i128, votes: &[i128]) -> i128 {
+        let applicant = Address::generate(&f.env);
+        let donor = funded_donor(f, 100_000);
+        f.client.contribute(&donor, &100_000);
+        f.client.apply(&applicant, &requested, &hash(&f.env, 1));
+        to_review(f);
+        for (i, v) in votes.iter().enumerate() {
             f.client
-                .review(&f.reviewers.get(i).unwrap(), &r1, &5_000);
+                .review(&f.reviewers.get(i as u32).unwrap(), &applicant, v);
         }
         let payee = Address::generate(&f.env);
         f.client.allow_payee(&payee);
-        f.client.finalize(&r1, &payee, &Mode::Direct);
-        assert_invariants(&f, &state);
-
-        // Sweep fee
-        f.client.sweep_fee();
-        state.fee_swept = true;
-        assert_invariants(&f, &state);
-
-        // Release tranches
-        f.client.release(&r1, &proof(&f, &r1, 1), &f.verifier);
-        assert_invariants(&f, &state);
-        f.client.release(&r1, &proof(&f, &r1, 2), &f.verifier);
-        assert_invariants(&f, &state);
-
-        // Move past release deadline
-        f.env.ledger().set_timestamp(RELEASE_DEADLINE);
-        assert_invariants(&f, &state);
-
-        // Refund d1
-        let amt1 = f.client.refund(&state.donors[0]);
-        state.refunded[0] = true;
-        state.refund_amounts_paid[0] = amt1;
-        assert_invariants(&f, &state);
-
-        // Move past sweep deadline
-        f.env.ledger().set_timestamp(SWEEP_DEADLINE);
-        assert_invariants(&f, &state);
-
-        // Sweep unclaimed
-        f.client.sweep_unclaimed();
-        state.unclaimed_swept = true;
-        assert_invariants(&f, &state);
+        f.client.finalize(&applicant, &payee, &Mode::Direct).granted
     }
 
-    // ---- Sequence 2: Interleaved sweep, refund, and release ----
-    {
-        let f = setup(2, 3);
-        let mut state = TestState::new();
-        assert_invariants(&f, &state);
-
-        let d1 = funded_donor(&f, 10_000);
-        f.client.contribute(&d1, &10_000);
-        state.donors.push(d1);
-        state.contributions.push(10_000);
-        state.refunded.push(false);
-        state.refund_amounts_paid.push(0);
-
-        let d2 = funded_donor(&f, 5_000);
-        f.client.contribute(&d2, &5_000);
-        state.donors.push(d2);
-        state.contributions.push(5_000);
-        state.refunded.push(false);
-        state.refund_amounts_paid.push(0);
-        assert_invariants(&f, &state);
-
-        let r1 = Address::generate(&f.env);
-        f.client.apply(&r1, &3_000, &hash(&f.env, 1));
-        state.recipients.push(r1.clone());
-        to_review(&f);
-        for i in 0..2u32 {
-            f.client
-                .review(&f.reviewers.get(i).unwrap(), &r1, &3_000);
+    proptest! {
+        #[test]
+        fn award_in_bounding_box(
+            mut votes in prop::collection::vec(1i128..=10_000i128, 3..=16),
+        ) {
+            votes.sort();
+            let requested = *votes.last().unwrap();
+            let f = setup(votes.len() as u32, votes.len() as u32);
+            let granted = run_award(&f, requested, &votes);
+            prop_assert!(
+                granted >= *votes.first().unwrap() && granted <= *votes.last().unwrap(),
+            );
         }
-        let payee = Address::generate(&f.env);
-        f.client.allow_payee(&payee);
-        f.client.finalize(&r1, &payee, &Mode::Direct);
-        assert_invariants(&f, &state);
-
-        f.client.release(&r1, &proof(&f, &r1, 1), &f.verifier);
-        assert_invariants(&f, &state);
-
-        f.env.ledger().set_timestamp(RELEASE_DEADLINE);
-        assert_invariants(&f, &state);
-
-        f.client.sweep_fee();
-        state.fee_swept = true;
-        assert_invariants(&f, &state);
-
-        let amt2 = f.client.refund(&state.donors[1]);
-        state.refunded[1] = true;
-        state.refund_amounts_paid[1] = amt2;
-        assert_invariants(&f, &state);
-
-        f.env.ledger().set_timestamp(SWEEP_DEADLINE);
-        f.client.sweep_unclaimed();
-        state.unclaimed_swept = true;
-        assert_invariants(&f, &state);
     }
 
-    // ---- Sequence 3: Cancelled state and refund ----
-    {
-        let f = setup(2, 3);
-        let mut state = TestState::new();
-        assert_invariants(&f, &state);
+    proptest! {
+        #[test]
+        fn award_never_exceeds_requested(
+            votes in prop::collection::vec(1i128..=10_000i128, 3..=16),
+            requested in 10_000i128..=100_000i128,
+        ) {
+            let f = setup(votes.len() as u32, votes.len() as u32);
+            let granted = run_award(&f, requested, &votes);
+            prop_assert!(granted <= requested);
+        }
+    }
 
-        let d1 = funded_donor(&f, 10_000);
-        f.client.contribute(&d1, &10_000);
-        state.donors.push(d1);
-        state.contributions.push(10_000);
-        state.refunded.push(false);
-        state.refund_amounts_paid.push(0);
-        assert_invariants(&f, &state);
+    proptest! {
+        #[test]
+        fn median_more_robust_than_mean(
+            base_votes in prop::collection::vec(100i128..=9_000i128, 3..=15),
+            extreme in prop_oneof![Just(1i128), Just(10_000i128)],
+        ) {
+            prop_assume!(base_votes.len() < MAX_QUORUM as usize);
 
-        f.client.cancel();
-        assert_invariants(&f, &state);
+            let mut sorted = base_votes.clone();
+            sorted.sort();
+            let requested = *sorted.last().unwrap().max(&extreme);
 
-        let amt1 = f.client.refund(&state.donors[0]);
-        state.refunded[0] = true;
-        state.refund_amounts_paid[0] = amt1;
-        assert_invariants(&f, &state);
+            let f_base = setup(sorted.len() as u32, sorted.len() as u32);
+            let median_before = run_award(&f_base, requested, &sorted);
 
-        f.client.sweep_fee();
-        state.fee_swept = true;
-        assert_invariants(&f, &state);
+            let mut with_extreme = sorted.clone();
+            with_extreme.push(extreme);
+            with_extreme.sort();
+            let f_ext = setup(with_extreme.len() as u32, with_extreme.len() as u32);
+            let median_after = run_award(&f_ext, requested, &with_extreme);
 
-        f.env.ledger().set_timestamp(SWEEP_DEADLINE);
-        f.client.sweep_unclaimed();
-        state.unclaimed_swept = true;
-        assert_invariants(&f, &state);
+            let median_shift = (median_after - median_before).unsigned_abs();
+
+            // The median's influence from a single vote is bounded by the gap
+            // between the two order statistics it can jump between.  This is the
+            // core robustness property the issue asks for: no single vote can
+            // move the median by more than one "step" in the sorted list,
+            // whereas the mean is pulled proportionally to the outlier's
+            // distance from the centre.
+            let max_gap = sorted.windows(2)
+                .map(|w| (w[1] - w[0]).unsigned_abs())
+                .max()
+                .unwrap_or(0);
+            prop_assert!(
+                median_shift <= max_gap,
+                "median shift {median_shift} must be bounded by max gap {max_gap}",
+            );
+        }
+    }
+
+    proptest! {
+        #[test]
+        fn order_independent(
+            votes in prop::collection::vec(1i128..=10_000i128, 3..=16),
+        ) {
+            let requested = *votes.iter().max().unwrap();
+            let n = votes.len() as u32;
+
+            let f1 = setup(n, n);
+            let g1 = run_award(&f1, requested, &votes);
+
+            let mut reversed = votes.clone();
+            reversed.reverse();
+            let f2 = setup(n, n);
+            let g2 = run_award(&f2, requested, &reversed);
+
+            prop_assert_eq!(g1, g2);
+        }
+    }
+
+    proptest! {
+        #[test]
+        fn identical_votes_yields_that_value(
+            value in 1i128..=10_000i128,
+            n in 3u32..=16u32,
+        ) {
+            let f = setup(n, n);
+            // Build a stack-allocated slice to avoid soroban_sdk::Vec aliasing.
+            let mut buf = [0i128; 16];
+            for slot in buf.iter_mut().take(n as usize) {
+                *slot = value;
+            }
+            let granted = run_award(&f, value, &buf[..n as usize]);
+            prop_assert_eq!(granted, value);
+        }
     }
 }

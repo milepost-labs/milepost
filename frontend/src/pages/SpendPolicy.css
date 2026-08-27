@@ -1,0 +1,25 @@
+.policy-lookup {
+  display: grid;
+  gap: var(--space-3);
+  max-width: 40rem;
+  margin-bottom: var(--space-6);
+}
+
+.policy-lookup-actions {
+  display: flex;
+  gap: var(--space-3);
+  flex-wrap: wrap;
+}
+
+.policy-sections {
+  display: grid;
+  gap: var(--space-6);
+  margin-bottom: var(--space-8);
+}
+
+.policy-configure {
+  display: grid;
+  gap: var(--space-3);
+  border-top: 1px solid var(--surface-border);
+  padding-top: var(--space-6);
+}

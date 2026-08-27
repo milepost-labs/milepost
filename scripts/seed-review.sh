@@ -42,7 +42,7 @@ addr() { stellar keys address "milepost-$1"; }
 invoke() {
   local id="$1" source="$2"; shift 2
   stellar contract invoke --id "$id" --source-account "milepost-$source" \
-    --network "$NETWORK" --send=yes -- "$@" 2>/dev/null
+    --network "$NETWORK" --send=yes -- "$@"
 }
 
 echo "==> Reviewing"
