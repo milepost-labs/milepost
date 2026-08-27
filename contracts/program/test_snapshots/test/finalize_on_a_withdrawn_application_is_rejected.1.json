@@ -774,7 +774,7 @@
           },
           "ext": "v0"
         },
-        "live_until": 1555200
+        "live_until": 4095
       },
       {
         "entry": {
@@ -801,7 +801,7 @@
           },
           "ext": "v0"
         },
-        "live_until": 1555200
+        "live_until": 4095
       },
       {
         "entry": {
@@ -828,7 +828,7 @@
           },
           "ext": "v0"
         },
-        "live_until": 1555200
+        "live_until": 4095
       },
       {
         "entry": {
@@ -855,7 +855,7 @@
           },
           "ext": "v0"
         },
-        "live_until": 1555200
+        "live_until": 4095
       },
       {
         "entry": {
@@ -879,7 +879,7 @@
               },
               "durability": "persistent",
               "val": {
-                "bool": true
+                "i128": "1000"
               }
             }
           },
@@ -909,7 +909,7 @@
               },
               "durability": "persistent",
               "val": {
-                "bool": true
+                "i128": "1000"
               }
             }
           },
@@ -980,6 +980,14 @@
                             },
                             "val": {
                               "bytes": "0707070707070707070707070707070707070707070707070707070707070707"
+                            }
+                          },
+                          {
+                            "key": {
+                              "symbol": "minimum_award"
+                            },
+                            "val": {
+                              "i128": "0"
                             }
                           },
                           {
@@ -1108,7 +1116,7 @@
           },
           "ext": "v0"
         },
-        "live_until": 1555200
+        "live_until": 4095
       },
       {
         "entry": {
@@ -1389,7 +1397,7 @@
           },
           "ext": "v0"
         },
-        "live_until": 1555200
+        "live_until": 4095
       }
     ]
   },

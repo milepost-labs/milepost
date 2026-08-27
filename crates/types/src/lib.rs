@@ -79,5 +79,9 @@ pub struct ProgrammeConfig {
     /// Reviewer votes needed before an application can be finalised.
     pub quorum: u32,
     pub tranches: u32,
+    /// Minimum award amount below which finalisation is refused. Prevents awards
+    /// smaller than the fee taken from them, or so small that splitting into
+    /// tranches produces payments worth less than the transaction cost.
+    pub minimum_award: i128,
     pub metadata_hash: BytesN<32>,
 }

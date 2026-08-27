@@ -188,6 +188,10 @@ impl Registry {
                         sweep_deadline,
                         quorum,
                         tranches,
+                        // No minimum: programmes deployed through the registry
+                        // opt out until `create` exposes it, which would mean a
+                        // fifteenth parameter and a bindings regeneration.
+                        minimum_award: 0,
                         metadata_hash,
                     },
                     reviewers,
