@@ -164,8 +164,6 @@ export function AllowlistManager({ walletAddress }: AllowlistManagerProps) {
         error={tx.error}
         successTitle="Allowlist updated"
         successDescription="The payee allowlist state has been updated on-chain."
-        hash={tx.hash}
-        network={wallet.network}
       />
 
       <div className="allowlist-preview">

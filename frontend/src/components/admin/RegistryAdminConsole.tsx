@@ -203,7 +203,7 @@ export function RegistryAdminConsole() {
                 </Button>
               </div>
             </Field>
-            <TransactionOutcome phase={txFee.phase} error={txFee.error} successTitle="Fee updated" hash={txFee.hash} network={wallet.network} />
+            <TransactionOutcome phase={txFee.phase} error={txFee.error} successTitle="Fee updated" />
           </form>
 
           {/* Treasury Form */}
@@ -222,7 +222,7 @@ export function RegistryAdminConsole() {
                 </Button>
               </div>
             </Field>
-            <TransactionOutcome phase={txTreasury.phase} error={txTreasury.error} successTitle="Treasury updated" hash={txTreasury.hash} network={wallet.network} />
+            <TransactionOutcome phase={txTreasury.phase} error={txTreasury.error} successTitle="Treasury updated" />
           </form>
 
           {/* Policy Contract Form */}
@@ -241,7 +241,7 @@ export function RegistryAdminConsole() {
                 </Button>
               </div>
             </Field>
-            <TransactionOutcome phase={txPolicy.phase} error={txPolicy.error} successTitle="Default policy updated" hash={txPolicy.hash} network={wallet.network} />
+            <TransactionOutcome phase={txPolicy.phase} error={txPolicy.error} successTitle="Default policy updated" />
           </form>
 
           {/* Irreversible Admin Handover Section */}
@@ -253,7 +253,7 @@ export function RegistryAdminConsole() {
             <Button variant="danger" onClick={() => setAdminModalOpen(true)}>
               Transfer Admin Ownership
             </Button>
-            <TransactionOutcome phase={txAdmin.phase} error={txAdmin.error} successTitle="Admin control transferred" hash={txAdmin.hash} network={wallet.network} />
+            <TransactionOutcome phase={txAdmin.phase} error={txAdmin.error} successTitle="Admin control transferred" />
           </div>
         </div>
       )}
