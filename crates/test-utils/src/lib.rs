@@ -36,8 +36,6 @@ pub mod schedule {
 /// exactly this.
 #[cfg(feature = "testutils")]
 pub fn new_test_env() -> Env {
-    use soroban_sdk::testutils::Env as _;
-
     let env = Env::default();
     env.mock_all_auths();
     env
@@ -54,7 +52,6 @@ pub fn hash(env: &Env, byte: u8) -> BytesN<32> {
 #[cfg(feature = "testutils")]
 pub fn register_token(env: &Env) -> soroban_sdk::Address {
     use soroban_sdk::testutils::Address as _;
-    use soroban_sdk::testutils::Env as _;
 
     let issuer = soroban_sdk::Address::generate(env);
     env.register_stellar_asset_contract_v2(issuer).address()
