@@ -1,11 +1,19 @@
 import { useEffect, useMemo, useState } from "react";
 import { Link } from "react-router-dom";
 import type { Phase, ProgrammeConfig } from "@milepost/program";
-import { CalendarClock, Landmark, ShieldCheck, UsersRound } from "lucide-react";
+import {
+  CalendarClock,
+  Landmark,
+  ShieldAlert,
+  ShieldCheck,
+  UsersRound,
+} from "lucide-react";
 import { AsyncView } from "../components/state/AsyncStates";
 import { Badge, Card, PhaseBadge, Stat, Table } from "../components/ui";
+import { useSoroban } from "../context/useSoroban";
 import { useContractRead, useContractResult, useProgramme } from "../hooks";
 import { formatAmount, percentOf } from "../lib/amount";
+import { registryVerificationCopy } from "../lib/registryVerification";
 import "./ProgrammeDetail.css";
 
 const ZERO = 0n;
@@ -107,7 +115,13 @@ function formatFeeBps(feeBps: number): string {
 
 export const ProgrammeDetail = () => {
   const { id: programmeId, client: programme, isDefault } = useProgramme();
+  const { registry } = useSoroban();
   const [nowMs, setNowMs] = useState(() => Date.now());
+
+  const isRegistered = useContractRead(
+    () => registry.is_programme({ addr: programmeId }),
+    [registry, programmeId],
+  );
 
   const config = useContractResult(() => programme.get_config(), [programme]);
   const phase = useContractResult(() => programme.get_phase(), [programme]);
@@ -318,6 +332,31 @@ export const ProgrammeDetail = () => {
       </section>
 
       <section className="programme-grid animate-fade-up">
+        <Card title="Registry verification">
+          <AsyncView
+            {...isRegistered}
+            onRetry={isRegistered.refetch}
+            contract="registry"
+          >
+            {(deployedByRegistry) => {
+              const copy = registryVerificationCopy(deployedByRegistry);
+              return (
+                <div className="verification-panel">
+                  {deployedByRegistry ? (
+                    <ShieldCheck aria-hidden="true" />
+                  ) : (
+                    <ShieldAlert aria-hidden="true" />
+                  )}
+                  <div>
+                    <Badge tone={copy.tone}>{copy.label}</Badge>
+                    <p className="typo-text text-muted">{copy.description}</p>
+                  </div>
+                </div>
+              );
+            }}
+          </AsyncView>
+        </Card>
+
         <Card
           title="Money flow"
           aside={
