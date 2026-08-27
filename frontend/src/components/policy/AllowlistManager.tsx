@@ -3,9 +3,9 @@ import { Client, networks, type Policy } from '@milepost/policy-spend';
 import { useWallet } from '../../context/useWallet';
 import { useContractRead, useContractResult } from '../../hooks/useContractRead';
 import { useTransaction } from '../../hooks/useTransaction';
-import { looksLikeAddress, truncateAddress } from '../../lib/format';
+import { looksLikeAddress } from '../../lib/format';
 import { TransactionOutcome } from '../state/AsyncStates';
-import { Badge, Button, Card, Field } from '../ui';
+import { AddressChip, Badge, Button, Card, Field } from '../ui';
 import './AllowlistManager.css';
 
 const policyClient = new Client({
@@ -111,7 +111,7 @@ export function AllowlistManager({ walletAddress }: AllowlistManagerProps) {
         <div>
           <h3 className="allowlist-title">Wallet Spend Allowlist</h3>
           <p className="allowlist-subtitle">
-            Governs approved recipient payees for wallet <span className="mono">{truncateAddress(walletAddress)}</span>
+            Governs approved recipient payees for wallet <AddressChip address={walletAddress} copyLabel="Copy wallet address" />
           </p>
         </div>
         <Badge tone={isSteward ? 'accent' : 'neutral'}>
@@ -122,7 +122,7 @@ export function AllowlistManager({ walletAddress }: AllowlistManagerProps) {
       {!isSteward && (
         <div className="read-only-banner" role="note">
           <p>
-            You are viewing this allowlist in read-only mode. Only the policy steward ({policy?.steward ? truncateAddress(policy.steward) : 'Steward'}) can add or remove payees.
+            You are viewing this allowlist in read-only mode. Only the policy steward ({policy?.steward ? <AddressChip address={policy.steward} copyLabel="Copy steward address" /> : 'Steward'}) can add or remove payees.
           </p>
         </div>
       )}
@@ -164,6 +164,8 @@ export function AllowlistManager({ walletAddress }: AllowlistManagerProps) {
         error={tx.error}
         successTitle="Allowlist updated"
         successDescription="The payee allowlist state has been updated on-chain."
+        hash={tx.hash}
+        network={wallet.network}
       />
 
       <div className="allowlist-preview">

@@ -1,3 +1,5 @@
+export { CopyButton, type CopyButtonProps } from './CopyButton';
+export { AddressChip, type AddressChipProps } from './AddressChip';
 export { Button, type ButtonProps } from './Button';
 export { Card, Stat, type CardProps } from './Card';
 export { Field, type FieldProps } from './Field';

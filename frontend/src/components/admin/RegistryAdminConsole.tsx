@@ -3,9 +3,9 @@ import { Client, networks, type Config } from '@milepost/registry';
 import { useWallet } from '../../context/useWallet';
 import { useContractResult } from '../../hooks/useContractRead';
 import { useTransaction } from '../../hooks/useTransaction';
-import { looksLikeAddress, truncateAddress } from '../../lib/format';
+import { looksLikeAddress } from '../../lib/format';
 import { TransactionOutcome } from '../state/AsyncStates';
-import { Badge, Button, Card, Field, Modal } from '../ui';
+import { AddressChip, Badge, Button, Card, Field, Modal } from '../ui';
 import './RegistryAdminConsole.css';
 
 const registryClient = new Client({
@@ -134,7 +134,7 @@ export function RegistryAdminConsole() {
       {!isAdmin && (
         <div className="admin-read-only-banner" role="note">
           <p>
-            You are viewing the registry configuration in <strong>read-only</strong> mode. Connected wallet ({wallet.address ? truncateAddress(wallet.address) : 'None'}) is not the protocol admin ({config?.admin ? truncateAddress(config.admin) : 'Admin'}).
+            You are viewing the registry configuration in <strong>read-only</strong> mode. Connected wallet ({wallet.address ? <AddressChip address={wallet.address} copyLabel="Copy wallet address" /> : 'None'}) is not the protocol admin ({config?.admin ? <AddressChip address={config.admin} copyLabel="Copy admin address" /> : 'Admin'}).
           </p>
         </div>
       )}
@@ -143,12 +143,12 @@ export function RegistryAdminConsole() {
         <div className="registry-config-grid">
           <div className="config-item">
             <span className="config-label">Protocol Admin:</span>
-            <span className="mono">{config.admin}</span>
+            <AddressChip address={config.admin} copyLabel="Copy admin address" />
           </div>
 
           <div className="config-item">
             <span className="config-label">Treasury Address:</span>
-            <span className="mono">{config.treasury}</span>
+            <AddressChip address={config.treasury} copyLabel="Copy treasury address" />
           </div>
 
           <div className="config-item">
@@ -160,17 +160,17 @@ export function RegistryAdminConsole() {
 
           <div className="config-item">
             <span className="config-label">Attestation Registry:</span>
-            <span className="mono">{config.attest}</span>
+            <AddressChip address={config.attest} copyLabel="Copy attestation registry address" />
           </div>
 
           <div className="config-item">
             <span className="config-label">Default Policy Contract:</span>
-            <span className="mono">{config.policy}</span>
+            <AddressChip address={config.policy} copyLabel="Copy policy contract address" />
           </div>
 
           <div className="config-item">
             <span className="config-label">Record Contract:</span>
-            <span className="mono">{config.record}</span>
+            <AddressChip address={config.record} copyLabel="Copy record contract address" />
           </div>
         </div>
       )}
@@ -203,7 +203,7 @@ export function RegistryAdminConsole() {
                 </Button>
               </div>
             </Field>
-            <TransactionOutcome phase={txFee.phase} error={txFee.error} successTitle="Fee updated" />
+            <TransactionOutcome phase={txFee.phase} error={txFee.error} successTitle="Fee updated" hash={txFee.hash} network={wallet.network} />
           </form>
 
           {/* Treasury Form */}
@@ -215,14 +215,14 @@ export function RegistryAdminConsole() {
                   className="input-text"
                   value={treasuryInput}
                   onChange={(e) => setTreasuryInput(e.target.value.trim())}
-                  placeholder={`Current: ${config?.treasury ? truncateAddress(config.treasury) : 'G...'}`}
+                  placeholder={`Current: ${config?.treasury ? config.treasury.slice(0, 6) + '…' + config.treasury.slice(-4) : 'G...'}`}
                 />
                 <Button type="submit" loading={txTreasury.busy}>
                   Update Treasury
                 </Button>
               </div>
             </Field>
-            <TransactionOutcome phase={txTreasury.phase} error={txTreasury.error} successTitle="Treasury updated" />
+            <TransactionOutcome phase={txTreasury.phase} error={txTreasury.error} successTitle="Treasury updated" hash={txTreasury.hash} network={wallet.network} />
           </form>
 
           {/* Policy Contract Form */}
@@ -234,14 +234,14 @@ export function RegistryAdminConsole() {
                   className="input-text"
                   value={policyInput}
                   onChange={(e) => setPolicyInput(e.target.value.trim())}
-                  placeholder={`Current: ${config?.policy ? truncateAddress(config.policy) : 'C...'}`}
+                  placeholder={`Current: ${config?.policy ? config.policy.slice(0, 6) + '…' + config.policy.slice(-4) : 'C...'}`}
                 />
                 <Button type="submit" loading={txPolicy.busy}>
                   Update Policy
                 </Button>
               </div>
             </Field>
-            <TransactionOutcome phase={txPolicy.phase} error={txPolicy.error} successTitle="Default policy updated" />
+            <TransactionOutcome phase={txPolicy.phase} error={txPolicy.error} successTitle="Default policy updated" hash={txPolicy.hash} network={wallet.network} />
           </form>
 
           {/* Irreversible Admin Handover Section */}
@@ -253,7 +253,7 @@ export function RegistryAdminConsole() {
             <Button variant="danger" onClick={() => setAdminModalOpen(true)}>
               Transfer Admin Ownership
             </Button>
-            <TransactionOutcome phase={txAdmin.phase} error={txAdmin.error} successTitle="Admin control transferred" />
+            <TransactionOutcome phase={txAdmin.phase} error={txAdmin.error} successTitle="Admin control transferred" hash={txAdmin.hash} network={wallet.network} />
           </div>
         </div>
       )}

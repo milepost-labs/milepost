@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { formatDate, timeUntil, hasPassed, truncateAddress, looksLikeAddress, toDate } from './format';
+import { formatDate, timeUntil, hasPassed, truncateAddress, looksLikeAddress, toDate, explorerUrl } from './format';
 
 const NOW = new Date('2026-03-10T12:00:00Z');
 const at = (iso: string) => Math.floor(new Date(iso).getTime() / 1000);
@@ -60,5 +60,32 @@ describe('looksLikeAddress', () => {
     expect(looksLikeAddress('')).toBe(false);
     expect(looksLikeAddress('GABC')).toBe(false);
     expect(looksLikeAddress('XAH3D4RM45ETE4W7VDRCWZBPRPT63CJXAGXFYVBC2FGANBZTS4OTKXCA')).toBe(false);
+  });
+});
+
+describe('explorerUrl', () => {
+  const hash = 'abc123';
+
+  it('uses testnet for a TESTNET network string', () => {
+    expect(explorerUrl(hash, 'TESTNET')).toBe(
+      'https://stellar.expert/explorer/testnet/tx/abc123',
+    );
+  });
+
+  it('is case-insensitive for the network string', () => {
+    expect(explorerUrl(hash, 'testnet')).toContain('/testnet/');
+    expect(explorerUrl(hash, 'TESTNET')).toContain('/testnet/');
+  });
+
+  it('uses public for anything that is not testnet', () => {
+    expect(explorerUrl(hash, 'PUBLIC')).toBe(
+      'https://stellar.expert/explorer/public/tx/abc123',
+    );
+    expect(explorerUrl(hash, 'FUTURENET')).toContain('/public/');
+  });
+
+  it('includes the hash in the URL', () => {
+    const url = explorerUrl('deadbeef', 'TESTNET');
+    expect(url).toContain('deadbeef');
   });
 });

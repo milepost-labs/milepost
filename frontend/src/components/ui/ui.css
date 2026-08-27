@@ -202,3 +202,46 @@
 .ui-radio__text { display: flex; flex-direction: column; gap: var(--space-1); }
 .ui-radio__label { font-weight: var(--weight-medium); }
 .ui-radio__description { font-size: var(--text-sm); color: var(--text-muted); }
+
+/* ── CopyButton ──────────────────────────────────────────────────────────── */
+.copy-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  padding: 0;
+  border: 1px solid transparent;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--text-muted);
+  cursor: pointer;
+  transition: color var(--transition-fast), background var(--transition-fast);
+  flex-shrink: 0;
+}
+.copy-button:hover {
+  color: var(--text-main);
+  background: var(--surface-hover);
+  border-color: var(--border);
+}
+.copy-button--copied {
+  color: var(--success);
+  border-color: color-mix(in srgb, var(--success) 35%, transparent);
+  background: color-mix(in srgb, var(--success) 8%, transparent);
+}
+
+/* ── AddressChip ─────────────────────────────────────────────────────────── */
+.address-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-1);
+  max-width: 100%;
+}
+.address-chip__text {
+  font-family: var(--font-numeric);
+  font-size: var(--text-sm);
+  color: var(--text-main);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}

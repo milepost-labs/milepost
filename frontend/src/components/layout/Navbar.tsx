@@ -1,13 +1,11 @@
 import { Wallet } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import { useWallet } from '../../context/useWallet';
+import { AddressChip } from '../ui';
 import './Navbar.css';
 
 export const Navbar = () => {
   const { address, connect: connectWallet } = useWallet();
-
-  // Helper to truncate address
-  const truncate = (addr: string) => `${addr.slice(0, 5)}...${addr.slice(-4)}`;
 
   return (
     <header className="navbar glass-panel">
@@ -34,7 +32,7 @@ export const Navbar = () => {
           {address ? (
             <div className="badge-pill connected-badge" style={{ backgroundColor: 'var(--surface-hover)', border: '1px solid var(--surface-border)' }}>
               <span className="pulse-dot" style={{ backgroundColor: 'var(--color-success)' }}></span>
-              {truncate(address)}
+              <AddressChip address={address} copyLabel="Copy wallet address" />
             </div>
           ) : (
             <button onClick={connectWallet} className="btn-primary connect-wallet-btn">

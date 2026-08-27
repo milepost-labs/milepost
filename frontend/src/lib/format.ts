@@ -91,3 +91,16 @@ export function truncateAddress(address: string, lead = 6, tail = 4): string {
 export function looksLikeAddress(value: string): boolean {
   return /^G[A-Z2-7]{55}$/.test(value) || /^C[A-Z2-7]{55}$/.test(value);
 }
+
+/**
+ * Build a Stellar Expert URL for a transaction hash.
+ *
+ * `network` is whatever Freighter's `getNetwork()` returns — typically
+ * `"TESTNET"` or `"PUBLIC"`. Anything that does not case-insensitively
+ * contain "testnet" is treated as mainnet, which is the safer default.
+ */
+export function explorerUrl(hash: string, network: string): string {
+  const net = network.toLowerCase().includes('testnet') ? 'testnet' : 'public';
+  return `https://stellar.expert/explorer/${net}/tx/${hash}`;
+}
+
