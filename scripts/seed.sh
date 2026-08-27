@@ -33,7 +33,7 @@ echo "==> Preparing accounts"
 for a in "${ACTORS[@]}"; do
   key="milepost-$a"
   if ! stellar keys address "$key" >/dev/null 2>&1; then
-    stellar keys generate "$key" --network "$NETWORK" --fund >/dev/null 2>&1
+    stellar keys generate "$key" --network "$NETWORK" --fund >/dev/null
     echo "    created $key"
   fi
 done
@@ -43,7 +43,7 @@ addr() { stellar keys address "milepost-$1"; }
 invoke() {
   local id="$1" source="$2"; shift 2
   stellar contract invoke --id "$id" --source-account "milepost-$source" \
-    --network "$NETWORK" --send=yes -- "$@" 2>/dev/null
+    --network "$NETWORK" --send=yes -- "$@"
 }
 
 # Deadlines are relative to now so the scenario walks through its phases as the

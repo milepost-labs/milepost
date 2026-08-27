@@ -264,6 +264,24 @@ impl Registry {
         env.storage().persistent().has(&Key::Programme(addr))
     }
 
+    /// The current deployment nonce. One higher than the nonce used by the last
+    /// `create` call — i.e. the nonce the *next* deployment will use.
+    pub fn nonce(env: Env) -> u64 {
+        env.storage().instance().get(&Key::Nonce).unwrap_or(0)
+    }
+
+    /// Derive the address a programme *would* have if deployed at the given
+    /// nonce, using the same salt scheme as `create`. A client can walk the
+    /// range `[0, nonce)` without the contract storing a list.
+    pub fn programme_address(env: Env, n: u64) -> Address {
+        let salt = env
+            .crypto()
+            .sha256(&soroban_sdk::Bytes::from_array(&env, &n.to_be_bytes()));
+        env.deployer()
+            .with_current_contract(salt.to_bytes())
+            .deployed_address()
+    }
+
     fn config(env: &Env) -> Result<Config, Error> {
         env.storage()
             .instance()

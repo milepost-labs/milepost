@@ -1,132 +1,377 @@
-import { useEffect, useState } from 'react';
-import './RecipientDashboard.css';
-import { Award, Unlock, FileText, AlertCircle } from 'lucide-react';
-import { useSoroban } from '../context/useSoroban';
+import { useEffect, useState, useMemo } from 'react';
+import { Link } from 'react-router-dom';
+import { useContractRead, useContractResult, useProgramme, useTransaction, phaseLabel } from '../hooks';
+import { AsyncView, Empty } from '../components/state/AsyncStates';
+import { Badge, Button, Card, Field, Modal, Stat } from '../components/ui';
 import { useWallet } from '../context/useWallet';
-import { formatAmount } from '../lib/amount';
-import type { Award as AwardData, Application } from '@milepost/program';
+import { DEMO_PROGRAMME_ID } from '../context/sorobanStore';
+import { formatAmount, formatExact, tryParseAmount } from '../lib/amount';
+import './RecipientDashboard.css';
 
-// Seeded testnet recipient (Ada) for demo purposes
-const DEMO_ADDRESS = "GAH3D4RM45ETE4W7VDRCWZBPRPT63CJXAGXFYVBC2FGANBZTS4OTKXCA";
+/** Seeded testnet recipient (Ada), shown only when no wallet is connected. */
+const DEMO_RECIPIENT = 'GAH3D4RM45ETE4W7VDRCWZBPRPT63CJXAGXFYVBC2FGANBZTS4OTKXCA';
+
+/**
+ * There is no contract call that lists a programme's verified payees — see
+ * docs/frontend-integration.md. The seeded school is known ahead of time, so
+ * it seeds the picker; anyone can add another candidate address to check.
+ */
+const SEEDED_PAYEES: Record<string, string[]> = {
+  [DEMO_PROGRAMME_ID]: ['GAUHWES2VEBGS5IWDET2IUYZXG3HCXOV7QIMXWM3AH3KHXE4HWJOSC5A'],
+};
+
+const STELLAR_ADDRESS = /^G[A-Z2-7]{55}$/;
+
+type PayeeStatus = 'checking' | 'verified' | 'unverified' | 'error';
+
+const formatXlm = (amount: bigint) => formatAmount(amount, { asset: 'XLM' });
+const shorten = (address: string) => `${address.slice(0, 4)}…${address.slice(-4)}`;
+const candidateStorageKey = (programmeId: string) => `milepost:recipient-payees:${programmeId}`;
+
+function loadCandidates(programmeId: string): string[] {
+  try {
+    const stored = window.localStorage.getItem(candidateStorageKey(programmeId));
+    if (stored) return JSON.parse(stored) as string[];
+  } catch {
+    // Corrupt or inaccessible storage — fall back to the seed below.
+  }
+  return SEEDED_PAYEES[programmeId] ?? [];
+}
 
 export const RecipientDashboard = () => {
-  const { address } = useWallet();
-  const { demoProgramme: programme } = useSoroban();
-  const activeAddress = address || DEMO_ADDRESS;
-  const isDemo = !address;
+  const { address: walletAddress } = useWallet();
+  const { client: programme, id: programmeId } = useProgramme();
+  const isDemo = !walletAddress;
+  const recipient = walletAddress || DEMO_RECIPIENT;
 
-  const [award, setAward] = useState<AwardData | null>(null);
-  const [application, setApplication] = useState<Application | null>(null);
-  const [loading, setLoading] = useState(true);
+  const award = useContractResult(() => programme.get_award({ recipient }), [programme, recipient]);
+  const allocation = useContractRead(() => programme.allocation_of({ recipient }), [programme, recipient]);
+  const config = useContractResult(() => programme.get_config(), [programme]);
 
+  // Candidate payees to check, persisted per programme so a recipient does
+  // not re-enter the same address every visit.
+  // Stored candidates are the source of truth; sessionAdds covers the case
+  // where the write failed, so the picker still works for this session.
+  // Deriving rather than syncing in an effect keeps the programme switch to a
+  // single render.
+  const [sessionAdds, setSessionAdds] = useState<Record<string, string[]>>({});
+  const candidates = useMemo(() => {
+    const stored = loadCandidates(programmeId);
+    const extra = (sessionAdds[programmeId] ?? []).filter((a) => !stored.includes(a));
+    return [...stored, ...extra];
+  }, [programmeId, sessionAdds]);
+
+  const [payeeStatus, setPayeeStatus] = useState<Record<string, PayeeStatus>>({});
   useEffect(() => {
-    const fetchRecipientData = async () => {
-      try {
-        setLoading(true);
-        // 1. Fetch Application
-        const appRes = await programme.get_application({ applicant: activeAddress });
-        
-        const app = appRes.result.unwrap();
-        setApplication(app);
-
-        // 2. If finalized, fetch Award
-        if (app.finalized) {
-          const awardRes = await programme.get_award({ recipient: activeAddress });
-          setAward(awardRes.result.unwrap());
-        }
-      } catch (e) {
-        console.error("Not a recipient or data missing:", e);
-      } finally {
-        setLoading(false);
-      }
+    let cancelled = false;
+    (async () => {
+      const entries = await Promise.all(
+        candidates.map(async (address): Promise<[string, PayeeStatus]> => {
+          try {
+            const { result } = await programme.is_payee({ payee: address });
+            return [address, result ? 'verified' : 'unverified'];
+          } catch {
+            return [address, 'error'];
+          }
+        }),
+      );
+      if (cancelled) return;
+      setPayeeStatus((prev) => ({ ...prev, ...Object.fromEntries(entries) }));
+    })();
+    return () => {
+      cancelled = true;
     };
-    fetchRecipientData();
-  }, [activeAddress, programme]);
+  }, [programme, candidates]);
 
-  if (loading) {
-    return <div className="dashboard-container"><p>Loading on-chain data...</p></div>;
-  }
+  const addCandidate = (address: string) => {
+    if (candidates.includes(address)) return;
+    try {
+      const next = [...loadCandidates(programmeId), address];
+      window.localStorage.setItem(candidateStorageKey(programmeId), JSON.stringify(next));
+    } catch {
+      // Best-effort only — sessionAdds below still carries it for this session.
+    }
+    setSessionAdds((prev) => ({
+      ...prev,
+      [programmeId]: [...(prev[programmeId] ?? []), address],
+    }));
+  };
 
-  if (!application) {
-    return (
-      <div className="dashboard-container">
-        <header className="dashboard-header animate-fade-up">
-          <h1>Recipient Dashboard</h1>
-          {isDemo && <p className="text-warning">Viewing Demo Address</p>}
-        </header>
-        <div className="glass-panel" style={{ padding: '2rem', textAlign: 'center' }}>
-          <AlertCircle size={48} style={{ margin: '0 auto', color: 'var(--text-muted)' }} />
-          <h3 style={{ marginTop: '1rem' }}>No Application Found</h3>
-          <p className="text-muted">The connected wallet is not a registered applicant for this programme.</p>
-        </div>
-      </div>
-    );
-  }
+  const [candidateInput, setCandidateInput] = useState('');
+  const [candidateError, setCandidateError] = useState<string | null>(null);
+  const handleAddCandidate = () => {
+    const address = candidateInput.trim();
+    if (!STELLAR_ADDRESS.test(address)) {
+      setCandidateError('Enter a valid Stellar address.');
+      return;
+    }
+    setCandidateError(null);
+    setCandidateInput('');
+    addCandidate(address);
+  };
+
+  const [selectedPayee, setSelectedPayee] = useState<string | null>(null);
+  const [amountInput, setAmountInput] = useState('');
+  const [amountError, setAmountError] = useState<string | null>(null);
+  const [confirmOpen, setConfirmOpen] = useState(false);
+  const [pendingAmount, setPendingAmount] = useState<bigint | null>(null);
+
+  const transaction = useTransaction<bigint>({ contract: 'program' });
+
+  // Reading the clock during render is impure — two renders would disagree.
+  // Ticking it as state matches ProgrammeDetail and keeps the close-out honest
+  // without a refresh.
+  const [nowSeconds, setNowSeconds] = useState(() => Math.floor(Date.now() / 1000));
+  useEffect(() => {
+    const interval = window.setInterval(() => setNowSeconds(Math.floor(Date.now() / 1000)), 30_000);
+    return () => window.clearInterval(interval);
+  }, []);
+
+  const sweepDeadline = config.data?.sweep_deadline ?? null;
+  const spendClosed = sweepDeadline !== null && BigInt(nowSeconds) >= sweepDeadline;
+
+  const openConfirm = () => {
+    if (!selectedPayee) {
+      setAmountError('Pick a verified payee first.');
+      return;
+    }
+    const parsed = tryParseAmount(amountInput);
+    if (!parsed.ok) {
+      setAmountError(parsed.error);
+      return;
+    }
+    if (allocation.data !== null && parsed.value > allocation.data) {
+      setAmountError('That is more than you have available to direct.');
+      return;
+    }
+    setAmountError(null);
+    setPendingAmount(parsed.value);
+    setConfirmOpen(true);
+  };
+
+  const closeConfirm = () => {
+    if (transaction.busy) return;
+    setConfirmOpen(false);
+    transaction.reset();
+  };
+
+  const handleConfirm = async () => {
+    if (!selectedPayee || pendingAmount === null) return;
+    const payee = selectedPayee;
+    const amount = pendingAmount;
+
+    const result = await transaction.send(async () => {
+      const tx = await programme.spend({ recipient, payee, amount });
+      return {
+        signAndSend: async (options: Parameters<typeof tx.signAndSend>[0]) => {
+          const sent = await tx.signAndSend(options);
+          return { result: sent.result.unwrap() };
+        },
+      };
+    });
+
+    if (result !== null) {
+      setConfirmOpen(false);
+      setSelectedPayee(null);
+      setAmountInput('');
+      setPendingAmount(null);
+      allocation.refetch();
+    }
+  };
 
   return (
     <div className="dashboard-container">
-      <header className="dashboard-header animate-fade-up">
+      <header className="dashboard-header">
         <h1>Recipient Dashboard</h1>
-        {isDemo && <p className="badge badge-settled" style={{ display: 'inline-block', marginTop: '0.5rem' }}>Demo Mode (Ada's Data)</p>}
-        <p className="typo-text text-muted">Track your milestones and unlock your grant tranches.</p>
+        {isDemo && (
+          <Badge tone="neutral">Viewing Ada&rsquo;s testnet award — connect a wallet to use your own</Badge>
+        )}
+        <p className="typo-text text-muted">Track your award and direct your allocation to a verified payee.</p>
       </header>
 
-      <section className="stats-grid animate-fade-up" style={{ animationDelay: '100ms' }}>
-        <div className="stat-card glass-panel">
-          <div className="stat-icon"><Award size={24} /></div>
-          <div className="stat-content">
-            <span className="stat-label">Total Awarded</span>
-            <span className="stat-value">{award ? `${formatAmount(award.granted)} XLM` : 'Pending'}</span>
-          </div>
+      <Card title="Recipient views">
+        <p className="typo-text text-muted recipient-views__intro">
+          Look up standing, award progress, and application status for this programme.
+        </p>
+        <div className="recipient-views__links">
+          <Link to="/recipients/standing" className="btn-secondary">
+            Standing
+          </Link>
+          <Link to="/recipients/award-progress" className="btn-secondary">
+            Award progress
+          </Link>
+          <Link to="/recipients/application-timeline" className="btn-secondary">
+            Application timeline
+          </Link>
         </div>
-        <div className="stat-card glass-panel">
-          <div className="stat-icon"><FileText size={24} /></div>
-          <div className="stat-content">
-            <span className="stat-label">Requested Amount</span>
-            <span className="stat-value">{formatAmount(application.requested)} XLM</span>
-          </div>
-        </div>
-        <div className="stat-card glass-panel">
-          <div className="stat-icon"><Unlock size={24} /></div>
-          <div className="stat-content">
-            <span className="stat-label">Tranches Released</span>
-            <span className="stat-value">{award ? `${award.tranches_released} / ${award.tranches}` : '0 / 0'}</span>
-          </div>
-        </div>
-      </section>
+      </Card>
 
-      <section className="milestones-section animate-fade-up" style={{ animationDelay: '200ms' }}>
-        <h2>Award Details</h2>
-        <div className="milestones-timeline">
-          
-          <div className="milestone-card glass-panel unlocked">
-            <div className="milestone-icon">
-              <AlertCircle size={20} />
-            </div>
-            <div className="milestone-details">
-              <h3>Funding Mode: {award ? award.mode.tag : 'Pending Settle'}</h3>
-              <p className="typo-text text-muted">
-                {award?.mode.tag === 'Allocated' && "You can allocate your unlocked tranches to any verified payee."}
-                {award?.mode.tag === 'Direct' && "Funds are paid directly to your fixed payee."}
-              </p>
-              
-              {application && application.votes.length > 0 && (
-                <div style={{ marginTop: '1rem', padding: '1rem', backgroundColor: 'var(--background)', borderRadius: '8px' }}>
-                  <p className="text-muted" style={{ fontSize: '0.85rem', marginBottom: '0.5rem' }}>Reviewer Votes (Median Mechanism)</p>
-                  <div style={{ display: 'flex', gap: '0.5rem' }}>
-                    {application.votes.map((v: bigint, i: number) => (
-                      <span key={i} className="badge" style={{ backgroundColor: 'var(--surface)', border: '1px solid var(--surface-border)' }}>
-                        {formatAmount(v)} XLM
-                      </span>
-                    ))}
-                  </div>
-                </div>
-              )}
-            </div>
-          </div>
+      <AsyncView
+        {...award}
+        onRetry={award.refetch}
+        empty={{
+          title: 'No award yet',
+          description: 'This account has no finalised award on this programme.',
+        }}
+      >
+        {(data) => (
+          <>
+            <section className="stats-grid">
+              <Card>
+                <Stat label="Granted" value={formatXlm(data.granted)} numeric />
+              </Card>
+              <Card>
+                <Stat label="Released" value={formatXlm(data.released)} numeric />
+              </Card>
+              <Card>
+                <Stat label="Tranches released" value={`${data.tranches_released} / ${data.tranches}`} />
+              </Card>
+            </section>
 
-        </div>
-      </section>
+            {data.mode.tag === 'Allocated' ? (
+              <Card title="Direct your allocation" className="allocation-card">
+                <Stat
+                  label="Available to direct"
+                  numeric
+                  value={
+                    <AsyncView {...allocation} onRetry={allocation.refetch}>
+                      {(value) => formatXlm(value)}
+                    </AsyncView>
+                  }
+                />
+
+                {spendClosed ? (
+                  <Empty
+                    title="Spending closed"
+                    description={
+                      sweepDeadline !== null
+                        ? `The sweep window opened on ${new Date(Number(sweepDeadline) * 1000).toLocaleString()} — this allocation can no longer be directed and will be swept.`
+                        : 'The sweep window has opened — this allocation can no longer be directed.'
+                    }
+                  />
+                ) : (
+                  <>
+                    <div className="payee-picker">
+                      <h3>Verified payees</h3>
+                      {candidates.length === 0 && (
+                        <p className="typo-text text-muted">
+                          No payees checked yet on this device — add one below.
+                        </p>
+                      )}
+                      <div className="payee-list" role="radiogroup" aria-label="Verified payees">
+                        {candidates.map((address) => {
+                          const status = payeeStatus[address] ?? 'checking';
+                          const verified = status === 'verified';
+                          return (
+                            <label
+                              key={address}
+                              className={`payee-option${verified ? '' : ' payee-option--disabled'}`}
+                            >
+                              <input
+                                type="radio"
+                                name="payee"
+                                value={address}
+                                checked={selectedPayee === address}
+                                disabled={!verified}
+                                onChange={() => setSelectedPayee(address)}
+                              />
+                              <span className="payee-option__address numeric" title={address}>
+                                {shorten(address)}
+                              </span>
+                              <Badge tone={verified ? 'success' : status === 'checking' ? 'neutral' : 'danger'}>
+                                {status === 'checking' ? 'Checking…' : verified ? 'Verified' : 'Not verified'}
+                              </Badge>
+                            </label>
+                          );
+                        })}
+                      </div>
+
+                      <div className="payee-add">
+                        <Field
+                          label="Add a payee to check"
+                          placeholder="G..."
+                          value={candidateInput}
+                          onChange={(event) => {
+                            setCandidateInput(event.target.value);
+                            setCandidateError(null);
+                          }}
+                          error={candidateError}
+                          hint="Only the programme creator can verify a payee — this checks whether one already is."
+                        />
+                        <Button variant="secondary" size="sm" onClick={handleAddCandidate}>
+                          Check payee
+                        </Button>
+                      </div>
+                    </div>
+
+                    <Field
+                      label="Amount"
+                      placeholder="0.00"
+                      value={amountInput}
+                      onChange={(event) => {
+                        setAmountInput(event.target.value);
+                        setAmountError(null);
+                      }}
+                      error={amountError}
+                      suffix="XLM"
+                    />
+
+                    <Button onClick={openConfirm} disabled={config.loading || allocation.loading} fullWidth>
+                      Direct funds
+                    </Button>
+                  </>
+                )}
+              </Card>
+            ) : (
+              <Card title="Payment mode">
+                <p className="typo-text text-muted">
+                  {data.mode.tag === 'Direct' &&
+                    'This award pays straight to a fixed, verified payee. There is nothing for you to direct here.'}
+                  {data.mode.tag === 'Restricted' &&
+                    "This award is paid into your smart wallet, where a spend policy limits onward payments to verified destinations."}
+                  {data.mode.tag === 'Open' && 'This award is paid to you directly, with no restriction.'}
+                </p>
+              </Card>
+            )}
+          </>
+        )}
+      </AsyncView>
+
+      <Modal
+        open={confirmOpen}
+        onClose={closeConfirm}
+        title="Confirm allocation"
+        busy={transaction.busy}
+        footer={
+          <>
+            <Button variant="secondary" onClick={closeConfirm} disabled={transaction.busy}>
+              Cancel
+            </Button>
+            <Button
+              onClick={handleConfirm}
+              loading={transaction.busy}
+              loadingLabel={phaseLabel(transaction.phase) || 'Confirm'}
+            >
+              Confirm
+            </Button>
+          </>
+        }
+      >
+        {selectedPayee && pendingAmount !== null && (
+          <div className="confirm-summary">
+            <p>
+              Send <strong className="numeric">{formatExact(pendingAmount)} XLM</strong> to
+            </p>
+            <p className="numeric confirm-summary__address">{selectedPayee}</p>
+          </div>
+        )}
+        {transaction.error && (
+          <p role="alert" className="confirm-error">
+            {transaction.error.message}
+            {transaction.error.action ? ` ${transaction.error.action}` : ''}
+          </p>
+        )}
+      </Modal>
     </div>
   );
 };
