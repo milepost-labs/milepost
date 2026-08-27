@@ -171,6 +171,29 @@ its own address and isolated state. Protocol fee is 250 bps.
 Re-running the deploy script produces a fresh set rather than upgrading these.
 Current ids always live in `deployments/testnet.json`.
 
+## Quickstart
+
+From a clean checkout, one command builds, deploys, seeds a scenario, waits
+out the application window, and runs the review stage:
+
+```sh
+./scripts/quickstart.sh testnet
+```
+
+It checks for the `stellar` CLI and the `wasm32v1-none` Rust target up front
+and fails fast with install instructions if either is missing, then runs
+`deploy.sh`, `seed.sh` and `seed-review.sh` in sequence — showing a live
+countdown while it waits for the seeded programme's application window to
+close, since the review stage genuinely cannot run before then. It finishes
+with a summary of the programme address, the awards the reviewers settled on,
+and what was released.
+
+Pass a different network or deployer key the same way the underlying scripts
+accept them: `./scripts/quickstart.sh testnet my-deployer-key`.
+
+Prefer the individual steps below if you want to inspect state (or run other
+commands) between them.
+
 ## Development
 
 Requires Rust stable with the `wasm32v1-none` target and `stellar` CLI 27.x.

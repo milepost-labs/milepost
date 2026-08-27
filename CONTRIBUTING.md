@@ -21,7 +21,7 @@ Welcome, and thank you for your interest in contributing to Milepost! This guide
 | Node.js | 18+ | 22 is recommended for CI alignment |
 | npm | 8+ | Do not use pnpm or yarn — it creates lockfile conflicts |
 | Rust + Cargo | stable (1.74+) | Install via [rustup.rs](https://rustup.rs/) |
-| wasm32-unknown-unknown | — | `rustup target add wasm32-unknown-unknown` |
+| wasm32v1-none | — | `rustup target add wasm32v1-none` |
 | Stellar CLI | 21+ | [Installation guide](https://developers.stellar.org/docs/build/smart-contracts/getting-started/setup) |
 | Freighter wallet | latest | [freighter.app](https://www.freighter.app/) — browser extension for UI testing |
 
