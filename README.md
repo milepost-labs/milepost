@@ -227,6 +227,13 @@ Accounts and ids land in `deployments/<network>.seed.json`.
 
 For a full list of error codes, causes, and recommended actions across all five contracts, see [docs/error-code-reference.md](docs/error-code-reference.md).
 
+## Learn more
+
+- [TTL Strategy](docs/ttl-strategy.md)
+- [Programme Metadata](docs/programme-metadata.md)
+- [Error Codes](docs/error-code-reference.md)
+- [Security Model and Trust Assumptions](docs/security-model.md)
+
 ## TypeScript bindings
 
 `packages/` holds generated clients, checked in so a frontend can build without
