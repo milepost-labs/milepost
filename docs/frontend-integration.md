@@ -3,7 +3,7 @@
 Everything needed to wire the web app to the live contracts, with real data
 already on testnet to render against.
 
-## What this protocol actually does
+## What this protocol actually doess
 
 A **funder** creates a *programme* and puts money in. **Applicants** ask for the
 amount they actually need. **Reviewers** each approve some amount up to that,
