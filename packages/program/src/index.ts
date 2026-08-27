@@ -185,7 +185,7 @@ export interface Standing {
  * Lets anyone verify a full off-chain history against on-chain state.
  */
 history_root: Buffer;
-  last_updated: u64;
+  last_seen: u64;
   /**
  * Distinct programmes this recipient has been credited under.
  */

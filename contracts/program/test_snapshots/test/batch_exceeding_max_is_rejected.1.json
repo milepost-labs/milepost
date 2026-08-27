@@ -46,7 +46,8 @@
                 },
                 {
                   "bool": true
-                }
+                },
+                "void"
               ]
             }
           },
@@ -204,6 +205,12 @@
                     "val": {
                       "string": "milestone-met:v1"
                     }
+                  },
+                  {
+                    "key": {
+                      "symbol": "predecessor"
+                    },
+                    "val": "void"
                   },
                   {
                     "key": {
