@@ -2,9 +2,9 @@
 
 use super::*;
 use soroban_sdk::{
-    testutils::{Address as _, Ledger as _},
+    testutils::{Address as _, Events as _, Ledger as _},
     token::{StellarAssetClient, TokenClient},
-    vec, Env, String,
+    vec, Env, IntoVal, String, Symbol,
 };
 
 /// A stand-in for the spend policy. The programme only asks whether a policy is
@@ -172,6 +172,23 @@ fn constructor_stores_config_and_reviewers() {
     for r in f.reviewers.iter() {
         assert!(f.client.is_reviewer(&r));
     }
+}
+
+#[test]
+fn construction_emits_a_programme_created_event() {
+    let f = setup(3, 5);
+    let expected = vec![
+        &f.env,
+        (
+            f.client.address.clone(),
+            vec![&f.env, Symbol::new(&f.env, "created")],
+            ProgrammeCreated {
+                config: f.client.get_config(),
+            }
+            .into_val(&f.env),
+        ),
+    ];
+    assert_eq!(f.env.events().all(), expected);
 }
 
 /// Constructing with a quorum above the reviewer count would make every
@@ -847,12 +864,28 @@ fn an_empty_programme_can_be_cancelled() {
 }
 
 #[test]
-fn a_funded_programme_cannot_be_cancelled() {
-    // Cancelling must never be able to strand someone else's money.
+fn a_programme_that_has_released_cannot_be_cancelled() {
+    // Cancelling must never be able to strand money that already left.
+    let f = setup(2, 3);
+    let recipient = Address::generate(&f.env);
+    let school = Address::generate(&f.env);
+    award_to(&f, &recipient, &school, &900);
+    f.env.ledger().set_timestamp(RELEASE_DEADLINE - 1);
+    f.client
+        .release(&recipient, &proof(&f, &recipient, 1), &f.verifier);
+
+    assert_eq!(f.client.try_cancel(), Err(Ok(Error::NotCancellable)));
+}
+
+#[test]
+fn a_funded_unreleased_programme_can_be_cancelled() {
+    // Before any tranche is released the money is all still in the contract and
+    // belongs to the donors, so backing out is safe.
     let f = setup(2, 3);
     let donor = funded_donor(&f, 1_000);
     f.client.contribute(&donor, &1_000);
-    assert_eq!(f.client.try_cancel(), Err(Ok(Error::NotCancellable)));
+    f.client.cancel();
+    assert_eq!(f.client.get_phase(), Phase::Cancelled);
 }
 
 #[test]
@@ -860,6 +893,37 @@ fn cancelling_twice_is_rejected() {
     let f = setup(2, 3);
     f.client.cancel();
     assert_eq!(f.client.try_cancel(), Err(Ok(Error::Cancelled)));
+}
+
+// ---- TTL strategy (issue #114) ----
+
+#[test]
+fn reviewer_entry_resolves_after_the_bump_threshold() {
+    // Reviewer/verifier entries are written once in the constructor and only
+    // read thereafter, so they get an explicit bump there. Long after the
+    // 60-day threshold — but still inside the 90-day window the contract bumps
+    // to — the trust set must still resolve.
+    let f = setup(3, 5);
+    f.env.ledger().set_sequence_number(BUMP_THRESHOLD + 5);
+    assert!(f.client.is_reviewer(&f.reviewers.get(0).unwrap()));
+}
+
+#[test]
+fn keepalive_is_permissionless_and_refreshes_a_subject() {
+    let f = setup(2, 3);
+    let donor = funded_donor(&f, 10_000);
+    f.client.contribute(&donor, &10_000);
+
+    // Anyone may call keepalive; it refreshes the subject's entries and the
+    // contract-wide instance state without error, and a subject with no entries
+    // is a harmless no-op.
+    let stranger = Address::generate(&f.env);
+    f.client.keepalive(&stranger);
+    f.client.keepalive(&donor);
+
+    // The entry remains readable deep into the programme's life.
+    f.env.ledger().set_sequence_number(BUMP_LEDGERS + 5);
+    assert_eq!(f.client.contributed_by(&donor), 10_000);
 }
 
 // ---- release ----
@@ -1185,6 +1249,77 @@ fn cancelling_opens_refunds_immediately() {
         f.client.try_refund(&stranger),
         Err(Ok(Error::NothingToRefund))
     );
+}
+
+// ---- cancellation + refunds (issue #117) ----
+
+#[test]
+fn cancel_then_refund_returns_a_donors_net_contribution() {
+    let f = setup(2, 3);
+    let donor = funded_donor(&f, 10_000);
+    f.client.contribute(&donor, &10_000);
+    f.client.cancel();
+
+    // The release deadline no longer matters; refunds open at once and return the
+    // donor's share of everything still in the contract (total less the fee).
+    assert_eq!(f.client.refund(&donor), 9_000);
+    assert_eq!(f.token.balance(&donor), 9_000);
+}
+
+#[test]
+fn cancel_opens_refunds_without_waiting_on_the_release_deadline() {
+    let f = setup(2, 3);
+    let donor = funded_donor(&f, 10_000);
+    f.client.contribute(&donor, &10_000);
+    // Still inside the contribution window a normal refund is refused.
+    assert_eq!(f.client.try_refund(&donor), Err(Ok(Error::RefundsNotOpen)));
+    f.client.cancel();
+    // Cancellation unlocks it immediately.
+    assert_eq!(f.client.refund(&donor), 9_000);
+}
+
+#[test]
+fn cancel_then_sweep_takes_only_unclaimed_funds_after_the_grace_period() {
+    let f = setup(2, 3);
+    let donor = funded_donor(&f, 10_000);
+    f.client.contribute(&donor, &10_000);
+    f.client.cancel();
+
+    // Before the sweep deadline the donor is still entitled to claim, so a sweep
+    // is refused even though the programme is cancelled.
+    f.env.ledger().set_timestamp(RELEASE_DEADLINE);
+    assert_eq!(
+        f.client.try_sweep_unclaimed(),
+        Err(Ok(Error::SweepNotOpen))
+    );
+
+    // Once the grace period lapses, only what nobody claimed moves on. The donor
+    // never refunded here, so the whole balance (fee + their share) is swept.
+    f.env.ledger().set_timestamp(SWEEP_DEADLINE);
+    assert_eq!(f.client.sweep_unclaimed(), 10_000);
+    assert_eq!(f.token.balance(&f.treasury), 10_000);
+}
+
+#[test]
+fn cancelling_lets_a_donor_who_refunds_keep_their_money_when_swept() {
+    let f = setup(2, 3);
+    let quick = funded_donor(&f, 5_000);
+    let slow = funded_donor(&f, 5_000);
+    f.client.contribute(&quick, &5_000);
+    f.client.contribute(&slow, &5_000);
+    f.client.cancel();
+
+    f.env.ledger().set_timestamp(RELEASE_DEADLINE);
+    f.client.refund(&quick);
+    assert_eq!(f.token.balance(&quick), 4_500);
+
+    f.env.ledger().set_timestamp(SWEEP_DEADLINE);
+    f.client.sweep_unclaimed();
+
+    // The claimant kept theirs; only the fee and the no-show's share swept.
+    assert_eq!(f.token.balance(&quick), 4_500);
+    assert_eq!(f.token.balance(&slow), 0);
+    assert_eq!(f.token.balance(&f.treasury), 5_500);
 }
 
 #[test]

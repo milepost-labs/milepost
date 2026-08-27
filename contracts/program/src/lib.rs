@@ -369,6 +369,26 @@ pub struct ProgrammeCancelled {
     pub at: u64,
 }
 
+/// Emitted once, at construction, so an observer rebuilding programme history
+/// from events has a starting point. Carries the full terms an observer cannot
+/// otherwise cheaply obtain — the deadlines, quorum, tranches, fee and the
+/// addresses the programme is wired to. Mirrors the existing convention of
+/// publishing the whole struct rather than a projection of it.
+#[contractevent(topics = ["created"], data_format = "single-value")]
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct ProgrammeCreated {
+    pub config: ProgrammeConfig,
+}
+
+/// A permissionless nudge that keeps the contract's long-lived entries from
+/// being archived. See [`Programme::keepalive`] for the rationale; the struct
+/// exists so the event can be published here too when that path is exercised.
+#[contractevent(topics = ["kept"], data_format = "single-value")]
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct KeptAlive {
+    pub subject: Address,
+}
+
 #[contractevent(topics = ["withdrawn"], data_format = "single-value")]
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct ApplicationWithdrawn {
@@ -443,20 +463,36 @@ impl Programme {
         }
 
         for reviewer in reviewers.iter() {
+            let key = Key::Reviewer(reviewer.clone());
+            env.storage().persistent().set(&key, &true);
+            // Written once here and only read thereafter, so without an explicit
+            // bump it would archive while the programme is still live.
             env.storage()
                 .persistent()
-                .set(&Key::Reviewer(reviewer), &true);
+                .extend_ttl(&key, BUMP_THRESHOLD, BUMP_LEDGERS);
         }
         for verifier in verifiers.iter() {
+            let key = Key::Verifier(verifier.clone());
+            env.storage().persistent().set(&key, &true);
             env.storage()
                 .persistent()
-                .set(&Key::Verifier(verifier), &true);
+                .extend_ttl(&key, BUMP_THRESHOLD, BUMP_LEDGERS);
         }
 
         env.storage().instance().set(&Key::Config, &config);
         env.storage().instance().set(&Key::Contributed, &0i128);
         env.storage().instance().set(&Key::Granted, &0i128);
         env.storage().instance().set(&Key::Released, &0i128);
+        // The contract-wide instance entries back every view and refund, so keep
+        // them alive from the start rather than relying on the first write.
+        env.storage()
+            .instance()
+            .extend_ttl(BUMP_THRESHOLD, BUMP_LEDGERS);
+
+        ProgrammeCreated {
+            config: config.clone(),
+        }
+        .publish(&env);
         Ok(())
     }
 
@@ -557,6 +593,11 @@ impl Programme {
         {
             return Err(Error::NotAuthorized);
         }
+        // Read on every review; bump it so the trust set survives a long review
+        // window without a separate keepalive.
+        env.storage()
+            .persistent()
+            .extend_ttl(&Key::Reviewer(reviewer.clone()), BUMP_THRESHOLD, BUMP_LEDGERS);
 
         let vote_key = Key::Voted(applicant.clone(), reviewer.clone());
         if env.storage().persistent().has(&vote_key) {
@@ -910,6 +951,11 @@ impl Programme {
         {
             return Err(Error::NotAuthorized);
         }
+        // Read on every release; bump it so a trusted verifier stays resolvable
+        // for the full life of a long-running programme.
+        env.storage()
+            .persistent()
+            .extend_ttl(&Key::Verifier(attester.clone()), BUMP_THRESHOLD, BUMP_LEDGERS);
 
         // One proof, one tranche. Without this a single attestation would
         // unlock the whole award.
@@ -1148,9 +1194,14 @@ impl Programme {
         Ok(remaining)
     }
 
-    /// Abandon a programme before it has taken on any obligations. Only possible
-    /// while nothing has been contributed and nothing awarded, so this can never
-    /// strand someone else's money.
+    /// Abandon a programme before any tranche has reached a recipient.
+    ///
+    /// Once money has been released, those payouts are final and the programme
+    /// cannot be unwound. Before that, every unspent token is still in the
+    /// contract and belongs to the donors, so stepping back and returning it is
+    /// the right call rather than stranding someone else's money. Cancelling
+    /// opens refunds immediately (see [`Programme::refund`]), so a donor need
+    /// not wait out a release deadline that no longer means anything.
     pub fn cancel(env: Env) -> Result<(), Error> {
         let config = Self::config(&env)?;
         config.creator.require_auth();
@@ -1158,9 +1209,11 @@ impl Programme {
         if env.storage().instance().get::<_, bool>(&Key::Cancelled) == Some(true) {
             return Err(Error::Cancelled);
         }
-        let contributed: i128 = env.storage().instance().get(&Key::Contributed).unwrap_or(0);
-        let granted: i128 = env.storage().instance().get(&Key::Granted).unwrap_or(0);
-        if contributed != 0 || granted != 0 {
+        // Safe only while nothing has actually left the contract. A released
+        // tranche is a payout that cannot be clawed back, so we refuse rather
+        // than leave a recipient who earned money empty-handed.
+        let released: i128 = env.storage().instance().get(&Key::Released).unwrap_or(0);
+        if released != 0 {
             return Err(Error::NotCancellable);
         }
 
@@ -1169,6 +1222,44 @@ impl Programme {
             at: env.ledger().timestamp(),
         }
         .publish(&env);
+        Ok(())
+    }
+
+    /// Keep the contract's long-lived entries from being archived.
+    ///
+    /// Permissionless, mirroring `keepalive` on the attestation and standing
+    /// contracts: anyone may pay the gas to extend TTL so a programme's history,
+    /// and the money still tied to it, does not silently rot away.
+    ///
+    /// `subject` scopes the bump to the entries one observer cares about — an
+    /// application, its award, any escrowed allocation, and that person's
+    /// contribution and refund marker. These are exactly the entries that have
+    /// no write of their own once the programme settles, so they are the ones
+    /// most likely to archive unnoticed. The contract-wide instance state
+    /// (config, the running totals, the cancellation flag) is bumped on every
+    /// call as well, since views and refunds depend on it and it has no subject.
+    ///
+    /// Bumping is capped at [`BUMP_LEDGERS`] from now, so calling this in a loop
+    /// cannot push an entry's TTL out without bound — there is no griefing path.
+    pub fn keepalive(env: Env, subject: Address) -> Result<(), Error> {
+        env.storage()
+            .instance()
+            .extend_ttl(BUMP_THRESHOLD, BUMP_LEDGERS);
+        for key in [
+            Key::Application(subject.clone()),
+            Key::Award(subject.clone()),
+            Key::Allocation(subject.clone()),
+            Key::Donor(subject.clone()),
+            Key::Refunded(subject.clone()),
+        ] {
+            if env.storage().persistent().has(&key) {
+                env.storage()
+                    .persistent()
+                    .extend_ttl(&key, BUMP_THRESHOLD, BUMP_LEDGERS);
+            }
+        }
+
+        KeptAlive { subject }.publish(&env);
         Ok(())
     }
 
