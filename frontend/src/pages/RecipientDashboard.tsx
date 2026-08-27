@@ -210,8 +210,14 @@ export const RecipientDashboard = () => {
         {...award}
         onRetry={award.refetch}
         empty={{
-          title: 'No award yet',
-          description: 'This account has no finalised award on this programme.',
+          title: 'No application yet',
+          description:
+            'Your granted amount, released tranches, and allocation will appear here once you apply and this programme finalizes an award for your application.',
+          action: (
+            <Link to="/recipients/application-timeline" className="btn-secondary">
+              Check your application
+            </Link>
+          ),
         }}
       >
         {(data) => (
