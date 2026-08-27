@@ -1,4 +1,4 @@
-import { useEffect, useState, type FormEvent } from 'react';
+import { useEffect, useMemo, useState, type FormEvent } from 'react';
 import { Buffer } from 'buffer';
 import './VerifierDashboard.css';
 import { ShieldCheck, Clock, FileSignature } from 'lucide-react';
@@ -16,6 +16,7 @@ import { Badge, Button, DateField, Field, Modal, Table, type Column } from '../c
 
 const DEMO_APPLICANT = 'GAH3D4RM45ETE4W7VDRCWZBPRPT63CJXAGXFYVBC2FGANBZTS4OTKXCA';
 
+const STELLAR_ADDRESS = /^G[A-Z2-7]{55}$/;
 const HEX_32_BYTES = /^(0x)?[0-9a-fA-F]{64}$/;
 
 /**
@@ -36,8 +37,45 @@ interface Milestone {
   tranchesReleased: number;
 }
 
+/**
+ * An attestation this verifier created through the app, kept locally because
+ * — like awards — there is no on-chain "attestations by attester" list until an
+ * indexer lands. `uid` is stored hex. Revocation status is read back on-chain
+ * rather than trusted from local memory.
+ */
+interface AttestRecord {
+  uid: string;
+  subject: string;
+  schemaUid: string;
+}
+
 const formatXlm = (amount: bigint) => formatAmount(amount, { asset: 'XLM' });
 const shorten = (address: string) => truncateAddress(address, 4, 4);
+
+const attestationStorageKey = (attester: string) => `milepost:verifier-attestations:${attester}`;
+
+function loadAttestations(attester: string): AttestRecord[] {
+  try {
+    const stored = window.localStorage.getItem(attestationStorageKey(attester));
+    if (stored) {
+      const parsed = JSON.parse(stored) as AttestRecord[];
+      return Array.isArray(parsed)
+        ? parsed.filter((r) => HEX_32_BYTES.test(r.uid) && STELLAR_ADDRESS.test(r.subject))
+        : [];
+    }
+  } catch {
+    // Corrupt or inaccessible storage — treat as empty.
+  }
+  return [];
+}
+
+function saveAttestations(attester: string, records: AttestRecord[]) {
+  try {
+    window.localStorage.setItem(attestationStorageKey(attester), JSON.stringify(records));
+  } catch {
+    // Best-effort only — the record is still usable for this session.
+  }
+}
 
 /**
  * Sign an attestation that releases a recipient's next tranche.
@@ -57,6 +95,7 @@ function AttestationModal({
   verifier,
   onClose,
   onReleased,
+  onAttended,
 }: {
   open: boolean;
   recipient: string | null;
@@ -67,6 +106,7 @@ function AttestationModal({
   verifier: string | null;
   onClose: () => void;
   onReleased: () => void;
+  onAttended: (record: AttestRecord) => void;
 }) {
   const [schemaInput, setSchemaInput] = useState('');
   const [hashInput, setHashInput] = useState('');
@@ -137,7 +177,10 @@ function AttestationModal({
       };
     });
 
-    if (result !== null) setAttestedUid(result);
+    if (result !== null) {
+      setAttestedUid(result);
+      onAttended({ uid: result.toString('hex'), subject: recipient, schemaUid: cleanSchema });
+    }
   };
 
   const handleRelease = async () => {
@@ -300,16 +343,225 @@ function AttestationModal({
   );
 }
 
+/** A row's on-chain state, resolved from `get` rather than trusted locally. */
+type AttestationStatus =
+  | { kind: 'revoked' }
+  | { kind: 'expired' }
+  | { kind: 'valid' }
+  | { kind: 'unknown' };
+
+/**
+ * Revoke one of the verifier's own attestations.
+ *
+ * The confirmation is explicit about what revocation does and does not undo:
+ * it stops the attestation being used again, but it does not recover funds a
+ * tranche already released. Overstating the effect here would be worse than
+ * not offering the action at all.
+ */
+function RevokeModal({
+  open,
+  record,
+  attest,
+  attester,
+  onClose,
+  onRevoked,
+}: {
+  open: boolean;
+  record: AttestRecord | null;
+  attest: AttestClient;
+  attester: string;
+  onClose: () => void;
+  onRevoked: () => void;
+}) {
+  const revokeTx = useTransaction<void>({ contract: 'attest' });
+
+  const handleClose = () => {
+    if (revokeTx.busy) return;
+    revokeTx.reset();
+    onClose();
+  };
+
+  const handleRevoke = async () => {
+    if (!record) return;
+    const result = await revokeTx.send(async () => {
+      const tx = await attest.revoke({ attester, uid: Buffer.from(record.uid, 'hex') });
+      return {
+        signAndSend: async (options: Parameters<typeof tx.signAndSend>[0]) => {
+          const sent = await tx.signAndSend(options);
+          return { result: sent.result.unwrap() };
+        },
+      };
+    });
+    if (result !== null) {
+      onRevoked();
+      revokeTx.reset();
+      onClose();
+    }
+  };
+
+  const revokeError = revokeTx.error ? explain(revokeTx.error, 'attest') : null;
+
+  return (
+    <Modal
+      open={open}
+      onClose={handleClose}
+      title="Revoke attestation"
+      busy={revokeTx.busy}
+      footer={
+        <>
+          <Button variant="secondary" onClick={handleClose} disabled={revokeTx.busy}>
+            Cancel
+          </Button>
+          <Button
+            variant="danger"
+            onClick={handleRevoke}
+            loading={revokeTx.busy}
+            loadingLabel={phaseLabel(revokeTx.phase) || 'Revoking…'}
+          >
+            Revoke
+          </Button>
+        </>
+      }
+    >
+      <div className="revoke-modal">
+        <p className="typo-text">
+          Revoke the attestation about <strong className="numeric">{record ? shorten(record.subject) : ''}</strong>
+          <span className="numeric revoke-modal__uid">{record ? record.uid : ''}</span>
+        </p>
+        <div className="revoke-modal__notice" role="note">
+          <ShieldCheck size={18} />
+          <p>
+            This marks the attestation revoked so it can no longer be used to release a tranche.{" "}
+            <strong>Funds that already released are not recovered</strong> — revocation does not claw anything back.
+          </p>
+        </div>
+        {revokeError && (
+          <p className="ui-field__message ui-field__message--error" role="alert">
+            {revokeError.message}
+            {revokeError.action ? ` ${revokeError.action}` : ''}
+          </p>
+        )}
+      </div>
+    </Modal>
+  );
+}
+
+/**
+ * The verifier's own attestations, as known to this app (the ones they created
+ * here) with their current on-chain status. Revoked attestations stay visible,
+ * marked as revoked, so the history the contract keeps is reflected rather than
+ * hidden.
+ */
+function MyAttestations({
+  attest,
+  attester,
+  records,
+}: {
+  attest: AttestClient;
+  attester: string;
+  records: AttestRecord[];
+}) {
+  const [status, setStatus] = useState<Record<string, AttestationStatus>>({});
+  const [selected, setSelected] = useState<AttestRecord | null>(null);
+  const [tick, setTick] = useState(0);
+
+  useEffect(() => {
+    if (records.length === 0) return;
+    let cancelled = false;
+    (async () => {
+      const next: Record<string, AttestationStatus> = {};
+      await Promise.all(
+        records.map(async (record): Promise<void> => {
+          const uidBuf = Buffer.from(record.uid, 'hex');
+          try {
+            const { result } = await attest.get({ uid: uidBuf });
+            const a = result.unwrap();
+            const nowSeconds = BigInt(Math.floor(Date.now() / 1000));
+            const revoked = a.revoked_at !== undefined && a.revoked_at !== null;
+            const expired = !revoked && a.expires_at !== undefined && a.expires_at !== null && a.expires_at <= nowSeconds;
+            next[record.uid] = revoked ? { kind: 'revoked' } : expired ? { kind: 'expired' } : { kind: 'valid' };
+          } catch {
+            next[record.uid] = { kind: 'unknown' };
+          }
+        }),
+      );
+      if (cancelled) return;
+      setStatus(next);
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [attest, records, tick]);
+
+  if (records.length === 0) {
+    return (
+      <Empty
+        title="No attestations yet"
+        description="Attestations you sign here appear here so you can revoke one if a milestone was attested in error or circumstances change."
+      />
+    );
+  }
+
+  const columns: Column<AttestRecord>[] = [
+    { key: 'subject', header: 'Recipient', render: (row) => <span className="numeric" title={row.subject}>{shorten(row.subject)}</span> },
+    { key: 'uid', header: 'Attestation', render: (row) => <span className="numeric" title={row.uid}>{truncateAddress(row.uid, 6, 6)}</span> },
+    { key: 'status', header: 'Status', render: (row) => <AttestationBadge state={status[row.uid]} /> },
+    {
+      key: 'action',
+      header: '',
+      render: (row) => {
+        const state = status[row.uid];
+        return state?.kind === 'revoked' ? (
+          <Badge tone="neutral">Revoked</Badge>
+        ) : (
+          <Button variant="secondary" size="sm" onClick={() => setSelected(row)}>
+            Revoke
+          </Button>
+        );
+      },
+    },
+  ];
+
+  return (
+    <>
+      <Table
+        caption={`Attestations signed by ${attester}`}
+        columns={columns}
+        rows={records}
+        keyOf={(row) => row.uid}
+      />
+      <RevokeModal
+        open={selected !== null}
+        record={selected}
+        attest={attest}
+        attester={attester}
+        onClose={() => setSelected(null)}
+        onRevoked={() => setTick((t) => t + 1)}
+      />
+    </>
+  );
+}
+
+function AttestationBadge({ state }: { state: AttestationStatus | undefined }) {
+  return (
+    <Badge tone={state?.kind === 'revoked' ? 'danger' : state?.kind === 'expired' ? 'neutral' : state?.kind === 'valid' ? 'success' : 'neutral'}>
+      {state?.kind === 'revoked' ? 'Revoked' : state?.kind === 'expired' ? 'Expired' : state?.kind === 'valid' ? 'Valid' : '…'}
+    </Badge>
+  );
+}
+
 function ProgrammeQueue({
   client,
   programmeId,
   verifier,
   attest,
+  onAttended,
 }: {
   client: ReturnType<typeof useProgramme>['client'];
   programmeId: string;
   verifier: string | null;
   attest: AttestClient;
+  onAttended: (record: AttestRecord) => void;
 }) {
   const recipients = KNOWN_RECIPIENTS[programmeId] ?? [];
   const [tick, setTick] = useState(0);
@@ -451,6 +703,7 @@ function ProgrammeQueue({
         verifier={verifier}
         onClose={() => setSelected(null)}
         onReleased={() => setTick((t) => t + 1)}
+        onAttended={onAttended}
       />
     </>
   );
@@ -462,6 +715,36 @@ export const VerifierDashboard = () => {
   const { programmeAt, attest } = useSoroban();
   const [approved, setApproved] = useState('');
   const [amountError, setAmountError] = useState<string | null>(null);
+
+  // The verifier's own attestations are derived from localStorage (there is no
+  // on-chain "attestations by attester" list), keyed by the connected address.
+  // Deriving rather than syncing in an effect keeps an address change to a
+  // single render. sessionAdds covers the rare case where persisting failed,
+  // so an attestation signed this session still shows up for revocation.
+  const [sessionAttestations, setSessionAttestations] = useState<Record<string, AttestRecord[]>>({});
+  const myAttestations = useMemo(() => {
+    if (!address) return [];
+    const stored = loadAttestations(address);
+    const extra = (sessionAttestations[address] ?? []).filter(
+      (record) => !stored.some((existing) => existing.uid === record.uid),
+    );
+    return [...extra, ...stored];
+  }, [address, sessionAttestations]);
+
+  const handleAttended = (record: AttestRecord) => {
+    if (!address) return;
+    try {
+      const next = loadAttestations(address).filter((existing) => existing.uid !== record.uid);
+      next.unshift(record);
+      saveAttestations(address, next);
+    } catch {
+      // Persist failed — sessionAdds below still carries it for this session.
+    }
+    setSessionAttestations((prev) => ({
+      ...prev,
+      [address]: (prev[address] ?? []).filter((existing) => existing.uid !== record.uid).concat(record),
+    }));
+  };
 
   const application = useContractResult<Application>(
     () => programme.get_application({ applicant: DEMO_APPLICANT }),
@@ -515,7 +798,28 @@ export const VerifierDashboard = () => {
             on you.
           </p>
         </div>
-        <ProgrammeQueue client={programmeAt(DEMO_PROGRAMME_ID)} programmeId={DEMO_PROGRAMME_ID} verifier={address ?? null} attest={attest} />
+        <ProgrammeQueue client={programmeAt(DEMO_PROGRAMME_ID)} programmeId={DEMO_PROGRAMME_ID} verifier={address ?? null} attest={attest} onAttended={handleAttended} />
+
+        {address && (
+          <div className="attestation-section__panel">
+            <div className="attestation-section__header">
+              <h2>Your attestations</h2>
+              <Badge tone="neutral">{truncateAddress(address)}</Badge>
+            </div>
+            <div className="attestation-section__intro">
+              <ShieldCheck size={18} />
+              <p className="typo-text text-muted">
+                Revoke one of your own attestations if it was made in error — revocation marks it invalid for future
+                tranches without undoing any that already released.
+              </p>
+            </div>
+            <MyAttestations
+              attest={attest}
+              attester={address}
+              records={myAttestations}
+            />
+          </div>
+        )}
       </section>
 
       <section className="stats-grid animate-fade-up" style={{ animationDelay: '200ms' }}>
