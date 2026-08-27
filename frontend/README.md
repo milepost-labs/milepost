@@ -31,9 +31,11 @@ at runtime. Fix them rather than suppressing them.
 
 ## Contract data model
 
-[`docs/frontend-integration.md`](../docs/frontend-integration.md) covers what the
-protocol does, the deployed testnet addresses, the phase and mode enums, and
-which reads back which screen. Read it if you are wiring a new contract call.
+The root [README](../README.md) covers what the protocol does, how money moves
+and the disbursement modes. [`docs/error-code-reference.md`](../docs/error-code-reference.md)
+lists every error each contract can return, with the cause and what a caller
+should do about it. The generated clients in [`packages/`](../packages) are the
+authority on the exact shapes.
 
 ---
 
