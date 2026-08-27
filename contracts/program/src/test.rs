@@ -33,11 +33,8 @@ mod policy {
     }
 }
 
-const APPLY_DEADLINE: u64 = 10_000;
-const REVIEW_DEADLINE: u64 = 20_000;
-const RELEASE_DEADLINE: u64 = 30_000;
-const SWEEP_DEADLINE: u64 = 40_000;
-const FEE_BPS: u32 = 1_000; // 10%
+use milepost_test_utils::hash;
+use milepost_test_utils::schedule::*;
 
 struct Fixture {
     env: Env,
@@ -59,13 +56,11 @@ fn setup(quorum: u32, reviewer_count: u32) -> Fixture {
 }
 
 fn setup_with(quorum: u32, reviewer_count: u32, tranches: u32) -> Fixture {
-    let env = Env::default();
-    env.mock_all_auths();
+    let env = milepost_test_utils::new_test_env();
 
-    let issuer = Address::generate(&env);
-    let asset = env.register_stellar_asset_contract_v2(issuer);
-    let token = TokenClient::new(&env, &asset.address());
-    let mint = StellarAssetClient::new(&env, &asset.address());
+    let asset = milepost_test_utils::register_token(&env);
+    let token = TokenClient::new(&env, &asset);
+    let mint = StellarAssetClient::new(&env, &asset);
 
     let creator = Address::generate(&env);
     let treasury = Address::generate(&env);
@@ -98,7 +93,7 @@ fn setup_with(quorum: u32, reviewer_count: u32, tranches: u32) -> Fixture {
         (
             ProgrammeConfig {
                 creator: creator.clone(),
-                token: asset.address(),
+                token: asset,
                 treasury: treasury.clone(),
                 attest: attest_id,
                 record: record_id,
@@ -142,10 +137,6 @@ fn funded_donor(f: &Fixture, amount: i128) -> Address {
     let donor = Address::generate(&f.env);
     f.mint.mint(&donor, &amount);
     donor
-}
-
-fn hash(env: &Env, byte: u8) -> BytesN<32> {
-    BytesN::from_array(env, &[byte; 32])
 }
 
 fn to_review(f: &Fixture) {
@@ -202,10 +193,8 @@ fn zero_quorum_is_rejected() {
 }
 
 fn construct_with(quorum: u32, reviewer_count: u32, apply: u64, review: u64, fee_bps: u32) {
-    let env = Env::default();
-    env.mock_all_auths();
-    let issuer = Address::generate(&env);
-    let asset = env.register_stellar_asset_contract_v2(issuer);
+    let env = milepost_test_utils::new_test_env();
+    let asset = milepost_test_utils::register_token(&env);
     let mut reviewers = Vec::new(&env);
     for _ in 0..reviewer_count {
         reviewers.push_back(Address::generate(&env));
@@ -217,7 +206,7 @@ fn construct_with(quorum: u32, reviewer_count: u32, apply: u64, review: u64, fee
         (
             ProgrammeConfig {
                 creator: Address::generate(&env),
-                token: asset.address(),
+                token: asset,
                 treasury: Address::generate(&env),
                 attest: Address::generate(&env),
                 record: Address::generate(&env),
@@ -1601,6 +1590,121 @@ fn allocations_stop_being_directable_once_the_sweep_opens() {
     );
 }
 
+// ---- differential tests: Direct vs Allocated ----
+
+/// Contribute funds, apply, review with `votes`, finalise in `mode` and claim
+/// every tranche. Returns the recipient so an Allocated award can be directed
+/// afterwards. `award_payee` is the destination for Direct mode; for Allocated
+/// it is only the (unused) award struct's payee slot.
+fn fund_and_release(f: &Fixture, votes: &[i128], award_payee: &Address, mode: Mode) -> Address {
+    let applicant = Address::generate(&f.env);
+    let donor = funded_donor(f, 100_000);
+    let requested = *votes.iter().max().unwrap();
+    f.client.contribute(&donor, &100_000);
+    f.client.apply(&applicant, &requested, &hash(&f.env, 1));
+    to_review(f);
+    for (i, v) in votes.iter().enumerate() {
+        f.client
+            .review(&f.reviewers.get(i as u32).unwrap(), &applicant, v);
+    }
+    f.client.finalize(&applicant, award_payee, &mode);
+    for t in 0..f.client.get_config().tranches {
+        f.client
+            .release(&applicant, &proof(f, &applicant, t as u8 + 1), &f.verifier);
+    }
+    applicant
+}
+
+#[test]
+fn neither_mode_can_move_funds_to_an_unverified_address() {
+    // Direct can't even be finalised to a payee the programme has not verified,
+    // so an unverified address can never become the destination.
+    let f = setup(3, 3);
+    let applicant = Address::generate(&f.env);
+    let donor = funded_donor(&f, 100_000);
+    f.client.contribute(&donor, &100_000);
+    f.client.apply(&applicant, &900, &hash(&f.env, 1));
+    to_review(&f);
+    for i in 0..3u32 {
+        f.client
+            .review(&f.reviewers.get(i).unwrap(), &applicant, &900);
+    }
+    let casino = Address::generate(&f.env);
+    assert_eq!(
+        f.client.try_finalize(&applicant, &casino, &Mode::Direct),
+        Err(Ok(Error::PayeeNotVerified))
+    );
+    assert_eq!(f.token.balance(&casino), 0);
+
+    // Allocated holds in escrow; no `spend` can reach an unverified payee, or
+    // route the money back to the recipient themselves.
+    let g = setup(3, 3);
+    let g_applicant = Address::generate(&g.env);
+    let held = allocated_to(&g, &g_applicant, &900);
+    let g_casino = Address::generate(&g.env);
+    assert_eq!(
+        g.client.try_spend(&g_applicant, &g_casino, &5),
+        Err(Ok(Error::PayeeNotVerified))
+    );
+    assert_eq!(
+        g.client.try_spend(&g_applicant, &g_applicant, &5),
+        Err(Ok(Error::PayeeNotVerified))
+    );
+    assert_eq!(g.client.allocation_of(&g_applicant), held);
+
+    // Even after part of the escrow has gone to a verified payee, the remainder
+    // still cannot reach an unverified address.
+    let school = Address::generate(&g.env);
+    g.client.allow_payee(&school);
+    g.client.spend(&g_applicant, &school, &100);
+    assert_eq!(
+        g.client.try_spend(&g_applicant, &g_casino, &100),
+        Err(Ok(Error::PayeeNotVerified))
+    );
+    assert_eq!(g.token.balance(&g_casino), 0);
+}
+
+#[test]
+fn direct_fixes_the_payee_while_allocated_lets_the_recipient_choose() {
+    let votes = [300i128, 600, 900]; // median 600
+
+    // Direct: the payee is fixed and verified at award time.
+    let f = setup(3, 3);
+    let school = Address::generate(&f.env);
+    let bookshop = Address::generate(&f.env);
+    f.client.allow_payee(&school);
+    f.client.allow_payee(&bookshop);
+    let recipient = fund_and_release(&f, &votes, &school, Mode::Direct);
+
+    assert_eq!(f.client.get_award(&recipient).granted, 600);
+    // The money lands only at the award's fixed payee; the recipient's own
+    // preference is never consulted.
+    assert_eq!(f.token.balance(&school), 600);
+    assert_eq!(f.token.balance(&bookshop), 0);
+    // There is no escrow to redirect, so Direct grants no agency.
+    assert_eq!(
+        f.client.try_spend(&recipient, &bookshop, &1),
+        Err(Ok(Error::InsufficientAllocation))
+    );
+
+    // Allocated: identical votes, but the recipient picks the destination
+    // among verified payees — the agency Direct mode denies them.
+    let g = setup(3, 3);
+    let g_school = Address::generate(&g.env);
+    let g_bookshop = Address::generate(&g.env);
+    g.client.allow_payee(&g_school);
+    g.client.allow_payee(&g_bookshop);
+    let g_recipient = fund_and_release(&g, &votes, &g_school, Mode::Allocated);
+
+    assert_eq!(g.client.get_award(&g_recipient).granted, 600);
+    // The same money, but the recipient chooses the bookshop this time.
+    assert_eq!(g.client.allocation_of(&g_recipient), 600);
+    g.client.spend(&g_recipient, &g_bookshop, &600);
+    assert_eq!(g.token.balance(&g_bookshop), 600);
+    assert_eq!(g.token.balance(&g_school), 0);
+    assert_eq!(g.client.allocation_of(&g_recipient), 0);
+}
+
 // ---- restricted mode guards ----
 
 #[test]
@@ -1835,6 +1939,7 @@ fn batch_exceeding_max_is_rejected() {
 // ---- property tests for the median award mechanism ----
 
 mod proptests {
+    extern crate std;
     use super::*;
     use proptest::prelude::*;
 
@@ -1954,6 +2059,162 @@ mod proptests {
             }
             let granted = run_award(&f, value, &buf[..n as usize]);
             prop_assert_eq!(granted, value);
+        }
+    }
+
+    // ---- property tests for refund proportionality ----
+
+    /// Open refunds and have every donor claim once. Returns `(sum, per-donor
+    /// amounts)`; a donor whose proportional share floors to zero is counted as
+    /// claiming `0` (the contract returns `NothingToRefund` for them).
+    fn run_refunds(amounts: &[i128]) -> (Fixture, std::vec::Vec<Address>, i128) {
+        // Refunds only need a configured programme and the window open; the
+        // quorum and reviewer count do not participate, so keep the fixture
+        // minimal.
+        let f = setup(1, 1);
+        let mut donors = std::vec::Vec::with_capacity(amounts.len());
+        for &amt in amounts {
+            let d = funded_donor(&f, amt);
+            f.client.contribute(&d, &amt);
+            donors.push(d);
+        }
+        f.env.ledger().set_timestamp(RELEASE_DEADLINE);
+        (f, donors, amounts.iter().sum())
+    }
+
+    fn claim_all(f: &Fixture, donors: &[Address]) -> (i128, std::vec::Vec<i128>) {
+        let mut sum = 0i128;
+        let mut claimed = std::vec::Vec::with_capacity(donors.len());
+        for d in donors {
+            match f.client.try_refund(d) {
+                Ok(Ok(amt)) => {
+                    sum += amt;
+                    claimed.push(amt);
+                }
+                _ => claimed.push(0),
+            }
+        }
+        (sum, claimed)
+    }
+
+    /// The core invariants, shared by every generated donor set. Called by the
+    /// proptests below.
+    fn assert_refund_properties(amounts: &[i128]) {
+        let total: i128 = amounts.iter().sum();
+        let unpaid = total - total * FEE_BPS as i128 / BPS_DENOMINATOR;
+
+        let (f, donors, _) = run_refunds(amounts);
+        let (sum, claimed) = claim_all(&f, &donors);
+
+        // 1. The sum of refunds never exceeds the refundable balance.
+        assert!(
+            sum <= unpaid,
+            "refunded {sum} exceeds refundable pool {unpaid}"
+        );
+
+        // 2. Money is conserved and rounding dust is not lost or conjured: the
+        //    contract holds everything minus exactly what was paid out.
+        assert_eq!(
+            f.token.balance(&f.client.address),
+            total - sum,
+            "money leaked across the refund path"
+        );
+        let dust = unpaid - sum;
+        assert!(dust >= 0, "rounded more than was available: dust {dust}");
+
+        // 3. Where the dust went: it stays in the contract. Integer division
+        //    truncates, and each of the N proportional terms can round away less
+        //    than one unit, so the remainder is bounded by the donor count.
+        assert!(
+            (dust as usize) < donors.len(),
+            "dust {dust} is not accounted for among {} donors",
+            donors.len()
+        );
+
+        // 4. A donor's refund is never more than their proportional share, and
+        //    never more than they put in.
+        for (i, _d) in donors.iter().enumerate() {
+            let share = amounts[i] * unpaid / total;
+            assert!(
+                claimed[i] <= share,
+                "donor {i} got {} but their share is {share}",
+                claimed[i]
+            );
+            assert!(
+                claimed[i] <= amounts[i],
+                "donor {i} got {} but only gave {}",
+                claimed[i],
+                amounts[i]
+            );
+        }
+
+        // 5. No donor can claim twice: a second claim is either rejected as
+        //    already refunded, or there is nothing further to take.
+        for d in &donors {
+            let second = f.client.try_refund(d);
+            assert!(
+                matches!(second, Err(_) | Ok(Err(_))),
+                "donor claimed more than once"
+            );
+        }
+    }
+
+    proptest! {
+        #[test]
+        fn refunds_never_exceed_the_pool_and_account_for_dust(
+            amounts in prop::collection::vec(1i128..=10_000i128, 1..=20),
+        ) {
+            assert_refund_properties(&amounts);
+        }
+    }
+
+    proptest! {
+        #[test]
+        fn refunds_with_a_dominant_donor_round_down_safely(
+            small in prop::collection::vec(1i128..=100i128, 1..=19),
+            big in 500_000i128..=1_000_000i128,
+        ) {
+            let mut amounts = small;
+            amounts.push(big);
+            assert_refund_properties(&amounts);
+        }
+    }
+
+    proptest! {
+        #[test]
+        fn direct_and_allocated_pay_identical_totals_to_verified_payees(
+            mut votes in prop::collection::vec(1i128..=5_000i128, 3..=16),
+        ) {
+            votes.sort();
+
+            // Direct: fixed verified payee, fully released.
+            let f = setup(votes.len() as u32, votes.len() as u32);
+            let p1 = Address::generate(&f.env);
+            f.client.allow_payee(&p1);
+            let r1 = fund_and_release(&f, &votes, &p1, Mode::Direct);
+            let direct_total = f.token.balance(&p1);
+
+            // Allocated: identical votes, release into escrow, then the
+            // recipient directs it all to the same verified payee.
+            let g = setup(votes.len() as u32, votes.len() as u32);
+            let p2 = Address::generate(&g.env);
+            g.client.allow_payee(&p2);
+            let r2 = fund_and_release(&g, &votes, &p2, Mode::Allocated);
+            let escrow = g.client.allocation_of(&r2);
+            g.client.spend(&r2, &p2, &escrow);
+            let allocated_total = g.token.balance(&p2);
+
+            // The central README claim: identical inputs pay identical totals.
+            prop_assert_eq!(
+                direct_total,
+                allocated_total,
+                "Direct and Allocated paid different amounts for the same award"
+            );
+            prop_assert_eq!(
+                direct_total,
+                f.client.get_award(&r1).granted,
+                "total paid out should equal the full award"
+            );
         }
     }
 }

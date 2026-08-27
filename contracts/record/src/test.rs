@@ -1,6 +1,7 @@
 #![cfg(test)]
 
 use super::*;
+use milepost_test_utils::hash;
 use soroban_sdk::{testutils::Address as _, testutils::Ledger as _, Env};
 
 struct Fixture {
@@ -13,8 +14,7 @@ struct Fixture {
 }
 
 fn setup() -> Fixture {
-    let env = Env::default();
-    env.mock_all_auths();
+    let env = milepost_test_utils::new_test_env();
     let admin = Address::generate(&env);
     let id = env.register(Record, (admin.clone(),));
     let client = RecordClient::new(&env, &id);
@@ -30,10 +30,6 @@ fn setup() -> Fixture {
         subject: Address::generate(&env),
         programme: Address::generate(&env),
     }
-}
-
-fn hash(env: &Env, byte: u8) -> BytesN<32> {
-    BytesN::from_array(env, &[byte; 32])
 }
 
 const GENESIS: [u8; 32] = [0u8; 32];

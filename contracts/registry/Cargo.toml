@@ -18,3 +18,4 @@ milepost-types = { workspace = true }
 [dev-dependencies]
 soroban-sdk = { workspace = true, features = ["testutils"] }
 milepost-record = { path = "../record", features = ["testutils"] }
+milepost-test-utils = { path = "../../crates/test-utils", features = ["testutils"] }
