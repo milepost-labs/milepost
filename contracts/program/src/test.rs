@@ -68,7 +68,15 @@ fn setup_with(quorum: u32, reviewer_count: u32, tranches: u32) -> Fixture {
     let mint = StellarAssetClient::new(&env, &asset.address());
 
     let creator = Address::generate(&env);
-    let treasury = Address::generate(&env);
+    let signer1 = Address::generate(&env);
+    let signer2 = Address::generate(&env);
+    let treasury = env.register(
+        milepost_treasury::Treasury,
+        (
+            vec![&env, signer1.clone(), signer2.clone()],
+            2u32,
+        ),
+    );
     let verifier = Address::generate(&env);
 
     let attest_id = env.register(milepost_attest::Attest, ());
@@ -1499,4 +1507,284 @@ fn the_payee_registry_rejects_duplicates_and_unknowns() {
 
     f.client.deny_payee(&school);
     assert_eq!(f.client.try_deny_payee(&school), Err(Ok(Error::NotPayee)));
+}
+
+// ---- invariant testing ----
+
+struct TestState {
+    donors: std::vec::Vec<Address>,
+    contributions: std::vec::Vec<i128>,
+    refunded: std::vec::Vec<bool>,
+    refund_amounts_paid: std::vec::Vec<i128>,
+    recipients: std::vec::Vec<Address>,
+    fee_swept: bool,
+    unclaimed_swept: bool,
+}
+
+impl TestState {
+    fn new() -> Self {
+        Self {
+            donors: std::vec::Vec::new(),
+            contributions: std::vec::Vec::new(),
+            refunded: std::vec::Vec::new(),
+            refund_amounts_paid: std::vec::Vec::new(),
+            recipients: std::vec::Vec::new(),
+            fee_swept: false,
+            unclaimed_swept: false,
+        }
+    }
+}
+
+fn assert_invariants(f: &Fixture, state: &TestState) {
+    let env = &f.env;
+    let config = f.client.get_config();
+    let total_released = f.client.total_released();
+    let budget = f.client.budget();
+    let total_contributed = f.client.total_contributed();
+    let timestamp = env.ledger().timestamp();
+    let is_cancelled = f.client.get_phase() == Phase::Cancelled;
+    let refunds_open = is_cancelled || timestamp >= config.release_deadline;
+
+    // Invariant 1: total_released never exceeds budget
+    assert!(
+        total_released <= budget,
+        "Invariant 1 Violated: total_released ({}) exceeds budget ({})",
+        total_released,
+        budget
+    );
+
+    // Invariant 3 & 4: an award's released never exceeds its granted, and tranches_released never exceeds tranches
+    for recipient in state.recipients.iter() {
+        if let Ok(award) = f.client.try_get_award(&recipient) {
+            assert!(
+                award.released <= award.granted,
+                "Invariant 3 Violated: recipient {:?} released ({}) exceeds granted ({})",
+                recipient,
+                award.released,
+                award.granted
+            );
+            assert!(
+                award.tranches_released <= award.tranches,
+                "Invariant 4 Violated: recipient {:?} tranches_released ({}) exceeds tranches ({})",
+                recipient,
+                award.tranches_released,
+                award.tranches
+            );
+        }
+    }
+
+    // Invariant 2: the sum of all refunds never exceeds budget - total_released
+    let mut sum_refunds_paid = 0i128;
+    let mut sum_potential_refunds = 0i128;
+    let unpaid_budget = budget - total_released;
+
+    for (i, donor) in state.donors.iter().enumerate() {
+        let contributed = state.contributions[i];
+        let was_refunded = state.refunded[i];
+
+        if was_refunded {
+            let paid = state.refund_amounts_paid[i];
+            sum_refunds_paid += paid;
+        } else if refunds_open && !state.unclaimed_swept {
+            if total_contributed > 0 {
+                let potential = contributed
+                    .checked_mul(unpaid_budget)
+                    .unwrap()
+                    / total_contributed;
+                sum_potential_refunds += potential;
+            }
+        }
+    }
+
+    let total_refunds = sum_refunds_paid + sum_potential_refunds;
+    assert!(
+        total_refunds <= unpaid_budget,
+        "Invariant 2 Violated: sum of refunds ({}) exceeds budget - total_released ({})",
+        total_refunds,
+        unpaid_budget
+    );
+
+    // Invariant 5: the contract's token balance is always at least what it still owes
+    let fee = total_contributed * (config.fee_bps as i128) / 10000;
+    let mut owed = 0i128;
+
+    if !state.fee_swept {
+        owed += fee;
+    }
+
+    if !state.unclaimed_swept {
+        if refunds_open {
+            owed += sum_potential_refunds;
+        } else {
+            owed += unpaid_budget;
+        }
+    }
+
+    let balance = f.token.balance(&f.client.address);
+    assert!(
+        balance >= owed,
+        "Invariant 5 Violated: contract balance ({}) is less than what it owes ({})",
+        balance,
+        owed
+    );
+}
+
+#[test]
+fn test_invariants_across_sequences() {
+    // ---- Sequence 1: Happy path release and final sweep ----
+    {
+        let f = setup(2, 3);
+        let mut state = TestState::new();
+        assert_invariants(&f, &state);
+
+        let d1 = funded_donor(&f, 10_000);
+        f.client.contribute(&d1, &10_000);
+        state.donors.push(d1);
+        state.contributions.push(10_000);
+        state.refunded.push(false);
+        state.refund_amounts_paid.push(0);
+        assert_invariants(&f, &state);
+
+        let d2 = funded_donor(&f, 20_000);
+        f.client.contribute(&d2, &20_000);
+        state.donors.push(d2);
+        state.contributions.push(20_000);
+        state.refunded.push(false);
+        state.refund_amounts_paid.push(0);
+        assert_invariants(&f, &state);
+
+        let r1 = Address::generate(&f.env);
+        f.client.apply(&r1, &5_000, &hash(&f.env, 1));
+        state.recipients.push(r1.clone());
+        assert_invariants(&f, &state);
+
+        to_review(&f);
+        assert_invariants(&f, &state);
+
+        for i in 0..2u32 {
+            f.client
+                .review(&f.reviewers.get(i).unwrap(), &r1, &5_000);
+        }
+        let payee = Address::generate(&f.env);
+        f.client.allow_payee(&payee);
+        f.client.finalize(&r1, &payee, &Mode::Direct);
+        assert_invariants(&f, &state);
+
+        // Sweep fee
+        f.client.sweep_fee();
+        state.fee_swept = true;
+        assert_invariants(&f, &state);
+
+        // Release tranches
+        f.client.release(&r1, &proof(&f, &r1, 1), &f.verifier);
+        assert_invariants(&f, &state);
+        f.client.release(&r1, &proof(&f, &r1, 2), &f.verifier);
+        assert_invariants(&f, &state);
+
+        // Move past release deadline
+        f.env.ledger().set_timestamp(RELEASE_DEADLINE);
+        assert_invariants(&f, &state);
+
+        // Refund d1
+        let amt1 = f.client.refund(&state.donors[0]);
+        state.refunded[0] = true;
+        state.refund_amounts_paid[0] = amt1;
+        assert_invariants(&f, &state);
+
+        // Move past sweep deadline
+        f.env.ledger().set_timestamp(SWEEP_DEADLINE);
+        assert_invariants(&f, &state);
+
+        // Sweep unclaimed
+        f.client.sweep_unclaimed();
+        state.unclaimed_swept = true;
+        assert_invariants(&f, &state);
+    }
+
+    // ---- Sequence 2: Interleaved sweep, refund, and release ----
+    {
+        let f = setup(2, 3);
+        let mut state = TestState::new();
+        assert_invariants(&f, &state);
+
+        let d1 = funded_donor(&f, 10_000);
+        f.client.contribute(&d1, &10_000);
+        state.donors.push(d1);
+        state.contributions.push(10_000);
+        state.refunded.push(false);
+        state.refund_amounts_paid.push(0);
+
+        let d2 = funded_donor(&f, 5_000);
+        f.client.contribute(&d2, &5_000);
+        state.donors.push(d2);
+        state.contributions.push(5_000);
+        state.refunded.push(false);
+        state.refund_amounts_paid.push(0);
+        assert_invariants(&f, &state);
+
+        let r1 = Address::generate(&f.env);
+        f.client.apply(&r1, &3_000, &hash(&f.env, 1));
+        state.recipients.push(r1.clone());
+        to_review(&f);
+        for i in 0..2u32 {
+            f.client
+                .review(&f.reviewers.get(i).unwrap(), &r1, &3_000);
+        }
+        let payee = Address::generate(&f.env);
+        f.client.allow_payee(&payee);
+        f.client.finalize(&r1, &payee, &Mode::Direct);
+        assert_invariants(&f, &state);
+
+        f.client.release(&r1, &proof(&f, &r1, 1), &f.verifier);
+        assert_invariants(&f, &state);
+
+        f.env.ledger().set_timestamp(RELEASE_DEADLINE);
+        assert_invariants(&f, &state);
+
+        f.client.sweep_fee();
+        state.fee_swept = true;
+        assert_invariants(&f, &state);
+
+        let amt2 = f.client.refund(&state.donors[1]);
+        state.refunded[1] = true;
+        state.refund_amounts_paid[1] = amt2;
+        assert_invariants(&f, &state);
+
+        f.env.ledger().set_timestamp(SWEEP_DEADLINE);
+        f.client.sweep_unclaimed();
+        state.unclaimed_swept = true;
+        assert_invariants(&f, &state);
+    }
+
+    // ---- Sequence 3: Cancelled state and refund ----
+    {
+        let f = setup(2, 3);
+        let mut state = TestState::new();
+        assert_invariants(&f, &state);
+
+        let d1 = funded_donor(&f, 10_000);
+        f.client.contribute(&d1, &10_000);
+        state.donors.push(d1);
+        state.contributions.push(10_000);
+        state.refunded.push(false);
+        state.refund_amounts_paid.push(0);
+        assert_invariants(&f, &state);
+
+        f.client.cancel();
+        assert_invariants(&f, &state);
+
+        let amt1 = f.client.refund(&state.donors[0]);
+        state.refunded[0] = true;
+        state.refund_amounts_paid[0] = amt1;
+        assert_invariants(&f, &state);
+
+        f.client.sweep_fee();
+        state.fee_swept = true;
+        assert_invariants(&f, &state);
+
+        f.env.ledger().set_timestamp(SWEEP_DEADLINE);
+        f.client.sweep_unclaimed();
+        state.unclaimed_swept = true;
+        assert_invariants(&f, &state);
+    }
 }

@@ -7,6 +7,7 @@ import { Home } from './pages/Home';
 import { FunderDashboard } from './pages/FunderDashboard';
 import { RecipientDashboard } from './pages/RecipientDashboard';
 import { VerifierDashboard } from './pages/VerifierDashboard';
+import { SchemaLookup } from './pages/SchemaLookup';
 
 function App() {
   return (
@@ -20,6 +21,7 @@ function App() {
               <Route path="funders" element={<FunderDashboard />} />
               <Route path="recipients" element={<RecipientDashboard />} />
               <Route path="verifiers" element={<VerifierDashboard />} />
+              <Route path="schemas" element={<SchemaLookup />} />
             </Route>
           </Routes>
         </Router>

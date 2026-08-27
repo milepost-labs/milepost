@@ -23,6 +23,7 @@ export const Navbar = () => {
           <Link to="/funders" className="nav-link">Funders</Link>
           <Link to="/recipients" className="nav-link">Recipients</Link>
           <Link to="/verifiers" className="nav-link">Verifiers</Link>
+          <Link to="/schemas" className="nav-link">Schemas</Link>
         </nav>
 
         <div className="navbar-actions">

@@ -1147,6 +1147,13 @@ dependencies = [
 ]
 
 [[package]]
+name = "milepost-treasury"
+version = "0.1.0"
+dependencies = [
+ "soroban-sdk",
+]
+
+[[package]]
 name = "milepost-types"
 version = "0.1.0"
 dependencies = [
