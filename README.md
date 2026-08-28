@@ -227,6 +227,10 @@ Accounts and ids land in `deployments/<network>.seed.json`.
 
 For a full list of error codes, causes, and recommended actions across all five contracts, see [docs/error-code-reference.md](docs/error-code-reference.md).
 
+## Integrator FAQ
+
+Recurring questions from teams building on Milepost, answered with the reasoning behind the design rather than just the behaviour: see [docs/integrator-faq.md](docs/integrator-faq.md).
+
 ## TypeScript bindings
 
 `packages/` holds generated clients, checked in so a frontend can build without
