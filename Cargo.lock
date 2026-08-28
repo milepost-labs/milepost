@@ -1179,6 +1179,14 @@ dependencies = [
 ]
 
 [[package]]
+name = "milepost-attest-integration-example"
+version = "0.1.0"
+dependencies = [
+ "milepost-attest",
+ "soroban-sdk",
+]
+
+[[package]]
 name = "milepost-policy-spend"
 version = "0.1.0"
 dependencies = [
