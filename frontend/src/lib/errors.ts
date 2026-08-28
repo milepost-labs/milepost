@@ -78,7 +78,8 @@ const PROGRAM: Table = {
   35: { kind: 'blocked', message: 'Allocations can no longer be directed — the sweep window has opened.' },
   36: { kind: 'invalid', message: 'The payee batch size is too large.' },
   37: { kind: 'conflict', message: 'This application has been withdrawn.', action: 'Withdrawn applications cannot be reviewed, finalized, or re-applied.' },
-  39: { kind: 'blocked', message: 'This programme is paused.', action: 'The creator has temporarily halted contributions, applications, reviews, awards, and releases. Refunds remain available.' },
+  38: { kind: 'blocked', message: 'The median award is below this programme\u2019s minimum and cannot be finalised.', action: 'The application is unchanged and can still be finalised later if the minimum is met.' },
+  39: { kind: 'blocked', message: 'This programme is paused.', action: 'The creator has temporarily halted contributions, applications, reviews, awards and releases. Refunds and sweeps still work \u2014 wait for the creator to unpause before retrying.' },
 };
 
 const ATTEST: Table = {

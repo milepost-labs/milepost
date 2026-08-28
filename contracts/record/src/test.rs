@@ -54,7 +54,7 @@ fn first_credit_creates_standing() {
     assert_eq!(s.tranches, 1);
     assert_eq!(s.total_received, 500);
     assert_eq!(s.first_seen, 1_000);
-    assert_eq!(s.last_updated, 1_000);
+    assert_eq!(s.last_seen, 1_000);
     assert_ne!(
         s.history_root,
         BytesN::from_array(&f.env, &GENESIS),
@@ -75,7 +75,7 @@ fn aggregates_accumulate_across_tranches() {
 
     assert_eq!(s.tranches, 2);
     assert_eq!(s.total_received, 750);
-    assert_eq!(s.last_updated, 2_000);
+    assert_eq!(s.last_seen, 2_000);
     assert_eq!(s.first_seen, 0, "first_seen must not move");
 }
 

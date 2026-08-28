@@ -1,0 +1,106 @@
+name: smoke-test
+
+on:
+  schedule:
+    # Run daily at 06:00 UTC
+    - cron: "0 6 * * *"
+  workflow_dispatch:
+
+# Never block PRs. This only runs on a schedule or manual trigger.
+# Failures report which step broke and with what error.
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  smoke:
+    runs-on: ubuntu-latest
+    # Don't cancel on failure — we always want the diagnostic output.
+    continue-on-error: true
+    steps:
+      - uses: actions/checkout@v5
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: wasm32v1-none
+      - uses: stellar/stellar-cli@v27.1.0
+
+      - name: Build wasm
+        run: stellar contract build
+
+      - name: Deploy to testnet
+        id: deploy
+        run: ./scripts/deploy.sh testnet milepost-smoke-deployer
+        continue-on-error: true
+
+      - name: Seed scenario
+        id: seed
+        if: steps.deploy.outcome == 'success'
+        run: ./scripts/seed.sh testnet
+        continue-on-error: true
+
+      - name: Wait for application window
+        if: steps.seed.outcome == 'success'
+        run: |
+          SEED=deployments/testnet.seed.json
+          APPLY_DEADLINE=$(python3 -c "import json;print(json.load(open('$SEED'))['deadlines']['apply'])")
+          NOW=$(date +%s)
+          REMAINING=$((APPLY_DEADLINE - NOW + 3))
+          if (( REMAINING > 0 )); then
+            echo "Waiting ${REMAINING}s for application window to close..."
+            sleep "$REMAINING"
+          fi
+
+      - name: Run review stage
+        id: review
+        if: steps.seed.outcome == 'success'
+        run: ./scripts/seed-review.sh testnet
+        continue-on-error: true
+
+      - name: Assert final state
+        if: steps.review.outcome == 'success'
+        run: |
+          set -euo pipefail
+          SEED=deployments/testnet.seed.json
+          DEPLOYMENT=deployments/testnet.json
+
+          read_json() {
+            python3 -c "import json,sys;v=json.load(open(sys.argv[1]));[v:=v[k] for k in sys.argv[2:]];print(v)" "$@"
+          }
+
+          PROGRAMME=$(read_json "$SEED" programme)
+          REGISTRY=$(read_json "$DEPLOYMENT" registry)
+
+          # Verify the programme is registered
+          IS_PROG=$(stellar contract invoke --id "$REGISTRY" --source-account milepost-smoke-deployer --network testnet -- is_programme --programme "$PROGRAMME" 2>/dev/null || echo "false")
+          if [[ "$IS_PROG" != "true" ]]; then
+            echo "::error::Programme $PROGRAMME not found in registry"
+            exit 1
+          fi
+
+          # Verify total released is non-zero (at least one tranche was released)
+          TOTAL=$(stellar contract invoke --id "$PROGRAMME" --source-account milepost-smoke-deployer --network testnet -- total_released 2>/dev/null || echo "0")
+          if [[ "$TOTAL" == "0" ]]; then
+            echo "::error::No funds were released — tranche release failed"
+            exit 1
+          fi
+
+          echo "Smoke test passed: programme $PROGRAMME registered, total released: $TOTAL"
+
+      - name: Report
+        if: always()
+        run: |
+          echo "## Smoke Test Results" >> "$GITHUB_STEP_SUMMARY"
+          echo "" >> "$GITHUB_STEP_SUMMARY"
+          echo "| Step | Outcome |" >> "$GITHUB_STEP_SUMMARY"
+          echo "| --- | ---: |" >> "$GITHUB_STEP_SUMMARY"
+          echo "| Build | ${{ steps.build.outcome || 'skipped' }} |" >> "$GITHUB_STEP_SUMMARY"
+          echo "| Deploy | ${{ steps.deploy.outcome || 'skipped' }} |" >> "$GITHUB_STEP_SUMMARY"
+          echo "| Seed | ${{ steps.seed.outcome || 'skipped' }} |" >> "$GITHUB_STEP_SUMMARY"
+          echo "| Review | ${{ steps.review.outcome || 'skipped' }} |" >> "$GITHUB_STEP_SUMMARY"
+          echo "| Assert | ${{ steps.assert.outcome || 'skipped' }} |" >> "$GITHUB_STEP_SUMMARY"
+
+          if [[ "${{ steps.deploy.outcome }}" == "failure" ]]; then
+            echo "" >> "$GITHUB_STEP_SUMMARY"
+            echo "> **Note:** Deploy failure may indicate testnet unavailability." >> "$GITHUB_STEP_SUMMARY"
+            echo "> This is not necessarily a code issue — check testnet status at" >> "$GITHUB_STEP_SUMMARY"
+            echo "> https://stellar.org/developers/blog/category/testnet" >> "$GITHUB_STEP_SUMMARY"
+          fi

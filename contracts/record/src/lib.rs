@@ -211,7 +211,7 @@ impl Record {
                 tranches: 0,
                 total_received: 0,
                 first_seen: now,
-                last_updated: now,
+                last_seen: now,
                 history_root: BytesN::from_array(&env, &[0u8; 32]),
             });
 
@@ -231,7 +231,7 @@ impl Record {
             .checked_add(amount)
             .ok_or(Error::Overflow)?;
         standing.tranches += 1;
-        standing.last_updated = now;
+        standing.last_seen = now;
         standing.history_root = Self::fold(
             &env,
             &standing.history_root,

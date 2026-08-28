@@ -2,7 +2,10 @@ import { useEffect, useMemo, useState } from "react";
 import { Link } from "react-router-dom";
 import type { Phase, ProgrammeConfig } from "@milepost/program";
 import {
+  AlertTriangle,
   CalendarClock,
+  CheckCircle2,
+  FileText,
   Landmark,
   ShieldAlert,
   ShieldCheck,
@@ -10,7 +13,7 @@ import {
 } from "lucide-react";
 import { AsyncView } from "../components/state/AsyncStates";
 import { PausedBanner } from "../components/programme/PausedBanner";
-import { Badge, Card, PhaseBadge, Stat, Table } from "../components/ui";
+import { Badge, Button, Card, Field, PhaseBadge, Stat, Table } from "../components/ui";
 import { useSoroban } from "../context/useSoroban";
 import { useContractRead, useContractResult, useProgramme } from "../hooks";
 import { formatAmount, percentOf } from "../lib/amount";
@@ -112,6 +115,357 @@ function nextDeadline(
 
 function formatFeeBps(feeBps: number): string {
   return `${(feeBps / 100).toFixed(2)}%`;
+}
+
+/**
+ * Canonical JSON serialization matching docs/programme-metadata.md:
+ * object keys sorted lexicographically, no insignificant whitespace.
+ *
+ * This must agree with the Rust snippet in programme-metadata.md — both
+ * produce sorted compact JSON, so two clients that have the same document
+ * will compute the same hash.
+ */
+function canonicalize(value: unknown): string {
+  if (value === null || typeof value !== "object" || Array.isArray(value)) {
+    return JSON.stringify(value);
+  }
+  const obj = value as Record<string, unknown>;
+  const sorted = Object.keys(obj)
+    .sort()
+    .reduce<Record<string, unknown>>((acc, k) => {
+      acc[k] = obj[k];
+      return acc;
+    }, {});
+  // Recursively canonicalize nested objects.
+  return (
+    "{" +
+    Object.keys(sorted)
+      .map((k) => JSON.stringify(k) + ":" + canonicalize(sorted[k]))
+      .join(",") +
+    "}"
+  );
+}
+
+async function sha256Hex(text: string): Promise<string> {
+  const encoded = new TextEncoder().encode(text);
+  const hashBuffer = await crypto.subtle.digest("SHA-256", encoded);
+  return Array.from(new Uint8Array(hashBuffer))
+    .map((b) => b.toString(16).padStart(2, "0"))
+    .join("");
+}
+
+/** Required top-level fields per docs/programme-metadata.md. */
+const REQUIRED_FIELDS = [
+  "schema_version",
+  "name",
+  "description",
+  "vertical",
+  "contact",
+] as const;
+
+interface MetadataDoc {
+  schema_version: string;
+  name: string;
+  description: string;
+  vertical: string;
+  language?: string;
+  contact: { name: string; email: string; url?: string };
+  links?: Array<{ label: string; url: string }>;
+  [key: string]: unknown;
+}
+
+type MetadataState =
+  | { kind: "idle" }
+  | { kind: "fetching" }
+  | { kind: "mismatch"; fetchedHash: string; committedHash: string }
+  | { kind: "malformed"; reason: string }
+  | { kind: "unavailable"; reason: string }
+  | { kind: "ok"; doc: MetadataDoc; hash: string };
+
+/**
+ * Fetch a metadata document, hash it canonically, and compare against the
+ * on-chain commitment. The document is only displayed when hashes match —
+ * showing an unverified document would let anyone put words in the creator's
+ * mouth.
+ */
+function MetadataCard({ committedHash }: { committedHash: string }) {
+  const [urlInput, setUrlInput] = useState("");
+  const [state, setState] = useState<MetadataState>({ kind: "idle" });
+
+  const handleFetch = async () => {
+    const url = urlInput.trim();
+    if (!url) return;
+    setState({ kind: "fetching" });
+
+    let text: string;
+    try {
+      const res = await fetch(url);
+      if (!res.ok) {
+        setState({
+          kind: "unavailable",
+          reason: `Server returned ${res.status} ${res.statusText}.`,
+        });
+        return;
+      }
+      text = await res.text();
+    } catch (err) {
+      setState({
+        kind: "unavailable",
+        reason:
+          err instanceof Error
+            ? err.message
+            : "Could not fetch the document. Check the URL and your connection.",
+      });
+      return;
+    }
+
+    let parsed: unknown;
+    try {
+      parsed = JSON.parse(text);
+    } catch {
+      setState({
+        kind: "malformed",
+        reason: "The document is not valid JSON.",
+      });
+      return;
+    }
+
+    if (typeof parsed !== "object" || parsed === null || Array.isArray(parsed)) {
+      setState({ kind: "malformed", reason: "The document must be a JSON object." });
+      return;
+    }
+
+    // Validate required fields.
+    for (const field of REQUIRED_FIELDS) {
+      const val = (parsed as Record<string, unknown>)[field];
+      if (val === undefined || val === null || val === "") {
+        setState({
+          kind: "malformed",
+          reason: `Required field "${field}" is missing or empty.`,
+        });
+        return;
+      }
+    }
+
+    // Canonicalize and hash — must match the committed value exactly.
+    const canonical = canonicalize(parsed);
+    const fetchedHash = await sha256Hex(canonical);
+
+    if (fetchedHash !== committedHash) {
+      setState({ kind: "mismatch", fetchedHash, committedHash });
+      return;
+    }
+
+    setState({ kind: "ok", doc: parsed as MetadataDoc, hash: fetchedHash });
+  };
+
+  return (
+    <div style={{ display: "flex", flexDirection: "column", gap: "1.25rem" }}>
+      <p className="typo-text text-muted" style={{ margin: 0 }}>
+        The programme commits to a metadata document by hash. Paste the URL
+        where the document lives — IPFS gateway, Arweave, or the funder&rsquo;s
+        own site. The document is hashed and compared against the on-chain
+        commitment before anything is displayed; a mismatch is refused.
+      </p>
+
+      <div
+        style={{ display: "flex", alignItems: "flex-end", gap: "var(--space-3)" }}
+      >
+        <div style={{ flex: 1 }}>
+          <Field
+            label="Metadata document URL"
+            placeholder="https://…"
+            value={urlInput}
+            onChange={(e) => {
+              setUrlInput(e.target.value);
+              if (state.kind !== "idle") setState({ kind: "idle" });
+            }}
+          />
+        </div>
+        <Button
+          icon={<FileText size={16} />}
+          onClick={() => void handleFetch()}
+          disabled={!urlInput.trim() || state.kind === "fetching"}
+          loading={state.kind === "fetching"}
+          loadingLabel="Fetching…"
+        >
+          Fetch &amp; verify
+        </Button>
+      </div>
+
+      {state.kind === "unavailable" && (
+        <div
+          className="metadata-state metadata-state--warn"
+          role="alert"
+          aria-live="polite"
+        >
+          <AlertTriangle size={18} aria-hidden="true" />
+          <div>
+            <strong>Metadata unavailable.</strong>
+            <p className="typo-text text-muted" style={{ margin: "0.25rem 0 0" }}>
+              {state.reason} The on-chain commitment is{" "}
+              <code className="numeric">{committedHash}</code>. The programme is
+              fully functional — only the human-readable description is missing.
+            </p>
+          </div>
+        </div>
+      )}
+
+      {state.kind === "malformed" && (
+        <div
+          className="metadata-state metadata-state--error"
+          role="alert"
+          aria-live="polite"
+        >
+          <AlertTriangle size={18} aria-hidden="true" />
+          <div>
+            <strong>Document is malformed.</strong>
+            <p className="typo-text text-muted" style={{ margin: "0.25rem 0 0" }}>
+              {state.reason} A malformed document cannot be displayed as the
+              programme&rsquo;s description.
+            </p>
+          </div>
+        </div>
+      )}
+
+      {state.kind === "mismatch" && (
+        <div
+          className="metadata-state metadata-state--error"
+          role="alert"
+          aria-live="polite"
+        >
+          <AlertTriangle size={18} aria-hidden="true" />
+          <div>
+            <strong>Hash mismatch — document refused.</strong>
+            <p className="typo-text text-muted" style={{ margin: "0.25rem 0 0" }}>
+              The fetched document does not hash to the value the programme
+              committed to. It is not being displayed.
+            </p>
+            <dl
+              style={{
+                margin: "0.75rem 0 0",
+                display: "flex",
+                flexDirection: "column",
+                gap: "0.5rem",
+              }}
+            >
+              <div>
+                <dt
+                  style={{
+                    fontSize: "var(--text-xs)",
+                    textTransform: "uppercase",
+                    letterSpacing: "0.05em",
+                    color: "var(--text-muted)",
+                  }}
+                >
+                  Fetched document hash
+                </dt>
+                <dd className="numeric" style={{ margin: 0, fontSize: "var(--text-sm)", overflowWrap: "anywhere" }}>
+                  {state.fetchedHash}
+                </dd>
+              </div>
+              <div>
+                <dt
+                  style={{
+                    fontSize: "var(--text-xs)",
+                    textTransform: "uppercase",
+                    letterSpacing: "0.05em",
+                    color: "var(--text-muted)",
+                  }}
+                >
+                  On-chain commitment
+                </dt>
+                <dd className="numeric" style={{ margin: 0, fontSize: "var(--text-sm)", overflowWrap: "anywhere" }}>
+                  {state.committedHash}
+                </dd>
+              </div>
+            </dl>
+          </div>
+        </div>
+      )}
+
+      {state.kind === "ok" && (
+        <div
+          className="metadata-state metadata-state--ok"
+          role="status"
+          aria-live="polite"
+        >
+          <CheckCircle2 size={18} aria-hidden="true" />
+          <div style={{ flex: 1 }}>
+            <strong>Verified against on-chain commitment.</strong>
+
+            <dl className="metadata-doc">
+              <div className="metadata-doc__field">
+                <dt>Name</dt>
+                <dd>{state.doc.name}</dd>
+              </div>
+              <div className="metadata-doc__field">
+                <dt>Description</dt>
+                <dd>{state.doc.description}</dd>
+              </div>
+              <div className="metadata-doc__field">
+                <dt>Vertical</dt>
+                <dd>{state.doc.vertical}</dd>
+              </div>
+              {state.doc.language && (
+                <div className="metadata-doc__field">
+                  <dt>Language</dt>
+                  <dd>{state.doc.language}</dd>
+                </div>
+              )}
+              <div className="metadata-doc__field">
+                <dt>Contact</dt>
+                <dd>
+                  {state.doc.contact.name}
+                  {" — "}
+                  <a href={`mailto:${state.doc.contact.email}`}>
+                    {state.doc.contact.email}
+                  </a>
+                  {state.doc.contact.url && (
+                    <>
+                      {" "}
+                      &mdash;{" "}
+                      <a
+                        href={state.doc.contact.url}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                      >
+                        {state.doc.contact.url}
+                      </a>
+                    </>
+                  )}
+                </dd>
+              </div>
+              {state.doc.links && state.doc.links.length > 0 && (
+                <div className="metadata-doc__field">
+                  <dt>Links</dt>
+                  <dd>
+                    <ul className="metadata-doc__links">
+                      {state.doc.links.map((link, i) => (
+                        <li key={i}>
+                          <a
+                            href={link.url}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                          >
+                            {link.label}
+                          </a>
+                        </li>
+                      ))}
+                    </ul>
+                  </dd>
+                </div>
+              )}
+              <div className="metadata-doc__field">
+                <dt>Schema version</dt>
+                <dd className="numeric">{state.doc.schema_version}</dd>
+              </div>
+            </dl>
+          </div>
+        </div>
+      )}
+    </div>
+  );
 }
 
 export const ProgrammeDetail = () => {
@@ -578,6 +932,14 @@ export const ProgrammeDetail = () => {
                   </dd>
                 </div>
               </dl>
+            )}
+          </AsyncView>
+        </Card>
+
+        <Card title="Programme metadata">
+          <AsyncView {...config} onRetry={config.refetch} contract="program">
+            {(value) => (
+              <MetadataCard committedHash={value.metadata_hash.toString("hex")} />
             )}
           </AsyncView>
         </Card>

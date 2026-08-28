@@ -118,6 +118,11 @@ export const FinalizeAwards = () => {
   const remainingAfter = budget.data != null && granted != null ? budget.data - granted : null;
   const insufficient = remainingAfter != null && remainingAfter < 0n;
 
+  // Minimum award from config — 0n means no minimum is set.
+  const minimumAward = config.data?.minimum_award ?? 0n;
+  const belowMinimum =
+    minimumAward > 0n && granted !== null && granted < minimumAward;
+
   const selectedMode = modeTag ? ({ tag: modeTag, values: undefined } satisfies Mode) : null;
   const needsVerifiedPayee = selectedMode?.tag === 'Direct';
   const payee = needsVerifiedPayee ? payeeToVerify : applicant;
@@ -187,6 +192,21 @@ export const FinalizeAwards = () => {
             <span className="stat-value">
               <AsyncView {...config} onRetry={config.refetch}>
                 {(value) => `${value.quorum} votes`}
+              </AsyncView>
+            </span>
+          </div>
+        </div>
+        <div className="stat-card glass-panel">
+          <div className="stat-icon"><Coins size={24} /></div>
+          <div className="stat-content">
+            <span className="stat-label">Minimum Award</span>
+            <span className="stat-value">
+              <AsyncView {...config} onRetry={config.refetch}>
+                {(value) =>
+                  value.minimum_award > 0n
+                    ? formatAmount(value.minimum_award, { asset: 'XLM' })
+                    : 'None'
+                }
               </AsyncView>
             </span>
           </div>
@@ -376,15 +396,21 @@ export const FinalizeAwards = () => {
                       )}
 
                       {granted !== null && budget.data !== null && (
-                        <div className={`budget-note ${insufficient ? 'budget-note--error' : 'budget-note--ok'}`}>
+                        <div className={`budget-note ${insufficient || belowMinimum ? 'budget-note--error' : 'budget-note--ok'}`}>
                           <div>
-                            <span className="detail-label">Computed award</span>
+                            <span className="detail-label">Computed award (median)</span>
                             <span className="detail-value">{formatAmount(granted, { asset: 'XLM' })}</span>
                           </div>
                           <div>
                             <span className="detail-label">Remaining budget after award</span>
                             <span className="detail-value">{formatAmount(remainingAfter!, { asset: 'XLM' })}</span>
                           </div>
+                          {minimumAward > 0n && (
+                            <div>
+                              <span className="detail-label">Programme minimum award</span>
+                              <span className="detail-value">{formatAmount(minimumAward, { asset: 'XLM' })}</span>
+                            </div>
+                          )}
                         </div>
                       )}
 
@@ -392,6 +418,23 @@ export const FinalizeAwards = () => {
                         <p className="notice notice--blocked">
                           <AlertTriangle size={16} /> This award exceeds the remaining budget. Awards settle in the order they are finalised — first finalised, first funded.
                         </p>
+                      )}
+
+                      {belowMinimum && granted !== null && (
+                        <div className="notice notice--blocked" role="alert">
+                          <p style={{ margin: '0 0 0.5rem', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                            <AlertTriangle size={16} />
+                            <strong>Award is below the programme minimum and cannot be finalised.</strong>
+                          </p>
+                          <p style={{ margin: '0 0 0.25rem', fontSize: '0.875rem' }}>
+                            Median: <strong>{formatAmount(granted, { asset: 'XLM' })}</strong>
+                            {' '}&mdash; Minimum: <strong>{formatAmount(minimumAward, { asset: 'XLM' })}</strong>
+                            {' '}&mdash; Shortfall: <strong>{formatAmount(minimumAward - granted, { asset: 'XLM' })}</strong>
+                          </p>
+                          <p style={{ margin: 0, fontSize: '0.875rem', color: 'var(--color-muted)' }}>
+                            The application is unchanged and stays finalisable — if reviewers add higher votes and the median rises above the minimum, this call will succeed.
+                          </p>
+                        </div>
                       )}
 
                       {wallet.status !== 'connected' && (
@@ -405,7 +448,7 @@ export const FinalizeAwards = () => {
                           icon={<ArrowRight size={18} />}
                           loading={finalizeTx.busy}
                           loadingLabel="Finalising…"
-                          disabled={!payeeReady || insufficient || wallet.status !== 'connected'}
+                          disabled={!payeeReady || insufficient || belowMinimum || wallet.status !== 'connected'}
                           onClick={finalize}
                         >
                           Finalize award
@@ -415,15 +458,34 @@ export const FinalizeAwards = () => {
                         )}
                       </div>
 
-                      {finalizeTx.error && (
-                        <p
-                          className={`notice ${finalizeTx.error.kind === 'none' ? '' : 'notice--blocked'}`}
-                          role="alert"
-                        >
-                          {finalizeTx.error.message}
-                          {finalizeTx.error.action && <> {finalizeTx.error.action}</>}
-                        </p>
-                      )}
+                      {finalizeTx.error && (() => {
+                        const err = finalizeTx.error;
+                        // BelowMinimumAward (38) gets its own breakdown — the generic
+                        // message is enough for every other error.
+                        const isBelowMin = err.code === 38;
+                        return (
+                          <div
+                            className={`notice ${err.kind === 'none' ? '' : 'notice--blocked'}`}
+                            role="alert"
+                          >
+                            <p style={{ margin: 0, fontWeight: 600 }}>
+                              {err.message}
+                            </p>
+                            {isBelowMin && granted !== null && minimumAward > 0n && (
+                              <p style={{ margin: '0.5rem 0 0.25rem', fontSize: '0.875rem' }}>
+                                Median: <strong>{formatAmount(granted, { asset: 'XLM' })}</strong>
+                                {' '}&mdash; Minimum: <strong>{formatAmount(minimumAward, { asset: 'XLM' })}</strong>
+                                {' '}&mdash; Shortfall: <strong>{formatAmount(minimumAward - granted, { asset: 'XLM' })}</strong>
+                              </p>
+                            )}
+                            {err.action && (
+                              <p style={{ margin: '0.25rem 0 0', fontSize: '0.875rem', color: 'var(--color-muted)' }}>
+                                {err.action}
+                              </p>
+                            )}
+                          </div>
+                        );
+                      })()}
 
                       {settledAward && !app.finalized && (
                         <AwardResultCard title="Award finalised" award={settledAward} />

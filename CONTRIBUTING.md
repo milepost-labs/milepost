@@ -54,6 +54,29 @@ npm run dev
 ```
 Open [http://localhost:5173](http://localhost:5173/) to view the app.
 
+**Pre-commit hooks (opt-in)**
+To automatically check formatting (`rustfmt`) and linting (`eslint`) on changed files before each commit:
+```bash
+./scripts/install-hooks.sh
+```
+The hook runs only on staged files for speed. If you need to bypass it in an emergency, use `git commit --no-verify`.
+
+**Development Container**
+If you use VS Code or GitHub Codespaces, you can open the repository in a pre-configured Dev Container that includes all pinned toolchains (Rust stable with `wasm32v1-none`, Stellar CLI 27.1.0, and Node.js 24):
+1. Open the project in VS Code.
+2. When prompted, select **Reopen in Container** (or run `Dev Containers: Reopen in Container` from the Command Palette).
+Tool versions in `.devcontainer/Dockerfile` match `.github/workflows/ci.yml`. When updating toolchain versions, update both.
+
+**Task Runner (`just` or `make`)**
+Common commands and workflows are available via `just` (or standard `make`):
+* `just build` / `make build` — Build contract WASM artifacts
+* `just test` / `make test` — Run workspace tests (encodes WASM build order dependency)
+* `just lint` / `make lint` — Run `cargo fmt` check and `cargo clippy` (encodes WASM build order dependency)
+* `just frontend-build` / `make frontend-build` — Build TypeScript packages dist and frontend app
+* `just deploy` / `make deploy` — Deploy contracts using `./scripts/deploy.sh`
+* `just seed` / `make seed` — Seed protocol scenario data using `./scripts/seed.sh`
+* `just` / `make help` — List all available tasks
+
 ---
 
 ## 3. Running Frontend Checks

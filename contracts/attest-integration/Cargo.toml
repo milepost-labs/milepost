@@ -1,6 +1,6 @@
 [package]
-name = "milepost-registry"
-description = "Factory and protocol configuration for Milepost programmes"
+name = "milepost-attest-integration-example"
+description = "Minimal example: gating an action on an attestation"
 version.workspace = true
 edition.workspace = true
 rust-version.workspace = true
@@ -13,10 +13,10 @@ doctest = false
 
 [dependencies]
 soroban-sdk = { workspace = true }
-milepost-types = { workspace = true }
 
 [dev-dependencies]
 soroban-sdk = { workspace = true, features = ["testutils"] }
 milepost-attest = { path = "../attest", features = ["testutils"] }
-milepost-record = { path = "../record", features = ["testutils"] }
-milepost-test-utils = { path = "../../crates/test-utils", features = ["testutils"] }
+
+[features]
+testutils = ["soroban-sdk/testutils"]

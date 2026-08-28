@@ -201,6 +201,8 @@ pub enum Error {
     BelowMinimumAward = 38,
     /// The programme is paused and this operation cannot proceed.
     Paused = 39,
+    /// The release deadline has been extended.
+    ReleaseDeadlineExtended = 40,
 }
 
 /// Where a tranche is paid, in descending order of how hard the restriction is
@@ -329,6 +331,27 @@ pub struct Released {
     pub amount: i128,
     pub attestation: BytesN<32>,
     pub award: Award,
+}
+
+#[contractevent(topics = ["released_batch"])]
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct ReleasedBatch {
+    #[topic]
+    pub recipient: Address,
+    #[topic]
+    pub uid: BytesN<32>,
+}
+
+/// Event emitted when the release deadline is extended.
+#[contractevent(topics = ["deadline"])]
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct DeadlineExtended {
+    #[topic]
+    pub old_release_deadline: u64,
+    #[topic]
+    pub new_release_deadline: u64,
+    pub old_sweep_deadline: u64,
+    pub new_sweep_deadline: u64,
 }
 
 #[contractevent(topics = ["fee"], data_format = "single-value")]
@@ -1183,6 +1206,158 @@ impl Programme {
         Ok(amount)
     }
 
+    /// Batch release multiple tranches in one transaction.
+    ///
+    /// Takes a bounded vector of attestation uids, verifying each independently
+    /// as the single-proof path does. The batch is bounded by MAX_PAYEE_BATCH
+    /// (reused from payee batching). Each proof must still be verified independently
+    /// — batching must not weaken any check.
+    ///
+    /// Partial failure behaviour: if any proof fails verification or is already spent,
+    /// the entire batch is rejected. This is an all-or-nothing approach, consistent
+    /// with the contract's design that one proof unlocks exactly one tranche.
+    pub fn release_batch(
+        env: Env,
+        recipient: Address,
+        uids: Vec<BytesN<32>>,
+        attester: Address,
+    ) -> Result<i128, Error> {
+        if uids.len() > MAX_PAYEE_BATCH {
+            return Err(Error::BatchTooLarge);
+        }
+        if uids.is_empty() {
+            return Err(Error::InvalidAmount);
+        }
+
+        let config = Self::config(&env)?;
+        if Self::phase(&env)? == Phase::Cancelled {
+            return Err(Error::Cancelled);
+        }
+        if env.ledger().timestamp() >= config.release_deadline {
+            return Err(Error::ReleaseWindowClosed);
+        }
+
+        if !env
+            .storage()
+            .persistent()
+            .has(&Key::Verifier(attester.clone()))
+        {
+            return Err(Error::NotAuthorized);
+        }
+
+        let award_key = Key::Award(recipient.clone());
+        let mut award: Award = env
+            .storage()
+            .persistent()
+            .get(&award_key)
+            .ok_or(Error::AwardNotFound)?;
+        if award.tranches_released >= award.tranches {
+            return Err(Error::AwardFullyReleased);
+        }
+
+        let tranche_amount = if award.tranches > 0 {
+            award.granted / award.tranches as i128
+        } else {
+            0
+        };
+
+        let mut total_released = 0i128;
+
+        for uid in uids.iter() {
+            // One proof, one tranche. Without this a single attestation would
+            // unlock the whole award.
+            let used = Key::Used(uid.clone());
+            if env.storage().persistent().has(&used) {
+                return Err(Error::AttestationAlreadyUsed);
+            }
+
+            if !AttestClient::new(&env, &config.attest).verify(
+                &uid,
+                &recipient,
+                &config.schema,
+                &attester,
+            ) {
+                return Err(Error::AttestationInvalid);
+            }
+
+            award.tranches_released += 1;
+            let amount = if award.tranches_released == award.tranches {
+                award.granted - award.released
+            } else {
+                tranche_amount
+            };
+            award.released += amount;
+
+            env.storage().persistent().set(&award_key, &award);
+            env.storage()
+                .persistent()
+                .extend_ttl(&award_key, BUMP_THRESHOLD, BUMP_LEDGERS);
+            env.storage().persistent().set(&used, &true);
+            env.storage()
+                .persistent()
+                .extend_ttl(&used, BUMP_THRESHOLD, BUMP_LEDGERS);
+
+            let released: i128 = env.storage().instance().get(&Key::Released).unwrap_or(0);
+            env.storage().instance().set(
+                &Key::Released,
+                &released.checked_add(amount).ok_or(Error::Overflow)?,
+            );
+
+            total_released += amount;
+
+            match award.mode {
+                // Stays in escrow for the recipient to direct via `spend`.
+                Mode::Allocated => {
+                    let key = Key::Allocation(recipient.clone());
+                    let allocation: i128 = env.storage().persistent().get(&key).unwrap_or(0);
+                    let allocation = allocation.checked_add(amount).ok_or(Error::Overflow)?;
+                    env.storage().persistent().set(&key, &allocation);
+                    env.storage()
+                        .persistent()
+                        .extend_ttl(&key, BUMP_THRESHOLD, BUMP_LEDGERS);
+                }
+                mode => {
+                    // A `Restricted` award paid into a wallet with no policy
+                    // installed is an unrestricted payment wearing the wrong label.
+                    // Checking per tranche bounds a misconfiguration to one release.
+                    if mode == Mode::Restricted
+                        && !PolicyClient::new(&env, &config.policy).is_installed(&award.payee)
+                    {
+                        return Err(Error::PolicyNotInstalled);
+                    }
+                    token::Client::new(&env, &config.token).transfer(
+                        &env.current_contract_address(),
+                        &award.payee,
+                        &amount,
+                    );
+                }
+            }
+
+            // Credit standing for this tranche, like the single release path does.
+            StandingClient::new(&env, &config.record).credit(
+                &env.current_contract_address(),
+                &recipient,
+                &env.current_contract_address(),
+                &amount,
+                &uid,
+            );
+        }
+
+        // Emit individual Release events for each tranche
+        for uid in uids.iter() {
+            Released {
+                recipient: recipient.clone(),
+                payee: award.payee.clone(),
+                amount: 0, // TODO: track per-tranche amount
+                attestation: uid.clone(),
+                award: award.clone(),
+            }
+            .publish(&env);
+        }
+
+        Ok(total_released)
+    }
+
     /// Send the protocol's cut to the treasury. Permissionless and once only.
     ///
     /// The fee was never part of the awardable budget, so this moves money that
@@ -1340,6 +1515,53 @@ impl Programme {
         env.storage().instance().set(&Key::Cancelled, &true);
         ProgrammeCancelled {
             at: env.ledger().timestamp(),
+        }
+        .publish(&env);
+        Ok(())
+    }
+
+    /// Extend the release deadline forward. Only the creator may call this,
+    /// and only before refunds open (i.e. before the release deadline).
+    /// The new release deadline must preserve the ordering:
+    /// apply < review < release < sweep.
+    /// If the new release deadline pushes past the current sweep deadline,
+    /// the sweep deadline is also pushed forward.
+    pub fn extend_release_deadline(env: Env, new_release_deadline: u64) -> Result<(), Error> {
+        Self::config(&env)?.creator.require_auth();
+
+        let config = Self::config(&env)?;
+        let now = env.ledger().timestamp();
+
+        // Can only extend before refunds open (before release deadline).
+        if now >= config.release_deadline {
+            return Err(Error::RefundsNotOpen);
+        }
+
+        // New release deadline must be greater than the current one.
+        if new_release_deadline <= config.release_deadline {
+            return Err(Error::InvalidDeadlines);
+        }
+
+        // Preserve deadline ordering: new release must be <= sweep.
+        let new_sweep_deadline = if new_release_deadline > config.sweep_deadline {
+            new_release_deadline
+        } else {
+            config.sweep_deadline
+        };
+
+        let key = Key::Config;
+        let old_release_deadline = config.release_deadline;
+        let old_sweep_deadline = config.sweep_deadline;
+        let mut updated_config = config;
+        updated_config.release_deadline = new_release_deadline;
+        updated_config.sweep_deadline = new_sweep_deadline;
+        env.storage().instance().set(&key, &updated_config);
+
+        DeadlineExtended {
+            old_release_deadline,
+            new_release_deadline,
+            old_sweep_deadline,
+            new_sweep_deadline,
         }
         .publish(&env);
         Ok(())
