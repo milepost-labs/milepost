@@ -231,6 +231,10 @@ For a full list of error codes, causes, and recommended actions across all five 
 
 Recurring questions from teams building on Milepost, answered with the reasoning behind the design rather than just the behaviour: see [docs/integrator-faq.md](docs/integrator-faq.md).
 
+## Upgrade and compatibility
+
+What's guaranteed stable across releases, how a breaking change is signalled, and what to do when one lands: see [docs/upgrade-and-compatibility.md](docs/upgrade-and-compatibility.md).
+
 ## TypeScript bindings
 
 `packages/` holds generated clients, checked in so a frontend can build without
