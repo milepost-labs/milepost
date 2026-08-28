@@ -20,3 +20,5 @@ smart-wallet-interface = { git = "https://github.com/stellar/passkey-kit", rev =
 
 [dev-dependencies]
 soroban-sdk = { workspace = true, features = ["testutils"] }
+milepost-test-utils = { path = "../../crates/test-utils", features = ["testutils"] }
+proptest = "1"

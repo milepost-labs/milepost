@@ -61,9 +61,33 @@ jobs:
         uses: softprops/action-gh-release@v2
         with:
           name: ${{ github.ref_name }}
-          body_path: CHANGES.md
           # A `-` in the tag (e.g. v0.1.0-rc.1) marks a pre-release.
+          body_path: CHANGES.md
           prerelease: ${{ contains(github.ref_name, '-') }}
           files: |
             dist/*.wasm
             dist/checksums.txt
+
+      - name: Setup Node for NPM publish
+        uses: actions/setup-node@v5
+        with:
+          node-version: 24
+          registry-url: 'https://registry.npmjs.org'
+          cache: npm
+          cache-dependency-path: "**/package-lock.json"
+
+      - name: Publish TypeScript bindings to npm
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+        run: |
+          set -euo pipefail
+          VERSION=${GITHUB_REF_NAME#v}
+          for p in attest policy-spend program record registry; do
+            echo "Publishing packages/$p@$VERSION"
+            cd "packages/$p"
+            npm version "$VERSION" --no-git-tag-version
+            npm ci
+            npm run build
+            npm publish --access public
+            cd ../..
+          done

@@ -223,9 +223,20 @@ awards, and a real attestation under a restricted schema.
 
 Accounts and ids land in `deployments/<network>.seed.json`.
 
+For prerequisites, why the steps above are ordered the way they are, how to
+verify each one, and what to do when one fails partway, see
+[docs/deployment-runbook.md](docs/deployment-runbook.md).
+
 ## Error Reference
 
 For a full list of error codes, causes, and recommended actions across all five contracts, see [docs/error-code-reference.md](docs/error-code-reference.md).
+
+## Learn more
+
+- [TTL Strategy](docs/ttl-strategy.md)
+- [Programme Metadata](docs/programme-metadata.md)
+- [Error Codes](docs/error-code-reference.md)
+- [Security Model and Trust Assumptions](docs/security-model.md)
 
 ## TypeScript bindings
 
@@ -244,7 +255,11 @@ changes.
 - **Event query module.** Listings cannot be reconstructed yet.
 - **`Restricted` end to end.** `policy_spend` is tested standalone but has never
   been wired to a live passkey wallet.
+## Security
+
+For security vulnerability reporting guidelines and scope, see [SECURITY.md](SECURITY.md).
 
 ## Licence
 
 Apache-2.0
+
