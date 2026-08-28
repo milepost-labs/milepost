@@ -255,3 +255,188 @@ fn programme_address_is_deterministic() {
         f.client.programme_address(&0)
     );
 }
+
+#[test]
+fn test_full_cross_contract_integration() {
+    let env = Env::default();
+    env.mock_all_auths();
+
+    // Protocol participant accounts
+    let admin = Address::generate(&env);
+    let treasury = Address::generate(&env);
+    let policy = Address::generate(&env);
+    let creator = Address::generate(&env);
+    let donor = Address::generate(&env);
+    let applicant = Address::generate(&env);
+    let reviewer1 = Address::generate(&env);
+    let reviewer2 = Address::generate(&env);
+    let reviewer3 = Address::generate(&env);
+    let verifier = Address::generate(&env);
+    let payee = Address::generate(&env);
+
+    // 1. Deploy Attestation Registry
+    let attest_id = env.register(milepost_attest::Attest, ());
+    let attest_client = milepost_attest::AttestClient::new(&env, &attest_id);
+
+    // Register schema for milestone attestations
+    let schema_uid = attest_client.register_schema(
+        &verifier,
+        &String::from_str(&env, "Milestone Completion Schema"),
+        &true,
+        &false,
+    );
+
+    // 2. Deploy Record Contract (Standing)
+    let record_id = env.register(milepost_record::Record, (admin.clone(),));
+    let record_client = milepost_record::RecordClient::new(&env, &record_id);
+
+    // 3. Deploy Registry Contract
+    let program_wasm = env.deployer().upload_contract_wasm(programme::WASM);
+    let fee_bps = 1_000u32; // 10% fee
+    let registry_id = env.register(
+        Registry,
+        (
+            admin.clone(),
+            treasury.clone(),
+            attest_id.clone(),
+            record_id.clone(),
+            policy.clone(),
+            fee_bps,
+            program_wasm,
+        ),
+    );
+    let registry_client = RegistryClient::new(&env, &registry_id);
+
+    // Hand admin of Record contract over to Registry
+    record_client.set_admin(&registry_id);
+    assert_eq!(record_client.get_admin(), registry_id);
+
+    // 4. Acceptance Criterion Assertion: A programme deployed outside registry cannot write standing
+    let impostor = Address::generate(&env);
+    assert!(!record_client.is_writer(&impostor));
+    assert!(!registry_client.is_programme(&impostor));
+
+    // 5. Deploy Stellar Asset Token & Mint to Donor
+    let token_admin = Address::generate(&env);
+    let token_contract = env.register_stellar_asset_contract_v2(token_admin);
+    let token_address = token_contract.address();
+    let token_asset_client = soroban_sdk::token::StellarAssetClient::new(&env, &token_address);
+    let token_client = soroban_sdk::token::Client::new(&env, &token_address);
+
+    let contribution_amount = 100_000i128;
+    token_asset_client.mint(&donor, &contribution_amount);
+    assert_eq!(token_client.balance(&donor), contribution_amount);
+
+    // 6. Registry deploys Programme
+    let apply_deadline = 10_000u64;
+    let review_deadline = 20_000u64;
+    let release_deadline = 30_000u64;
+    let sweep_deadline = 40_000u64;
+    let quorum = 2u32;
+    let tranches = 2u32;
+    let metadata_hash = BytesN::from_array(&env, &[1u8; 32]);
+    let reviewers = vec![&env, reviewer1.clone(), reviewer2.clone(), reviewer3.clone()];
+    let verifiers = vec![&env, verifier.clone()];
+    let prog_name = String::from_str(&env, "Community Health Grant 2026");
+
+    let prog_address = registry_client.create(
+        &creator,
+        &token_address,
+        &schema_uid,
+        &apply_deadline,
+        &review_deadline,
+        &release_deadline,
+        &sweep_deadline,
+        &quorum,
+        &tranches,
+        &metadata_hash,
+        &reviewers,
+        &verifiers,
+        &prog_name,
+    );
+
+    // Assert registry deployment trust chain: Programme is recognized by Registry and authorized in Record
+    assert!(registry_client.is_programme(&prog_address));
+    assert!(record_client.is_writer(&prog_address));
+
+    let prog_client = programme::Client::new(&env, &prog_address);
+
+    // 7. Donors contribute to the Programme
+    prog_client.contribute(&donor, &contribution_amount);
+    assert_eq!(token_client.balance(&donor), 0);
+    assert_eq!(token_client.balance(&prog_address), contribution_amount);
+
+    // 8. Applicant applies
+    let requested_amount = 50_000i128;
+    prog_client.apply(&applicant, &requested_amount, &metadata_hash);
+
+    // 9. Reviewers vote during review phase
+    env.ledger().set_timestamp(15_000);
+    prog_client.review(&reviewer1, &applicant, &40_000);
+    prog_client.review(&reviewer2, &applicant, &50_000);
+
+    // 10. Finalize application into Award (Permissionless settlement at median vote)
+    prog_client.allow_payee(&payee);
+    let award = prog_client.finalize(&applicant, &payee, &programme::Mode::Open);
+    let granted_amount = 40_000i128; // Median of quorum 2 votes [40_000, 50_000]
+    assert_eq!(award.granted, granted_amount);
+    assert_eq!(award.tranches, 2);
+
+    // 11. Tranche 1: Trusted verifier attests milestone & Programme releases funds
+    let attestation1_data = BytesN::from_array(&env, &[10u8; 32]);
+    let attestation1_uid = attest_client.attest(
+        &verifier,
+        &schema_uid,
+        &applicant,
+        &attestation1_data,
+        &None,
+    );
+    assert!(attest_client.verify(&attestation1_uid, &applicant, &schema_uid, &verifier));
+
+    let released1 = prog_client.release(&applicant, &attestation1_uid, &verifier);
+    assert_eq!(released1, 20_000);
+    assert_eq!(token_client.balance(&payee), 20_000);
+
+    // Verify recipient standing credited in Record contract
+    let standing1 = record_client.get(&applicant);
+    assert_eq!(standing1.subject, applicant);
+    assert_eq!(standing1.tranches, 1);
+    assert_eq!(standing1.total_received, 20_000);
+
+    // 12. Tranche 2: Second milestone attestation & release
+    let attestation2_data = BytesN::from_array(&env, &[20u8; 32]);
+    let attestation2_uid = attest_client.attest(
+        &verifier,
+        &schema_uid,
+        &applicant,
+        &attestation2_data,
+        &None,
+    );
+    let released2 = prog_client.release(&applicant, &attestation2_uid, &verifier);
+    assert_eq!(released2, 20_000);
+    assert_eq!(token_client.balance(&payee), 40_000);
+
+    // Verify recipient standing updated
+    let standing2 = record_client.get(&applicant);
+    assert_eq!(standing2.tranches, 2);
+    assert_eq!(standing2.total_received, 40_000);
+
+    // 13. Protocol Fee Sweep & Accounting Invariant Assertion
+    env.ledger().set_timestamp(45_000);
+    prog_client.sweep_fee();
+
+    let expected_fee = 10_000i128; // 10% of 100_000
+    assert_eq!(token_client.balance(&treasury), expected_fee);
+
+    let payee_balance = token_client.balance(&payee);
+    let treasury_balance = token_client.balance(&treasury);
+    let remaining_contract_balance = token_client.balance(&prog_address);
+
+    // Assert: Money in equals money out plus fees plus remaining unallocated balance
+    assert_eq!(
+        contribution_amount,
+        payee_balance + treasury_balance + remaining_contract_balance,
+        "Money in equals money out plus fees and remaining unallocated balance"
+    );
+}
+
