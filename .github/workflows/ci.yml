@@ -55,6 +55,28 @@ jobs:
             printf '| %s | %s |\n' "$(basename "$f" .wasm)" "$(stat -c%s "$f")" >> "$GITHUB_STEP_SUMMARY"
           done
 
+      - name: Enforce contract size budgets
+        run: ./scripts/check-sizes.sh >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Install cargo-llvm-cov
+        run: cargo install cargo-llvm-cov --locked
+
+      - name: Coverage
+        run: |
+          cargo llvm-cov --all-features --summary-file /tmp/coverage-summary.txt
+          echo "### Coverage report" >> "$GITHUB_STEP_SUMMARY"
+          echo '```' >> "$GITHUB_STEP_SUMMARY"
+          cat /tmp/coverage-summary.txt >> "$GITHUB_STEP_SUMMARY"
+          echo '```' >> "$GITHUB_STEP_SUMMARY"
+          # Fail if total coverage drops below threshold (update after recording
+          # the current figure in your PR description).
+          TOTAL=$(grep -oP 'TOTAL.*\K[0-9.]+(?=%)' /tmp/coverage-summary.txt || echo "0")
+          THRESHOLD="${COVERAGE_THRESHOLD:-70}"
+          if (( $(echo "$TOTAL < $THRESHOLD" | bc -l) )); then
+            echo "::error::Coverage $TOTAL% is below the $THRESHOLD% threshold"
+            exit 1
+          fi
+
   frontend:
     runs-on: ubuntu-latest
     steps:
