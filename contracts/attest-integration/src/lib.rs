@@ -75,12 +75,7 @@ impl GatedAction {
         schema: BytesN<32>,
         attester: Address,
     ) -> Result<(), Error> {
-        let valid = AttestClient::new(&env, &attest).verify(
-            &uid,
-            &subject,
-            &schema,
-            &attester,
-        );
+        let valid = AttestClient::new(&env, &attest).verify(&uid, &subject, &schema, &attester);
         if valid {
             Ok(())
         } else {

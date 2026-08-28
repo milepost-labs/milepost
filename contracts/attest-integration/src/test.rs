@@ -46,18 +46,14 @@ fn register_schema(f: &Fixture) -> BytesN<32> {
 
 fn make_attestation(f: &Fixture, schema: &BytesN<32>) -> BytesN<32> {
     let client = milepost_attest::AttestClient::new(&f.env, &f.attest_id);
-    client.attest(
-        &f.authority,
-        schema,
-        &f.subject,
-        &hash(&f.env, 42),
-        &None,
-    )
+    client.attest(&f.authority, schema, &f.subject, &hash(&f.env, 42), &None)
 }
 
 fn gated(f: &Fixture, uid: &BytesN<32>, schema: &BytesN<32>, attester: &Address) -> bool {
     let client = GatedActionClient::new(&f.env, &f.gated_id);
-    client.try_gated_action(&f.attest_id, uid, &f.subject, schema, attester).is_ok()
+    client
+        .try_gated_action(&f.attest_id, uid, &f.subject, schema, attester)
+        .is_ok()
 }
 
 // ---- acceptance ----
@@ -89,9 +85,9 @@ fn wrong_subject_is_rejected() {
 
     let client = GatedActionClient::new(&f.env, &f.gated_id);
     let other_subject = Address::generate(&f.env);
-    assert!(
-        client.try_gated_action(&f.attest_id, &uid, &other_subject, &schema, &f.authority).is_err()
-    );
+    assert!(client
+        .try_gated_action(&f.attest_id, &uid, &other_subject, &schema, &f.authority)
+        .is_err());
 }
 
 #[test]
