@@ -227,6 +227,13 @@ impl Registry {
         Ok(())
     }
 
+    /// Upgrade the registry contract itself.
+    pub fn upgrade(env: Env, new_wasm_hash: BytesN<32>) -> Result<(), Error> {
+        let _ = Self::admin_config(&env)?;
+        env.deployer().update_current_contract_wasm(new_wasm_hash);
+        Ok(())
+    }
+
     pub fn set_fee(env: Env, fee_bps: u32) -> Result<(), Error> {
         if fee_bps > MAX_FEE_BPS {
             return Err(Error::FeeTooHigh);

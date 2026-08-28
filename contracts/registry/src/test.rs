@@ -1,6 +1,7 @@
 #![cfg(test)]
 
 use super::*;
+use milepost_test_utils::schedule::*;
 use soroban_sdk::{testutils::Address as _, vec, Env};
 
 // Requires the programme wasm to exist, so `cargo build --target wasm32v1-none
@@ -9,12 +10,6 @@ use soroban_sdk::{testutils::Address as _, vec, Env};
 mod programme {
     soroban_sdk::contractimport!(file = "../../target/wasm32v1-none/release/milepost_program.wasm");
 }
-
-const FEE_BPS: u32 = 1_000;
-const APPLY_DEADLINE: u64 = 10_000;
-const REVIEW_DEADLINE: u64 = 20_000;
-const RELEASE_DEADLINE: u64 = 30_000;
-const SWEEP_DEADLINE: u64 = 40_000;
 
 struct Fixture {
     env: Env,
@@ -26,8 +21,7 @@ struct Fixture {
 }
 
 fn setup() -> Fixture {
-    let env = Env::default();
-    env.mock_all_auths();
+    let env = milepost_test_utils::new_test_env();
 
     let admin = Address::generate(&env);
     let treasury = Address::generate(&env);
@@ -54,8 +48,7 @@ fn setup() -> Fixture {
     );
     record.set_admin(&id);
 
-    let issuer = Address::generate(&env);
-    let token = env.register_stellar_asset_contract_v2(issuer).address();
+    let token = milepost_test_utils::register_token(&env);
 
     let client = RegistryClient::new(&env, &id);
     Fixture {

@@ -1174,6 +1174,7 @@ checksum = "cf8baf1c55e62ffcace7a9f06f4bd9cd3f0c4beb022d3b367256b91b87513d98"
 name = "milepost-attest"
 version = "0.1.0"
 dependencies = [
+ "milepost-test-utils",
  "soroban-sdk",
 ]
 
@@ -1181,6 +1182,8 @@ dependencies = [
 name = "milepost-policy-spend"
 version = "0.1.0"
 dependencies = [
+ "milepost-test-utils",
+ "proptest",
  "smart-wallet-interface",
  "soroban-sdk",
 ]
@@ -1191,6 +1194,7 @@ version = "0.1.0"
 dependencies = [
  "milepost-attest",
  "milepost-record",
+ "milepost-test-utils",
  "milepost-types",
  "proptest",
  "soroban-sdk",
@@ -1200,6 +1204,7 @@ dependencies = [
 name = "milepost-record"
 version = "0.1.0"
 dependencies = [
+ "milepost-test-utils",
  "milepost-types",
  "soroban-sdk",
 ]
@@ -1209,7 +1214,15 @@ name = "milepost-registry"
 version = "0.1.0"
 dependencies = [
  "milepost-record",
+ "milepost-test-utils",
  "milepost-types",
+ "soroban-sdk",
+]
+
+[[package]]
+name = "milepost-test-utils"
+version = "0.1.0"
+dependencies = [
  "soroban-sdk",
 ]
 
