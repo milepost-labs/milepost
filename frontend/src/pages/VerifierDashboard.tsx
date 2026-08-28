@@ -776,19 +776,28 @@ export const VerifierDashboard = () => {
   const [amountError, setAmountError] = useState<string | null>(null);
 
   // The reviewer's own last-submitted vote, so the form can show it and let
-  // them replace it rather than treating every review as a first vote. Kept
-  // in state rather than derived, since a successful amend updates it
-  // directly without needing a storage round-trip.
-  const [myVote, setMyVote] = useState<bigint | null>(null);
-  useEffect(() => {
-    setMyVote(address ? loadReviewerVote(programmeId, DEMO_APPLICANT, address) : null);
-  }, [address, programmeId]);
+  // them replace it rather than treating every review as a first vote.
+  // Derived rather than synced in an effect: storage is the source of truth,
+  // and `voteVersion` re-reads it after a successful amend writes through.
+  const [voteVersion, setVoteVersion] = useState(0);
+  const myVote = useMemo(
+    () => (address ? loadReviewerVote(programmeId, DEMO_APPLICANT, address) : null),
+    // voteVersion looks unused to the linter because the read happens through
+    // localStorage rather than through a value it can see. Removing it would
+    // stop the form updating after an amend.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [address, programmeId, voteVersion],
+  );
 
   // Pre-fill the form with the reviewer's known vote so they see what they
-  // already cast and are editing it, not starting a blank second vote.
-  useEffect(() => {
+  // already cast and are editing it, not starting a blank second vote. The
+  // field is editable, so it cannot simply be derived — instead the seed is
+  // tracked, and the field reset only when the underlying vote changes.
+  const [seededFrom, setSeededFrom] = useState<bigint | null | undefined>(undefined);
+  if (seededFrom !== myVote) {
+    setSeededFrom(myVote);
     setApproved(myVote !== null ? formatExact(myVote) : '');
-  }, [myVote]);
+  }
 
   // The verifier's own attestations are derived from localStorage (there is no
   // on-chain "attestations by attester" list), keyed by the connected address.
@@ -854,7 +863,7 @@ export const VerifierDashboard = () => {
       // review() replaces rather than adds — this is the same vote, updated,
       // so the form keeps showing it as "your vote" rather than clearing.
       saveReviewerVote(programmeId, DEMO_APPLICANT, address, parsed.value);
-      setMyVote(parsed.value);
+      setVoteVersion((v) => v + 1);
     }
   };
 
