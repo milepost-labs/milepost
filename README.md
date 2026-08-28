@@ -198,6 +198,15 @@ commands) between them.
 
 Requires Rust stable with the `wasm32v1-none` target and `stellar` CLI 27.x.
 
+### Task Runner (`just` or `make`)
+You can use `just` or `make` for quick task execution with correct build dependencies:
+* `just build` / `make build` — Build contract WASM artifacts
+* `just test` / `make test` — Run workspace tests (builds WASM first)
+* `just lint` / `make lint` — Run `cargo fmt` and `cargo clippy` (builds WASM first)
+* `just frontend-build` / `make frontend-build` — Build TypeScript packages dist and frontend app
+* `just deploy` / `make deploy` — Deploy contracts using `./scripts/deploy.sh`
+* `just seed` / `make seed` — Seed protocol scenario data using `./scripts/seed.sh`
+
 ```sh
 cargo test                        # 133 tests
 cargo clippy --all-targets -- -D warnings

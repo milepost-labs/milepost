@@ -67,6 +67,16 @@ If you use VS Code or GitHub Codespaces, you can open the repository in a pre-co
 2. When prompted, select **Reopen in Container** (or run `Dev Containers: Reopen in Container` from the Command Palette).
 Tool versions in `.devcontainer/Dockerfile` match `.github/workflows/ci.yml`. When updating toolchain versions, update both.
 
+**Task Runner (`just` or `make`)**
+Common commands and workflows are available via `just` (or standard `make`):
+* `just build` / `make build` — Build contract WASM artifacts
+* `just test` / `make test` — Run workspace tests (encodes WASM build order dependency)
+* `just lint` / `make lint` — Run `cargo fmt` check and `cargo clippy` (encodes WASM build order dependency)
+* `just frontend-build` / `make frontend-build` — Build TypeScript packages dist and frontend app
+* `just deploy` / `make deploy` — Deploy contracts using `./scripts/deploy.sh`
+* `just seed` / `make seed` — Seed protocol scenario data using `./scripts/seed.sh`
+* `just` / `make help` — List all available tasks
+
 ---
 
 ## 3. Running Frontend Checks
