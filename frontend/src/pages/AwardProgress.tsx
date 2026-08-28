@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { Buffer } from 'buffer';
 import { useContractRead, useContractResult, useProgramme, useTransaction, phaseLabel } from '../hooks';
 import { AsyncView } from '../components/state/AsyncStates';
+import { PausedBanner } from '../components/programme/PausedBanner';
 import { Badge, Button, Card, Field, Stat, Table, type BadgeTone, type Column } from '../components/ui';
 import { useWallet } from '../context/useWallet';
 import { formatAmount } from '../lib/amount';
@@ -157,6 +158,8 @@ export const AwardProgress = () => {
 
   return (
     <div className="dashboard-container">
+      <PausedBanner client={programme} />
+
       <header className="dashboard-header">
         <h1>Award progress</h1>
         <p className="typo-text text-muted">

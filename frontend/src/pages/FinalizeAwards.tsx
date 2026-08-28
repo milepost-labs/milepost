@@ -16,6 +16,7 @@ import { contract, type Award, type Mode } from '@milepost/program';
 import { useContractRead, useContractResult, useProgramme, useTransaction } from '../hooks';
 import { useWallet } from '../context/useWallet';
 import { AsyncView, Loading } from '../components/state/AsyncStates';
+import { PausedBanner } from '../components/programme/PausedBanner';
 import { Badge, Button, Card, Field, PhaseBadge } from '../components/ui';
 import { formatAmount } from '../lib/amount';
 import './FinalizeAwards.css';
@@ -147,6 +148,8 @@ export const FinalizeAwards = () => {
 
   return (
     <div className="dashboard-container finalize-page">
+      <PausedBanner client={programme} />
+
       <header className="dashboard-header animate-fade-up">
         <h1>Finalize Awards</h1>
         <p className="typo-text text-muted">

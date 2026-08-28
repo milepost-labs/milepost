@@ -3,6 +3,7 @@ import { Link } from "react-router-dom";
 import type { Phase, ProgrammeConfig } from "@milepost/program";
 import { CalendarClock, Landmark, ShieldCheck, UsersRound } from "lucide-react";
 import { AsyncView } from "../components/state/AsyncStates";
+import { PausedBanner } from "../components/programme/PausedBanner";
 import { Badge, Card, PhaseBadge, Stat, Table } from "../components/ui";
 import { useContractRead, useContractResult, useProgramme } from "../hooks";
 import { formatAmount, percentOf } from "../lib/amount";
@@ -212,6 +213,8 @@ export const ProgrammeDetail = () => {
 
   return (
     <div className="programme-detail">
+      <PausedBanner client={programme} />
+
       <header className="programme-hero glass-panel animate-fade-up">
         <div className="programme-hero__copy">
           <Badge tone="accent">Live testnet programme</Badge>

@@ -12,6 +12,7 @@ import { formatAmount, tryParseAmount } from '../lib/amount';
 import { truncateAddress } from '../lib/format';
 import { explain } from '../lib/errors';
 import { AsyncView, Empty, ErrorState, Loading, Success } from '../components/state/AsyncStates';
+import { PausedBanner } from '../components/programme/PausedBanner';
 import { Badge, Button, DateField, Field, Modal, Table, type Column } from '../components/ui';
 
 const DEMO_APPLICANT = 'GAH3D4RM45ETE4W7VDRCWZBPRPT63CJXAGXFYVBC2FGANBZTS4OTKXCA';
@@ -781,6 +782,8 @@ export const VerifierDashboard = () => {
 
   return (
     <div className="dashboard-container">
+      <PausedBanner client={programme} />
+
       <header className="dashboard-header animate-fade-up">
         <h1>Verifier Dashboard</h1>
         <p className="typo-text text-muted">See who is waiting on your attestation to unlock their next tranche.</p>
