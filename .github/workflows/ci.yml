@@ -62,8 +62,37 @@ jobs:
         run: cargo install cargo-llvm-cov --locked
 
       - name: Coverage
+        env:
+          # Actual line coverage is about 98%; this leaves real headroom while
+          # still catching a meaningful regression.
+          COVERAGE_THRESHOLD: "90"
         run: |
-          cargo llvm-cov --all-features --summary-file /tmp/coverage-summary.txt
+          # `--fail-under-lines` does the threshold check itself. Parsing the
+          # percentage out of the text table is fragile — the TOTAL row carries
+          # region, function and line figures, and a grep takes whichever comes
+          # first.
+          #
+          # Run without `set -e` so the report still reaches the job summary
+          # when the gate fails; that is exactly when someone needs to read it.
+          set +e
+          cargo llvm-cov --all-features --summary-only \
+            --output-path /tmp/coverage-summary.txt \
+            --fail-under-lines "$COVERAGE_THRESHOLD"
+          status=$?
+          set -e
+
+          echo "### Coverage report" >> "$GITHUB_STEP_SUMMARY"
+          echo '```' >> "$GITHUB_STEP_SUMMARY"
+          cat /tmp/coverage-summary.txt >> "$GITHUB_STEP_SUMMARY"
+          # The report has no trailing newline, so the closing fence would
+          # otherwise land on the TOTAL row.
+          echo >> "$GITHUB_STEP_SUMMARY"
+          echo '```' >> "$GITHUB_STEP_SUMMARY"
+
+          if [ "$status" -ne 0 ]; then
+            echo "::error::Line coverage is below the ${COVERAGE_THRESHOLD}% threshold"
+          fi
+          exit $status
           echo "### Coverage report" >> "$GITHUB_STEP_SUMMARY"
           echo '```' >> "$GITHUB_STEP_SUMMARY"
           cat /tmp/coverage-summary.txt >> "$GITHUB_STEP_SUMMARY"
