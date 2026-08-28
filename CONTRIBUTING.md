@@ -61,6 +61,12 @@ To automatically check formatting (`rustfmt`) and linting (`eslint`) on changed 
 ```
 The hook runs only on staged files for speed. If you need to bypass it in an emergency, use `git commit --no-verify`.
 
+**Development Container**
+If you use VS Code or GitHub Codespaces, you can open the repository in a pre-configured Dev Container that includes all pinned toolchains (Rust stable with `wasm32v1-none`, Stellar CLI 27.1.0, and Node.js 24):
+1. Open the project in VS Code.
+2. When prompted, select **Reopen in Container** (or run `Dev Containers: Reopen in Container` from the Command Palette).
+Tool versions in `.devcontainer/Dockerfile` match `.github/workflows/ci.yml`. When updating toolchain versions, update both.
+
 ---
 
 ## 3. Running Frontend Checks
