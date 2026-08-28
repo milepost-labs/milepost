@@ -244,7 +244,11 @@ changes.
 - **Event query module.** Listings cannot be reconstructed yet.
 - **`Restricted` end to end.** `policy_spend` is tested standalone but has never
   been wired to a live passkey wallet.
+## Security
+
+For security vulnerability reporting guidelines and scope, see [SECURITY.md](SECURITY.md).
 
 ## Licence
 
 Apache-2.0
+
