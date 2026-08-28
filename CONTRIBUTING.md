@@ -54,6 +54,13 @@ npm run dev
 ```
 Open [http://localhost:5173](http://localhost:5173/) to view the app.
 
+**Pre-commit hooks (opt-in)**
+To automatically check formatting (`rustfmt`) and linting (`eslint`) on changed files before each commit:
+```bash
+./scripts/install-hooks.sh
+```
+The hook runs only on staged files for speed. If you need to bypass it in an emergency, use `git commit --no-verify`.
+
 ---
 
 ## 3. Running Frontend Checks
