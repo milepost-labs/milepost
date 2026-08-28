@@ -71,7 +71,7 @@
 
 use soroban_sdk::{
     contract, contractclient, contracterror, contractevent, contractimpl, contracttype, token,
-    Address, BytesN, Env, Vec,
+    Address, BytesN, Env, Symbol, Vec,
 };
 
 /// The programme's configuration, shared with the registry that builds it.
@@ -94,6 +94,28 @@ pub trait Attestations {
         schema: BytesN<32>,
         attester: Address,
     ) -> bool;
+    fn get_schema(env: Env, uid: BytesN<32>) -> Result<crate::Schema, crate::Error>;
+}
+
+/// Mirrors the schema type from the attest contract without importing it,
+/// which would re-export its symbols from this wasm.
+#[contracttype]
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct Schema {
+    pub uid: BytesN<32>,
+    pub authority: Address,
+    pub definition: soroban_sdk::String,
+    pub revocable: bool,
+    pub restricted: bool,
+}
+
+/// Error type matching the attest contract's error enum, used only for the
+/// `get_schema` return. Discriminants must stay in sync with the attest crate.
+#[contracterror]
+#[derive(Copy, Clone, Debug, Eq, PartialEq, PartialOrd, Ord)]
+#[repr(u32)]
+pub enum AttestError {
+    SchemaNotFound = 1,
 }
 
 /// The slice of the spend policy a programme needs.
@@ -201,6 +223,11 @@ pub enum Error {
     BelowMinimumAward = 38,
     /// The programme is paused and this operation cannot proceed.
     Paused = 39,
+    /// The schema is restricted but its authority is not among the verifiers,
+    /// so no tranche could ever be released.
+    SchemaAuthorityNotVerifier = 40,
+    /// The schema does not exist in the attestation registry.
+    SchemaNotFound = 41,
 }
 
 /// Where a tranche is paid, in descending order of how hard the restriction is
@@ -378,6 +405,14 @@ pub struct UnclaimedSwept {
     pub amount: i128,
 }
 
+#[contractevent(topics = ["verifier_changed"], data_format = "single-value")]
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct VerifierChanged {
+    #[topic]
+    pub verifier: Address,
+    pub added: bool,
+}
+
 #[contractevent(topics = ["cancelled"], data_format = "single-value")]
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct ProgrammeCancelled {
@@ -437,6 +472,8 @@ enum Key {
     Contributed,
     Granted,
     Released,
+    RefundedTotal,
+    SweptTotal,
     FeeSwept,
     /// One entry per contributor, so refunds stay proportional without a list.
     Donor(Address),
@@ -522,10 +559,34 @@ impl Programme {
                 .extend_ttl(&key, BUMP_THRESHOLD, BUMP_LEDGERS);
         }
 
+        // Validate the schema: it must exist, and if it is restricted the
+        // authority must be among the verifiers so a tranche can actually be
+        // released. Without this check a programme could be constructed in a
+        // state where no attestation could ever unlock payment.
+        //
+        // We call via `invoke_contract` rather than the generated client
+        // because the `contractclient` macro auto-unwraps `Result`, making
+        // it impossible to distinguish "schema not found" from "valid
+        // schema". With `invoke_contract` we can return our own error
+        // discriminant instead of letting the attest contract panic.
+        let args = soroban_sdk::vec![&env, config.schema.to_val()];
+        let result: Result<Schema, AttestError> =
+            env.invoke_contract(&config.attest, &Symbol::new(&env, "get_schema"), args);
+        match result {
+            Err(_) => return Err(Error::SchemaNotFound),
+            Ok(schema) => {
+                if schema.restricted && !verifiers.iter().any(|v| v == schema.authority) {
+                    return Err(Error::SchemaAuthorityNotVerifier);
+                }
+            }
+        }
+
         env.storage().instance().set(&Key::Config, &config);
         env.storage().instance().set(&Key::Contributed, &0i128);
         env.storage().instance().set(&Key::Granted, &0i128);
         env.storage().instance().set(&Key::Released, &0i128);
+        env.storage().instance().set(&Key::RefundedTotal, &0i128);
+        env.storage().instance().set(&Key::SweptTotal, &0i128);
         // The contract-wide instance entries back every view and refund, so keep
         // them alive from the start rather than relying on the first write.
         env.storage()
@@ -953,6 +1014,50 @@ impl Programme {
         Ok(())
     }
 
+    /// Add a new verifier to the trust set. The creator manages the verifier
+    /// list: reviewers decide *how much* to award, but the verifier list
+    /// decides *who can attest* that a milestone was met — a different
+    /// trust boundary.
+    pub fn add_verifier(env: Env, verifier: Address) -> Result<(), Error> {
+        Self::config(&env)?.creator.require_auth();
+        let key = Key::Verifier(verifier.clone());
+        if env.storage().persistent().has(&key) {
+            return Err(Error::AlreadyPayee); // reuse: already a verifier
+        }
+        env.storage().persistent().set(&key, &true);
+        env.storage()
+            .persistent()
+            .extend_ttl(&key, BUMP_THRESHOLD, BUMP_LEDGERS);
+
+        VerifierChanged {
+            verifier,
+            added: true,
+        }
+        .publish(&env);
+        Ok(())
+    }
+
+    /// Remove a verifier from the trust set. Attestations already made by a
+    /// removed verifier remain valid — they were signed under the schema's
+    /// authority, not the programme's verifier list, so the attestation
+    /// registry still recognises them. What changes is that future tranche
+    /// releases can no longer rely on attestations by this address.
+    pub fn remove_verifier(env: Env, verifier: Address) -> Result<(), Error> {
+        Self::config(&env)?.creator.require_auth();
+        let key = Key::Verifier(verifier.clone());
+        if !env.storage().persistent().has(&key) {
+            return Err(Error::NotPayee); // reuse: not a verifier
+        }
+        env.storage().persistent().remove(&key);
+
+        VerifierChanged {
+            verifier,
+            added: false,
+        }
+        .publish(&env);
+        Ok(())
+    }
+
     /// Withdraw an application before finalisation. Withdrawal is final for
     /// this programme — the applicant may not reapply. The application record
     /// is marked, not deleted, so history stays auditable. Votes already cast
@@ -1262,6 +1367,16 @@ impl Programme {
             .persistent()
             .extend_ttl(&refunded_key, BUMP_THRESHOLD, BUMP_LEDGERS);
 
+        let refunded_total: i128 = env
+            .storage()
+            .instance()
+            .get(&Key::RefundedTotal)
+            .unwrap_or(0);
+        env.storage().instance().set(
+            &Key::RefundedTotal,
+            &refunded_total.checked_add(amount).ok_or(Error::Overflow)?,
+        );
+
         token::Client::new(&env, &config.token).transfer(
             &env.current_contract_address(),
             &donor,
@@ -1308,6 +1423,12 @@ impl Programme {
             &env.current_contract_address(),
             &config.treasury,
             &remaining,
+        );
+
+        let swept_total: i128 = env.storage().instance().get(&Key::SweptTotal).unwrap_or(0);
+        env.storage().instance().set(
+            &Key::SweptTotal,
+            &swept_total.checked_add(remaining).ok_or(Error::Overflow)?,
         );
 
         UnclaimedSwept { amount: remaining }.publish(&env);
@@ -1493,6 +1614,17 @@ impl Programme {
 
     pub fn total_released(env: Env) -> i128 {
         env.storage().instance().get(&Key::Released).unwrap_or(0)
+    }
+
+    pub fn total_refunded(env: Env) -> i128 {
+        env.storage()
+            .instance()
+            .get(&Key::RefundedTotal)
+            .unwrap_or(0)
+    }
+
+    pub fn total_swept(env: Env) -> i128 {
+        env.storage().instance().get(&Key::SweptTotal).unwrap_or(0)
     }
 
     /// Escrowed funds this recipient may still direct.

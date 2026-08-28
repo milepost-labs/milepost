@@ -16,13 +16,17 @@ const REVIEW_DEADLINE: u64 = 20_000;
 const RELEASE_DEADLINE: u64 = 30_000;
 const SWEEP_DEADLINE: u64 = 40_000;
 
+#[allow(dead_code)]
 struct Fixture {
     env: Env,
     client: RegistryClient<'static>,
     record: milepost_record::RecordClient<'static>,
+    attest: milepost_attest::AttestClient<'static>,
     admin: Address,
     treasury: Address,
     token: Address,
+    schema: BytesN<32>,
+    verifier: Address,
 }
 
 fn setup() -> Fixture {
@@ -31,8 +35,19 @@ fn setup() -> Fixture {
 
     let admin = Address::generate(&env);
     let treasury = Address::generate(&env);
-    let attest = Address::generate(&env);
     let policy = Address::generate(&env);
+
+    // Deploy the real attest contract and register a schema so the programme
+    // constructor can call `get_schema` successfully.
+    let attest_id = env.register(milepost_attest::Attest, ());
+    let attest = milepost_attest::AttestClient::new(&env, &attest_id);
+    let verifier = Address::generate(&env);
+    let schema = attest.register_schema(
+        &verifier,
+        &String::from_str(&env, "milestone-met:v1"),
+        &true,
+        &true,
+    );
 
     // `record` is deployed with the deployer as admin, then handed to the
     // registry — the registry's address does not exist until it is deployed.
@@ -45,7 +60,7 @@ fn setup() -> Fixture {
         (
             admin.clone(),
             treasury.clone(),
-            attest,
+            attest_id,
             record_id,
             policy,
             FEE_BPS,
@@ -62,9 +77,12 @@ fn setup() -> Fixture {
         env: env.clone(),
         client,
         record,
+        attest,
         admin,
         treasury,
         token,
+        schema,
+        verifier,
     }
 }
 
@@ -72,7 +90,7 @@ fn create(f: &Fixture, creator: &Address) -> Address {
     f.client.create(
         creator,
         &f.token,
-        &BytesN::from_array(&f.env, &[3u8; 32]),
+        &f.schema,
         &APPLY_DEADLINE,
         &REVIEW_DEADLINE,
         &RELEASE_DEADLINE,
@@ -86,8 +104,9 @@ fn create(f: &Fixture, creator: &Address) -> Address {
             Address::generate(&f.env),
             Address::generate(&f.env),
         ],
-        &vec![&f.env, Address::generate(&f.env)],
+        &vec![&f.env, f.verifier.clone()],
         &String::from_str(&f.env, "Health worker stipend 2026"),
+        &0i128,
     )
 }
 
@@ -254,4 +273,41 @@ fn programme_address_is_deterministic() {
         f.client.programme_address(&0),
         f.client.programme_address(&0)
     );
+}
+
+#[test]
+fn create_passes_minimum_award_to_programme() {
+    let f = setup();
+    let creator = Address::generate(&f.env);
+    let programme_addr = f.client.create(
+        &creator,
+        &f.token,
+        &f.schema,
+        &APPLY_DEADLINE,
+        &REVIEW_DEADLINE,
+        &RELEASE_DEADLINE,
+        &SWEEP_DEADLINE,
+        &2u32,
+        &3u32,
+        &BytesN::from_array(&f.env, &[7u8; 32]),
+        &vec![
+            &f.env,
+            Address::generate(&f.env),
+            Address::generate(&f.env),
+            Address::generate(&f.env),
+        ],
+        &vec![&f.env, f.verifier.clone()],
+        &String::from_str(&f.env, "Health worker stipend 2026"),
+        &500i128,
+    );
+    let config = programme::Client::new(&f.env, &programme_addr).get_config();
+    assert_eq!(config.minimum_award, 500);
+}
+
+#[test]
+fn create_defaults_minimum_award_to_zero() {
+    let f = setup();
+    let programme = create(&f, &Address::generate(&f.env));
+    let config = programme::Client::new(&f.env, &programme).get_config();
+    assert_eq!(config.minimum_award, 0);
 }

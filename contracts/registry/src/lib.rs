@@ -157,6 +157,7 @@ impl Registry {
         reviewers: Vec<Address>,
         verifiers: Vec<Address>,
         name: String,
+        minimum_award: i128,
     ) -> Result<Address, Error> {
         creator.require_auth();
         let config = Self::config(&env)?;
@@ -188,10 +189,7 @@ impl Registry {
                         sweep_deadline,
                         quorum,
                         tranches,
-                        // No minimum: programmes deployed through the registry
-                        // opt out until `create` exposes it, which would mean a
-                        // fifteenth parameter and a bindings regeneration.
-                        minimum_award: 0,
+                        minimum_award,
                         metadata_hash,
                     },
                     reviewers,

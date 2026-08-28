@@ -1208,6 +1208,7 @@ dependencies = [
 name = "milepost-registry"
 version = "0.1.0"
 dependencies = [
+ "milepost-attest",
  "milepost-record",
  "milepost-types",
  "soroban-sdk",
