@@ -91,7 +91,7 @@ export const Standing = () => {
               <Stat label="Tranches released" value={data.tranches} />
               <Stat label="Total received" value={formatXlm(data.total_received)} numeric />
               <Stat label="First seen" value={formatDate(data.first_seen)} />
-              <Stat label="Last updated" value={formatDate(data.last_updated)} />
+              <Stat label="Last seen" value={formatDate(data.last_seen)} />
             </div>
 
             <div className="history-root">

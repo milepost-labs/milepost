@@ -75,6 +75,7 @@ fn setup_with(quorum: u32, reviewer_count: u32, tranches: u32) -> Fixture {
         &String::from_str(&env, "milestone-met:v1"),
         &true,
         &true,
+        &None,
     );
 
     let policy_id = env.register(policy::FakePolicy, ());
@@ -1427,6 +1428,138 @@ fn a_sweep_deadline_before_the_release_deadline_is_rejected() {
     );
 }
 
+#[test]
+fn creator_can_extend_release_deadline() {
+    let f = setup(2, 3);
+    let new_release = f.client.get_config().release_deadline + 1_000;
+    assert_eq!(
+        f.client.try_extend_release_deadline(&new_release),
+        Ok(Ok(()))
+    );
+    let config = f.client.get_config();
+    assert_eq!(config.release_deadline, new_release);
+    // Sweep deadline should be pushed forward too if release > old sweep
+    if new_release > f.client.get_config().sweep_deadline {
+        assert_eq!(config.sweep_deadline, new_release);
+    }
+}
+
+#[test]
+fn extending_after_refunds_open_is_rejected() {
+    let f = setup(2, 3);
+    f.env.ledger().set_timestamp(f.client.get_config().release_deadline);
+    let new_release = f.client.get_config().release_deadline + 1_000;
+    let result = f.client.try_extend_release_deadline(&new_release);
+    assert_eq!(
+        result,
+        Err(Ok(Error::RefundsNotOpen))
+    );
+}
+
+#[test]
+fn extending_to_same_or_earlier_deadline_is_rejected() {
+    let f = setup(2, 3);
+    let result = f.client.try_extend_release_deadline(&f.client.get_config().release_deadline);
+    assert_eq!(
+        result,
+        Err(Ok(Error::InvalidDeadlines))
+    );
+}
+
+#[test]
+fn batch_release_multiple_tranches() {
+    let f = setup(2, 3);
+    let recipient = Address::generate(&f.env);
+    let school = Address::generate(&f.env);
+    // Set up an award with 3 tranches
+    f.client.contribute(&funded_donor(&f, 100_000), &100_000);
+    f.client.apply(&recipient, &900, &hash(&f.env, 1));
+    to_review(&f);
+    for i in 0..f.client.get_config().quorum {
+        f.client
+            .review(&f.reviewers.get(i).unwrap(), &recipient, &900);
+    }
+    f.client.allow_payee(&school);
+    f.client.finalize(&recipient, &school, &Mode::Direct);
+
+    let uid1 = proof(&f, &recipient, 1);
+    let uid2 = proof(&f, &recipient, 2);
+    let uid3 = proof(&f, &recipient, 3);
+
+    // Batch release all 3 tranches
+    let amount = f.client.try_release_batch(&recipient, &vec![&f.env, uid1.clone(), uid2.clone(), uid3.clone()], &f.verifier);
+    assert_eq!(amount, Ok(Ok(900)), "total released should be 900");
+
+    let award = f.client.get_award(&recipient);
+    assert_eq!(award.tranches_released, 3);
+    assert_eq!(award.released, 900);
+    assert_eq!(f.client.total_released(), 900);
+    assert_eq!(f.token.balance(&school), 900);
+
+    // All proofs should be marked as spent
+    assert!(f.client.is_spent(&uid1));
+    assert!(f.client.is_spent(&uid2));
+    assert!(f.client.is_spent(&uid3));
+}
+
+#[test]
+fn batch_release_rejects_when_any_proof_already_spent() {
+    let f = setup(2, 3);
+    let recipient = Address::generate(&f.env);
+    let school = Address::generate(&f.env);
+    f.client.contribute(&funded_donor(&f, 100_000), &100_000);
+    f.client.apply(&recipient, &900, &hash(&f.env, 1));
+    to_review(&f);
+    for i in 0..f.client.get_config().quorum {
+        f.client
+            .review(&f.reviewers.get(i).unwrap(), &recipient, &900);
+    }
+    f.client.allow_payee(&school);
+    f.client.finalize(&recipient, &school, &Mode::Direct);
+
+    let uid1 = proof(&f, &recipient, 1);
+    let uid2 = proof(&f, &recipient, 2);
+
+    // Release first tranche
+    f.client.release(&recipient, &uid1, &f.verifier);
+
+    // Try batch with the already-spent uid1 - should fail
+    let result = f.client.try_release_batch(&recipient, &vec![&f.env, uid1, uid2], &f.verifier);
+    assert_eq!(
+        result,
+        Err(Ok(Error::AttestationAlreadyUsed))
+    );
+    // Award should still have 2 remaining tranches
+    let award = f.client.get_award(&recipient);
+    assert_eq!(award.tranches_released, 1);
+}
+
+#[test]
+fn batch_release_rejects_oversize() {
+    let f = setup(2, 3);
+    let recipient = Address::generate(&f.env);
+    let school = Address::generate(&f.env);
+    f.client.contribute(&funded_donor(&f, 100_000), &100_000);
+    f.client.apply(&recipient, &900, &hash(&f.env, 1));
+    to_review(&f);
+    for i in 0..f.client.get_config().quorum {
+        f.client
+            .review(&f.reviewers.get(i).unwrap(), &recipient, &900);
+    }
+    f.client.allow_payee(&school);
+    f.client.finalize(&recipient, &school, &Mode::Direct);
+
+    // MAX_PAYEE_BATCH is 50, so 51 should fail
+    let mut uids = Vec::new(&f.env);
+    for _ in 0..=MAX_PAYEE_BATCH {
+        uids.push_back(proof(&f, &recipient, 1));
+    }
+    assert_eq!(
+        f.client.try_release_batch(&recipient, &uids, &f.verifier),
+        Err(Ok(Error::BatchTooLarge))
+    );
+}
+
 // ---- allocated mode ----
 
 /// Award `granted` in `Allocated` mode and release the first tranche, so the
@@ -2247,6 +2380,7 @@ fn setup_with_minimum(
         &String::from_str(&env, "milestone-met:v1"),
         &true,
         &true,
+        &None,
     );
 
     let policy_id = env.register(policy::FakePolicy, ());

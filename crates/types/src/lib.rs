@@ -32,7 +32,8 @@ pub struct Standing {
     pub tranches: u32,
     pub total_received: i128,
     pub first_seen: u64,
-    pub last_updated: u64,
+    /// Timestamp of the last credit, allows readers to weigh recency.
+    pub last_seen: u64,
     /// Hash chain over every credit, in order. Genesis is all zeroes; each
     /// credit sets `root = sha256(root ‖ programme ‖ amount ‖ attestation ‖ ts)`.
     /// Lets anyone verify a full off-chain history against on-chain state.
