@@ -177,6 +177,12 @@ export interface Client {
   credit: ({writer, subject, programme, amount, attestation}: {writer: string, subject: string, programme: string, amount: i128, attestation: Buffer}, options?: MethodOptions) => Promise<AssembledTransaction<Result<Standing>>>
 
   /**
+   * Construct and simulate a upgrade transaction. Returns an `AssembledTransaction` object which will have a `result` field containing the result of the simulation. If this transaction changes contract state, you will need to call `signAndSend()` on the returned object.
+   * Upgrade the record contract itself.
+   */
+  upgrade: ({new_wasm_hash}: {new_wasm_hash: Buffer}, options?: MethodOptions) => Promise<AssembledTransaction<Result<void>>>
+
+  /**
    * Construct and simulate a get_admin transaction. Returns an `AssembledTransaction` object which will have a `result` field containing the result of the simulation. If this transaction changes contract state, you will need to call `signAndSend()` on the returned object.
    */
   get_admin: (options?: MethodOptions) => Promise<AssembledTransaction<Result<string>>>
@@ -248,6 +254,7 @@ export class Client extends ContractClient {
         "AAAABQAAAAAAAAAAAAAADVdyaXRlckNoYW5nZWQAAAAAAAABAAAABndyaXRlcgAAAAAAAgAAAAAAAAAGd3JpdGVyAAAAAAATAAAAAQAAAAAAAAAKYXV0aG9yaXplZAAAAAAAAQAAAAAAAAAA",
         "AAAAAAAAAAAAAAADZ2V0AAAAAAEAAAAAAAAAB3N1YmplY3QAAAAAEwAAAAEAAAPpAAAH0AAAAAhTdGFuZGluZwAAAAM=",
         "AAAAAAAAAQ1SZWNvcmQgYSByZWxlYXNlZCB0cmFuY2hlIGFnYWluc3QgYHN1YmplY3RgLCBjcmVhdGluZyB0aGVpciBzdGFuZGluZyBpZgp0aGlzIGlzIHRoZSBmaXJzdCBvbmUuIGBhdHRlc3RhdGlvbmAgaXMgdGhlIHByb29mIHRoYXQgdW5sb2NrZWQgdGhlCnJlbGVhc2U7IGl0IGlzIGZvbGRlZCBpbnRvIHRoZSBoYXNoIGNoYWluIHNvIHRoZSBvZmYtY2hhaW4gaGlzdG9yeSBjYW5ub3QKbGF0ZXIgY2xhaW0gYSByZWxlYXNlIHdhcyBiYWNrZWQgYnkgZGlmZmVyZW50IGV2aWRlbmNlLgAAAAAAAAZjcmVkaXQAAAAAAAUAAAAAAAAABndyaXRlcgAAAAAAEwAAAAAAAAAHc3ViamVjdAAAAAATAAAAAAAAAAlwcm9ncmFtbWUAAAAAAAATAAAAAAAAAAZhbW91bnQAAAAAAAsAAAAAAAAAC2F0dGVzdGF0aW9uAAAAA+4AAAAgAAAAAQAAA+kAAAfQAAAACFN0YW5kaW5nAAAAAw==",
+        "AAAAAAAAACNVcGdyYWRlIHRoZSByZWNvcmQgY29udHJhY3QgaXRzZWxmLgAAAAAHdXBncmFkZQAAAAABAAAAAAAAAA1uZXdfd2FzbV9oYXNoAAAAAAAD7gAAACAAAAABAAAD6QAAAAIAAAAD",
         "AAAAAAAAAAAAAAAJZ2V0X2FkbWluAAAAAAAAAAAAAAEAAAPpAAAAEwAAAAM=",
         "AAAAAAAAAAAAAAAJaXNfd3JpdGVyAAAAAAAAAQAAAAAAAAAEYWRkcgAAABMAAAABAAAAAQ==",
         "AAAAAAAAAMdQdXNoIGEgcmVjaXBpZW50J3Mgc3RhbmRpbmcgZnVydGhlciBmcm9tIGFyY2hpdmFsLiBQZXJtaXNzaW9ubGVzczogYQp0cmFjayByZWNvcmQgaXMgdGhlIHJlY2lwaWVudCdzIGFzc2V0LCBhbmQgYW55b25lIHdpbGxpbmcgdG8gcGF5IHRoZSBmZWUKbWF5IGtlZXAgaXQgYWxpdmUg4oCUIGluY2x1ZGluZyB0aGUgcmVjaXBpZW50IHRoZW1zZWx2ZXMuAAAAAAlrZWVwYWxpdmUAAAAAAAABAAAAAAAAAAdzdWJqZWN0AAAAABMAAAABAAAD6QAAAAIAAAAD",
@@ -264,6 +271,7 @@ export class Client extends ContractClient {
   public readonly fromJSON = {
     get: this.txFromJSON<Result<Standing>>,
         credit: this.txFromJSON<Result<Standing>>,
+        upgrade: this.txFromJSON<Result<void>>,
         get_admin: this.txFromJSON<Result<string>>,
         is_writer: this.txFromJSON<boolean>,
         keepalive: this.txFromJSON<Result<void>>,

@@ -2,6 +2,7 @@ import { useEffect, useState, useMemo } from 'react';
 import { Link } from 'react-router-dom';
 import { useContractRead, useContractResult, useProgramme, useTransaction, phaseLabel } from '../hooks';
 import { AsyncView, Empty } from '../components/state/AsyncStates';
+import { PausedBanner } from '../components/programme/PausedBanner';
 import { Badge, Button, Card, Field, Modal, Stat } from '../components/ui';
 import { useWallet } from '../context/useWallet';
 import { DEMO_PROGRAMME_ID } from '../context/sorobanStore';
@@ -182,6 +183,8 @@ export const RecipientDashboard = () => {
 
   return (
     <div className="dashboard-container">
+      <PausedBanner client={programme} />
+
       <header className="dashboard-header">
         <h1>Recipient Dashboard</h1>
         {isDemo && (

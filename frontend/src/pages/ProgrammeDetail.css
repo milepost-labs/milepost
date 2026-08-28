@@ -85,8 +85,25 @@
 }
 
 .programme-grid > .ui-card:first-child,
-.programme-grid > .ui-card:nth-child(2) {
+.programme-grid > .ui-card:nth-child(2),
+.programme-grid > .ui-card:nth-child(3) {
   grid-column: span 2;
+}
+
+.verification-panel {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  gap: var(--space-3);
+  align-items: start;
+}
+
+.verification-panel svg {
+  color: var(--accent);
+}
+
+.verification-panel p {
+  margin: var(--space-2) 0 0;
+  color: var(--text-muted);
 }
 
 .money-flow {
@@ -241,6 +258,7 @@
 
   .programme-grid > .ui-card:first-child,
   .programme-grid > .ui-card:nth-child(2),
+  .programme-grid > .ui-card:nth-child(3),
   .membership-card--wide {
     grid-column: auto;
   }

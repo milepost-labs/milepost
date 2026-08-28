@@ -8,10 +8,11 @@ import { useContractRead, useContractResult, useProgramme, useTransaction, phase
 import { useWallet } from '../context/useWallet';
 import { useSoroban } from '../context/useSoroban';
 import { DEMO_PROGRAMME_ID } from '../context/sorobanStore';
-import { formatAmount, tryParseAmount } from '../lib/amount';
+import { formatAmount, formatExact, tryParseAmount } from '../lib/amount';
 import { truncateAddress } from '../lib/format';
 import { explain } from '../lib/errors';
 import { AsyncView, Empty, ErrorState, Loading, Success } from '../components/state/AsyncStates';
+import { PausedBanner } from '../components/programme/PausedBanner';
 import { Badge, Button, DateField, Field, Modal, Table, type Column } from '../components/ui';
 
 const DEMO_APPLICANT = 'GAH3D4RM45ETE4W7VDRCWZBPRPT63CJXAGXFYVBC2FGANBZTS4OTKXCA';
@@ -75,6 +76,64 @@ function saveAttestations(attester: string, records: AttestRecord[]) {
   } catch {
     // Best-effort only — the record is still usable for this session.
   }
+}
+
+/**
+ * The reviewer's own last-submitted vote on an applicant, kept locally
+ * because — like attestations above — there is no on-chain "votes by
+ * reviewer" list. The contract stores votes as a bare sorted amount vector
+ * with no reviewer attached, so this is the only way this app can show a
+ * reviewer which of the sorted amounts is theirs to amend.
+ */
+const reviewerVoteStorageKey = (programmeId: string, applicant: string, reviewer: string) =>
+  `milepost:reviewer-vote:${programmeId}:${applicant}:${reviewer}`;
+
+function loadReviewerVote(programmeId: string, applicant: string, reviewer: string): bigint | null {
+  try {
+    const stored = window.localStorage.getItem(reviewerVoteStorageKey(programmeId, applicant, reviewer));
+    if (stored) return BigInt(stored);
+  } catch {
+    // Corrupt or inaccessible storage — treat as unknown.
+  }
+  return null;
+}
+
+function saveReviewerVote(programmeId: string, applicant: string, reviewer: string, approved: bigint) {
+  try {
+    window.localStorage.setItem(reviewerVoteStorageKey(programmeId, applicant, reviewer), approved.toString());
+  } catch {
+    // Best-effort only — the vote is still usable for this session.
+  }
+}
+
+/** Same median rule the contract applies at `finalize`: the lower of the two middles. */
+function medianAt(votes: bigint[], quorum: number): bigint | null {
+  if (quorum <= 0) return null;
+  const medianIndex = Math.floor((quorum - 1) / 2);
+  return votes.length > medianIndex ? votes[medianIndex] : null;
+}
+
+/**
+ * What the vote list would look like after replacing `oldVote` (if any) with
+ * `newVote`, mirroring the sorted-removal-then-sorted-insert the contract
+ * does in `review()` — so the projected median shown here matches what
+ * finalisation would actually settle on.
+ */
+function simulateAmendment(votes: bigint[], oldVote: bigint | null, newVote: bigint): bigint[] {
+  const next = [...votes];
+  if (oldVote !== null) {
+    const at = next.findIndex((vote) => vote === oldVote);
+    if (at !== -1) next.splice(at, 1);
+  }
+  let at = next.length;
+  for (let i = 0; i < next.length; i += 1) {
+    if (newVote < next[i]) {
+      at = i;
+      break;
+    }
+  }
+  next.splice(at, 0, newVote);
+  return next;
 }
 
 /**
@@ -711,10 +770,34 @@ function ProgrammeQueue({
 
 export const VerifierDashboard = () => {
   const { address } = useWallet();
-  const { client: programme } = useProgramme();
+  const { client: programme, id: programmeId } = useProgramme();
   const { programmeAt, attest } = useSoroban();
   const [approved, setApproved] = useState('');
   const [amountError, setAmountError] = useState<string | null>(null);
+
+  // The reviewer's own last-submitted vote, so the form can show it and let
+  // them replace it rather than treating every review as a first vote.
+  // Derived rather than synced in an effect: storage is the source of truth,
+  // and `voteVersion` re-reads it after a successful amend writes through.
+  const [voteVersion, setVoteVersion] = useState(0);
+  const myVote = useMemo(
+    () => (address ? loadReviewerVote(programmeId, DEMO_APPLICANT, address) : null),
+    // voteVersion looks unused to the linter because the read happens through
+    // localStorage rather than through a value it can see. Removing it would
+    // stop the form updating after an amend.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [address, programmeId, voteVersion],
+  );
+
+  // Pre-fill the form with the reviewer's known vote so they see what they
+  // already cast and are editing it, not starting a blank second vote. The
+  // field is editable, so it cannot simply be derived — instead the seed is
+  // tracked, and the field reset only when the underlying vote changes.
+  const [seededFrom, setSeededFrom] = useState<bigint | null | undefined>(undefined);
+  if (seededFrom !== myVote) {
+    setSeededFrom(myVote);
+    setApproved(myVote !== null ? formatExact(myVote) : '');
+  }
 
   // The verifier's own attestations are derived from localStorage (there is no
   // on-chain "attestations by attester" list), keyed by the connected address.
@@ -776,11 +859,18 @@ export const VerifierDashboard = () => {
     const result = await review.send(() =>
       programme.review({ reviewer: address, applicant: DEMO_APPLICANT, approved: parsed.value }),
     );
-    if (result !== null) setApproved('');
+    if (result !== null) {
+      // review() replaces rather than adds — this is the same vote, updated,
+      // so the form keeps showing it as "your vote" rather than clearing.
+      saveReviewerVote(programmeId, DEMO_APPLICANT, address, parsed.value);
+      setVoteVersion((v) => v + 1);
+    }
   };
 
   return (
     <div className="dashboard-container">
+      <PausedBanner client={programme} />
+
       <header className="dashboard-header animate-fade-up">
         <h1>Verifier Dashboard</h1>
         <p className="typo-text text-muted">See who is waiting on your attestation to unlock their next tranche.</p>
@@ -845,6 +935,14 @@ export const VerifierDashboard = () => {
               const isWithdrawn = currentApplication.withdrawn;
               const canReview = reviewer.data === true && !currentApplication.finalized && !isWithdrawn;
 
+              const pendingParsed = tryParseAmount(approved);
+              const pendingValue = pendingParsed.ok ? pendingParsed.value : null;
+              const isAmending = myVote !== null;
+              const projectedMedian =
+                pendingValue !== null
+                  ? medianAt(simulateAmendment(currentApplication.votes, myVote, pendingValue), quorum)
+                  : null;
+
               return (
                 <div className="queue-item glass-panel reviewer-console">
                   <div className="queue-item-icon"><FileSignature size={24} /></div>
@@ -882,8 +980,14 @@ export const VerifierDashboard = () => {
                         {address && reviewer.data === false && <p className="text-warning">This wallet is not a registered reviewer.</p>}
                         {canReview && (
                           <form className="review-form" onSubmit={submitReview}>
+                            {myVote !== null && (
+                              <p className="typo-text text-muted">
+                                Your current vote: <strong>{formatAmount(myVote)} XLM</strong>. Submitting again
+                                replaces it — it does not add a second vote.
+                              </p>
+                            )}
                             <Field
-                              label="Your approval"
+                              label={isAmending ? 'Update your approval' : 'Your approval'}
                               value={approved}
                               onChange={(event) => setApproved(event.target.value)}
                               onBlur={() => approved && setAmountError(tryParseAmount(approved).ok ? null : 'Enter a valid amount')}
@@ -893,7 +997,17 @@ export const VerifierDashboard = () => {
                               error={amountError}
                               hint={`Up to ${formatAmount(currentApplication.requested)} XLM`}
                             />
-                            <Button loading={review.busy} type="submit">Submit review</Button>
+                            {pendingValue !== null && (
+                              <p className="typo-text text-muted" role="status">
+                                Median {isAmending ? 'if amended' : 'if submitted'}:{' '}
+                                <strong>{median !== null ? `${formatAmount(median)} XLM` : '—'}</strong>
+                                {' → '}
+                                <strong>{projectedMedian !== null ? `${formatAmount(projectedMedian)} XLM` : '—'}</strong>
+                              </p>
+                            )}
+                            <Button loading={review.busy} type="submit">
+                              {isAmending ? 'Update your vote' : 'Submit review'}
+                            </Button>
                             {review.error && <p className="ui-field__message ui-field__message--error" role="alert">{review.error.message}</p>}
                           </form>
                         )}

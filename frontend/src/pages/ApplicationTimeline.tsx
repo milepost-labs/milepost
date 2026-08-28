@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { useContractResult, useProgramme, useTransaction, phaseLabel } from '../hooks';
 import { AsyncView, ErrorState } from '../components/state/AsyncStates';
+import { PausedBanner } from '../components/programme/PausedBanner';
 import { Badge, Button, Card, Field, Modal, type BadgeTone } from '../components/ui';
 import { useWallet } from '../context/useWallet';
 import { formatAmount } from '../lib/amount';
@@ -98,6 +99,8 @@ export const ApplicationTimeline = () => {
 
   return (
     <div className="dashboard-container">
+      <PausedBanner client={programme} />
+
       <header className="dashboard-header">
         <h1>Application timeline</h1>
         <p className="typo-text text-muted">

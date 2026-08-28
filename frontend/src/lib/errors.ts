@@ -78,6 +78,7 @@ const PROGRAM: Table = {
   35: { kind: 'blocked', message: 'Allocations can no longer be directed — the sweep window has opened.' },
   36: { kind: 'invalid', message: 'The payee batch size is too large.' },
   37: { kind: 'conflict', message: 'This application has been withdrawn.', action: 'Withdrawn applications cannot be reviewed, finalized, or re-applied.' },
+  39: { kind: 'blocked', message: 'This programme is paused.', action: 'The creator has temporarily halted contributions, applications, reviews, awards, and releases. Refunds remain available.' },
 };
 
 const ATTEST: Table = {

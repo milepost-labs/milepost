@@ -19,16 +19,14 @@ struct Fixture {
 }
 
 fn setup() -> Fixture {
-    let env = Env::default();
-    env.mock_all_auths();
+    let env = milepost_test_utils::new_test_env();
 
     let id = env.register(PolicySpend, ());
     let client = PolicySpendClient::new(&env, &id);
 
     let steward = Address::generate(&env);
     let wallet = Address::generate(&env);
-    let issuer = Address::generate(&env);
-    let token = env.register_stellar_asset_contract_v2(issuer).address();
+    let token = milepost_test_utils::register_token(&env);
     let school = Address::generate(&env);
 
     client.configure(&steward, &wallet, &token, &CAP, &PERIOD);
@@ -185,8 +183,7 @@ fn an_unverified_payee_is_rejected() {
 #[test]
 fn a_different_asset_is_rejected() {
     let f = setup();
-    let issuer = Address::generate(&f.env);
-    let other_token = f.env.register_stellar_asset_contract_v2(issuer).address();
+    let other_token = milepost_test_utils::register_token(&f.env);
 
     let contexts = vec![
         &f.env,
@@ -381,4 +378,162 @@ fn uninstalling_does_not_reset_the_spend_window() {
         ),
         SpendError::CapExceeded,
     );
+}
+
+// ---- spend cap window boundaries ----
+
+#[test]
+fn a_transfer_exactly_equal_to_the_cap_succeeds() {
+    let f = setup();
+    f.client.policy__(
+        &f.wallet,
+        &signer(&f),
+        &transfer_context(&f, &f.wallet, &f.school, CAP),
+    );
+    assert_eq!(f.client.remaining(&f.wallet), 0);
+    assert_denied(
+        f.client.try_policy__(
+            &f.wallet,
+            &signer(&f),
+            &transfer_context(&f, &f.wallet, &f.school, 1),
+        ),
+        SpendError::CapExceeded,
+    );
+}
+
+#[test]
+fn remaining_agrees_with_what_the_next_transfer_will_accept() {
+    let f = setup();
+    f.client.policy__(
+        &f.wallet,
+        &signer(&f),
+        &transfer_context(&f, &f.wallet, &f.school, 400),
+    );
+    assert_eq!(f.client.remaining(&f.wallet), 600);
+
+    // A transfer exactly equal to what `remaining` reports is accepted.
+    f.client.policy__(
+        &f.wallet,
+        &signer(&f),
+        &transfer_context(&f, &f.wallet, &f.school, 600),
+    );
+    assert_eq!(f.client.remaining(&f.wallet), 0);
+
+    // ... and one more than it is refused.
+    assert_denied(
+        f.client.try_policy__(
+            &f.wallet,
+            &signer(&f),
+            &transfer_context(&f, &f.wallet, &f.school, 1),
+        ),
+        SpendError::CapExceeded,
+    );
+}
+
+#[test]
+fn the_window_flips_exactly_at_the_period() {
+    let f = setup();
+    f.client.policy__(
+        &f.wallet,
+        &signer(&f),
+        &transfer_context(&f, &f.wallet, &f.school, CAP),
+    );
+    assert_eq!(f.client.remaining(&f.wallet), 0);
+
+    // One ledger before the boundary: no rollover, nothing new available.
+    f.env.ledger().set_timestamp(PERIOD - 1);
+    assert_eq!(f.client.remaining(&f.wallet), 0);
+    assert_denied(
+        f.client.try_policy__(
+            &f.wallet,
+            &signer(&f),
+            &transfer_context(&f, &f.wallet, &f.school, 1),
+        ),
+        SpendError::CapExceeded,
+    );
+
+    // Exactly at the boundary (elapsed when now - start >= period): the window
+    // rolls over and the full cap is available again.
+    f.env.ledger().set_timestamp(PERIOD);
+    assert_eq!(f.client.remaining(&f.wallet), CAP);
+    f.client.policy__(
+        &f.wallet,
+        &signer(&f),
+        &transfer_context(&f, &f.wallet, &f.school, CAP),
+    );
+    assert_eq!(f.client.remaining(&f.wallet), 0);
+}
+
+// ---- property tests for spend cap windows ----
+
+mod proptests {
+    extern crate std;
+    use super::*;
+    use proptest::prelude::*;
+
+    /// Run an arbitrary interleaving of time advances and transfers and check
+    /// the invariants at every step:
+    ///  - spent within the current window never exceeds the cap,
+    ///  - the contract's persisted state matches the reference model exactly,
+    ///  - `remaining` always agrees with the contract's window arithmetic.
+    fn run_window_sequence(ops: &[(u64, i128)]) {
+        let f = setup();
+        let (mut now, mut window_start, mut spent) = (0u64, 0u64, 0i128);
+
+        for &(delay, amount) in ops {
+            now = now.saturating_add(delay);
+            f.env.ledger().set_timestamp(now);
+
+            let elapsed = now.saturating_sub(window_start) >= PERIOD;
+            let prospective_start = if elapsed { now } else { window_start };
+            let prospective_spent = if elapsed { 0 } else { spent };
+
+            let contexts = transfer_context(&f, &f.wallet, &f.school, amount);
+            if prospective_spent + amount > CAP {
+                // A denial (including a window-lapsing call) persists nothing.
+                assert_denied(
+                    f.client.try_policy__(&f.wallet, &signer(&f), &contexts),
+                    SpendError::CapExceeded,
+                );
+            } else {
+                f.client.policy__(&f.wallet, &signer(&f), &contexts);
+                spent = prospective_spent + amount;
+                window_start = prospective_start;
+            }
+
+            let pol = f.client.get_policy(&f.wallet);
+            assert_eq!(pol.spent, spent, "contract spent drifted from the model");
+            assert_eq!(
+                pol.window_start, window_start,
+                "contract window drifted from the model"
+            );
+            // Total spent within the current window never exceeds the cap.
+            assert!(spent <= CAP, "spent {spent} exceeded cap {CAP}");
+
+            // `remaining` agrees with the contract's window arithmetic: it is
+            // the full cap once the window elapses, otherwise cap minus spent.
+            let remaining_model = if now.saturating_sub(window_start) >= PERIOD {
+                CAP
+            } else {
+                CAP - spent
+            };
+            assert_eq!(
+                f.client.remaining(&f.wallet),
+                remaining_model,
+                "remaining() disagreed with the window model"
+            );
+        }
+    }
+
+    proptest! {
+        #[test]
+        fn the_window_cap_holds_across_arbitrary_time_advances_and_transfers(
+            ops in prop::collection::vec(
+                (0u64..=(PERIOD + 3600), 1i128..=CAP),
+                1..=12,
+            ),
+        ) {
+            run_window_sequence(&ops);
+        }
+    }
 }

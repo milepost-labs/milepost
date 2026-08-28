@@ -22,6 +22,7 @@ import { formatAmount, percentOf } from "../lib/amount";
 import { explain } from "../lib/errors";
 import { RefundsAndSweepsSection } from "../components/funder/RefundsAndSweepsSection";
 import { DonorContributionReceipt } from "../components/funder/DonorContributionReceipt";
+import { PausedBanner } from "../components/programme/PausedBanner";
 
 interface BudgetBreakdown {
   budget: bigint;
@@ -60,6 +61,9 @@ export const FunderDashboard = () => {
 
   const cancelTx = useTransaction({ contract: "program" });
   const [cancelModalOpen, setCancelModalOpen] = useState(false);
+
+  const paused = useContractRead(() => programme.is_paused(), [programme]);
+  const pauseTx = useTransaction({ contract: "program" });
 
   const isCreator = Boolean(
     walletAddress && config.data && walletAddress === config.data.creator,
@@ -146,8 +150,28 @@ export const FunderDashboard = () => {
     ? explain(cancelTx.error, "program")
     : null;
 
+  const handleTogglePause = async () => {
+    const result = await pauseTx.send(async () => {
+      const tx = paused.data ? await programme.unpause() : await programme.pause();
+      return {
+        signAndSend: async (options: Parameters<typeof tx.signAndSend>[0]) => {
+          const sent = await tx.signAndSend(options);
+          return { result: sent.result.unwrap() };
+        },
+      };
+    });
+
+    if (result !== null) {
+      paused.refetch();
+    }
+  };
+
+  const pauseErrorExplained = pauseTx.error ? explain(pauseTx.error, "program") : null;
+
   return (
     <div className="dashboard-container">
+      <PausedBanner client={programme} />
+
       <header className="dashboard-header animate-fade-up">
         <div
           style={{
@@ -163,18 +187,43 @@ export const FunderDashboard = () => {
             </p>
           </div>
           {isCreator && !isCancelled && (
-            <Button
-              variant="secondary"
-              style={{
-                color: "var(--color-error)",
-                borderColor: "var(--color-error)",
-              }}
-              onClick={() => setCancelModalOpen(true)}
-            >
-              Cancel programme
-            </Button>
+            <div style={{ display: "flex", gap: "0.75rem" }}>
+              <Button
+                variant="secondary"
+                style={{
+                  color: "var(--color-warning)",
+                  borderColor: "var(--color-warning)",
+                }}
+                onClick={handleTogglePause}
+                loading={pauseTx.busy}
+                loadingLabel={paused.data ? "Unpausing…" : "Pausing…"}
+                disabled={paused.loading}
+              >
+                {paused.data ? "Unpause programme" : "Pause programme"}
+              </Button>
+              <Button
+                variant="secondary"
+                style={{
+                  color: "var(--color-error)",
+                  borderColor: "var(--color-error)",
+                }}
+                onClick={() => setCancelModalOpen(true)}
+              >
+                Cancel programme
+              </Button>
+            </div>
           )}
         </div>
+        {pauseErrorExplained && (
+          <p
+            className="ui-field__message ui-field__message--error"
+            role="alert"
+            style={{ marginTop: "0.75rem" }}
+          >
+            {pauseErrorExplained.message}
+            {pauseErrorExplained.action ? ` ${pauseErrorExplained.action}` : ""}
+          </p>
+        )}
       </header>
 
       {isCancelled && (
