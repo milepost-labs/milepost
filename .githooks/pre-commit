@@ -1,0 +1,49 @@
+#!/usr/bin/env bash
+set -e
+
+# Pre-commit hook for formatting and linting changed files only.
+# Fast, opt-in pre-commit safeguard for Milepost contributors.
+# Can be bypassed in emergencies with: git commit --no-verify
+
+echo "Running pre-commit checks on staged files..."
+
+# Get list of staged files (Added, Copied, Modified, Renamed)
+STAGED_FILES=$(git diff --cached --name-only --diff-filter=ACMR)
+
+if [ -z "$STAGED_FILES" ]; then
+    exit 0
+fi
+
+# 1. Check Rust formatting on changed .rs files
+STAGED_RS_FILES=$(echo "$STAGED_FILES" | grep '\.rs$' || true)
+
+if [ -n "$STAGED_RS_FILES" ]; then
+    echo "Checking Rust formatting..."
+    if ! rustfmt --check $STAGED_RS_FILES; then
+        echo ""
+        echo "❌ Rust formatting check failed on staged files."
+        echo "Fix formatting using 'cargo fmt' or format the affected files, then stage them."
+        echo "To bypass this hook in an emergency, use 'git commit --no-verify'."
+        exit 1
+    fi
+fi
+
+# 2. Check Frontend linting on changed frontend files
+STAGED_FRONTEND_FILES=$(echo "$STAGED_FILES" | grep -E '^frontend/.*\.(js|jsx|ts|tsx)$' || true)
+
+if [ -n "$STAGED_FRONTEND_FILES" ]; then
+    echo "Checking frontend lint..."
+    REL_FRONTEND_FILES=$(echo "$STAGED_FRONTEND_FILES" | sed 's|^frontend/||')
+    if [ -n "$REL_FRONTEND_FILES" ]; then
+        if ! (cd frontend && npx eslint $REL_FRONTEND_FILES); then
+            echo ""
+            echo "❌ Frontend lint check failed on staged files."
+            echo "Fix ESLint errors in frontend, then stage them."
+            echo "To bypass this hook in an emergency, use 'git commit --no-verify'."
+            exit 1
+        fi
+    fi
+fi
+
+echo "✅ Pre-commit checks passed!"
+exit 0
