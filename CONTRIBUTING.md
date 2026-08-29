@@ -93,6 +93,11 @@ npm run build
 
 **Architecture note:** The frontend is built with React, Vite, and TypeScript. We utilize a custom CSS-variable design system in `index.css`. Please ensure any new components adhere to the existing slate/navy aesthetic rather than introducing new localized colors.
 
+**Testing the frontend:** Tests mock the contract clients — nothing should
+touch the network — and the reachability check fails on any module nothing
+imports. See the [frontend testing guide](docs/frontend-testing-guide.md) for
+how to mock a contract client and which behaviours are worth covering.
+
 ---
 
 ## 4. Running Contract Checks
@@ -117,6 +122,13 @@ To build the WASM artifacts for deployment:
 stellar contract build
 ```
 The compiled outputs will land in `target/wasm32-unknown-unknown/release/`.
+
+**The wasm build must come first.** `registry`'s tests `contractimport!` the
+built programme, so running clippy or tests before building produces failures
+that look like unrelated logic errors — and a stale artifact silently tests the
+wrong contract. See the [testing guide](docs/testing-guide.md) for the ordering
+rule, bindings regeneration, and the generated-file and fixture traps that have
+cost review rounds.
 
 ---
 

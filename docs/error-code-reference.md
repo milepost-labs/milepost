@@ -123,6 +123,7 @@ If you are reading the client bindings and see `SpendError` where other contract
 | 33 | `InsufficientAllocation` | Fault | The recipient has no allocation, or not enough of one (for Allocated mode) | The recipient must have an award finalized first, or the allocation is too small. Increase the award or check that it was finalized |
 | 34 | `PolicyNotInstalled` | Fault | A Restricted award was released to a wallet with no policy installed | The recipient must install the policy-spend contract policy before `release()` can send a Restricted tranche. Ask the recipient to configure their wallet |
 | 35 | `SpendWindowClosed` | Fault | Allocations can no longer be directed once the sweep window opens | Directed allocations (moving money from escrow to a payee) must happen before the sweep deadline. Finalize your allocation before the window closes |
+| 39 | `Paused` | Fault | The programme is paused and this operation cannot proceed | The creator paused the programme in an emergency. Wait for `unpause`, or read what a pause stops and does not stop in the [trust model](../README.md#emergency-pause) |
 
 ---
 
@@ -186,6 +187,7 @@ Alphabetical cross-reference across all contracts:
 | `NothingToSweep` | program | 29 | Expected |
 | `Overflow` | program | 15 | Fault |
 | `Overflow` | record | 4 | Fault |
+| `Paused` | program | 39 | Fault |
 | `PayeeNotAllowed` | policy-spend | 5 | Fault |
 | `PayeeNotVerified` | program | 30 | Fault |
 | `PolicyNotInstalled` | program | 34 | Fault |

@@ -29,6 +29,12 @@ The React Compiler lint rules are **on**, and they are not cosmetic — they cat
 render-purity and cascading-setState bugs that type-check cleanly and misbehave
 at runtime. Fix them rather than suppressing them.
 
+**Testing.** The suite mocks the contract clients — nothing may touch the
+network — and the reachability check fails on any module nothing imports. See
+the [frontend testing guide](../docs/frontend-testing-guide.md) for how to mock
+a contract client, what the reachability check means when it fires, and which
+behaviours are worth testing.
+
 ## Contract data model
 
 The root [README](../README.md) covers what the protocol does, how money moves
