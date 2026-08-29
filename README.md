@@ -164,6 +164,37 @@ already determined — by the votes, and by an attestation the verifier signed �
 so requiring a privileged trigger would only let whoever holds it withhold money
 someone has already earned.
 
+### Emergency pause
+
+A programme can be paused in an emergency, and only by the creator (the address
+that funded it — the same key that verifies payees). While paused:
+
+- **Stops:** `contribute`, `apply`, `review`, `finalize`, `spend` and `release`.
+  Every one of these is refused with the `Paused` error until the pause is
+  lifted.
+- **Does not stop:** `refund`, `sweep_fee` and `sweep_unclaimed`. Donors must
+  always be able to reclaim unreleased funds, even in an emergency. A pause that
+  trapped contributors' money would be worse than whatever it was containing.
+- **The clock keeps running.** Pause halts the forward money-path, not the
+  ledger. The apply, review, release and sweep deadlines are absolute wall-clock
+  timestamps and continue to tick down while the programme is paused — so a long
+  pause eats into the release window, and a recipient can lose time they had to
+  claim a tranche. That cost is deliberate: if a pause shifted deadlines, a
+  compromised creator key could cycle the pause to delay the refund and sweep
+  windows indefinitely, holding donors' money hostage. If an emergency genuinely
+  needs more time, the creator can extend the release deadline explicitly with
+  `extend_release_deadline` before it passes (see issue #162 and PR #198 for the
+  decision and its tests).
+
+The pause is **reversible and temporary**, which is the whole distinction from
+`cancel`. `cancel` permanently ends the programme and opens refunds immediately;
+`pause` is a containment action that a creator can lift with `unpause` at any
+time, after which operations resume under the current wall-clock phase. A
+creator can check whether a programme is paused with `is_paused`, and pause or
+unpause by calling `pause` or `unpause`. A programme cannot be paused once it
+has been cancelled. Pausing repeatedly does nothing once the flag is set, and
+unpausing an unpaused programme is a no-op.
+
 ---
 
 ## Deployed (testnet)
