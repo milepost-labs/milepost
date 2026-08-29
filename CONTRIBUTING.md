@@ -93,6 +93,11 @@ npm run build
 
 **Architecture note:** The frontend is built with React, Vite, and TypeScript. We utilize a custom CSS-variable design system in `index.css`. Please ensure any new components adhere to the existing slate/navy aesthetic rather than introducing new localized colors.
 
+**Testing the frontend:** Tests mock the contract clients — nothing should
+touch the network — and the reachability check fails on any module nothing
+imports. See the [frontend testing guide](docs/frontend-testing-guide.md) for
+how to mock a contract client and which behaviours are worth covering.
+
 ---
 
 ## 4. Running Contract Checks
