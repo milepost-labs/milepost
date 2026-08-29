@@ -157,6 +157,11 @@ impl Record {
         Ok(())
     }
 
+    /// Hand the admin role to another address.
+    ///
+    /// The admin decides who may write standing, so this is the key that
+    /// governs whether the record can be trusted at all. Irreversible from the
+    /// old admin's side once it lands.
     pub fn set_admin(env: Env, new_admin: Address) -> Result<(), Error> {
         Self::admin(&env)?.require_auth();
         env.storage().instance().set(&Key::Admin, &new_admin);
@@ -171,10 +176,13 @@ impl Record {
         Ok(())
     }
 
+    /// Whether `addr` is authorised to credit standing.
     pub fn is_writer(env: Env, addr: Address) -> bool {
         env.storage().persistent().has(&Key::Writer(addr))
     }
 
+    /// The current admin. Errors rather than returning a placeholder when the
+    /// contract has not been constructed.
     pub fn get_admin(env: Env) -> Result<Address, Error> {
         Self::admin(&env)
     }
@@ -255,6 +263,10 @@ impl Record {
         Ok(standing)
     }
 
+    /// A recipient's accumulated standing across every programme.
+    ///
+    /// `NotFound` means no tranche has ever been released to them — an ordinary
+    /// answer for a first-time applicant, not a fault.
     pub fn get(env: Env, subject: Address) -> Result<Standing, Error> {
         let key = Key::Standing(subject);
         let standing: Standing = env

@@ -167,6 +167,10 @@ token: string;
 export interface Client {
   /**
    * Construct and simulate a get transaction. Returns an `AssembledTransaction` object which will have a `result` field containing the result of the simulation. If this transaction changes contract state, you will need to call `signAndSend()` on the returned object.
+   * A recipient's accumulated standing across every programme.
+   * 
+   * `NotFound` means no tranche has ever been released to them — an ordinary
+   * answer for a first-time applicant, not a fault.
    */
   get: ({subject}: {subject: string}, options?: MethodOptions) => Promise<AssembledTransaction<Result<Standing>>>
 
@@ -187,11 +191,14 @@ export interface Client {
 
   /**
    * Construct and simulate a get_admin transaction. Returns an `AssembledTransaction` object which will have a `result` field containing the result of the simulation. If this transaction changes contract state, you will need to call `signAndSend()` on the returned object.
+   * The current admin. Errors rather than returning a placeholder when the
+   * contract has not been constructed.
    */
   get_admin: (options?: MethodOptions) => Promise<AssembledTransaction<Result<string>>>
 
   /**
    * Construct and simulate a is_writer transaction. Returns an `AssembledTransaction` object which will have a `result` field containing the result of the simulation. If this transaction changes contract state, you will need to call `signAndSend()` on the returned object.
+   * Whether `addr` is authorised to credit standing.
    */
   is_writer: ({addr}: {addr: string}, options?: MethodOptions) => Promise<AssembledTransaction<boolean>>
 
@@ -213,6 +220,11 @@ export interface Client {
 
   /**
    * Construct and simulate a set_admin transaction. Returns an `AssembledTransaction` object which will have a `result` field containing the result of the simulation. If this transaction changes contract state, you will need to call `signAndSend()` on the returned object.
+   * Hand the admin role to another address.
+   * 
+   * The admin decides who may write standing, so this is the key that
+   * governs whether the record can be trusted at all. Irreversible from the
+   * old admin's side once it lands.
    */
   set_admin: ({new_admin}: {new_admin: string}, options?: MethodOptions) => Promise<AssembledTransaction<Result<void>>>
 
@@ -255,14 +267,14 @@ export class Client extends ContractClient {
         "AAAABQAAAAAAAAAAAAAACENyZWRpdGVkAAAAAQAAAAZjcmVkaXQAAAAAAAMAAAAAAAAAB3N1YmplY3QAAAAAEwAAAAEAAAAAAAAACXByb2dyYW1tZQAAAAAAABMAAAABAAAAAAAAAAhzdGFuZGluZwAAB9AAAAAIU3RhbmRpbmcAAAAAAAAAAA==",
         "AAAABQAAAAAAAAAAAAAADEFkbWluQ2hhbmdlZAAAAAEAAAAFYWRtaW4AAAAAAAABAAAAAAAAAAVhZG1pbgAAAAAAABMAAAABAAAAAA==",
         "AAAABQAAAAAAAAAAAAAADVdyaXRlckNoYW5nZWQAAAAAAAABAAAABndyaXRlcgAAAAAAAgAAAAAAAAAGd3JpdGVyAAAAAAATAAAAAQAAAAAAAAAKYXV0aG9yaXplZAAAAAAAAQAAAAAAAAAA",
-        "AAAAAAAAAAAAAAADZ2V0AAAAAAEAAAAAAAAAB3N1YmplY3QAAAAAEwAAAAEAAAPpAAAH0AAAAAhTdGFuZGluZwAAAAM=",
+        "AAAAAAAAALZBIHJlY2lwaWVudCdzIGFjY3VtdWxhdGVkIHN0YW5kaW5nIGFjcm9zcyBldmVyeSBwcm9ncmFtbWUuCgpgTm90Rm91bmRgIG1lYW5zIG5vIHRyYW5jaGUgaGFzIGV2ZXIgYmVlbiByZWxlYXNlZCB0byB0aGVtIOKAlCBhbiBvcmRpbmFyeQphbnN3ZXIgZm9yIGEgZmlyc3QtdGltZSBhcHBsaWNhbnQsIG5vdCBhIGZhdWx0LgAAAAAAA2dldAAAAAABAAAAAAAAAAdzdWJqZWN0AAAAABMAAAABAAAD6QAAB9AAAAAIU3RhbmRpbmcAAAAD",
         "AAAAAAAAAQ1SZWNvcmQgYSByZWxlYXNlZCB0cmFuY2hlIGFnYWluc3QgYHN1YmplY3RgLCBjcmVhdGluZyB0aGVpciBzdGFuZGluZyBpZgp0aGlzIGlzIHRoZSBmaXJzdCBvbmUuIGBhdHRlc3RhdGlvbmAgaXMgdGhlIHByb29mIHRoYXQgdW5sb2NrZWQgdGhlCnJlbGVhc2U7IGl0IGlzIGZvbGRlZCBpbnRvIHRoZSBoYXNoIGNoYWluIHNvIHRoZSBvZmYtY2hhaW4gaGlzdG9yeSBjYW5ub3QKbGF0ZXIgY2xhaW0gYSByZWxlYXNlIHdhcyBiYWNrZWQgYnkgZGlmZmVyZW50IGV2aWRlbmNlLgAAAAAAAAZjcmVkaXQAAAAAAAUAAAAAAAAABndyaXRlcgAAAAAAEwAAAAAAAAAHc3ViamVjdAAAAAATAAAAAAAAAAlwcm9ncmFtbWUAAAAAAAATAAAAAAAAAAZhbW91bnQAAAAAAAsAAAAAAAAAC2F0dGVzdGF0aW9uAAAAA+4AAAAgAAAAAQAAA+kAAAfQAAAACFN0YW5kaW5nAAAAAw==",
         "AAAAAAAAACNVcGdyYWRlIHRoZSByZWNvcmQgY29udHJhY3QgaXRzZWxmLgAAAAAHdXBncmFkZQAAAAABAAAAAAAAAA1uZXdfd2FzbV9oYXNoAAAAAAAD7gAAACAAAAABAAAD6QAAAAIAAAAD",
-        "AAAAAAAAAAAAAAAJZ2V0X2FkbWluAAAAAAAAAAAAAAEAAAPpAAAAEwAAAAM=",
-        "AAAAAAAAAAAAAAAJaXNfd3JpdGVyAAAAAAAAAQAAAAAAAAAEYWRkcgAAABMAAAABAAAAAQ==",
+        "AAAAAAAAAGlUaGUgY3VycmVudCBhZG1pbi4gRXJyb3JzIHJhdGhlciB0aGFuIHJldHVybmluZyBhIHBsYWNlaG9sZGVyIHdoZW4gdGhlCmNvbnRyYWN0IGhhcyBub3QgYmVlbiBjb25zdHJ1Y3RlZC4AAAAAAAAJZ2V0X2FkbWluAAAAAAAAAAAAAAEAAAPpAAAAEwAAAAM=",
+        "AAAAAAAAADBXaGV0aGVyIGBhZGRyYCBpcyBhdXRob3Jpc2VkIHRvIGNyZWRpdCBzdGFuZGluZy4AAAAJaXNfd3JpdGVyAAAAAAAAAQAAAAAAAAAEYWRkcgAAABMAAAABAAAAAQ==",
         "AAAAAAAAAMdQdXNoIGEgcmVjaXBpZW50J3Mgc3RhbmRpbmcgZnVydGhlciBmcm9tIGFyY2hpdmFsLiBQZXJtaXNzaW9ubGVzczogYQp0cmFjayByZWNvcmQgaXMgdGhlIHJlY2lwaWVudCdzIGFzc2V0LCBhbmQgYW55b25lIHdpbGxpbmcgdG8gcGF5IHRoZSBmZWUKbWF5IGtlZXAgaXQgYWxpdmUg4oCUIGluY2x1ZGluZyB0aGUgcmVjaXBpZW50IHRoZW1zZWx2ZXMuAAAAAAlrZWVwYWxpdmUAAAAAAAABAAAAAAAAAAdzdWJqZWN0AAAAABMAAAABAAAD6QAAAAIAAAAD",
         "AAAAAAAAAMFSZWNvbXB1dGUgd2hhdCBgaGlzdG9yeV9yb290YCBiZWNvbWVzIGFmdGVyIG9uZSBtb3JlIGNyZWRpdC4gTGV0cyBhbgppbmRleGVyLCBvciBhbnlvbmUgYXVkaXRpbmcgYSBjbGFpbWVkIGhpc3RvcnksIHZlcmlmeSBvZmYtY2hhaW4gcmVjb3JkcwphZ2FpbnN0IG9uLWNoYWluIHN0YXRlIHdpdGhvdXQgdHJ1c3RpbmcgdGhlIGluZGV4ZXIuAAAAAAAACW5leHRfcm9vdAAAAAAAAAUAAAAAAAAABHJvb3QAAAPuAAAAIAAAAAAAAAAJcHJvZ3JhbW1lAAAAAAAAEwAAAAAAAAAGYW1vdW50AAAAAAALAAAAAAAAAAthdHRlc3RhdGlvbgAAAAPuAAAAIAAAAAAAAAAJdGltZXN0YW1wAAAAAAAABgAAAAEAAAPuAAAAIA==",
-        "AAAAAAAAAAAAAAAJc2V0X2FkbWluAAAAAAAAAQAAAAAAAAAJbmV3X2FkbWluAAAAAAAAEwAAAAEAAAPpAAAAAgAAAAM=",
+        "AAAAAAAAANJIYW5kIHRoZSBhZG1pbiByb2xlIHRvIGFub3RoZXIgYWRkcmVzcy4KClRoZSBhZG1pbiBkZWNpZGVzIHdobyBtYXkgd3JpdGUgc3RhbmRpbmcsIHNvIHRoaXMgaXMgdGhlIGtleSB0aGF0CmdvdmVybnMgd2hldGhlciB0aGUgcmVjb3JkIGNhbiBiZSB0cnVzdGVkIGF0IGFsbC4gSXJyZXZlcnNpYmxlIGZyb20gdGhlCm9sZCBhZG1pbidzIHNpZGUgb25jZSBpdCBsYW5kcy4AAAAAAAlzZXRfYWRtaW4AAAAAAAABAAAAAAAAAAluZXdfYWRtaW4AAAAAAAATAAAAAQAAA+kAAAACAAAAAw==",
         "AAAAAAAAAMxBdXRob3Jpc2UgYSBjb250cmFjdCB0byBjcmVkaXQgc3RhbmRpbmcuIERlbGliZXJhdGVseSByZXN0cmljdGVkOiBhbgp1bmF1dGhvcmlzZWQgd3JpdGVyIGNvdWxkIG1hbnVmYWN0dXJlIGEgdHJhY2sgcmVjb3JkIG91dCBvZiBub3RoaW5nLAp3aGljaCB3b3VsZCBtYWtlIGV2ZXJ5IGRvd25zdHJlYW0gdW5kZXJ3cml0aW5nIGRlY2lzaW9uIHdvcnRobGVzcy4AAAAKYWRkX3dyaXRlcgAAAAAAAQAAAAAAAAAGd3JpdGVyAAAAAAATAAAAAQAAA+kAAAACAAAAAw==",
         "AAAAAAAAAIZgYWRtaW5gIGdvdmVybnMgd2hpY2ggY29udHJhY3RzIG1heSB3cml0ZSBzdGFuZGluZy4gSW4gcHJvZHVjdGlvbiB0aGlzIGlzCnRoZSBwcm90b2NvbCByZWdpc3RyeSwgd2hpY2ggYWRkcyBlYWNoIHByb2dyYW1tZSBpdCBkZXBsb3lzLgAAAAAADV9fY29uc3RydWN0b3IAAAAAAAABAAAAAAAAAAVhZG1pbgAAAAAAABMAAAAA",
         "AAAAAAAAAHpSZXZva2UgYSB3cml0ZXIuIFN0YW5kaW5nIGFscmVhZHkgY3JlZGl0ZWQgaXMgbGVmdCBhbG9uZSDigJQgaGlzdG9yeSBpcyBub3QKcmV3cml0dGVuIGJlY2F1c2UgYW4gaXNzdWVyIHdhcyBsYXRlciByZW1vdmVkLgAAAAAADXJlbW92ZV93cml0ZXIAAAAAAAABAAAAAAAAAAZ3cml0ZXIAAAAAABMAAAABAAAD6QAAAAIAAAAD",

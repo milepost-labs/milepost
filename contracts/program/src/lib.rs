@@ -525,6 +525,14 @@ pub struct Programme;
 
 #[contractimpl]
 impl Programme {
+    /// Fix the terms of a funding round, permanently.
+    ///
+    /// Everything validated here is validated because getting it wrong makes
+    /// the programme unable to pay out money it has already taken: deadlines
+    /// must run in order, a quorum above the reviewer count leaves every
+    /// application unfinalisable, and an empty verifier set means no tranche
+    /// could ever be released. None of it can be changed afterwards, which is
+    /// what lets a donor rely on the terms they contributed under.
     pub fn __constructor(
         env: Env,
         config: ProgrammeConfig,

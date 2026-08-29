@@ -110,6 +110,11 @@ pub struct Registry;
 
 #[contractimpl]
 impl Registry {
+    /// Establish the protocol configuration every programme inherits.
+    ///
+    /// The admin set here can retune the fee, treasury and policy, change the
+    /// wasm future programmes deploy from, and upgrade this contract — so it
+    /// is the most consequential parameter in the call.
     pub fn __constructor(
         env: Env,
         admin: Address,
@@ -232,6 +237,9 @@ impl Registry {
         Ok(())
     }
 
+    /// Set the protocol fee, in basis points, for programmes created after
+    /// this call. Existing programmes keep the fee they were deployed with.
+    /// Refused above `MAX_FEE_BPS`.
     pub fn set_fee(env: Env, fee_bps: u32) -> Result<(), Error> {
         if fee_bps > MAX_FEE_BPS {
             return Err(Error::FeeTooHigh);
@@ -242,6 +250,8 @@ impl Registry {
         Ok(())
     }
 
+    /// Set the policy signer contract that future programmes consult before
+    /// paying a `Restricted` tranche. Existing programmes are unaffected.
     pub fn set_policy(env: Env, policy: Address) -> Result<(), Error> {
         let mut config = Self::admin_config(&env)?;
         config.policy = policy;
@@ -249,6 +259,8 @@ impl Registry {
         Ok(())
     }
 
+    /// Set where protocol fees settle for programmes created after this call.
+    /// Existing programmes keep the treasury they were deployed with.
     pub fn set_treasury(env: Env, treasury: Address) -> Result<(), Error> {
         let mut config = Self::admin_config(&env)?;
         config.treasury = treasury;
@@ -256,6 +268,10 @@ impl Registry {
         Ok(())
     }
 
+    /// Hand protocol administration to another address.
+    ///
+    /// The registry admin configures every future programme and can upgrade
+    /// this contract and `record`, so this is the widest-reaching call here.
     pub fn set_admin(env: Env, admin: Address) -> Result<(), Error> {
         let mut config = Self::admin_config(&env)?;
         config.admin = admin;
@@ -263,6 +279,8 @@ impl Registry {
         Ok(())
     }
 
+    /// The current protocol configuration: admin, treasury, fee, the
+    /// contracts programmes are wired to, and the programme wasm hash.
     pub fn get_config(env: Env) -> Result<Config, Error> {
         Self::config(&env)
     }

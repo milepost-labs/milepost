@@ -23,8 +23,12 @@ jobs:
       - name: Format
         run: cargo fmt --all --check
 
+      # A prebuilt binary rather than `cargo install cargo-audit`, which
+      # compiles from source on every run and adds minutes to every push.
       - name: Check dependencies for known vulnerabilities
-        run: cargo install --locked cargo-audit && cargo audit
+        uses: rustsec/audit-check@v2
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
 
       # Must precede both Clippy and Test. The registry's tests instantiate the
       # programme from its built wasm, the same way the registry does on-chain,
@@ -34,13 +38,6 @@ jobs:
       # time.
       - name: Build wasm
         run: cargo build --target wasm32v1-none --release
-
-      - name: Cache wasm artifacts
-        uses: actions/cache@v4
-        with:
-          path: target/wasm32v1-none/release
-          key: wasm-build-${{ github.sha }}
-          retention-days: 1
 
       - name: Validate contract documentation
         run: ./scripts/check-docs.sh
@@ -121,25 +118,19 @@ jobs:
 
   frontend:
     runs-on: ubuntu-latest
-    needs: check
+    # Deliberately not `needs: check`. This job builds the binding packages
+    # from checked-in TypeScript and never touches the wasm, so serialising it
+    # behind the contract job only makes the pipeline longer — and skips
+    # frontend entirely whenever the contract job is red, which is exactly when
+    # you still want to know.
     steps:
       - uses: actions/checkout@v5
-      - uses: dtolnay/rust-toolchain@stable
-        with:
-          targets: wasm32v1-none
       - uses: actions/setup-node@v5
         with:
           # eslint requires ^20.19 || ^22.13 || >=24; vite wants >=22.12.
           node-version: 24
           cache: npm
           cache-dependency-path: "**/package-lock.json"
-
-      - name: Restore wasm build cache
-        uses: actions/cache@v4
-        with:
-          path: target/wasm32v1-none/release
-          key: wasm-build-${{ github.sha }}
-          fail-on-cache-miss: true
 
       # `packages/*/dist` is gitignored, so a fresh checkout cannot resolve
       # `@milepost/*` at all. The frontend imports its contract types from
