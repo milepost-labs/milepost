@@ -1585,11 +1585,7 @@ impl Programme {
         }
 
         let refunded_key = Key::Refunded(donor.clone());
-        let claimed: i128 = env
-            .storage()
-            .persistent()
-            .get(&refunded_key)
-            .unwrap_or(0);
+        let claimed: i128 = env.storage().persistent().get(&refunded_key).unwrap_or(0);
 
         let remaining = total_share.checked_sub(claimed).ok_or(Error::Overflow)?;
         if remaining <= 0 {

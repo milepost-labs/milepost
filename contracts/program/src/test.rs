@@ -475,7 +475,7 @@ fn pausing_across_release_deadline_closes_releases_and_opens_refunds() {
     // When unpaused, release window is closed because deadlines are wall-clock
     f.client.unpause();
     let attestation = hash(&f.env, 100);
-    let verifier = f.verifiers.get(0).unwrap();
+    let verifier = f.verifier.clone();
     assert_eq!(
         f.client.try_release(&applicant, &attestation, &verifier),
         Err(Ok(Error::ReleaseWindowClosed))
@@ -2540,10 +2540,7 @@ mod proptests {
     }
 
     /// Core invariants for arbitrary partial claim sequences.
-    fn assert_partial_refund_properties(
-        amounts: &[i128],
-        split_fractions: &[std::vec::Vec<u32>],
-    ) {
+    fn assert_partial_refund_properties(amounts: &[i128], split_fractions: &[std::vec::Vec<u32>]) {
         let total: i128 = amounts.iter().sum();
         let unpaid = total - total * FEE_BPS as i128 / BPS_DENOMINATOR;
 
