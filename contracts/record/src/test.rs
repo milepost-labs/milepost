@@ -4,6 +4,13 @@ use super::*;
 use milepost_test_utils::hash;
 use soroban_sdk::{testutils::Address as _, testutils::Ledger as _, Env};
 
+// Upgrading needs a real uploaded wasm to point at. Importing this crate's own
+// artifact means `cargo build --target wasm32v1-none --release` must run first,
+// which CI already does before testing — the registry's tests rely on the same.
+mod built {
+    soroban_sdk::contractimport!(file = "../../target/wasm32v1-none/release/milepost_record.wasm");
+}
+
 struct Fixture {
     env: Env,
     client: RecordClient<'static>,
@@ -335,4 +342,24 @@ fn archived_markers_restore_rather_than_double_counting() {
     assert_eq!(s.programmes, 1, "an archived marker must not double-count");
     assert_eq!(s.tranches, 2);
     assert_eq!(s.total_received, 600);
+}
+
+/// Upgrading replaces the contract's entire code. `record` holds the standing
+/// every downstream funder underwrites against, so an unguarded upgrade here
+/// would let anyone rewrite that history wholesale.
+#[test]
+fn the_admin_can_upgrade_the_record() {
+    let f = setup();
+    let new_wasm = f.env.deployer().upload_contract_wasm(built::WASM);
+    f.client.upgrade(&new_wasm);
+}
+
+#[test]
+#[should_panic(expected = "Error(Auth, InvalidAction)")]
+fn upgrading_the_record_requires_the_admin() {
+    let f = setup();
+    let new_wasm = f.env.deployer().upload_contract_wasm(built::WASM);
+    // Drop the mocked authorisations so `require_auth` is actually enforced.
+    f.env.set_auths(&[]);
+    f.client.upgrade(&new_wasm);
 }

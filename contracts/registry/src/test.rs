@@ -493,3 +493,27 @@ fn create_defaults_minimum_award_to_zero() {
     let config = programme::Client::new(&f.env, &programme).get_config();
     assert_eq!(config.minimum_award, 0);
 }
+
+/// Upgrading replaces the contract's entire code, so the guard on it is the
+/// most consequential in the registry — and the registry is admin of `record`,
+/// so this key reaches further than the registry alone.
+#[test]
+fn the_admin_can_upgrade_the_registry() {
+    let f = setup();
+    let new_wasm = f.env.deployer().upload_contract_wasm(programme::WASM);
+    f.client.upgrade(&new_wasm);
+}
+
+/// `upgrade` reads its authorisation through `admin_config`, which calls
+/// `require_auth` and whose return value the caller discards. That makes the
+/// check easy to lose in a refactor without any test noticing, which is what
+/// this pins down.
+#[test]
+#[should_panic(expected = "Error(Auth, InvalidAction)")]
+fn upgrading_the_registry_requires_the_admin() {
+    let f = setup();
+    let new_wasm = f.env.deployer().upload_contract_wasm(programme::WASM);
+    // Drop the mocked authorisations so `require_auth` is actually enforced.
+    f.env.set_auths(&[]);
+    f.client.upgrade(&new_wasm);
+}

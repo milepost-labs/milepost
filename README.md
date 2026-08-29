@@ -147,6 +147,17 @@ installed, which bounds a misconfiguration to a single tranche.
 - **Registry** is admin of `record`. A programme may write standing *because the
   registry deployed it*, never because it asked. A programme deployed any other
   way can still take contributions and make awards, but cannot touch standing.
+- **Registry admin** can also replace the code of `registry` and `record`
+  outright, through `upgrade`. That is a larger power than configuring the
+  protocol, and it is worth naming: the key that sets the fee is the key that
+  could rewrite how standing is recorded. `attest` and `policy_spend` have no
+  admin and so cannot be upgraded at all, and a deployed `program` cannot be
+  upgraded by anyone — its terms are fixed for the life of the programme, which
+  is what lets a donor rely on them.
+
+Upgrading is not reversible in the way it sounds. Replacing a contract with wasm
+that does not itself expose `upgrade` freezes it permanently, so the new code
+has to carry the door it came through.
 
 `finalize` and `release` are permissionless on purpose. Both outcomes are
 already determined — by the votes, and by an attestation the verifier signed —
