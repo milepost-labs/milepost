@@ -161,3 +161,11 @@ jobs:
 
       - name: Test
         run: npm test --prefix frontend
+
+      # Six independent lockfiles: frontend/ plus the five binding packages.
+      # The frontend handles wallet signing, so a compromised production
+      # dependency there reaches transaction construction. The failure policy
+      # is deliberate and documented in scripts/check-npm-advisories.sh, which
+      # is the only place that needs to change when the policy changes.
+      - name: Check npm dependencies for known advisories
+        run: ./scripts/check-npm-advisories.sh
