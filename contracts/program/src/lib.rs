@@ -68,6 +68,29 @@
 //! - **No ordering double-commits.** Once an application is finalised, every
 //!   further `finalize` call against it fails with [`Error::AlreadyFinalized`]
 //!   before the budget is touched again, regardless of who calls it or when.
+//!
+//! ## Pause and deadlines: the clock keeps running
+//!
+//! Pausing halts the forward money-path (`contribute`, `apply`, `review`,
+//! `finalize`, `spend`, `release`) but **does not pause the ledger clock**.
+//! The programme deadlines (`apply_deadline`, `review_deadline`,
+//! `release_deadline`, `sweep_deadline`) are absolute wall-clock timestamps and
+//! continue to tick down during a pause.
+//!
+//! This is an intentional architectural decision:
+//!
+//! - **Donors are never held hostage:** Automatic deadline shifting would allow
+//!   a creator (or compromised key) to repeatedly cycle or maintain a pause to
+//!   indefinitely delay the refund and sweep windows. Keeping deadlines on a
+//!   fixed wall-clock ensures donors can always reclaim unreleased funds once
+//!   the release window closes.
+//! - **Explicit over implicit extension:** If an emergency is contained and
+//!   recipients legitimately need extra time to claim tranches, the creator may
+//!   use [`Programme::extend_release_deadline`] prior to the release deadline.
+//!   This keeps timeline extensions explicit, auditable (via events), and
+//!   subject to strict boundary checks rather than a side-effect of pausing.
+//! - **Invariant preservation:** Refund and sweep paths remain active during a
+//!   pause so capital is never trapped.
 
 use soroban_sdk::{
     contract, contractclient, contracterror, contractevent, contractimpl, contracttype, token,
@@ -1506,16 +1529,36 @@ impl Programme {
     /// released — a recipient who never produced a proof leaves their tranches
     /// in the pool, and after the release window those go back to the people who
     /// put them in rather than sitting stranded.
+    ///
+    /// Single-claim callers receive their entire proportional share; donors who
+    /// previously claimed partial amounts receive whatever is left of their share.
     pub fn refund(env: Env, donor: Address) -> Result<i128, Error> {
-        let config = Self::config(&env)?;
-        let cancelled = Self::phase(&env)? == Phase::Cancelled;
-        if !cancelled && env.ledger().timestamp() < config.release_deadline {
-            return Err(Error::RefundsNotOpen);
+        Self::execute_refund(&env, donor, None)
+    }
+
+    /// Claim a partial refund up to the donor's remaining proportional share.
+    ///
+    /// Allows donors to reclaim an explicit amount, leaving the remainder
+    /// claimable in later calls or available for the sweep.
+    pub fn refund_partial(env: Env, donor: Address, amount: i128) -> Result<i128, Error> {
+        Self::execute_refund(&env, donor, Some(amount))
+    }
+
+    fn execute_refund(
+        env: &Env,
+        donor: Address,
+        requested_amount: Option<i128>,
+    ) -> Result<i128, Error> {
+        if let Some(amt) = requested_amount {
+            if amt <= 0 {
+                return Err(Error::InvalidAmount);
+            }
         }
 
-        let refunded_key = Key::Refunded(donor.clone());
-        if env.storage().persistent().has(&refunded_key) {
-            return Err(Error::AlreadyRefunded);
+        let config = Self::config(env)?;
+        let cancelled = Self::phase(env)? == Phase::Cancelled;
+        if !cancelled && env.ledger().timestamp() < config.release_deadline {
+            return Err(Error::RefundsNotOpen);
         }
 
         let contributed: i128 = env
@@ -1529,19 +1572,42 @@ impl Programme {
 
         let total: i128 = env.storage().instance().get(&Key::Contributed).unwrap_or(0);
         let released: i128 = env.storage().instance().get(&Key::Released).unwrap_or(0);
-        let unpaid = Self::available(&env, &config)? - released;
+        let unpaid = Self::available(env, &config)? - released;
         if unpaid <= 0 {
             return Err(Error::NothingToRefund);
         }
 
         // Proportional to what this donor put in, so rounding cannot let the
         // sum of refunds exceed what is actually left.
-        let amount = contributed.checked_mul(unpaid).ok_or(Error::Overflow)? / total;
-        if amount <= 0 {
+        let total_share = contributed.checked_mul(unpaid).ok_or(Error::Overflow)? / total;
+        if total_share <= 0 {
             return Err(Error::NothingToRefund);
         }
 
-        env.storage().persistent().set(&refunded_key, &true);
+        let refunded_key = Key::Refunded(donor.clone());
+        let claimed: i128 = env
+            .storage()
+            .persistent()
+            .get(&refunded_key)
+            .unwrap_or(0);
+
+        let remaining = total_share.checked_sub(claimed).ok_or(Error::Overflow)?;
+        if remaining <= 0 {
+            return Err(Error::AlreadyRefunded);
+        }
+
+        let amount = match requested_amount {
+            Some(amt) => {
+                if amt > remaining {
+                    return Err(Error::InvalidAmount);
+                }
+                amt
+            }
+            None => remaining,
+        };
+
+        let new_claimed = claimed.checked_add(amount).ok_or(Error::Overflow)?;
+        env.storage().persistent().set(&refunded_key, &new_claimed);
         env.storage()
             .persistent()
             .extend_ttl(&refunded_key, BUMP_THRESHOLD, BUMP_LEDGERS);
@@ -1556,13 +1622,13 @@ impl Programme {
             &refunded_total.checked_add(amount).ok_or(Error::Overflow)?,
         );
 
-        token::Client::new(&env, &config.token).transfer(
+        token::Client::new(env, &config.token).transfer(
             &env.current_contract_address(),
             &donor,
             &amount,
         );
 
-        Refunded { donor, amount }.publish(&env);
+        Refunded { donor, amount }.publish(env);
         Ok(amount)
     }
 
@@ -1734,8 +1800,12 @@ impl Programme {
     /// refund and sweep paths open so donors are never trapped.
     ///
     /// Covers: contribute, apply, review, finalize, spend, release.
-    /// Does NOT cover: refund, sweep_fee, sweep_unclaimed (donors must always
-    /// be able to reclaim their money, even during an emergency).
+    /// Does NOT cover: refund, refund_partial, sweep_fee, sweep_unclaimed
+    /// (donors must always be able to reclaim their money, even during an emergency).
+    ///
+    /// Deadlines remain wall-clock: pausing stops forward calls but does NOT
+    /// halt or shift the ledger clock. When unpaused, the programme's active
+    /// phase and allowed actions correspond to the current wall-clock timestamp.
     ///
     /// Only the creator may pause. This is deliberate: the creator funds and
     /// oversees the programme, and pausing is a reversible containment action,
@@ -1758,6 +1828,9 @@ impl Programme {
 
     /// Lift the pause and resume normal operation.
     /// Only the creator may unpause.
+    ///
+    /// Once unpaused, allowed operations are determined by the current wall-clock
+    /// timestamp against the original deadlines (or explicitly extended deadlines).
     pub fn unpause(env: Env) -> Result<(), Error> {
         let config = Self::config(&env)?;
         config.creator.require_auth();
@@ -1790,6 +1863,8 @@ impl Programme {
         env.storage().instance().get::<_, bool>(&Key::Paused) == Some(true)
     }
 
+    /// Returns the current phase based on wall-clock timestamp, regardless of
+    /// whether the programme is currently paused.
     pub fn phase(env: &Env) -> Result<Phase, Error> {
         if env.storage().instance().get::<_, bool>(&Key::Cancelled) == Some(true) {
             return Ok(Phase::Cancelled);
@@ -1827,6 +1902,14 @@ impl Programme {
         env.storage()
             .persistent()
             .get(&Key::Donor(donor))
+            .unwrap_or(0)
+    }
+
+    /// How much of a refund this donor has claimed so far.
+    pub fn refunded_to(env: Env, donor: Address) -> i128 {
+        env.storage()
+            .persistent()
+            .get(&Key::Refunded(donor))
             .unwrap_or(0)
     }
 

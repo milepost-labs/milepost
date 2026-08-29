@@ -408,6 +408,118 @@ fn pausing_does_not_trap_refunds() {
     assert!(refunded > 0, "a paused programme must still refund donors");
 }
 
+// ---- pause and deadline interaction (issue #162) ----
+
+#[test]
+fn pausing_across_apply_deadline_advances_phase_and_blocks_late_apply() {
+    let f = setup(2, 3);
+    let donor = funded_donor(&f, 10_000);
+    f.client.contribute(&donor, &1_000);
+
+    // Pause while still inside the contribution window
+    f.client.pause();
+    assert!(f.client.is_paused());
+
+    // Advance clock past apply deadline into review phase
+    f.env.ledger().set_timestamp(APPLY_DEADLINE + 1);
+    assert_eq!(f.client.get_phase(), Phase::Review);
+
+    // While paused, operations are refused with Paused
+    let applicant = Address::generate(&f.env);
+    assert_eq!(
+        f.client.try_apply(&applicant, &500, &hash(&f.env, 1)),
+        Err(Ok(Error::Paused))
+    );
+    let r = f.reviewers.get(0).unwrap();
+    assert_eq!(
+        f.client.try_review(&r, &applicant, &500),
+        Err(Ok(Error::Paused))
+    );
+
+    // When unpaused, wall-clock phase rules apply: apply is closed, review is open
+    f.client.unpause();
+    assert_eq!(
+        f.client.try_apply(&applicant, &500, &hash(&f.env, 1)),
+        Err(Ok(Error::WrongPhase))
+    );
+}
+
+#[test]
+fn pausing_across_release_deadline_closes_releases_and_opens_refunds() {
+    let f = setup(2, 3);
+    let donor = funded_donor(&f, 10_000);
+    f.client.contribute(&donor, &10_000);
+
+    let applicant = Address::generate(&f.env);
+    let payee = Address::generate(&f.env);
+    f.client.allow_payee(&payee);
+    f.client.apply(&applicant, &5_000, &hash(&f.env, 1));
+    to_review(&f);
+
+    let r1 = f.reviewers.get(0).unwrap();
+    let r2 = f.reviewers.get(1).unwrap();
+    f.client.review(&r1, &applicant, &5_000);
+    f.client.review(&r2, &applicant, &5_000);
+    f.client.finalize(&applicant, &payee, &Mode::Direct);
+
+    // Move into the release window and pause
+    f.env.ledger().set_timestamp(REVIEW_DEADLINE + 1);
+    f.client.pause();
+
+    // Advance time past the release deadline while paused
+    f.env.ledger().set_timestamp(RELEASE_DEADLINE + 1);
+
+    // While paused, refunds are open and succeed
+    assert_eq!(f.client.refund(&donor), 9_000);
+
+    // When unpaused, release window is closed because deadlines are wall-clock
+    f.client.unpause();
+    let attestation = hash(&f.env, 100);
+    let verifier = f.verifiers.get(0).unwrap();
+    assert_eq!(
+        f.client.try_release(&applicant, &attestation, &verifier),
+        Err(Ok(Error::ReleaseWindowClosed))
+    );
+}
+
+#[test]
+fn pausing_across_sweep_deadline_allows_fee_and_unclaimed_sweeps_while_paused() {
+    let f = setup(2, 3);
+    let donor = funded_donor(&f, 10_000);
+    f.client.contribute(&donor, &10_000);
+
+    // Pause contract
+    f.client.pause();
+
+    // Advance clock past sweep deadline
+    f.env.ledger().set_timestamp(SWEEP_DEADLINE + 1);
+
+    // Both sweep_fee and sweep_unclaimed work even while paused
+    let fee = f.client.sweep_fee();
+    assert_eq!(fee, 1_000);
+
+    let swept = f.client.sweep_unclaimed();
+    assert_eq!(swept, 9_000);
+    assert_eq!(f.token.balance(&f.treasury), 10_000);
+    assert_eq!(f.token.balance(&f.client.address), 0);
+}
+
+#[test]
+fn pause_does_not_shift_or_extend_deadlines() {
+    let f = setup(2, 3);
+    let cfg_before = f.client.get_config();
+
+    f.client.pause();
+    f.env.ledger().set_timestamp(APPLY_DEADLINE + 500);
+    f.client.unpause();
+
+    let cfg_after = f.client.get_config();
+    assert_eq!(cfg_before.apply_deadline, cfg_after.apply_deadline);
+    assert_eq!(cfg_before.review_deadline, cfg_after.review_deadline);
+    assert_eq!(cfg_before.release_deadline, cfg_after.release_deadline);
+    assert_eq!(cfg_before.sweep_deadline, cfg_after.sweep_deadline);
+}
+
 #[test]
 fn a_reviewer_votes_once_per_applicant() {
     let f = setup(2, 3);
@@ -1354,6 +1466,119 @@ fn refunds_never_exceed_what_is_left() {
         total <= f.client.budget(),
         "rounding must never let refunds exceed the pool"
     );
+}
+
+// ---- partial refunds (issue #161) ----
+
+#[test]
+fn a_donor_can_claim_partially_and_the_rest_later() {
+    let f = setup(2, 3);
+    let donor = funded_donor(&f, 10_000);
+    f.client.contribute(&donor, &10_000);
+    f.env.ledger().set_timestamp(RELEASE_DEADLINE);
+
+    // Total share is 9_000 (10_000 - 10% fee).
+    // First partial claim: 3_000
+    assert_eq!(f.client.refund_partial(&donor, &3_000), 3_000);
+    assert_eq!(f.token.balance(&donor), 3_000);
+    assert_eq!(f.client.refunded_to(&donor), 3_000);
+    assert_eq!(f.client.total_refunded(), 3_000);
+
+    // Second partial claim: 4_000
+    assert_eq!(f.client.refund_partial(&donor, &4_000), 4_000);
+    assert_eq!(f.token.balance(&donor), 7_000);
+    assert_eq!(f.client.refunded_to(&donor), 7_000);
+    assert_eq!(f.client.total_refunded(), 7_000);
+
+    // Final claim via refund(): claims remaining 2_000
+    assert_eq!(f.client.refund(&donor), 2_000);
+    assert_eq!(f.token.balance(&donor), 9_000);
+    assert_eq!(f.client.refunded_to(&donor), 9_000);
+    assert_eq!(f.client.total_refunded(), 9_000);
+
+    // Subsequent claim fails with AlreadyRefunded
+    assert_eq!(f.client.try_refund(&donor), Err(Ok(Error::AlreadyRefunded)));
+    assert_eq!(
+        f.client.try_refund_partial(&donor, &1),
+        Err(Ok(Error::AlreadyRefunded))
+    );
+}
+
+#[test]
+fn partial_refund_with_invalid_amount_fails() {
+    let f = setup(2, 3);
+    let donor = funded_donor(&f, 10_000);
+    f.client.contribute(&donor, &10_000);
+    f.env.ledger().set_timestamp(RELEASE_DEADLINE);
+
+    // Zero or negative amounts fail with InvalidAmount
+    assert_eq!(
+        f.client.try_refund_partial(&donor, &0),
+        Err(Ok(Error::InvalidAmount))
+    );
+    assert_eq!(
+        f.client.try_refund_partial(&donor, &-100),
+        Err(Ok(Error::InvalidAmount))
+    );
+
+    // Amount exceeding remaining share (9_000) fails with InvalidAmount
+    assert_eq!(
+        f.client.try_refund_partial(&donor, &9_001),
+        Err(Ok(Error::InvalidAmount))
+    );
+
+    // Claim 5_000, remaining is 4_000. Trying to claim 4_001 fails
+    assert_eq!(f.client.refund_partial(&donor, &5_000), 5_000);
+    assert_eq!(
+        f.client.try_refund_partial(&donor, &4_001),
+        Err(Ok(Error::InvalidAmount))
+    );
+}
+
+#[test]
+fn partial_refund_before_window_opens_fails() {
+    let f = setup(2, 3);
+    let donor = funded_donor(&f, 10_000);
+    f.client.contribute(&donor, &10_000);
+    to_review(&f);
+
+    assert_eq!(
+        f.client.try_refund_partial(&donor, &1_000),
+        Err(Ok(Error::RefundsNotOpen))
+    );
+}
+
+#[test]
+fn cancelling_allows_partial_refunds_immediately() {
+    let f = setup(2, 3);
+    let donor = funded_donor(&f, 10_000);
+    f.client.contribute(&donor, &10_000);
+    f.client.cancel();
+
+    assert_eq!(f.client.refund_partial(&donor, &4_000), 4_000);
+    assert_eq!(f.client.refund(&donor), 5_000);
+    assert_eq!(f.token.balance(&donor), 9_000);
+}
+
+#[test]
+fn partial_claims_leave_remainder_for_sweep() {
+    let f = setup(2, 3);
+    let donor = funded_donor(&f, 10_000);
+    f.client.contribute(&donor, &10_000);
+    f.env.ledger().set_timestamp(RELEASE_DEADLINE);
+
+    // Donor claims 3_000 out of 9_000, leaving 6_000 unclaimed
+    assert_eq!(f.client.refund_partial(&donor, &3_000), 3_000);
+
+    // Advance past sweep deadline
+    f.env.ledger().set_timestamp(SWEEP_DEADLINE);
+
+    // Sweep takes 1_000 fee + 6_000 unclaimed refund = 7_000
+    let swept = f.client.sweep_unclaimed();
+    assert_eq!(swept, 7_000);
+    assert_eq!(f.token.balance(&f.treasury), 7_000);
+    assert_eq!(f.token.balance(&donor), 3_000);
+    assert_eq!(f.token.balance(&f.client.address), 0);
 }
 
 // ---- unclaimed refunds ----
@@ -2311,6 +2536,113 @@ mod proptests {
             let mut amounts = small;
             amounts.push(big);
             assert_refund_properties(&amounts);
+        }
+    }
+
+    /// Core invariants for arbitrary partial claim sequences.
+    fn assert_partial_refund_properties(
+        amounts: &[i128],
+        split_fractions: &[std::vec::Vec<u32>],
+    ) {
+        let total: i128 = amounts.iter().sum();
+        let unpaid = total - total * FEE_BPS as i128 / BPS_DENOMINATOR;
+
+        let (f, donors, _) = run_refunds(amounts);
+
+        let mut total_claimed_all = 0i128;
+
+        for (i, d) in donors.iter().enumerate() {
+            let share = amounts[i] * unpaid / total;
+            let fractions = if i < split_fractions.len() && !split_fractions[i].is_empty() {
+                &split_fractions[i][..]
+            } else {
+                &[1][..]
+            };
+
+            let frac_sum: u64 = fractions.iter().map(|&x| x as u64).sum();
+            let mut donor_claimed = 0i128;
+
+            for &frac in fractions {
+                let available = share - donor_claimed;
+                if available <= 0 {
+                    break;
+                }
+                let chunk = ((share as u128 * frac as u128) / (frac_sum as u128)) as i128;
+                let chunk = chunk.min(available);
+                if chunk > 0 {
+                    match f.client.try_refund_partial(d, &chunk) {
+                        Ok(Ok(amt)) => {
+                            assert_eq!(amt, chunk);
+                            donor_claimed += amt;
+                        }
+                        _ => panic!("valid partial refund of {chunk} rejected for donor {i}"),
+                    }
+                }
+            }
+
+            // Claim remaining share
+            let remaining = share - donor_claimed;
+            if remaining > 0 {
+                match f.client.try_refund(d) {
+                    Ok(Ok(amt)) => {
+                        assert_eq!(amt, remaining);
+                        donor_claimed += amt;
+                    }
+                    _ => panic!("valid refund of remaining {remaining} rejected for donor {i}"),
+                }
+            }
+
+            assert_eq!(donor_claimed, share, "donor {i} did not claim exact share");
+            assert_eq!(f.client.refunded_to(d), donor_claimed);
+
+            // Subsequent claims must fail with AlreadyRefunded
+            if share > 0 {
+                assert_eq!(
+                    f.client.try_refund(d),
+                    Err(Ok(Error::AlreadyRefunded)),
+                    "subsequent refund after full claim did not return AlreadyRefunded"
+                );
+                assert_eq!(
+                    f.client.try_refund_partial(d, &1),
+                    Err(Ok(Error::AlreadyRefunded)),
+                    "subsequent partial refund after full claim did not return AlreadyRefunded"
+                );
+            }
+
+            total_claimed_all += donor_claimed;
+        }
+
+        // 1. Total claimed never exceeds unpaid pool
+        assert!(
+            total_claimed_all <= unpaid,
+            "total partial refunds {total_claimed_all} exceeds unpaid pool {unpaid}"
+        );
+
+        // 2. Token balance in contract equals total contributed minus total claimed
+        assert_eq!(
+            f.token.balance(&f.client.address),
+            total - total_claimed_all,
+            "contract balance mismatch after partial claims"
+        );
+
+        // 3. Sweeping unclaimed funds sweeps exactly what is left
+        f.env.ledger().set_timestamp(SWEEP_DEADLINE);
+        let remaining_in_contract = f.token.balance(&f.client.address);
+        if remaining_in_contract > 0 {
+            let swept = f.client.sweep_unclaimed();
+            assert_eq!(swept, remaining_in_contract);
+            assert_eq!(f.token.balance(&f.treasury), remaining_in_contract);
+            assert_eq!(f.token.balance(&f.client.address), 0);
+        }
+    }
+
+    proptest! {
+        #[test]
+        fn partial_refunds_arbitrary_sequences_preserve_invariants(
+            amounts in prop::collection::vec(1i128..=10_000i128, 1..=15),
+            splits in prop::collection::vec(prop::collection::vec(1u32..=100u32, 1..=5), 1..=15),
+        ) {
+            assert_partial_refund_properties(&amounts, &splits);
         }
     }
 
