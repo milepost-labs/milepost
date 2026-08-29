@@ -118,6 +118,13 @@ stellar contract build
 ```
 The compiled outputs will land in `target/wasm32-unknown-unknown/release/`.
 
+**The wasm build must come first.** `registry`'s tests `contractimport!` the
+built programme, so running clippy or tests before building produces failures
+that look like unrelated logic errors — and a stale artifact silently tests the
+wrong contract. See the [testing guide](docs/testing-guide.md) for the ordering
+rule, bindings regeneration, and the generated-file and fixture traps that have
+cost review rounds.
+
 ---
 
 ## 5. Documentation Standards
