@@ -18,6 +18,7 @@ import { ApplicationTimeline } from "./pages/ApplicationTimeline";
 import { AdminDashboard } from "./pages/AdminDashboard";
 import { AttestationLookup } from "./pages/AttestationLookup";
 import { RegisterSchema } from "./pages/RegisterSchema";
+import { NotFound } from "./pages/NotFound";
 
 function App() {
   return (
@@ -52,6 +53,7 @@ function App() {
                 <Route path="finalize" element={<FinalizeAwards />} />
                 <Route path="attestations" element={<AttestationLookup />} />
                 <Route path="schemas/register" element={<RegisterSchema />} />
+                <Route path="*" element={<NotFound />} />
               </Route>
             </Routes>
           </Router>
