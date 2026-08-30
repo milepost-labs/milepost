@@ -1,3 +1,4 @@
+import { useEffect, useState } from 'react';
 import { Buffer } from 'buffer';
 import { Clock, ShieldCheck } from 'lucide-react';
 import { useSoroban } from '../../context/useSoroban';
@@ -7,6 +8,18 @@ import './Keepalive.css';
 
 const DAY_SECONDS = 86400;
 const EXPIRY_WARNING_DAYS = 45;
+
+// Ticking it as state matches AttestationLookup and keeps the age honest
+// without a refresh. Reading Date.now() during render is also impure, which
+// the React Compiler lint rejects.
+function useNowSeconds() {
+  const [nowSeconds, setNowSeconds] = useState(() => Math.floor(Date.now() / 1000));
+  useEffect(() => {
+    const interval = window.setInterval(() => setNowSeconds(Math.floor(Date.now() / 1000)), 30_000);
+    return () => window.clearInterval(interval);
+  }, []);
+  return nowSeconds;
+}
 
 function archivalExplainer() {
   return (
@@ -33,7 +46,7 @@ export function AttestationKeepalive({ uid, createdAt }: { uid: Buffer; createdA
   const { attest } = useSoroban();
   const tx = useTransaction({ contract: 'attest' });
 
-  const now = Math.floor(Date.now() / 1000);
+  const now = useNowSeconds();
   const ageDays = Math.floor((now - Number(createdAt)) / DAY_SECONDS);
   const approaching = ageDays >= EXPIRY_WARNING_DAYS;
 
@@ -103,7 +116,7 @@ export function StandingKeepalive({ subject, lastSeen }: { subject: string; last
   const { record } = useSoroban();
   const tx = useTransaction({ contract: 'record' });
 
-  const now = Math.floor(Date.now() / 1000);
+  const now = useNowSeconds();
   const ageDays = Math.floor((now - Number(lastSeen)) / DAY_SECONDS);
   const approaching = ageDays >= EXPIRY_WARNING_DAYS;
 

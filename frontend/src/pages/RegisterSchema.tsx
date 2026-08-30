@@ -35,7 +35,7 @@ export const RegisterSchema = () => {
         definition: trimmed,
         revocable,
         restricted,
-        predecessor: null,
+        predecessor: undefined,
       });
       return {
         signAndSend: async (options: Parameters<typeof built.signAndSend>[0]) => {
