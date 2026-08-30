@@ -1,6 +1,7 @@
 #![cfg(test)]
 
 use super::*;
+use milepost_test_utils::hash;
 use soroban_sdk::{testutils::Address as _, testutils::Ledger as _, Env};
 
 struct Fixture {
@@ -11,8 +12,7 @@ struct Fixture {
 }
 
 fn setup() -> Fixture {
-    let env = Env::default();
-    env.mock_all_auths();
+    let env = milepost_test_utils::new_test_env();
     let id = env.register(Attest, ());
     let client = AttestClient::new(&env, &id);
     let authority = Address::generate(&env);
@@ -25,16 +25,13 @@ fn setup() -> Fixture {
     }
 }
 
-fn hash(env: &Env, byte: u8) -> BytesN<32> {
-    BytesN::from_array(env, &[byte; 32])
-}
-
 fn open_schema(f: &Fixture) -> BytesN<32> {
     f.client.register_schema(
         &f.authority,
         &String::from_str(&f.env, "enrolment:v1"),
         &true,
         &false,
+        &None,
     )
 }
 
@@ -60,6 +57,7 @@ fn identical_schemas_collide_rather_than_duplicate() {
             &String::from_str(&f.env, "enrolment:v1"),
             &true,
             &false,
+            &None,
         ),
         Err(Ok(Error::SchemaAlreadyExists))
     );
@@ -75,6 +73,7 @@ fn same_definition_from_a_different_authority_is_a_different_schema() {
         &String::from_str(&f.env, "enrolment:v1"),
         &true,
         &false,
+        &None,
     );
     assert_ne!(first, second);
 }
@@ -206,6 +205,7 @@ fn irrevocable_schemas_reject_revocation() {
         &String::from_str(&f.env, "completion:v1"),
         &false,
         &false,
+        &None,
     );
     let uid = f
         .client
@@ -226,6 +226,7 @@ fn restricted_schemas_admit_only_their_authority() {
         &String::from_str(&f.env, "shifts-worked:v1"),
         &true,
         &true,
+        &None,
     );
 
     let stranger = Address::generate(&f.env);
@@ -315,6 +316,7 @@ fn verify_requires_subject_schema_and_attester_to_all_match() {
         &String::from_str(&f.env, "unrelated:v1"),
         &true,
         &false,
+        &None,
     );
 
     // Each of the three is independently sufficient to reject.
