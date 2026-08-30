@@ -153,6 +153,9 @@ jobs:
       - name: Build
         run: npm run build --prefix frontend
 
+      - name: Enforce frontend bundle size budget
+        run: ./scripts/check-frontend-bundle-size.sh >> "$GITHUB_STEP_SUMMARY"
+
       # Not cosmetic. The React Compiler rules here catch render-purity and
       # cascading-setState bugs that type-check cleanly and misbehave at
       # runtime.
