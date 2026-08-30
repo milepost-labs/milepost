@@ -12,6 +12,14 @@ env:
 jobs:
   check:
     runs-on: ubuntu-latest
+    # rustsec/audit-check publishes its result as a check run. Without an
+    # explicit grant the job inherits a read-only GITHUB_TOKEN on `push`, and
+    # the action fails with "Resource not accessible by integration" after the
+    # audit itself has already come back clean — so every push to main went red
+    # on a green audit.
+    permissions:
+      contents: read
+      checks: write
     steps:
       - uses: actions/checkout@v5
       - uses: dtolnay/rust-toolchain@stable
