@@ -12,7 +12,9 @@ soroban contract bindings ts \
   --output-dir ./path/to/program
 ```
 
-The network passphrase and contract ID are exported from [index.ts](./src/index.ts) in the `networks` constant. If you are the one who generated this library and you know that this contract is also deployed to other networks, feel free to update `networks` with other valid options. This will help your contract consumers use this library more easily.
+The network passphrase is exported from [index.ts](./src/index.ts) in the `networks` constant. Unlike singleton contracts (e.g. registry, record), the `program` package does **not** carry a deployed contract ID because every programme is a separate instantiated contract rather than a singleton. Consumers must provide the specific contract ID of the programme they wish to interact with at runtime.
+
+Versions of this package precisely match the release tag of the Milepost smart contracts. Stale bindings will fail at runtime if the on-chain contract interface changes, so always ensure the npm package version matches the deployed contract version you are interacting with.
 
 # To publish or not to publish
 

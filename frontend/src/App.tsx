@@ -1,29 +1,66 @@
-import { BrowserRouter as Router, Routes, Route } from 'react-router-dom';
-import { ThemeProvider } from './context/ThemeContext';
-import { SorobanProvider } from './context/SorobanContext';
-import { WalletProvider } from './context/WalletContext';
-import { Layout } from './components/layout/Layout';
-import { Home } from './pages/Home';
-import { FunderDashboard } from './pages/FunderDashboard';
-import { RecipientDashboard } from './pages/RecipientDashboard';
-import { VerifierDashboard } from './pages/VerifierDashboard';
+import { BrowserRouter as Router, Routes, Route } from "react-router-dom";
+import { ThemeProvider } from "./context/ThemeContext";
+import { SorobanProvider } from "./context/SorobanContext";
+import { WalletProvider } from "./context/WalletContext";
+import { Layout } from "./components/layout/Layout";
+import { Home } from "./pages/Home";
+import { FunderDashboard } from "./pages/FunderDashboard";
+import { ProgrammeDetail } from "./pages/ProgrammeDetail";
+import { RecipientDashboard } from "./pages/RecipientDashboard";
+import { VerifierDashboard } from "./pages/VerifierDashboard";
+import { FinalizeAwards } from "./pages/FinalizeAwards";
+import { ProgrammeDirectory } from "./pages/ProgrammeDirectory";
+import { SpendPolicy } from "./pages/SpendPolicy";
+import { RegistryAdmin } from "./pages/RegistryAdmin";
+import { Standing } from "./pages/Standing";
+import { AwardProgress } from "./pages/AwardProgress";
+import { ApplicationTimeline } from "./pages/ApplicationTimeline";
+import { AdminDashboard } from "./pages/AdminDashboard";
+import { AttestationLookup } from "./pages/AttestationLookup";
+import { RegisterSchema } from "./pages/RegisterSchema";
+import { NotFound } from "./pages/NotFound";
+import { ErrorBoundary } from "./components/ErrorBoundary";
 
 function App() {
   return (
     <ThemeProvider>
       <WalletProvider>
         <SorobanProvider>
-        <Router>
-          <Routes>
-            <Route path="/" element={<Layout />}>
-              <Route index element={<Home />} />
-              <Route path="funders" element={<FunderDashboard />} />
-              <Route path="recipients" element={<RecipientDashboard />} />
-              <Route path="verifiers" element={<VerifierDashboard />} />
-            </Route>
-          </Routes>
-        </Router>
-      </SorobanProvider>
+          <ErrorBoundary>
+            <Router>
+              <Routes>
+                <Route path="/" element={<Layout />}>
+                  <Route index element={<Home />} />
+                  <Route path="directory" element={<ProgrammeDirectory />} />
+                  <Route path="funders" element={<FunderDashboard />} />
+                  <Route path="programme" element={<ProgrammeDetail />} />
+                  <Route
+                    path="programme/:programmeId"
+                    element={<ProgrammeDetail />}
+                  />
+                  <Route path="recipients" element={<RecipientDashboard />} />
+                  <Route path="recipients/standing" element={<Standing />} />
+                  <Route
+                    path="recipients/award-progress"
+                    element={<AwardProgress />}
+                  />
+                  <Route
+                    path="recipients/application-timeline"
+                    element={<ApplicationTimeline />}
+                  />
+                  <Route path="verifiers" element={<VerifierDashboard />} />
+                  <Route path="policy" element={<SpendPolicy />} />
+                  <Route path="admin" element={<RegistryAdmin />} />
+                  <Route path="admin/standing" element={<AdminDashboard />} />
+                  <Route path="finalize" element={<FinalizeAwards />} />
+                  <Route path="attestations" element={<AttestationLookup />} />
+                  <Route path="schemas/register" element={<RegisterSchema />} />
+                  <Route path="*" element={<NotFound />} />
+                </Route>
+              </Routes>
+            </Router>
+          </ErrorBoundary>
+        </SorobanProvider>
       </WalletProvider>
     </ThemeProvider>
   );

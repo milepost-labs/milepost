@@ -108,3 +108,74 @@ export function AsyncView<T>({
   }
   return <>{children(data)}</>;
 }
+
+/**
+ * Confirmation that something worked.
+ *
+ * Loading, empty and error were covered; success was not, so every write screen
+ * would have invented its own. A transaction that succeeds silently is
+ * indistinguishable from one that did nothing, and on a screen that moves money
+ * that is the difference between confidence and a support request.
+ *
+ * `role="status"` announces it without stealing focus.
+ */
+export function Success({
+  title,
+  description,
+  action,
+  onDismiss,
+}: {
+  title: string;
+  description?: ReactNode;
+  action?: ReactNode;
+  onDismiss?: () => void;
+}) {
+  return (
+    <div className="state-success" role="status" aria-live="polite">
+      <div className="state-success__text">
+        <p className="state-success__title">{title}</p>
+        {description && <p className="state-success__description">{description}</p>}
+      </div>
+      {action}
+      {onDismiss && (
+        <button type="button" className="state-success__dismiss" onClick={onDismiss} aria-label="Dismiss">
+          ×
+        </button>
+      )}
+    </div>
+  );
+}
+
+/**
+ * The full outcome of a write, driven by `useTransaction`.
+ *
+ * Renders nothing while idle, the failure when it fails, and the confirmation
+ * when it succeeds — so a screen wires one component rather than three
+ * conditionals it has to keep consistent with the others.
+ */
+export function TransactionOutcome({
+  phase,
+  error,
+  successTitle,
+  successDescription,
+  onDismiss,
+}: {
+  phase: string;
+  error: { message: string; action?: string; kind: string } | null;
+  successTitle: string;
+  successDescription?: ReactNode;
+  onDismiss?: () => void;
+}) {
+  if (error) {
+    return (
+      <div className={`state-error state-error--${error.kind}`} role="alert">
+        <p className="state-error__message">{error.message}</p>
+        {error.action && <p className="state-error__action">{error.action}</p>}
+      </div>
+    );
+  }
+  if (phase === 'success') {
+    return <Success title={successTitle} description={successDescription} onDismiss={onDismiss} />;
+  }
+  return null;
+}

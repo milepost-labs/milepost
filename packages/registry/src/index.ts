@@ -84,7 +84,10 @@ export interface Standing {
  * Lets anyone verify a full off-chain history against on-chain state.
  */
 history_root: Buffer;
-  last_updated: u64;
+  /**
+ * Timestamp of the last credit, allows readers to weigh recency.
+ */
+last_seen: u64;
   /**
  * Distinct programmes this recipient has been credited under.
  */
@@ -120,6 +123,12 @@ attest: string;
   creator: string;
   fee_bps: u32;
   metadata_hash: Buffer;
+  /**
+ * Minimum award amount below which finalisation is refused. Prevents awards
+ * smaller than the fee taken from them, or so small that splitting into
+ * tranches produces payments worth less than the transaction cost.
+ */
+minimum_award: i128;
   /**
  * Policy signer contract, consulted before a `Restricted` tranche is paid
  * into a recipient's wallet.
@@ -163,6 +172,13 @@ token: string;
 
 export interface Client {
   /**
+   * Construct and simulate a nonce transaction. Returns an `AssembledTransaction` object which will have a `result` field containing the result of the simulation. If this transaction changes contract state, you will need to call `signAndSend()` on the returned object.
+   * The current deployment nonce. One higher than the nonce used by the last
+   * `create` call — i.e. the nonce the *next* deployment will use.
+   */
+  nonce: (options?: MethodOptions) => Promise<AssembledTransaction<u64>>
+
+  /**
    * Construct and simulate a create transaction. Returns an `AssembledTransaction` object which will have a `result` field containing the result of the simulation. If this transaction changes contract state, you will need to call `signAndSend()` on the returned object.
    * Deploy a programme and authorise it to write standing.
    * 
@@ -170,25 +186,42 @@ export interface Client {
    * caller, so a creator cannot deploy a programme that pays a fee to
    * themselves or skips it entirely.
    */
-  create: ({creator, token, schema, apply_deadline, review_deadline, release_deadline, sweep_deadline, quorum, tranches, metadata_hash, reviewers, verifiers, name}: {creator: string, token: string, schema: Buffer, apply_deadline: u64, review_deadline: u64, release_deadline: u64, sweep_deadline: u64, quorum: u32, tranches: u32, metadata_hash: Buffer, reviewers: Array<string>, verifiers: Array<string>, name: string}, options?: MethodOptions) => Promise<AssembledTransaction<Result<string>>>
+  create: ({creator, token, schema, apply_deadline, review_deadline, release_deadline, sweep_deadline, quorum, tranches, metadata_hash, reviewers, verifiers, name, minimum_award}: {creator: string, token: string, schema: Buffer, apply_deadline: u64, review_deadline: u64, release_deadline: u64, sweep_deadline: u64, quorum: u32, tranches: u32, metadata_hash: Buffer, reviewers: Array<string>, verifiers: Array<string>, name: string, minimum_award: i128}, options?: MethodOptions) => Promise<AssembledTransaction<Result<string>>>
 
   /**
    * Construct and simulate a set_fee transaction. Returns an `AssembledTransaction` object which will have a `result` field containing the result of the simulation. If this transaction changes contract state, you will need to call `signAndSend()` on the returned object.
+   * Set the protocol fee, in basis points, for programmes created after
+   * this call. Existing programmes keep the fee they were deployed with.
+   * Refused above `MAX_FEE_BPS`.
    */
   set_fee: ({fee_bps}: {fee_bps: u32}, options?: MethodOptions) => Promise<AssembledTransaction<Result<void>>>
 
   /**
+   * Construct and simulate a upgrade transaction. Returns an `AssembledTransaction` object which will have a `result` field containing the result of the simulation. If this transaction changes contract state, you will need to call `signAndSend()` on the returned object.
+   * Upgrade the registry contract itself.
+   */
+  upgrade: ({new_wasm_hash}: {new_wasm_hash: Buffer}, options?: MethodOptions) => Promise<AssembledTransaction<Result<void>>>
+
+  /**
    * Construct and simulate a set_admin transaction. Returns an `AssembledTransaction` object which will have a `result` field containing the result of the simulation. If this transaction changes contract state, you will need to call `signAndSend()` on the returned object.
+   * Hand protocol administration to another address.
+   * 
+   * The registry admin configures every future programme and can upgrade
+   * this contract and `record`, so this is the widest-reaching call here.
    */
   set_admin: ({admin}: {admin: string}, options?: MethodOptions) => Promise<AssembledTransaction<Result<void>>>
 
   /**
    * Construct and simulate a get_config transaction. Returns an `AssembledTransaction` object which will have a `result` field containing the result of the simulation. If this transaction changes contract state, you will need to call `signAndSend()` on the returned object.
+   * The current protocol configuration: admin, treasury, fee, the
+   * contracts programmes are wired to, and the programme wasm hash.
    */
   get_config: (options?: MethodOptions) => Promise<AssembledTransaction<Result<Config>>>
 
   /**
    * Construct and simulate a set_policy transaction. Returns an `AssembledTransaction` object which will have a `result` field containing the result of the simulation. If this transaction changes contract state, you will need to call `signAndSend()` on the returned object.
+   * Set the policy signer contract that future programmes consult before
+   * paying a `Restricted` tranche. Existing programmes are unaffected.
    */
   set_policy: ({policy}: {policy: string}, options?: MethodOptions) => Promise<AssembledTransaction<Result<void>>>
 
@@ -201,6 +234,8 @@ export interface Client {
 
   /**
    * Construct and simulate a set_treasury transaction. Returns an `AssembledTransaction` object which will have a `result` field containing the result of the simulation. If this transaction changes contract state, you will need to call `signAndSend()` on the returned object.
+   * Set where protocol fees settle for programmes created after this call.
+   * Existing programmes keep the treasury they were deployed with.
    */
   set_treasury: ({treasury}: {treasury: string}, options?: MethodOptions) => Promise<AssembledTransaction<Result<void>>>
 
@@ -211,6 +246,14 @@ export interface Client {
    * which is the point of deploying rather than proxying.
    */
   set_program_wasm: ({wasm}: {wasm: Buffer}, options?: MethodOptions) => Promise<AssembledTransaction<Result<void>>>
+
+  /**
+   * Construct and simulate a programme_address transaction. Returns an `AssembledTransaction` object which will have a `result` field containing the result of the simulation. If this transaction changes contract state, you will need to call `signAndSend()` on the returned object.
+   * Derive the address a programme *would* have if deployed at the given
+   * nonce, using the same salt scheme as `create`. A client can walk the
+   * range `[0, nonce)` without the contract storing a list.
+   */
+  programme_address: ({n}: {n: u64}, options?: MethodOptions) => Promise<AssembledTransaction<string>>
 
 }
 export class Client extends ContractClient {
@@ -234,30 +277,36 @@ export class Client extends ContractClient {
     super(
       new ContractSpec([ "AAAABAAAAAAAAAAAAAAABUVycm9yAAAAAAAAAwAAAAAAAAANTm90QXV0aG9yaXplZAAAAAAAAAEAAAAAAAAACkZlZVRvb0hpZ2gAAAAAAAIAAAAAAAAADk5vdEluaXRpYWxpemVkAAAAAAAD",
         "AAAAAQAAAAAAAAAAAAAABkNvbmZpZwAAAAAABwAAAAAAAAAFYWRtaW4AAAAAAAATAAAAR0F0dGVzdGF0aW9uIHJlZ2lzdHJ5IHRoYXQgcHJvZ3JhbW1lcyB2ZXJpZnkgdHJhbmNoZSBjb25kaXRpb25zIGFnYWluc3QuAAAAAAZhdHRlc3QAAAAAABMAAAAAAAAAB2ZlZV9icHMAAAAABAAAAEVTcGVuZCBwb2xpY3kgcHJvZ3JhbW1lcyBjb25zdWx0IGJlZm9yZSBwYXlpbmcgYSBgUmVzdHJpY3RlZGAgdHJhbmNoZS4AAAAAAAAGcG9saWN5AAAAAAATAAAAP0hhc2ggb2YgdGhlIHVwbG9hZGVkIHByb2dyYW1tZSB3YXNtIHRoYXQgYGNyZWF0ZWAgaW5zdGFudGlhdGVzLgAAAAAMcHJvZ3JhbV93YXNtAAAD7gAAACAAAAA0U3RhbmRpbmcgY29udHJhY3QgdGhhdCBwcm9ncmFtbWVzIGNyZWRpdCBvbiByZWxlYXNlLgAAAAZyZWNvcmQAAAAAABMAAAAAAAAACHRyZWFzdXJ5AAAAEw==",
-        "AAAAAAAAAOFEZXBsb3kgYSBwcm9ncmFtbWUgYW5kIGF1dGhvcmlzZSBpdCB0byB3cml0ZSBzdGFuZGluZy4KClRyZWFzdXJ5IGFuZCBmZWUgY29tZSBmcm9tIHByb3RvY29sIGNvbmZpZ3VyYXRpb24gcmF0aGVyIHRoYW4gZnJvbSB0aGUKY2FsbGVyLCBzbyBhIGNyZWF0b3IgY2Fubm90IGRlcGxveSBhIHByb2dyYW1tZSB0aGF0IHBheXMgYSBmZWUgdG8KdGhlbXNlbHZlcyBvciBza2lwcyBpdCBlbnRpcmVseS4AAAAAAAAGY3JlYXRlAAAAAAANAAAAAAAAAAdjcmVhdG9yAAAAABMAAAAAAAAABXRva2VuAAAAAAAAEwAAAAAAAAAGc2NoZW1hAAAAAAPuAAAAIAAAAAAAAAAOYXBwbHlfZGVhZGxpbmUAAAAAAAYAAAAAAAAAD3Jldmlld19kZWFkbGluZQAAAAAGAAAAAAAAABByZWxlYXNlX2RlYWRsaW5lAAAABgAAAAAAAAAOc3dlZXBfZGVhZGxpbmUAAAAAAAYAAAAAAAAABnF1b3J1bQAAAAAABAAAAAAAAAAIdHJhbmNoZXMAAAAEAAAAAAAAAA1tZXRhZGF0YV9oYXNoAAAAAAAD7gAAACAAAAAAAAAACXJldmlld2VycwAAAAAAA+oAAAATAAAAAAAAAAl2ZXJpZmllcnMAAAAAAAPqAAAAEwAAAAAAAAAEbmFtZQAAABAAAAABAAAD6QAAABMAAAAD",
-        "AAAAAAAAAAAAAAAHc2V0X2ZlZQAAAAABAAAAAAAAAAdmZWVfYnBzAAAAAAQAAAABAAAD6QAAAAIAAAAD",
-        "AAAAAAAAAAAAAAAJc2V0X2FkbWluAAAAAAAAAQAAAAAAAAAFYWRtaW4AAAAAAAATAAAAAQAAA+kAAAACAAAAAw==",
-        "AAAAAAAAAAAAAAAKZ2V0X2NvbmZpZwAAAAAAAAAAAAEAAAPpAAAH0AAAAAZDb25maWcAAAAAAAM=",
-        "AAAAAAAAAAAAAAAKc2V0X3BvbGljeQAAAAAAAQAAAAAAAAAGcG9saWN5AAAAAAATAAAAAQAAA+kAAAACAAAAAw==",
-        "AAAAAAAAAG9XaGV0aGVyIHRoaXMgYWRkcmVzcyBpcyBhIHByb2dyYW1tZSB0aGUgcmVnaXN0cnkgZGVwbG95ZWQuIEFueXRoaW5nIGVsc2UKY2xhaW1pbmcgdG8gYmUgb25lIGlzIG5vdCB2b3VjaGVkIGZvci4AAAAADGlzX3Byb2dyYW1tZQAAAAEAAAAAAAAABGFkZHIAAAATAAAAAQAAAAE=",
-        "AAAAAAAAAAAAAAAMc2V0X3RyZWFzdXJ5AAAAAQAAAAAAAAAIdHJlYXN1cnkAAAATAAAAAQAAA+kAAAACAAAAAw==",
         "AAAABQAAAAAAAAAAAAAADUNvbmZpZ0NoYW5nZWQAAAAAAAABAAAABmNvbmZpZwAAAAAAAQAAAAAAAAAGY29uZmlnAAAAAAfQAAAABkNvbmZpZwAAAAAAAAAAAAA=",
-        "AAAAAAAAAAAAAAANX19jb25zdHJ1Y3RvcgAAAAAAAAcAAAAAAAAABWFkbWluAAAAAAAAEwAAAAAAAAAIdHJlYXN1cnkAAAATAAAAAAAAAAZhdHRlc3QAAAAAABMAAAAAAAAABnJlY29yZAAAAAAAEwAAAAAAAAAGcG9saWN5AAAAAAATAAAAAAAAAAdmZWVfYnBzAAAAAAQAAAAAAAAADHByb2dyYW1fd2FzbQAAA+4AAAAgAAAAAQAAA+kAAAACAAAAAw==",
         "AAAABQAAAAAAAAAAAAAAEFByb2dyYW1tZUNyZWF0ZWQAAAABAAAAB2NyZWF0ZWQAAAAAAwAAAAAAAAAJcHJvZ3JhbW1lAAAAAAAAEwAAAAEAAAAAAAAAB2NyZWF0b3IAAAAAEwAAAAEAAAAAAAAABG5hbWUAAAAQAAAAAAAAAAA=",
+        "AAAAAAAAAIlUaGUgY3VycmVudCBkZXBsb3ltZW50IG5vbmNlLiBPbmUgaGlnaGVyIHRoYW4gdGhlIG5vbmNlIHVzZWQgYnkgdGhlIGxhc3QKYGNyZWF0ZWAgY2FsbCDigJQgaS5lLiB0aGUgbm9uY2UgdGhlICpuZXh0KiBkZXBsb3ltZW50IHdpbGwgdXNlLgAAAAAAAAVub25jZQAAAAAAAAAAAAABAAAABg==",
+        "AAAAAAAAAOFEZXBsb3kgYSBwcm9ncmFtbWUgYW5kIGF1dGhvcmlzZSBpdCB0byB3cml0ZSBzdGFuZGluZy4KClRyZWFzdXJ5IGFuZCBmZWUgY29tZSBmcm9tIHByb3RvY29sIGNvbmZpZ3VyYXRpb24gcmF0aGVyIHRoYW4gZnJvbSB0aGUKY2FsbGVyLCBzbyBhIGNyZWF0b3IgY2Fubm90IGRlcGxveSBhIHByb2dyYW1tZSB0aGF0IHBheXMgYSBmZWUgdG8KdGhlbXNlbHZlcyBvciBza2lwcyBpdCBlbnRpcmVseS4AAAAAAAAGY3JlYXRlAAAAAAAOAAAAAAAAAAdjcmVhdG9yAAAAABMAAAAAAAAABXRva2VuAAAAAAAAEwAAAAAAAAAGc2NoZW1hAAAAAAPuAAAAIAAAAAAAAAAOYXBwbHlfZGVhZGxpbmUAAAAAAAYAAAAAAAAAD3Jldmlld19kZWFkbGluZQAAAAAGAAAAAAAAABByZWxlYXNlX2RlYWRsaW5lAAAABgAAAAAAAAAOc3dlZXBfZGVhZGxpbmUAAAAAAAYAAAAAAAAABnF1b3J1bQAAAAAABAAAAAAAAAAIdHJhbmNoZXMAAAAEAAAAAAAAAA1tZXRhZGF0YV9oYXNoAAAAAAAD7gAAACAAAAAAAAAACXJldmlld2VycwAAAAAAA+oAAAATAAAAAAAAAAl2ZXJpZmllcnMAAAAAAAPqAAAAEwAAAAAAAAAEbmFtZQAAABAAAAAAAAAADW1pbmltdW1fYXdhcmQAAAAAAAALAAAAAQAAA+kAAAATAAAAAw==",
+        "AAAAAAAAAKVTZXQgdGhlIHByb3RvY29sIGZlZSwgaW4gYmFzaXMgcG9pbnRzLCBmb3IgcHJvZ3JhbW1lcyBjcmVhdGVkIGFmdGVyCnRoaXMgY2FsbC4gRXhpc3RpbmcgcHJvZ3JhbW1lcyBrZWVwIHRoZSBmZWUgdGhleSB3ZXJlIGRlcGxveWVkIHdpdGguClJlZnVzZWQgYWJvdmUgYE1BWF9GRUVfQlBTYC4AAAAAAAAHc2V0X2ZlZQAAAAABAAAAAAAAAAdmZWVfYnBzAAAAAAQAAAABAAAD6QAAAAIAAAAD",
+        "AAAAAAAAACVVcGdyYWRlIHRoZSByZWdpc3RyeSBjb250cmFjdCBpdHNlbGYuAAAAAAAAB3VwZ3JhZGUAAAAAAQAAAAAAAAANbmV3X3dhc21faGFzaAAAAAAAA+4AAAAgAAAAAQAAA+kAAAACAAAAAw==",
+        "AAAAAAAAALxIYW5kIHByb3RvY29sIGFkbWluaXN0cmF0aW9uIHRvIGFub3RoZXIgYWRkcmVzcy4KClRoZSByZWdpc3RyeSBhZG1pbiBjb25maWd1cmVzIGV2ZXJ5IGZ1dHVyZSBwcm9ncmFtbWUgYW5kIGNhbiB1cGdyYWRlCnRoaXMgY29udHJhY3QgYW5kIGByZWNvcmRgLCBzbyB0aGlzIGlzIHRoZSB3aWRlc3QtcmVhY2hpbmcgY2FsbCBoZXJlLgAAAAlzZXRfYWRtaW4AAAAAAAABAAAAAAAAAAVhZG1pbgAAAAAAABMAAAABAAAD6QAAAAIAAAAD",
+        "AAAAAAAAAH1UaGUgY3VycmVudCBwcm90b2NvbCBjb25maWd1cmF0aW9uOiBhZG1pbiwgdHJlYXN1cnksIGZlZSwgdGhlCmNvbnRyYWN0cyBwcm9ncmFtbWVzIGFyZSB3aXJlZCB0bywgYW5kIHRoZSBwcm9ncmFtbWUgd2FzbSBoYXNoLgAAAAAAAApnZXRfY29uZmlnAAAAAAAAAAAAAQAAA+kAAAfQAAAABkNvbmZpZwAAAAAAAw==",
+        "AAAAAAAAAIdTZXQgdGhlIHBvbGljeSBzaWduZXIgY29udHJhY3QgdGhhdCBmdXR1cmUgcHJvZ3JhbW1lcyBjb25zdWx0IGJlZm9yZQpwYXlpbmcgYSBgUmVzdHJpY3RlZGAgdHJhbmNoZS4gRXhpc3RpbmcgcHJvZ3JhbW1lcyBhcmUgdW5hZmZlY3RlZC4AAAAACnNldF9wb2xpY3kAAAAAAAEAAAAAAAAABnBvbGljeQAAAAAAEwAAAAEAAAPpAAAAAgAAAAM=",
+        "AAAAAAAAAG9XaGV0aGVyIHRoaXMgYWRkcmVzcyBpcyBhIHByb2dyYW1tZSB0aGUgcmVnaXN0cnkgZGVwbG95ZWQuIEFueXRoaW5nIGVsc2UKY2xhaW1pbmcgdG8gYmUgb25lIGlzIG5vdCB2b3VjaGVkIGZvci4AAAAADGlzX3Byb2dyYW1tZQAAAAEAAAAAAAAABGFkZHIAAAATAAAAAQAAAAE=",
+        "AAAAAAAAAIVTZXQgd2hlcmUgcHJvdG9jb2wgZmVlcyBzZXR0bGUgZm9yIHByb2dyYW1tZXMgY3JlYXRlZCBhZnRlciB0aGlzIGNhbGwuCkV4aXN0aW5nIHByb2dyYW1tZXMga2VlcCB0aGUgdHJlYXN1cnkgdGhleSB3ZXJlIGRlcGxveWVkIHdpdGguAAAAAAAADHNldF90cmVhc3VyeQAAAAEAAAAAAAAACHRyZWFzdXJ5AAAAEwAAAAEAAAPpAAAAAgAAAAM=",
+        "AAAAAAAAAP9Fc3RhYmxpc2ggdGhlIHByb3RvY29sIGNvbmZpZ3VyYXRpb24gZXZlcnkgcHJvZ3JhbW1lIGluaGVyaXRzLgoKVGhlIGFkbWluIHNldCBoZXJlIGNhbiByZXR1bmUgdGhlIGZlZSwgdHJlYXN1cnkgYW5kIHBvbGljeSwgY2hhbmdlIHRoZQp3YXNtIGZ1dHVyZSBwcm9ncmFtbWVzIGRlcGxveSBmcm9tLCBhbmQgdXBncmFkZSB0aGlzIGNvbnRyYWN0IOKAlCBzbyBpdAppcyB0aGUgbW9zdCBjb25zZXF1ZW50aWFsIHBhcmFtZXRlciBpbiB0aGUgY2FsbC4AAAAADV9fY29uc3RydWN0b3IAAAAAAAAHAAAAAAAAAAVhZG1pbgAAAAAAABMAAAAAAAAACHRyZWFzdXJ5AAAAEwAAAAAAAAAGYXR0ZXN0AAAAAAATAAAAAAAAAAZyZWNvcmQAAAAAABMAAAAAAAAABnBvbGljeQAAAAAAEwAAAAAAAAAHZmVlX2JwcwAAAAAEAAAAAAAAAAxwcm9ncmFtX3dhc20AAAPuAAAAIAAAAAEAAAPpAAAAAgAAAAM=",
         "AAAAAAAAAMdQb2ludCBhdCBhIG5ldyBwcm9ncmFtbWUgd2FzbS4gT25seSBhZmZlY3RzIHByb2dyYW1tZXMgZGVwbG95ZWQgYWZ0ZXIgdGhlCmNoYW5nZSDigJQgZXhpc3Rpbmcgb25lcyBrZWVwIHJ1bm5pbmcgdGhlIGNvZGUgdGhleSB3ZXJlIGRlcGxveWVkIHdpdGgsCndoaWNoIGlzIHRoZSBwb2ludCBvZiBkZXBsb3lpbmcgcmF0aGVyIHRoYW4gcHJveHlpbmcuAAAAABBzZXRfcHJvZ3JhbV93YXNtAAAAAQAAAAAAAAAEd2FzbQAAA+4AAAAgAAAAAQAAA+kAAAACAAAAAw==",
-        "AAAAAQAAAJ9BIHJlY2lwaWVudCdzIGFjY3VtdWxhdGVkIHRyYWNrIHJlY29yZC4KCldyaXR0ZW4gYnkgYHJlY29yZGAsIHJldHVybmVkIHRvIGFueSBjb250cmFjdCB0aGF0IGNyZWRpdHMgaXQsIGFuZCByZWFkIGJ5CnByb2dyYW1tZXMgdW5kZXJ3cml0aW5nIGEgcmVwZWF0IGFwcGxpY2FudC4AAAAAAAAAAAhTdGFuZGluZwAAAAcAAAAAAAAACmZpcnN0X3NlZW4AAAAAAAYAAADaSGFzaCBjaGFpbiBvdmVyIGV2ZXJ5IGNyZWRpdCwgaW4gb3JkZXIuIEdlbmVzaXMgaXMgYWxsIHplcm9lczsgZWFjaApjcmVkaXQgc2V0cyBgcm9vdCA9IHNoYTI1Nihyb290IOKAliBwcm9ncmFtbWUg4oCWIGFtb3VudCDigJYgYXR0ZXN0YXRpb24g4oCWIHRzKWAuCkxldHMgYW55b25lIHZlcmlmeSBhIGZ1bGwgb2ZmLWNoYWluIGhpc3RvcnkgYWdhaW5zdCBvbi1jaGFpbiBzdGF0ZS4AAAAAAAxoaXN0b3J5X3Jvb3QAAAPuAAAAIAAAAAAAAAAMbGFzdF91cGRhdGVkAAAABgAAADtEaXN0aW5jdCBwcm9ncmFtbWVzIHRoaXMgcmVjaXBpZW50IGhhcyBiZWVuIGNyZWRpdGVkIHVuZGVyLgAAAAAKcHJvZ3JhbW1lcwAAAAAABAAAAAAAAAAHc3ViamVjdAAAAAATAAAAAAAAAA50b3RhbF9yZWNlaXZlZAAAAAAACwAAADFUcmFuY2hlcyByZWxlYXNlZCB0byB0aGVtLCBhY3Jvc3MgYWxsIHByb2dyYW1tZXMuAAAAAAAACHRyYW5jaGVzAAAABA==",
-        "AAAAAQAAAYtFdmVyeXRoaW5nIGEgcHJvZ3JhbW1lIGlzIGNvbnN0cnVjdGVkIGZyb20uCgpHcm91cGVkIGludG8gYSBzdHJ1Y3QgcmF0aGVyIHRoYW4gcGFzc2VkIGFzIGEgZG96ZW4gcG9zaXRpb25hbCBhcmd1bWVudHMg4oCUCmF0IHRoYXQgd2lkdGggYSBjYWxsZXIgdHJhbnNwb3NpbmcgYHJldmlld19kZWFkbGluZWAgYW5kIGByZWxlYXNlX2RlYWRsaW5lYCwKb3IgYHF1b3J1bWAgYW5kIGB0cmFuY2hlc2AsIHByb2R1Y2VzIGEgdmFsaWQtbG9va2luZyBwcm9ncmFtbWUgdGhhdCBiZWhhdmVzCndyb25nbHksIGFuZCB0aGUgdHlwZSBzeXN0ZW0gc2F5cyBub3RoaW5nLgoKTGl2ZXMgaGVyZSBiZWNhdXNlIHRoZSByZWdpc3RyeSBjb25zdHJ1Y3RzIGl0IGFuZCB0aGUgcHJvZ3JhbW1lIGNvbnN1bWVzIGl0LgAAAAAAAAAAD1Byb2dyYW1tZUNvbmZpZwAAAAAPAAAAGEFwcGxpY2F0aW9ucyBjbG9zZSBoZXJlLgAAAA5hcHBseV9kZWFkbGluZQAAAAAABgAAAEJBdHRlc3RhdGlvbiByZWdpc3RyeSB0aGF0IHRyYW5jaGUgY29uZGl0aW9ucyBhcmUgdmVyaWZpZWQgYWdhaW5zdC4AAAAAAAZhdHRlc3QAAAAAABMAAAAAAAAAB2NyZWF0b3IAAAAAEwAAAAAAAAAHZmVlX2JwcwAAAAAEAAAAAAAAAA1tZXRhZGF0YV9oYXNoAAAAAAAD7gAAACAAAABiUG9saWN5IHNpZ25lciBjb250cmFjdCwgY29uc3VsdGVkIGJlZm9yZSBhIGBSZXN0cmljdGVkYCB0cmFuY2hlIGlzIHBhaWQKaW50byBhIHJlY2lwaWVudCdzIHdhbGxldC4AAAAAAAZwb2xpY3kAAAAAABMAAAA9UmV2aWV3ZXIgdm90ZXMgbmVlZGVkIGJlZm9yZSBhbiBhcHBsaWNhdGlvbiBjYW4gYmUgZmluYWxpc2VkLgAAAAAAAAZxdW9ydW0AAAAAAAQAAAArU3RhbmRpbmcgY29udHJhY3QgY3JlZGl0ZWQgb24gZWFjaCByZWxlYXNlLgAAAAAGcmVjb3JkAAAAAAATAAAARlRyYW5jaGVzIHN0b3AgcmVsZWFzaW5nIGhlcmUsIGFuZCB3aGF0ZXZlciBpcyBsZWZ0IGJlY29tZXMgcmVmdW5kYWJsZS4AAAAAABByZWxlYXNlX2RlYWRsaW5lAAAABgAAABNSZXZpZXdzIGNsb3NlIGhlcmUuAAAAAA9yZXZpZXdfZGVhZGxpbmUAAAAABgAAAEZUaGUgc2luZ2xlIHNjaGVtYSB3aG9zZSBhdHRlc3RhdGlvbnMgdW5sb2NrIHRoaXMgcHJvZ3JhbW1lJ3MgdHJhbmNoZXMuAAAAAAAGc2NoZW1hAAAAAAPuAAAAIAAAAQRSZWZ1bmRzIG5vYm9keSBjbGFpbWVkIHN3ZWVwIHRvIHRoZSB0cmVhc3VyeSBoZXJlLgoKU2V0IHBlciBwcm9ncmFtbWUgcmF0aGVyIHRoYW4gZml4ZWQgcHJvdG9jb2wtd2lkZTogYSB0aHJlZS1tb250aCBzdHVkZW50CmJ1cnNhcnkgYW5kIGEgdGhyZWUteWVhciBpbmZyYXN0cnVjdHVyZSBncmFudCBoYXZlIHZlcnkgZGlmZmVyZW50IGlkZWFzCmFib3V0IGhvdyBsb25nIGlzIGxvbmcgZW5vdWdoIHRvIHdhaXQgZm9yIGEgZG9ub3IgdG8gY29tZSBiYWNrLgAAAA5zd2VlcF9kZWFkbGluZQAAAAAABgAAAEFUaGUgYXNzZXQgYmVpbmcgZGlzdHJpYnV0ZWQsIGFzIGEgU3RlbGxhciBBc3NldCBDb250cmFjdCBhZGRyZXNzLgAAAAAAAAV0b2tlbgAAAAAAABMAAAAAAAAACHRyYW5jaGVzAAAABAAAAAAAAAAIdHJlYXN1cnkAAAAT" ]),
+        "AAAAAAAAAMFEZXJpdmUgdGhlIGFkZHJlc3MgYSBwcm9ncmFtbWUgKndvdWxkKiBoYXZlIGlmIGRlcGxveWVkIGF0IHRoZSBnaXZlbgpub25jZSwgdXNpbmcgdGhlIHNhbWUgc2FsdCBzY2hlbWUgYXMgYGNyZWF0ZWAuIEEgY2xpZW50IGNhbiB3YWxrIHRoZQpyYW5nZSBgWzAsIG5vbmNlKWAgd2l0aG91dCB0aGUgY29udHJhY3Qgc3RvcmluZyBhIGxpc3QuAAAAAAAAEXByb2dyYW1tZV9hZGRyZXNzAAAAAAAAAQAAAAAAAAABbgAAAAAAAAYAAAABAAAAEw==",
+        "AAAAAQAAAJ9BIHJlY2lwaWVudCdzIGFjY3VtdWxhdGVkIHRyYWNrIHJlY29yZC4KCldyaXR0ZW4gYnkgYHJlY29yZGAsIHJldHVybmVkIHRvIGFueSBjb250cmFjdCB0aGF0IGNyZWRpdHMgaXQsIGFuZCByZWFkIGJ5CnByb2dyYW1tZXMgdW5kZXJ3cml0aW5nIGEgcmVwZWF0IGFwcGxpY2FudC4AAAAAAAAAAAhTdGFuZGluZwAAAAcAAAAAAAAACmZpcnN0X3NlZW4AAAAAAAYAAADaSGFzaCBjaGFpbiBvdmVyIGV2ZXJ5IGNyZWRpdCwgaW4gb3JkZXIuIEdlbmVzaXMgaXMgYWxsIHplcm9lczsgZWFjaApjcmVkaXQgc2V0cyBgcm9vdCA9IHNoYTI1Nihyb290IOKAliBwcm9ncmFtbWUg4oCWIGFtb3VudCDigJYgYXR0ZXN0YXRpb24g4oCWIHRzKWAuCkxldHMgYW55b25lIHZlcmlmeSBhIGZ1bGwgb2ZmLWNoYWluIGhpc3RvcnkgYWdhaW5zdCBvbi1jaGFpbiBzdGF0ZS4AAAAAAAxoaXN0b3J5X3Jvb3QAAAPuAAAAIAAAAD5UaW1lc3RhbXAgb2YgdGhlIGxhc3QgY3JlZGl0LCBhbGxvd3MgcmVhZGVycyB0byB3ZWlnaCByZWNlbmN5LgAAAAAACWxhc3Rfc2VlbgAAAAAAAAYAAAA7RGlzdGluY3QgcHJvZ3JhbW1lcyB0aGlzIHJlY2lwaWVudCBoYXMgYmVlbiBjcmVkaXRlZCB1bmRlci4AAAAACnByb2dyYW1tZXMAAAAAAAQAAAAAAAAAB3N1YmplY3QAAAAAEwAAAAAAAAAOdG90YWxfcmVjZWl2ZWQAAAAAAAsAAAAxVHJhbmNoZXMgcmVsZWFzZWQgdG8gdGhlbSwgYWNyb3NzIGFsbCBwcm9ncmFtbWVzLgAAAAAAAAh0cmFuY2hlcwAAAAQ=",
+        "AAAAAQAAAYtFdmVyeXRoaW5nIGEgcHJvZ3JhbW1lIGlzIGNvbnN0cnVjdGVkIGZyb20uCgpHcm91cGVkIGludG8gYSBzdHJ1Y3QgcmF0aGVyIHRoYW4gcGFzc2VkIGFzIGEgZG96ZW4gcG9zaXRpb25hbCBhcmd1bWVudHMg4oCUCmF0IHRoYXQgd2lkdGggYSBjYWxsZXIgdHJhbnNwb3NpbmcgYHJldmlld19kZWFkbGluZWAgYW5kIGByZWxlYXNlX2RlYWRsaW5lYCwKb3IgYHF1b3J1bWAgYW5kIGB0cmFuY2hlc2AsIHByb2R1Y2VzIGEgdmFsaWQtbG9va2luZyBwcm9ncmFtbWUgdGhhdCBiZWhhdmVzCndyb25nbHksIGFuZCB0aGUgdHlwZSBzeXN0ZW0gc2F5cyBub3RoaW5nLgoKTGl2ZXMgaGVyZSBiZWNhdXNlIHRoZSByZWdpc3RyeSBjb25zdHJ1Y3RzIGl0IGFuZCB0aGUgcHJvZ3JhbW1lIGNvbnN1bWVzIGl0LgAAAAAAAAAAD1Byb2dyYW1tZUNvbmZpZwAAAAAQAAAAGEFwcGxpY2F0aW9ucyBjbG9zZSBoZXJlLgAAAA5hcHBseV9kZWFkbGluZQAAAAAABgAAAEJBdHRlc3RhdGlvbiByZWdpc3RyeSB0aGF0IHRyYW5jaGUgY29uZGl0aW9ucyBhcmUgdmVyaWZpZWQgYWdhaW5zdC4AAAAAAAZhdHRlc3QAAAAAABMAAAAAAAAAB2NyZWF0b3IAAAAAEwAAAAAAAAAHZmVlX2JwcwAAAAAEAAAAAAAAAA1tZXRhZGF0YV9oYXNoAAAAAAAD7gAAACAAAADQTWluaW11bSBhd2FyZCBhbW91bnQgYmVsb3cgd2hpY2ggZmluYWxpc2F0aW9uIGlzIHJlZnVzZWQuIFByZXZlbnRzIGF3YXJkcwpzbWFsbGVyIHRoYW4gdGhlIGZlZSB0YWtlbiBmcm9tIHRoZW0sIG9yIHNvIHNtYWxsIHRoYXQgc3BsaXR0aW5nIGludG8KdHJhbmNoZXMgcHJvZHVjZXMgcGF5bWVudHMgd29ydGggbGVzcyB0aGFuIHRoZSB0cmFuc2FjdGlvbiBjb3N0LgAAAA1taW5pbXVtX2F3YXJkAAAAAAAACwAAAGJQb2xpY3kgc2lnbmVyIGNvbnRyYWN0LCBjb25zdWx0ZWQgYmVmb3JlIGEgYFJlc3RyaWN0ZWRgIHRyYW5jaGUgaXMgcGFpZAppbnRvIGEgcmVjaXBpZW50J3Mgd2FsbGV0LgAAAAAABnBvbGljeQAAAAAAEwAAAD1SZXZpZXdlciB2b3RlcyBuZWVkZWQgYmVmb3JlIGFuIGFwcGxpY2F0aW9uIGNhbiBiZSBmaW5hbGlzZWQuAAAAAAAABnF1b3J1bQAAAAAABAAAACtTdGFuZGluZyBjb250cmFjdCBjcmVkaXRlZCBvbiBlYWNoIHJlbGVhc2UuAAAAAAZyZWNvcmQAAAAAABMAAABGVHJhbmNoZXMgc3RvcCByZWxlYXNpbmcgaGVyZSwgYW5kIHdoYXRldmVyIGlzIGxlZnQgYmVjb21lcyByZWZ1bmRhYmxlLgAAAAAAEHJlbGVhc2VfZGVhZGxpbmUAAAAGAAAAE1Jldmlld3MgY2xvc2UgaGVyZS4AAAAAD3Jldmlld19kZWFkbGluZQAAAAAGAAAARlRoZSBzaW5nbGUgc2NoZW1hIHdob3NlIGF0dGVzdGF0aW9ucyB1bmxvY2sgdGhpcyBwcm9ncmFtbWUncyB0cmFuY2hlcy4AAAAAAAZzY2hlbWEAAAAAA+4AAAAgAAABBFJlZnVuZHMgbm9ib2R5IGNsYWltZWQgc3dlZXAgdG8gdGhlIHRyZWFzdXJ5IGhlcmUuCgpTZXQgcGVyIHByb2dyYW1tZSByYXRoZXIgdGhhbiBmaXhlZCBwcm90b2NvbC13aWRlOiBhIHRocmVlLW1vbnRoIHN0dWRlbnQKYnVyc2FyeSBhbmQgYSB0aHJlZS15ZWFyIGluZnJhc3RydWN0dXJlIGdyYW50IGhhdmUgdmVyeSBkaWZmZXJlbnQgaWRlYXMKYWJvdXQgaG93IGxvbmcgaXMgbG9uZyBlbm91Z2ggdG8gd2FpdCBmb3IgYSBkb25vciB0byBjb21lIGJhY2suAAAADnN3ZWVwX2RlYWRsaW5lAAAAAAAGAAAAQVRoZSBhc3NldCBiZWluZyBkaXN0cmlidXRlZCwgYXMgYSBTdGVsbGFyIEFzc2V0IENvbnRyYWN0IGFkZHJlc3MuAAAAAAAABXRva2VuAAAAAAAAEwAAAAAAAAAIdHJhbmNoZXMAAAAEAAAAAAAAAAh0cmVhc3VyeQAAABM=" ]),
       options
     )
   }
   public readonly fromJSON = {
-    create: this.txFromJSON<Result<string>>,
+    nonce: this.txFromJSON<u64>,
+        create: this.txFromJSON<Result<string>>,
         set_fee: this.txFromJSON<Result<void>>,
+        upgrade: this.txFromJSON<Result<void>>,
         set_admin: this.txFromJSON<Result<void>>,
         get_config: this.txFromJSON<Result<Config>>,
         set_policy: this.txFromJSON<Result<void>>,
         is_programme: this.txFromJSON<boolean>,
         set_treasury: this.txFromJSON<Result<void>>,
-        set_program_wasm: this.txFromJSON<Result<void>>
+        set_program_wasm: this.txFromJSON<Result<void>>,
+        programme_address: this.txFromJSON<string>
   }
 }

@@ -1,0 +1,24 @@
+# CODEOWNERS - Review Routing for Milepost Repository
+#
+# IMPORTANT NOTE ON ENFORCEMENT:
+# This CODEOWNERS file automatically assigns review requests to designated maintainers
+# based on path risk profiles. It provides a visual signal and review routing in PRs,
+# but does NOT block merges on its own. Enforcing mandatory approval gates requires
+# configuring GitHub branch protection rules ("Require review from Code Owners").
+
+# Catch-all fallback default owner
+* @adetomiwa21 @milepost-labs/maintainers
+
+# High-Risk / Money-Handling Code (Contracts & Shared Core Types)
+contracts/ @adetomiwa21 @milepost-labs/contract-reviewers
+crates/ @adetomiwa21 @milepost-labs/contract-reviewers
+
+# Frontend Web Application
+frontend/ @adetomiwa21 @milepost-labs/frontend-reviewers
+
+# CI/CD Workflows and Action Specifications
+.github/workflows/ @adetomiwa21 @milepost-labs/devops-reviewers
+
+# Documentation
+docs/ @adetomiwa21 @milepost-labs/docs-reviewers
+*.md @adetomiwa21 @milepost-labs/docs-reviewers

@@ -147,11 +147,53 @@ installed, which bounds a misconfiguration to a single tranche.
 - **Registry** is admin of `record`. A programme may write standing *because the
   registry deployed it*, never because it asked. A programme deployed any other
   way can still take contributions and make awards, but cannot touch standing.
+- **Registry admin** can also replace the code of `registry` and `record`
+  outright, through `upgrade`. That is a larger power than configuring the
+  protocol, and it is worth naming: the key that sets the fee is the key that
+  could rewrite how standing is recorded. `attest` and `policy_spend` have no
+  admin and so cannot be upgraded at all, and a deployed `program` cannot be
+  upgraded by anyone — its terms are fixed for the life of the programme, which
+  is what lets a donor rely on them.
+
+Upgrading is not reversible in the way it sounds. Replacing a contract with wasm
+that does not itself expose `upgrade` freezes it permanently, so the new code
+has to carry the door it came through.
 
 `finalize` and `release` are permissionless on purpose. Both outcomes are
 already determined — by the votes, and by an attestation the verifier signed —
 so requiring a privileged trigger would only let whoever holds it withhold money
 someone has already earned.
+
+### Emergency pause
+
+A programme can be paused in an emergency, and only by the creator (the address
+that funded it — the same key that verifies payees). While paused:
+
+- **Stops:** `contribute`, `apply`, `review`, `finalize`, `spend` and `release`.
+  Every one of these is refused with the `Paused` error until the pause is
+  lifted.
+- **Does not stop:** `refund`, `sweep_fee` and `sweep_unclaimed`. Donors must
+  always be able to reclaim unreleased funds, even in an emergency. A pause that
+  trapped contributors' money would be worse than whatever it was containing.
+- **The clock keeps running.** Pause halts the forward money-path, not the
+  ledger. The apply, review, release and sweep deadlines are absolute wall-clock
+  timestamps and continue to tick down while the programme is paused — so a long
+  pause eats into the release window, and a recipient can lose time they had to
+  claim a tranche. That cost is deliberate: if a pause shifted deadlines, a
+  compromised creator key could cycle the pause to delay the refund and sweep
+  windows indefinitely, holding donors' money hostage. If an emergency genuinely
+  needs more time, the creator can extend the release deadline explicitly with
+  `extend_release_deadline` before it passes (see issue #162 and PR #198 for the
+  decision and its tests).
+
+The pause is **reversible and temporary**, which is the whole distinction from
+`cancel`. `cancel` permanently ends the programme and opens refunds immediately;
+`pause` is a containment action that a creator can lift with `unpause` at any
+time, after which operations resume under the current wall-clock phase. A
+creator can check whether a programme is paused with `is_paused`, and pause or
+unpause by calling `pause` or `unpause`. A programme cannot be paused once it
+has been cancelled. Pausing repeatedly does nothing once the flag is set, and
+unpausing an unpaused programme is a no-op.
 
 ---
 
@@ -171,9 +213,41 @@ its own address and isolated state. Protocol fee is 250 bps.
 Re-running the deploy script produces a fresh set rather than upgrading these.
 Current ids always live in `deployments/testnet.json`.
 
+## Quickstart
+
+From a clean checkout, one command builds, deploys, seeds a scenario, waits
+out the application window, and runs the review stage:
+
+```sh
+./scripts/quickstart.sh testnet
+```
+
+It checks for the `stellar` CLI and the `wasm32v1-none` Rust target up front
+and fails fast with install instructions if either is missing, then runs
+`deploy.sh`, `seed.sh` and `seed-review.sh` in sequence — showing a live
+countdown while it waits for the seeded programme's application window to
+close, since the review stage genuinely cannot run before then. It finishes
+with a summary of the programme address, the awards the reviewers settled on,
+and what was released.
+
+Pass a different network or deployer key the same way the underlying scripts
+accept them: `./scripts/quickstart.sh testnet my-deployer-key`.
+
+Prefer the individual steps below if you want to inspect state (or run other
+commands) between them.
+
 ## Development
 
 Requires Rust stable with the `wasm32v1-none` target and `stellar` CLI 27.x.
+
+### Task Runner (`just` or `make`)
+You can use `just` or `make` for quick task execution with correct build dependencies:
+* `just build` / `make build` — Build contract WASM artifacts
+* `just test` / `make test` — Run workspace tests (builds WASM first)
+* `just lint` / `make lint` — Run `cargo fmt` and `cargo clippy` (builds WASM first)
+* `just frontend-build` / `make frontend-build` — Build TypeScript packages dist and frontend app
+* `just deploy` / `make deploy` — Deploy contracts using `./scripts/deploy.sh`
+* `just seed` / `make seed` — Seed protocol scenario data using `./scripts/seed.sh`
 
 ```sh
 cargo test                        # 133 tests
@@ -200,6 +274,25 @@ awards, and a real attestation under a restricted schema.
 
 Accounts and ids land in `deployments/<network>.seed.json`.
 
+For prerequisites, why the steps above are ordered the way they are, how to
+verify each one, and what to do when one fails partway, see
+[docs/deployment-runbook.md](docs/deployment-runbook.md).
+
+## Error Reference
+
+For a full list of error codes, causes, and recommended actions across all five contracts, see [docs/error-code-reference.md](docs/error-code-reference.md).
+
+## Learn more
+
+- [TTL Strategy](docs/ttl-strategy.md)
+- [Programme Metadata](docs/programme-metadata.md)
+- [Error Codes](docs/error-code-reference.md)
+- [Security Model and Trust Assumptions](docs/security-model.md)
+- [Integrator FAQ](docs/integrator-faq.md) — recurring questions, answered with
+  the reasoning behind the design rather than only the behaviour
+- [Upgrade and Compatibility](docs/upgrade-and-compatibility.md) — what stays
+  stable across releases, how a breaking change is signalled, and what to do
+  when one lands
 ## TypeScript bindings
 
 `packages/` holds generated clients, checked in so a frontend can build without
@@ -217,7 +310,11 @@ changes.
 - **Event query module.** Listings cannot be reconstructed yet.
 - **`Restricted` end to end.** `policy_spend` is tested standalone but has never
   been wired to a live passkey wallet.
+## Security
+
+For security vulnerability reporting guidelines and scope, see [SECURITY.md](SECURITY.md).
 
 ## Licence
 
 Apache-2.0
+

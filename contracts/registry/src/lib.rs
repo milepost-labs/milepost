@@ -110,6 +110,11 @@ pub struct Registry;
 
 #[contractimpl]
 impl Registry {
+    /// Establish the protocol configuration every programme inherits.
+    ///
+    /// The admin set here can retune the fee, treasury and policy, change the
+    /// wasm future programmes deploy from, and upgrade this contract — so it
+    /// is the most consequential parameter in the call.
     pub fn __constructor(
         env: Env,
         admin: Address,
@@ -157,6 +162,7 @@ impl Registry {
         reviewers: Vec<Address>,
         verifiers: Vec<Address>,
         name: String,
+        minimum_award: i128,
     ) -> Result<Address, Error> {
         creator.require_auth();
         let config = Self::config(&env)?;
@@ -188,6 +194,7 @@ impl Registry {
                         sweep_deadline,
                         quorum,
                         tranches,
+                        minimum_award,
                         metadata_hash,
                     },
                     reviewers,
@@ -223,6 +230,16 @@ impl Registry {
         Ok(())
     }
 
+    /// Upgrade the registry contract itself.
+    pub fn upgrade(env: Env, new_wasm_hash: BytesN<32>) -> Result<(), Error> {
+        let _ = Self::admin_config(&env)?;
+        env.deployer().update_current_contract_wasm(new_wasm_hash);
+        Ok(())
+    }
+
+    /// Set the protocol fee, in basis points, for programmes created after
+    /// this call. Existing programmes keep the fee they were deployed with.
+    /// Refused above `MAX_FEE_BPS`.
     pub fn set_fee(env: Env, fee_bps: u32) -> Result<(), Error> {
         if fee_bps > MAX_FEE_BPS {
             return Err(Error::FeeTooHigh);
@@ -233,6 +250,8 @@ impl Registry {
         Ok(())
     }
 
+    /// Set the policy signer contract that future programmes consult before
+    /// paying a `Restricted` tranche. Existing programmes are unaffected.
     pub fn set_policy(env: Env, policy: Address) -> Result<(), Error> {
         let mut config = Self::admin_config(&env)?;
         config.policy = policy;
@@ -240,6 +259,8 @@ impl Registry {
         Ok(())
     }
 
+    /// Set where protocol fees settle for programmes created after this call.
+    /// Existing programmes keep the treasury they were deployed with.
     pub fn set_treasury(env: Env, treasury: Address) -> Result<(), Error> {
         let mut config = Self::admin_config(&env)?;
         config.treasury = treasury;
@@ -247,6 +268,10 @@ impl Registry {
         Ok(())
     }
 
+    /// Hand protocol administration to another address.
+    ///
+    /// The registry admin configures every future programme and can upgrade
+    /// this contract and `record`, so this is the widest-reaching call here.
     pub fn set_admin(env: Env, admin: Address) -> Result<(), Error> {
         let mut config = Self::admin_config(&env)?;
         config.admin = admin;
@@ -254,6 +279,8 @@ impl Registry {
         Ok(())
     }
 
+    /// The current protocol configuration: admin, treasury, fee, the
+    /// contracts programmes are wired to, and the programme wasm hash.
     pub fn get_config(env: Env) -> Result<Config, Error> {
         Self::config(&env)
     }
@@ -262,6 +289,24 @@ impl Registry {
     /// claiming to be one is not vouched for.
     pub fn is_programme(env: Env, addr: Address) -> bool {
         env.storage().persistent().has(&Key::Programme(addr))
+    }
+
+    /// The current deployment nonce. One higher than the nonce used by the last
+    /// `create` call — i.e. the nonce the *next* deployment will use.
+    pub fn nonce(env: Env) -> u64 {
+        env.storage().instance().get(&Key::Nonce).unwrap_or(0)
+    }
+
+    /// Derive the address a programme *would* have if deployed at the given
+    /// nonce, using the same salt scheme as `create`. A client can walk the
+    /// range `[0, nonce)` without the contract storing a list.
+    pub fn programme_address(env: Env, n: u64) -> Address {
+        let salt = env
+            .crypto()
+            .sha256(&soroban_sdk::Bytes::from_array(&env, &n.to_be_bytes()));
+        env.deployer()
+            .with_current_contract(salt.to_bytes())
+            .deployed_address()
     }
 
     fn config(env: &Env) -> Result<Config, Error> {

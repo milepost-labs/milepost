@@ -1,0 +1,26 @@
+[package]
+name = "milepost-test-utils"
+description = "Shared dev-only test helpers for the contract test suites"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+
+[lib]
+# Deliberately no cdylib, and dev-only: this crate builds nothing into a
+# contract's wasm, so a shared test harness cannot leak into a deployed
+# programme. Keeping it `lib`-only mirrors milepost-types and avoids any link
+# collision if several contract test targets depend on it.
+crate-type = ["lib"]
+doctest = false
+
+[dependencies]
+soroban-sdk = { workspace = true }
+
+[features]
+# The helpers that touch the test environment (`mock_all_auths`, address
+# generation, asset registration) need the SDK's testutils bindings. Suites
+# enable this when they depend on the crate:
+#   milepost-test-utils = { path = "../test-utils", features = ["testutils"] }
+testutils = ["soroban-sdk/testutils"]
