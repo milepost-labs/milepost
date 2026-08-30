@@ -82,14 +82,35 @@ they are written to be independently useful.
 
 A `treasury` multisig is planned; fees currently settle to a single address.
 
+### Phase machine
+
+Programme state is computed from wall-clock deadlines and an optional cancellation
+flag. `phase()` consults these in order; the diagram shows the resulting state
+transitions.
+
+```mermaid
+stateDiagram-v2
+    [*] --> Open
+    Open --> Review: after application deadline
+    Review --> Settled: after review deadline
+    Open --> Cancelled: cancelled
+    Review --> Cancelled: cancelled
+    Settled --> [*]
+    Cancelled --> [*]
+```
+
 ### How money moves
 
-```
-contribute ──▶ apply ──▶ review ──▶ finalize ──▶ release ──▶ spend
-   donor       recipient  reviewers    anyone      anyone    recipient
-                             │            │           │
-                        median of      budget    attestation
-                          votes         check      verified
+```mermaid
+flowchart TD
+    Contribute[Donor contributes] --> Apply[Recipient applies]
+    Apply --> Review[Reviewers vote]
+    Review --> Finalize[Finalize: median award, budget check]
+    Finalize --> Release[Release: attestation verified]
+    Release --> Spend[Spend: mode-dependent routing]
+    Finalize -->|unawarded budget| Refund[Refund: proportional to contributions]
+    Release -->|unclaimed tranches after release window| Refund
+    Refund -->|abandoned after sweep deadline| Sweep[Sweep: to protocol address]
 ```
 
 1. **Contribute.** Donors fund the programme. Contributions close when
@@ -122,6 +143,15 @@ decision, not a configuration detail.
 | **`Allocated`** | Held in escrow; the recipient directs it to a verified payee | The contract | Which payee, when, how much |
 | **`Restricted`** | Recipient's smart wallet, policy signer on spending | Wallet configuration | Any policy-permitted destination |
 | **`Open`** | Recipient, unrestricted | Nothing | Everything |
+
+```mermaid
+flowchart LR
+    R[Released tranche] --> M{Mode}
+    M -->|Direct| D[Direct<br/>Paid straight to fixed payee]
+    M -->|Allocated| A[Allocated<br/>Held in escrow; recipient directs to verified payee]
+    M -->|Restricted| S[Restricted<br/>In recipient's smart wallet; policy signer limits spend]
+    M -->|Open| O[Open<br/>In recipient's wallet; unrestricted]
+```
 
 `Direct` and `Allocated` are equally unbypassable — in both, funds cannot reach
 an unverified address because they never leave the contract until they do. The
@@ -310,6 +340,7 @@ changes.
 - **Event query module.** Listings cannot be reconstructed yet.
 - **`Restricted` end to end.** `policy_spend` is tested standalone but has never
   been wired to a live passkey wallet.
+
 ## Security
 
 For security vulnerability reporting guidelines and scope, see [SECURITY.md](SECURITY.md).
