@@ -5,6 +5,7 @@ import { useContractResult } from '../hooks';
 import { useSoroban } from '../context/useSoroban';
 import { AsyncView } from '../components/state/AsyncStates';
 import { Badge, Button, Card, Field } from '../components/ui';
+import { AttestationKeepalive } from '../components/keepalive/Keepalive';
 import './AttestationLookup.css';
 
 const HEX_32_BYTES = /^(0x)?[0-9a-fA-F]{64}$/;
@@ -420,6 +421,8 @@ export const AttestationLookup = () => {
                     </div>
                   )}
                 </Card>
+
+                <AttestationKeepalive uid={a.uid} createdAt={a.created_at} />
               </>
             );
           }}

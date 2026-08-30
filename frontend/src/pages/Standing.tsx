@@ -4,6 +4,7 @@ import { CheckCircle2, XCircle, AlertTriangle } from 'lucide-react';
 import { useContractResult } from '../hooks';
 import { AsyncView } from '../components/state/AsyncStates';
 import { Badge, Button, Card, Field, Stat } from '../components/ui';
+import { StandingKeepalive } from '../components/keepalive/Keepalive';
 import { useWallet } from '../context/useWallet';
 import { useSoroban } from '../context/useSoroban';
 import { formatAmount } from '../lib/amount';
@@ -409,6 +410,8 @@ export const Standing = () => {
           <Card title="Verify history chain">
             <HistoryVerifier onChainRoot={data.history_root} />
           </Card>
+
+          <StandingKeepalive subject={data.subject} lastSeen={data.last_seen} />
           </>
         )}
       </AsyncView>
