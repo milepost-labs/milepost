@@ -21,7 +21,7 @@ jobs:
       contents: read
       checks: write
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v7
       - uses: dtolnay/rust-toolchain@stable
         with:
           targets: wasm32v1-none
@@ -55,7 +55,7 @@ jobs:
       # only finds out after a transaction is already submitted. Fail here
       # instead. `networks.testnet` on the four singletons is ignored so a
       # wasm-only regeneration cannot fail for the missing address.
-      - uses: stellar/stellar-cli@v27.1.0
+      - uses: stellar/stellar-cli@v28.0.0
       - name: Check TypeScript bindings
         run: ./scripts/check-bindings.sh
 
@@ -132,8 +132,8 @@ jobs:
     # frontend entirely whenever the contract job is red, which is exactly when
     # you still want to know.
     steps:
-      - uses: actions/checkout@v5
-      - uses: actions/setup-node@v5
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
         with:
           # eslint requires ^20.19 || ^22.13 || >=24; vite wants >=22.12.
           node-version: 24
