@@ -19,44 +19,47 @@ import { AdminDashboard } from "./pages/AdminDashboard";
 import { AttestationLookup } from "./pages/AttestationLookup";
 import { RegisterSchema } from "./pages/RegisterSchema";
 import { NotFound } from "./pages/NotFound";
+import { ErrorBoundary } from "./components/ErrorBoundary";
 
 function App() {
   return (
     <ThemeProvider>
       <WalletProvider>
         <SorobanProvider>
-          <Router>
-            <Routes>
-              <Route path="/" element={<Layout />}>
-                <Route index element={<Home />} />
-                <Route path="directory" element={<ProgrammeDirectory />} />
-                <Route path="funders" element={<FunderDashboard />} />
-                <Route path="programme" element={<ProgrammeDetail />} />
-                <Route
-                  path="programme/:programmeId"
-                  element={<ProgrammeDetail />}
-                />
-                <Route path="recipients" element={<RecipientDashboard />} />
-                <Route path="recipients/standing" element={<Standing />} />
-                <Route
-                  path="recipients/award-progress"
-                  element={<AwardProgress />}
-                />
-                <Route
-                  path="recipients/application-timeline"
-                  element={<ApplicationTimeline />}
-                />
-                <Route path="verifiers" element={<VerifierDashboard />} />
-                <Route path="policy" element={<SpendPolicy />} />
-                <Route path="admin" element={<RegistryAdmin />} />
-                <Route path="admin/standing" element={<AdminDashboard />} />
-                <Route path="finalize" element={<FinalizeAwards />} />
-                <Route path="attestations" element={<AttestationLookup />} />
-                <Route path="schemas/register" element={<RegisterSchema />} />
-                <Route path="*" element={<NotFound />} />
-              </Route>
-            </Routes>
-          </Router>
+          <ErrorBoundary>
+            <Router>
+              <Routes>
+                <Route path="/" element={<Layout />}>
+                  <Route index element={<Home />} />
+                  <Route path="directory" element={<ProgrammeDirectory />} />
+                  <Route path="funders" element={<FunderDashboard />} />
+                  <Route path="programme" element={<ProgrammeDetail />} />
+                  <Route
+                    path="programme/:programmeId"
+                    element={<ProgrammeDetail />}
+                  />
+                  <Route path="recipients" element={<RecipientDashboard />} />
+                  <Route path="recipients/standing" element={<Standing />} />
+                  <Route
+                    path="recipients/award-progress"
+                    element={<AwardProgress />}
+                  />
+                  <Route
+                    path="recipients/application-timeline"
+                    element={<ApplicationTimeline />}
+                  />
+                  <Route path="verifiers" element={<VerifierDashboard />} />
+                  <Route path="policy" element={<SpendPolicy />} />
+                  <Route path="admin" element={<RegistryAdmin />} />
+                  <Route path="admin/standing" element={<AdminDashboard />} />
+                  <Route path="finalize" element={<FinalizeAwards />} />
+                  <Route path="attestations" element={<AttestationLookup />} />
+                  <Route path="schemas/register" element={<RegisterSchema />} />
+                  <Route path="*" element={<NotFound />} />
+                </Route>
+              </Routes>
+            </Router>
+          </ErrorBoundary>
         </SorobanProvider>
       </WalletProvider>
     </ThemeProvider>
