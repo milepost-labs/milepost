@@ -17,6 +17,7 @@ import { AwardProgress } from "./pages/AwardProgress";
 import { ApplicationTimeline } from "./pages/ApplicationTimeline";
 import { AdminDashboard } from "./pages/AdminDashboard";
 import { AttestationLookup } from "./pages/AttestationLookup";
+import { RegisterSchema } from "./pages/RegisterSchema";
 
 function App() {
   return (
@@ -50,6 +51,7 @@ function App() {
                 <Route path="admin/standing" element={<AdminDashboard />} />
                 <Route path="finalize" element={<FinalizeAwards />} />
                 <Route path="attestations" element={<AttestationLookup />} />
+                <Route path="schemas/register" element={<RegisterSchema />} />
               </Route>
             </Routes>
           </Router>
