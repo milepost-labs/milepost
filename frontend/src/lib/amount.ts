@@ -146,3 +146,62 @@ export function percentOf(part: bigint, total: bigint): number {
 function group(value: bigint): string {
   return value.toString().replace(/\B(?=(\d{3})+(?!\d))/g, ',');
 }
+
+/**
+ * The flow of a programme's funds. `held`, is what remains in the pool:
+ * contributed minus everything that has left it (released to recipients,
+ * refunded by recipients, or swept back to the funder).
+ */
+export interface FundFlows {
+  contributed: bigint;
+  released: bigint;
+  refunded: bigint;
+  swept: bigint;
+  held: bigint;
+}
+
+/**
+ * Account for every stroop contributed. The parts always sum to `contributed`:
+ * held is derived, so a closed programme reads as complete rather than stalled.
+ */
+export function fundFlows(
+  contributed: bigint,
+  released: bigint,
+  refunded: bigint,
+  swept: bigint,
+): FundFlows {
+  return {
+    contributed,
+    released,
+    refunded,
+    swept,
+    held: contributed - released - refunded - swept,
+  };
+}
+
+/** A row in the "where the money ended up" breakdown. */
+export interface FundFlowRow {
+  key: 'released' | 'refunded' | 'swept' | 'held';
+  label: string;
+  amount: bigint;
+}
+
+/**
+ * Rows for the breakdown, omitting refunded/swept when they are zero so a
+ * programme with no such flows does not display meaningless `0.00` figures.
+ * Held is always included – even when zero it explains that the programme is
+ * fully accounted for.
+ */
+export function fundFlowRows(flows: FundFlows): FundFlowRow[] {
+  const rows: FundFlowRow[] = [
+    { key: 'released', label: 'Released', amount: flows.released },
+  ];
+  if (flows.refunded !== 0n) {
+    rows.push({ key: 'refunded', label: 'Refunded', amount: flows.refunded });
+  }
+  if (flows.swept !== 0n) {
+    rows.push({ key: 'swept', label: 'Swept', amount: flows.swept });
+  }
+  rows.push({ key: 'held', label: 'Still held', amount: flows.held });
+  return rows;
+}

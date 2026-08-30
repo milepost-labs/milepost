@@ -2,32 +2,39 @@ import { useMemo } from 'react';
 import { useParams } from 'react-router-dom';
 import { useSoroban } from '../context/useSoroban';
 import { DEMO_PROGRAMME_ID } from '../context/sorobanStore';
+import { useContractRead } from './useContractRead';
 
-/**
- * The programme a screen is looking at.
- *
- * Programmes are separate contracts, so every screen needs an address. Four
- * places had already hardcoded one, and with twenty-odd screens still to build
- * that becomes twenty hardcoded addresses and no way to view a second
- * programme.
- *
- * The address comes from the route (`/programme/:programmeId`), falling back to
- * the seeded testnet programme so pages still render something real while
- * listings do not yet exist.
- */
 export function useProgramme() {
   const { programmeId } = useParams<{ programmeId?: string }>();
   const { programmeAt } = useSoroban();
 
   const id = programmeId ?? DEMO_PROGRAMME_ID;
+  const client = useMemo(() => programmeAt(id), [id, programmeAt]);
 
-  return useMemo(
-    () => ({
+  const { data: totalContributed } = useContractRead(() => client.total_contributed(), [client]);
+  const { data: totalGranted } = useContractRead(() => client.total_granted(), [client]);
+  const { data: totalReleased } = useContractRead(() => client.total_released(), [client]);
+  const { data: totalRefunded } = useContractRead(() => client.total_refunded(), [client]);
+  const { data: totalSwept } = useContractRead(() => client.total_swept(), [client]);
+
+  return useMemo(() => {
+    const contributed = totalContributed ?? 0n;
+    const granted = totalGranted ?? 0n;
+    const released = totalReleased ?? 0n;
+    const refunded = totalRefunded ?? 0n;
+    const swept = totalSwept ?? 0n;
+    return {
       id,
-      client: programmeAt(id),
-      /** True when falling back rather than showing a programme that was asked for. */
+      client,
       isDefault: !programmeId,
-    }),
-    [id, programmeId, programmeAt],
-  );
+      breakdown: {
+        contributed,
+        granted,
+        released,
+        refunded,
+        swept,
+        held: contributed - released - refunded - swept,
+      },
+    };
+  }, [id, client, programmeId, totalContributed, totalGranted, totalReleased, totalRefunded, totalSwept]);
 }

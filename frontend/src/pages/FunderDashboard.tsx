@@ -30,6 +30,8 @@ interface BudgetBreakdown {
   totalContributed: bigint;
   totalGranted: bigint;
   totalReleased: bigint;
+  totalRefunded: bigint;
+  totalSwept: bigint;
 }
 
 const ZERO = 0n;
@@ -57,6 +59,14 @@ export const FunderDashboard = () => {
     () => programme.total_released(),
     [programme],
   );
+  const refunded = useContractRead(
+    () => programme.total_refunded(),
+    [programme],
+  );
+  const swept = useContractRead(
+    () => programme.total_swept(),
+    [programme],
+  );
   const phase = useContractResult(() => programme.get_phase(), [programme]);
 
   const cancelTx = useTransaction({ contract: "program" });
@@ -75,13 +85,17 @@ export const FunderDashboard = () => {
     fee.data !== null &&
     contributed.data !== null &&
     granted.data !== null &&
-    released.data !== null
+    released.data !== null &&
+    refunded.data !== null &&
+    swept.data !== null
       ? {
           budget: budget.data,
           fee: fee.data,
           totalContributed: contributed.data,
           totalGranted: granted.data,
           totalReleased: released.data,
+          totalRefunded: refunded.data,
+          totalSwept: swept.data,
         }
       : null;
 
@@ -90,19 +104,25 @@ export const FunderDashboard = () => {
     fee.loading ||
     contributed.loading ||
     granted.loading ||
-    released.loading;
+    released.loading ||
+    refunded.loading ||
+    swept.loading;
   const breakdownError =
     budget.error ||
     fee.error ||
     contributed.error ||
     granted.error ||
-    released.error;
+    released.error ||
+    refunded.error ||
+    swept.error;
   const refetchBreakdown = () => {
     budget.refetch();
     fee.refetch();
     contributed.refetch();
     granted.refetch();
     released.refetch();
+    refunded.refetch();
+    swept.refetch();
   };
 
   const feePercent = breakdown
@@ -126,6 +146,15 @@ export const FunderDashboard = () => {
     : ZERO;
   const unallocatedSegment = breakdown
     ? maxBigint(breakdown.budget - releasedSegment - committedSegment, ZERO)
+    : ZERO;
+  const stillHeld = breakdown
+    ? maxBigint(
+        breakdown.totalContributed -
+          breakdown.totalReleased -
+          breakdown.totalRefunded -
+          breakdown.totalSwept,
+        ZERO,
+      )
     : ZERO;
 
   const handleCancelConfirm = async () => {
@@ -334,6 +363,98 @@ export const FunderDashboard = () => {
                   <span className="budget-equation-label">Budget</span>
                   <strong className="numeric">
                     {formatXlm(figures.budget)}
+                  </strong>
+                </div>
+              </div>
+
+              <div
+                className="where-funds-went"
+                style={{ marginTop: "1.5rem" }}
+              >
+                <span className="stat-label">Where the money went</span>
+                <div
+                  style={{
+                    display: "flex",
+                    justifyContent: "space-between",
+                    marginTop: "0.5rem",
+                  }}
+                >
+                  <span>Total contributed</span>
+                  <strong className="numeric">
+                    {formatXlm(figures.totalContributed)}
+                  </strong>
+                </div>
+                <div
+                  style={{
+                    display: "flex",
+                    justifyContent: "space-between",
+                    marginTop: "0.25rem",
+                  }}
+                >
+                  <span>Released</span>
+                  <strong className="numeric">
+                    {formatXlm(figures.totalReleased)}
+                  </strong>
+                </div>
+                {figures.totalRefunded > ZERO && (
+                  <div
+                    style={{
+                      display: "flex",
+                      justifyContent: "space-between",
+                      marginTop: "0.25rem",
+                    }}
+                  >
+                    <span>Refunded</span>
+                    <strong className="numeric">
+                      {formatXlm(figures.totalRefunded)}
+                    </strong>
+                  </div>
+                )}
+                {figures.totalSwept > ZERO && (
+                  <div
+                    style={{
+                      display: "flex",
+                      justifyContent: "space-between",
+                      marginTop: "0.25rem",
+                    }}
+                  >
+                    <span>Swept</span>
+                    <strong className="numeric">
+                      {formatXlm(figures.totalSwept)}
+                    </strong>
+                  </div>
+                )}
+                {stillHeld > ZERO && (
+                  <div
+                    style={{
+                      display: "flex",
+                      justifyContent: "space-between",
+                      marginTop: "0.25rem",
+                    }}
+                  >
+                    <span>Still held</span>
+                    <strong className="numeric">
+                      {formatXlm(stillHeld)}
+                    </strong>
+                  </div>
+                )}
+                <div
+                  style={{
+                    display: "flex",
+                    justifyContent: "space-between",
+                    marginTop: "0.5rem",
+                    paddingTop: "0.5rem",
+                    borderTop: "1px solid var(--color-border)",
+                  }}
+                >
+                  <strong>Total accounted</strong>
+                  <strong className="numeric">
+                    {formatXlm(
+                      figures.totalReleased +
+                        figures.totalRefunded +
+                        figures.totalSwept +
+                        stillHeld,
+                    )}
                   </strong>
                 </div>
               </div>

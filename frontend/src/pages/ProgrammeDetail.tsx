@@ -29,6 +29,8 @@ interface ProgrammeFigures {
   totalContributed: bigint;
   totalGranted: bigint;
   totalReleased: bigint;
+  totalRefunded?: bigint;
+  totalSwept?: bigint;
 }
 
 type DeadlineKey =
