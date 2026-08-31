@@ -3418,3 +3418,212 @@ fn closing_identity_after_refund_and_sweep() {
         "closing identity: contributed must equal released + refunded + swept + balance"
     );
 }
+
+// ---- archival simulation ----
+//
+// Every persistent entry in this contract has a TTL and will eventually archive.
+// Since protocol 23 an archived persistent entry is automatically restored on
+// access. The tests below advance the ledger past the bump window and assert
+// that all entry types behave correctly after restoration.
+
+/// Advance the ledger past the bump window so every persistent entry archives.
+fn archive_all(f: &Fixture) {
+    let seq = f.env.ledger().sequence();
+    f.env.ledger().set_sequence_number(seq + BUMP_LEDGERS + 10);
+}
+
+#[test]
+fn used_attestation_marker_stays_spent_after_archival() {
+    // This is the load-bearing test: a spent proof must not become spendable
+    // again after its Used marker archives and is restored on read.
+    let f = setup(2, 3);
+    let recipient = Address::generate(&f.env);
+    let school = Address::generate(&f.env);
+    award_to(&f, &recipient, &school, &900);
+
+    let uid = proof(&f, &recipient, 1);
+    f.client.release(&recipient, &uid, &f.verifier);
+    assert!(f.client.is_spent(&uid));
+
+    archive_all(&f);
+
+    assert!(
+        f.client.is_spent(&uid),
+        "a spent attestation must remain spent after archival"
+    );
+    assert_eq!(
+        f.client.try_release(&recipient, &uid, &f.verifier),
+        Err(Ok(Error::AttestationAlreadyUsed)),
+        "a spent proof must not unlock another tranche after archival"
+    );
+}
+
+#[test]
+fn used_marker_survives_archival_across_batch_release() {
+    let f = setup(2, 3);
+    let recipient = Address::generate(&f.env);
+    let school = Address::generate(&f.env);
+    f.client.contribute(&funded_donor(&f, 100_000), &100_000);
+    f.client.apply(&recipient, &900, &hash(&f.env, 1));
+    to_review(&f);
+    for i in 0..f.client.get_config().quorum {
+        f.client
+            .review(&f.reviewers.get(i).unwrap(), &recipient, &900);
+    }
+    f.client.allow_payee(&school);
+    f.client.finalize(&recipient, &school, &Mode::Direct);
+
+    let uid1 = proof(&f, &recipient, 1);
+    let uid2 = proof(&f, &recipient, 2);
+
+    // Release first tranche, archive, then try a batch that includes the
+    // already-spent uid1 — the entire batch must be rejected.
+    f.client.release(&recipient, &uid1, &f.verifier);
+    archive_all(&f);
+
+    let result = f
+        .client
+        .try_release_batch(&recipient, &vec![&f.env, uid1, uid2], &f.verifier);
+    assert_eq!(result, Err(Ok(Error::AttestationAlreadyUsed)));
+}
+
+#[test]
+fn application_entry_survives_archival() {
+    let f = setup(2, 3);
+    let applicant = Address::generate(&f.env);
+    f.client.apply(&applicant, &5_000, &hash(&f.env, 1));
+
+    archive_all(&f);
+
+    let a = f.client.get_application(&applicant);
+    assert_eq!(a.requested, 5_000);
+    assert!(!a.finalized);
+}
+
+#[test]
+fn award_entry_survives_archival() {
+    let f = setup(2, 3);
+    let applicant = Address::generate(&f.env);
+    let award = awarded(&f, &applicant, 1_000, &[1_000, 1_000]);
+
+    archive_all(&f);
+
+    let a = f.client.get_award(&applicant);
+    assert_eq!(a.granted, award.granted);
+    assert_eq!(a.tranches, award.tranches);
+    assert_eq!(a.released, 0);
+}
+
+#[test]
+fn award_tracks_releases_across_archival() {
+    let f = setup(2, 3);
+    let recipient = Address::generate(&f.env);
+    let school = Address::generate(&f.env);
+    award_to(&f, &recipient, &school, &900);
+
+    f.client
+        .release(&recipient, &proof(&f, &recipient, 1), &f.verifier);
+
+    archive_all(&f);
+
+    let a = f.client.get_award(&recipient);
+    assert_eq!(a.tranches_released, 1);
+    assert_eq!(a.released, 300);
+    // Second tranche still works after archival.
+    let amount = f
+        .client
+        .release(&recipient, &proof(&f, &recipient, 2), &f.verifier);
+    assert_eq!(amount, 300);
+}
+
+#[test]
+fn donor_entry_survives_archival() {
+    let f = setup(2, 3);
+    let donor = funded_donor(&f, 10_000);
+    f.client.contribute(&donor, &10_000);
+
+    archive_all(&f);
+
+    assert_eq!(f.client.contributed_by(&donor), 10_000);
+}
+
+#[test]
+fn reviewer_entry_survives_archival() {
+    let f = setup(3, 5);
+    let r = f.reviewers.get(0).unwrap();
+
+    archive_all(&f);
+
+    assert!(f.client.is_reviewer(&r));
+}
+
+#[test]
+fn verifier_entry_survives_archival() {
+    let f = setup(2, 3);
+
+    archive_all(&f);
+
+    assert!(f.client.is_verifier(&f.verifier));
+}
+
+#[test]
+fn payee_entry_survives_archival() {
+    let f = setup(2, 3);
+    let school = Address::generate(&f.env);
+    f.client.allow_payee(&school);
+
+    archive_all(&f);
+
+    assert!(f.client.is_payee(&school));
+}
+
+#[test]
+fn allocation_entry_survives_archival() {
+    let f = setup(2, 3);
+    let recipient = Address::generate(&f.env);
+    allocated_to(&f, &recipient, &900);
+
+    archive_all(&f);
+
+    assert_eq!(f.client.allocation_of(&recipient), 300);
+    // Spending still works after archival.
+    let school = Address::generate(&f.env);
+    f.client.allow_payee(&school);
+    let remaining = f.client.spend(&recipient, &school, &100);
+    assert_eq!(remaining, 200);
+}
+
+#[test]
+fn keepalive_extends_subject_entries_ttl() {
+    let f = setup(2, 3);
+    let donor = funded_donor(&f, 10_000);
+    f.client.contribute(&donor, &10_000);
+
+    let seq_before = f.env.ledger().sequence();
+    f.client.keepalive(&donor);
+
+    // After keepalive, the donor entry must survive BUMP_LEDGERS more ledgers.
+    f.env
+        .ledger()
+        .set_sequence_number(seq_before + BUMP_LEDGERS + 5);
+    assert_eq!(f.client.contributed_by(&donor), 10_000);
+}
+
+#[test]
+fn keepalive_extends_application_and_award() {
+    let f = setup(2, 3);
+    let applicant = Address::generate(&f.env);
+    let school = Address::generate(&f.env);
+    award_to(&f, &applicant, &school, &900);
+
+    let seq_before = f.env.ledger().sequence();
+    f.client.keepalive(&applicant);
+
+    f.env
+        .ledger()
+        .set_sequence_number(seq_before + BUMP_LEDGERS + 5);
+    let a = f.client.get_award(&applicant);
+    assert_eq!(a.granted, 900);
+    let app = f.client.get_application(&applicant);
+    assert_eq!(app.requested, 900);
+}

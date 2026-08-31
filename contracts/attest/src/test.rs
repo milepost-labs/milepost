@@ -359,3 +359,121 @@ fn verify_rejects_an_unknown_id() {
         .client
         .verify(&hash(&f.env, 9), &f.subject, &schema, &f.authority));
 }
+
+// ---- archival simulation ----
+//
+// Attestations and schemas are persistent entries with a TTL. Since protocol 23
+// an archived persistent entry is automatically restored on access. These tests
+// advance past the bump window and assert that all fields survive.
+
+#[test]
+fn schema_survives_archival() {
+    let f = setup();
+    let uid = open_schema(&f);
+
+    let seq = f.env.ledger().sequence();
+    f.env.ledger().set_sequence_number(seq + BUMP_LEDGERS + 10);
+
+    let s = f.client.get_schema(&uid);
+    assert_eq!(s.uid, uid);
+    assert_eq!(s.authority, f.authority);
+    assert!(s.revocable);
+    assert!(!s.restricted);
+}
+
+#[test]
+fn attestation_survives_archival_and_preserves_all_fields() {
+    let f = setup();
+    let schema = open_schema(&f);
+    let uid = f
+        .client
+        .attest(&f.authority, &schema, &f.subject, &hash(&f.env, 1), &None);
+
+    let seq = f.env.ledger().sequence();
+    f.env.ledger().set_sequence_number(seq + BUMP_LEDGERS + 10);
+
+    let a = f.client.get(&uid);
+    assert_eq!(a.uid, uid);
+    assert_eq!(a.schema, schema);
+    assert_eq!(a.attester, f.authority);
+    assert_eq!(a.subject, f.subject);
+    assert_eq!(a.revoked_at, None);
+    assert!(f.client.is_valid(&uid));
+}
+
+#[test]
+fn revoked_attestation_stays_revoked_after_archival() {
+    let f = setup();
+    let schema = open_schema(&f);
+    let uid = f
+        .client
+        .attest(&f.authority, &schema, &f.subject, &hash(&f.env, 1), &None);
+
+    f.env.ledger().set_timestamp(9_000);
+    f.client.revoke(&f.authority, &uid);
+    assert!(!f.client.is_valid(&uid));
+
+    let seq = f.env.ledger().sequence();
+    f.env.ledger().set_sequence_number(seq + BUMP_LEDGERS + 10);
+
+    assert!(!f.client.is_valid(&uid), "revocation must survive archival");
+    assert_eq!(f.client.get(&uid).revoked_at, Some(9_000));
+}
+
+#[test]
+fn expired_attestation_stays_invalid_after_archival() {
+    let f = setup();
+    let schema = open_schema(&f);
+    let expires_at = f.env.ledger().timestamp() + 1_000;
+    let uid = f.client.attest(
+        &f.authority,
+        &schema,
+        &f.subject,
+        &hash(&f.env, 1),
+        &Some(expires_at),
+    );
+
+    f.env.ledger().set_timestamp(expires_at + 1);
+    assert!(!f.client.is_valid(&uid));
+
+    let seq = f.env.ledger().sequence();
+    f.env.ledger().set_sequence_number(seq + BUMP_LEDGERS + 10);
+
+    assert!(!f.client.is_valid(&uid), "expiry must survive archival");
+    // The record still exists so history stays auditable.
+    assert_eq!(f.client.get(&uid).uid, uid);
+}
+
+#[test]
+fn keepalive_extends_attestation_ttl() {
+    let f = setup();
+    let schema = open_schema(&f);
+    let uid = f
+        .client
+        .attest(&f.authority, &schema, &f.subject, &hash(&f.env, 1), &None);
+
+    let seq_before = f.env.ledger().sequence();
+    f.client.keepalive(&uid);
+
+    // After keepalive, the attestation must survive BUMP_LEDGERS more ledgers.
+    f.env
+        .ledger()
+        .set_sequence_number(seq_before + BUMP_LEDGERS + 5);
+    assert!(f.client.is_valid(&uid));
+    assert_eq!(f.client.get(&uid).uid, uid);
+}
+
+#[test]
+fn schema_survives_archival_without_keepalive() {
+    let f = setup();
+    let uid = open_schema(&f);
+
+    let seq_before = f.env.ledger().sequence();
+    // `keepalive` only accepts attestation UIDs, not schema UIDs, so schemas
+    // rely on automatic restoration on read. Verify that works.
+    f.env
+        .ledger()
+        .set_sequence_number(seq_before + BUMP_LEDGERS + 5);
+    let s = f.client.get_schema(&uid);
+    assert_eq!(s.uid, uid);
+}
