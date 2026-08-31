@@ -12,6 +12,14 @@ env:
 jobs:
   check:
     runs-on: ubuntu-latest
+    # rustsec/audit-check publishes its result as a check run. Without an
+    # explicit grant the job inherits a read-only GITHUB_TOKEN on `push`, and
+    # the action fails with "Resource not accessible by integration" after the
+    # audit itself has already come back clean — so every push to main went red
+    # on a green audit.
+    permissions:
+      contents: read
+      checks: write
     steps:
       - uses: actions/checkout@v5
       - uses: dtolnay/rust-toolchain@stable
@@ -23,6 +31,13 @@ jobs:
       - name: Format
         run: cargo fmt --all --check
 
+      # A prebuilt binary rather than `cargo install cargo-audit`, which
+      # compiles from source on every run and adds minutes to every push.
+      - name: Check dependencies for known vulnerabilities
+        uses: rustsec/audit-check@v2
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+
       # Must precede both Clippy and Test. The registry's tests instantiate the
       # programme from its built wasm, the same way the registry does on-chain,
       # so the artifact has to exist before anything compiles a test target —
@@ -31,6 +46,18 @@ jobs:
       # time.
       - name: Build wasm
         run: cargo build --target wasm32v1-none --release
+
+      - name: Validate contract documentation
+        run: ./scripts/check-docs.sh
+
+      # Bindings in packages/ are generated from this wasm and checked in. If a
+      # contract interface changes and nobody regenerates them, the frontend
+      # only finds out after a transaction is already submitted. Fail here
+      # instead. `networks.testnet` on the four singletons is ignored so a
+      # wasm-only regeneration cannot fail for the missing address.
+      - uses: stellar/stellar-cli@v27.1.0
+      - name: Check TypeScript bindings
+        run: ./scripts/check-bindings.sh
 
       - name: Clippy
         run: cargo clippy --all-targets --all-features -- -D warnings
@@ -45,3 +72,111 @@ jobs:
           for f in target/wasm32v1-none/release/*.wasm; do
             printf '| %s | %s |\n' "$(basename "$f" .wasm)" "$(stat -c%s "$f")" >> "$GITHUB_STEP_SUMMARY"
           done
+
+      - name: Enforce contract size budgets
+        run: ./scripts/check-sizes.sh >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Install cargo-llvm-cov
+        run: cargo install cargo-llvm-cov --locked
+
+      - name: Coverage
+        env:
+          # Actual line coverage is about 98%; this leaves real headroom while
+          # still catching a meaningful regression.
+          COVERAGE_THRESHOLD: "90"
+        run: |
+          # `--fail-under-lines` does the threshold check itself. Parsing the
+          # percentage out of the text table is fragile — the TOTAL row carries
+          # region, function and line figures, and a grep takes whichever comes
+          # first.
+          #
+          # Run without `set -e` so the report still reaches the job summary
+          # when the gate fails; that is exactly when someone needs to read it.
+          set +e
+          cargo llvm-cov --all-features --summary-only \
+            --output-path /tmp/coverage-summary.txt \
+            --fail-under-lines "$COVERAGE_THRESHOLD"
+          status=$?
+          set -e
+
+          echo "### Coverage report" >> "$GITHUB_STEP_SUMMARY"
+          echo '```' >> "$GITHUB_STEP_SUMMARY"
+          cat /tmp/coverage-summary.txt >> "$GITHUB_STEP_SUMMARY"
+          # The report has no trailing newline, so the closing fence would
+          # otherwise land on the TOTAL row.
+          echo >> "$GITHUB_STEP_SUMMARY"
+          echo '```' >> "$GITHUB_STEP_SUMMARY"
+
+          if [ "$status" -ne 0 ]; then
+            echo "::error::Line coverage is below the ${COVERAGE_THRESHOLD}% threshold"
+          fi
+          exit $status
+          echo "### Coverage report" >> "$GITHUB_STEP_SUMMARY"
+          echo '```' >> "$GITHUB_STEP_SUMMARY"
+          cat /tmp/coverage-summary.txt >> "$GITHUB_STEP_SUMMARY"
+          echo '```' >> "$GITHUB_STEP_SUMMARY"
+          # Fail if total coverage drops below threshold (update after recording
+          # the current figure in your PR description).
+          TOTAL=$(grep -oP 'TOTAL.*\K[0-9.]+(?=%)' /tmp/coverage-summary.txt || echo "0")
+          THRESHOLD="${COVERAGE_THRESHOLD:-70}"
+          if (( $(echo "$TOTAL < $THRESHOLD" | bc -l) )); then
+            echo "::error::Coverage $TOTAL% is below the $THRESHOLD% threshold"
+            exit 1
+          fi
+
+  frontend:
+    runs-on: ubuntu-latest
+    # Deliberately not `needs: check`. This job builds the binding packages
+    # from checked-in TypeScript and never touches the wasm, so serialising it
+    # behind the contract job only makes the pipeline longer — and skips
+    # frontend entirely whenever the contract job is red, which is exactly when
+    # you still want to know.
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
+        with:
+          # eslint requires ^20.19 || ^22.13 || >=24; vite wants >=22.12.
+          node-version: 24
+          cache: npm
+          cache-dependency-path: "**/package-lock.json"
+
+      # `packages/*/dist` is gitignored, so a fresh checkout cannot resolve
+      # `@milepost/*` at all. The frontend imports its contract types from
+      # these, and without them tsc fails on a missing module rather than on
+      # anything real — which would make every other step here meaningless.
+      # Each package carries its own lockfile, so `npm ci` is exact.
+      - name: Build bindings
+        run: |
+          for p in attest policy-spend program record registry; do
+            npm ci --prefix "packages/$p"
+            npm run build --prefix "packages/$p"
+          done
+
+      - name: Install
+        run: npm ci --prefix frontend
+
+      # `tsc -b && vite build`. This step is the reason the job exists: until
+      # now CI ran cargo only, so a PR touching nothing but .tsx went green
+      # without a line of TypeScript being compiled.
+      - name: Build
+        run: npm run build --prefix frontend
+
+      - name: Enforce frontend bundle size budget
+        run: ./scripts/check-frontend-bundle-size.sh >> "$GITHUB_STEP_SUMMARY"
+
+      # Not cosmetic. The React Compiler rules here catch render-purity and
+      # cascading-setState bugs that type-check cleanly and misbehave at
+      # runtime.
+      - name: Lint
+        run: npm run lint --prefix frontend
+
+      - name: Test
+        run: npm test --prefix frontend
+
+      # Six independent lockfiles: frontend/ plus the five binding packages.
+      # The frontend handles wallet signing, so a compromised production
+      # dependency there reaches transaction construction. The failure policy
+      # is deliberate and documented in scripts/check-npm-advisories.sh, which
+      # is the only place that needs to change when the policy changes.
+      - name: Check npm dependencies for known advisories
+        run: ./scripts/check-npm-advisories.sh

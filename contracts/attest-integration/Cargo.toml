@@ -1,0 +1,22 @@
+[package]
+name = "milepost-attest-integration-example"
+description = "Minimal example: gating an action on an attestation"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+
+[lib]
+crate-type = ["lib", "cdylib"]
+doctest = false
+
+[dependencies]
+soroban-sdk = { workspace = true }
+
+[dev-dependencies]
+soroban-sdk = { workspace = true, features = ["testutils"] }
+milepost-attest = { path = "../attest", features = ["testutils"] }
+
+[features]
+testutils = ["soroban-sdk/testutils"]

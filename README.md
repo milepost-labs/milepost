@@ -26,3 +26,324 @@ That gap is why this is built on Stellar rather than an EVM chain:
 - **Policy signers** mean a tranche can land in a recipient's own wallet and
   still only be spendable to verified payees.
 
+## One protocol, many verticals
+
+Education is the demo scenario, not the design. The contracts carry no domain
+vocabulary at all: a *verifier* attests a *condition* about a *recipient*, and
+what those mean is configured per programme.
+
+| Vertical | Verifier | Condition | Paid to |
+| --- | --- | --- | --- |
+| Education | School | Enrolment, term completed | Institution |
+| Health workers | Clinic | Shifts worked | Recipient, unrestricted |
+| Agriculture | Co-operative | Harvest delivered | Input supplier |
+| Vocational | Training provider | Course completed | Recipient, restricted |
+| Humanitarian | Field officer | Household verified | Verified vendors |
+| SME microgrants | Programme officer | Milestone met | Mixed |
+
+Swapping vertical means a different schema and a different verifier set. It does
+not mean a different contract.
+
+---
+
+## Architecture
+
+Five contracts and one shared type crate. Three of the five have no dependency
+on the rest of the protocol and are usable on their own.
+
+```mermaid
+graph TD
+    R[registry<br/>factory + protocol config] -->|deploys| P[program<br/>one funding round]
+    R -->|authorises as writer| S[record<br/>recipient standing]
+    P -->|verifies proof| A[attest<br/>attestation registry]
+    P -->|credits on release| S
+    P -->|checks installed| PS[policy_spend<br/>wallet spend policy]
+    V([verifier]) -->|signs attestation| A
+    D([donor]) -->|contributes| P
+    P -->|pays| Y([verified payee])
+```
+
+### The contracts
+
+| Crate | Role | Wasm |
+| --- | --- | ---: |
+| [`program`](contracts/program) | One funding round: contributions, applications, review, awards, tranche release, refunds | 59,754 |
+| [`policy_spend`](contracts/policy-spend) | Smart wallet policy signer limiting spend to verified payees | 35,631 |
+| [`record`](contracts/record) | Portable, non-transferable recipient standing | 23,555 |
+| [`attest`](contracts/attest) | Schema-based attestation registry | 23,535 |
+| [`registry`](contracts/registry) | Factory and protocol configuration | 19,887 |
+| [`types`](crates/types) | Types crossing contract boundaries — no contract, no wasm | — |
+
+`attest`, `record` and `policy_spend` know nothing about the rest of the
+protocol. Soroban has no EAS equivalent and no standard spend-policy library, so
+they are written to be independently useful.
+
+A `treasury` multisig is planned; fees currently settle to a single address.
+
+### Phase machine
+
+Programme state is computed from wall-clock deadlines and an optional cancellation
+flag. `phase()` consults these in order; the diagram shows the resulting state
+transitions.
+
+```mermaid
+stateDiagram-v2
+    [*] --> Open
+    Open --> Review: after application deadline
+    Review --> Settled: after review deadline
+    Open --> Cancelled: cancelled
+    Review --> Cancelled: cancelled
+    Settled --> [*]
+    Cancelled --> [*]
+```
+
+### How money moves
+
+```mermaid
+flowchart TD
+    Contribute[Donor contributes] --> Apply[Recipient applies]
+    Apply --> Review[Reviewers vote]
+    Review --> Finalize[Finalize: median award, budget check]
+    Finalize --> Release[Release: attestation verified]
+    Release --> Spend[Spend: mode-dependent routing]
+    Finalize -->|unawarded budget| Refund[Refund: proportional to contributions]
+    Release -->|unclaimed tranches after release window| Refund
+    Refund -->|abandoned after sweep deadline| Sweep[Sweep: to protocol address]
+```
+
+1. **Contribute.** Donors fund the programme. Contributions close when
+   applications do, so the budget is fixed before anyone reviews against it.
+2. **Apply.** An applicant states the amount they actually need. Not a fixed
+   slot — one may need 200 for exam fees while another needs 5,000 for tuition.
+3. **Review.** Each reviewer approves an amount *up to* what was asked.
+4. **Finalize.** The award settles at the **median** of the votes. The minimum
+   would let one cautious reviewer dictate the outcome; the mean would let one
+   outlier drag it. Awards are checked against remaining budget, first finalised
+   first served.
+5. **Release.** A tranche unlocks only when `attest` confirms the claim is
+   valid, is about this recipient, is under this programme's schema, and was
+   signed by a verifier the programme trusts. One proof unlocks exactly one
+   tranche.
+6. **Spend.** Where the tranche goes depends on the award's mode.
+
+Anything never released — unawarded budget, or tranches nobody claimed — returns
+to contributors proportionally once the release window closes. Only genuinely
+abandoned funds are swept afterwards, on a per-programme deadline.
+
+### Disbursement modes
+
+Ordered by how hard the restriction is to circumvent. This is the core product
+decision, not a configuration detail.
+
+| Mode | Where funds go | Enforced by | Recipient chooses |
+| --- | --- | --- | --- |
+| **`Direct`** | Straight to a payee fixed at award time | The contract | No |
+| **`Allocated`** | Held in escrow; the recipient directs it to a verified payee | The contract | Which payee, when, how much |
+| **`Restricted`** | Recipient's smart wallet, policy signer on spending | Wallet configuration | Any policy-permitted destination |
+| **`Open`** | Recipient, unrestricted | Nothing | Everything |
+
+```mermaid
+flowchart LR
+    R[Released tranche] --> M{Mode}
+    M -->|Direct| D[Direct<br/>Paid straight to fixed payee]
+    M -->|Allocated| A[Allocated<br/>Held in escrow; recipient directs to verified payee]
+    M -->|Restricted| S[Restricted<br/>In recipient's smart wallet; policy signer limits spend]
+    M -->|Open| O[Open<br/>In recipient's wallet; unrestricted]
+```
+
+`Direct` and `Allocated` are equally unbypassable — in both, funds cannot reach
+an unverified address because they never leave the contract until they do. The
+difference is agency, and it is the reason to prefer `Allocated`: the recipient
+picks between two equally valid bookshops, or pays rent this week rather than
+next, without ever holding money that could go elsewhere.
+
+`Restricted` is weaker than it looks and the code says so. A policy constrains
+*one signer*, not the wallet: a recipient holding an unrestricted admin signer
+can authorise around it. Genuine enforcement requires the wallet's own
+`SignerLimits` to confine the funded signer to the policy, which is a deployment
+step no contract here can perform. `release` verifies the policy is at least
+installed, which bounds a misconfiguration to a single tranche.
+
+### Trust model
+
+- **Reviewers** decide amounts. Set at construction, and quorum cannot exceed
+  their number or applications would be unfinalisable.
+- **Verifiers** unlock tranches. A programme names the attesters it trusts;
+  `attest` independently confirms a proof really is theirs.
+- **Creator** verifies payees — a different question from whether an applicant
+  deserves funding, so a different role decides it.
+- **Registry** is admin of `record`. A programme may write standing *because the
+  registry deployed it*, never because it asked. A programme deployed any other
+  way can still take contributions and make awards, but cannot touch standing.
+- **Registry admin** can also replace the code of `registry` and `record`
+  outright, through `upgrade`. That is a larger power than configuring the
+  protocol, and it is worth naming: the key that sets the fee is the key that
+  could rewrite how standing is recorded. `attest` and `policy_spend` have no
+  admin and so cannot be upgraded at all, and a deployed `program` cannot be
+  upgraded by anyone — its terms are fixed for the life of the programme, which
+  is what lets a donor rely on them.
+
+Upgrading is not reversible in the way it sounds. Replacing a contract with wasm
+that does not itself expose `upgrade` freezes it permanently, so the new code
+has to carry the door it came through.
+
+`finalize` and `release` are permissionless on purpose. Both outcomes are
+already determined — by the votes, and by an attestation the verifier signed —
+so requiring a privileged trigger would only let whoever holds it withhold money
+someone has already earned.
+
+### Emergency pause
+
+A programme can be paused in an emergency, and only by the creator (the address
+that funded it — the same key that verifies payees). While paused:
+
+- **Stops:** `contribute`, `apply`, `review`, `finalize`, `spend` and `release`.
+  Every one of these is refused with the `Paused` error until the pause is
+  lifted.
+- **Does not stop:** `refund`, `sweep_fee` and `sweep_unclaimed`. Donors must
+  always be able to reclaim unreleased funds, even in an emergency. A pause that
+  trapped contributors' money would be worse than whatever it was containing.
+- **The clock keeps running.** Pause halts the forward money-path, not the
+  ledger. The apply, review, release and sweep deadlines are absolute wall-clock
+  timestamps and continue to tick down while the programme is paused — so a long
+  pause eats into the release window, and a recipient can lose time they had to
+  claim a tranche. That cost is deliberate: if a pause shifted deadlines, a
+  compromised creator key could cycle the pause to delay the refund and sweep
+  windows indefinitely, holding donors' money hostage. If an emergency genuinely
+  needs more time, the creator can extend the release deadline explicitly with
+  `extend_release_deadline` before it passes (see issue #162 and PR #198 for the
+  decision and its tests).
+
+The pause is **reversible and temporary**, which is the whole distinction from
+`cancel`. `cancel` permanently ends the programme and opens refunds immediately;
+`pause` is a containment action that a creator can lift with `unpause` at any
+time, after which operations resume under the current wall-clock phase. A
+creator can check whether a programme is paused with `is_paused`, and pause or
+unpause by calling `pause` or `unpause`. A programme cannot be paused once it
+has been cancelled. Pausing repeatedly does nothing once the flag is set, and
+unpausing an unpaused programme is a no-op.
+
+---
+
+## Deployed (testnet)
+
+| Contract | Id |
+| --- | --- |
+| `attest` | `CCOVBEADD2GEVZD3XHCKGIVWLD55CF7IF2PPA3X3LEIN3FWZKLLIJOZ4` |
+| `record` | `CCNOJI7LNHQBQFFOQRB3B5CAABRNOXYCGLJTVWRMS7AMOMDGKNY324ZO` |
+| `registry` | `CA7HUSERUURI6OIV7T22RI3J2BB2BIGC3A7QZCVLY2EKDZANYEDIAHUQ` |
+| `policy_spend` | `CAWCAOO3VYQT3LFKX4IKD6FDEPCOI3N3URPMAALO3T7G5OCMQM5IA6BQ` |
+
+Programmes are instantiated from wasm hash
+`50cfa4da906e79fe2fd0883251d3204b04ff31e2970b2d3c1df7f5bb2ca60bf8`, so each gets
+its own address and isolated state. Protocol fee is 250 bps.
+
+Re-running the deploy script produces a fresh set rather than upgrading these.
+Current ids always live in `deployments/testnet.json`.
+
+## Quickstart
+
+From a clean checkout, one command builds, deploys, seeds a scenario, waits
+out the application window, and runs the review stage:
+
+```sh
+./scripts/quickstart.sh testnet
+```
+
+It checks for the `stellar` CLI and the `wasm32v1-none` Rust target up front
+and fails fast with install instructions if either is missing, then runs
+`deploy.sh`, `seed.sh` and `seed-review.sh` in sequence — showing a live
+countdown while it waits for the seeded programme's application window to
+close, since the review stage genuinely cannot run before then. It finishes
+with a summary of the programme address, the awards the reviewers settled on,
+and what was released.
+
+Pass a different network or deployer key the same way the underlying scripts
+accept them: `./scripts/quickstart.sh testnet my-deployer-key`.
+
+Prefer the individual steps below if you want to inspect state (or run other
+commands) between them.
+
+## Development
+
+Requires Rust stable with the `wasm32v1-none` target and `stellar` CLI 27.x.
+
+### Task Runner (`just` or `make`)
+You can use `just` or `make` for quick task execution with correct build dependencies:
+* `just build` / `make build` — Build contract WASM artifacts
+* `just test` / `make test` — Run workspace tests (builds WASM first)
+* `just lint` / `make lint` — Run `cargo fmt` and `cargo clippy` (builds WASM first)
+* `just frontend-build` / `make frontend-build` — Build TypeScript packages dist and frontend app
+* `just deploy` / `make deploy` — Deploy contracts using `./scripts/deploy.sh`
+* `just seed` / `make seed` — Seed protocol scenario data using `./scripts/seed.sh`
+
+```sh
+cargo test                        # 133 tests
+cargo clippy --all-targets -- -D warnings
+cargo build --target wasm32v1-none --release
+./scripts/deploy.sh testnet       # deploy, write ids to deployments/
+```
+
+Build the wasm before running tests: `registry`'s tests instantiate a programme
+from its built artifact, the same way the registry does on-chain.
+
+## Seeding a scenario
+
+```sh
+./scripts/seed.sh testnet          # programme, funding, two applications
+./scripts/seed-review.sh testnet   # once the application window closes
+```
+
+Two halves, because phases are driven by wall-clock deadlines and the review
+stage genuinely cannot run until applications close. The scenario exercises the
+cases that matter: two applicants asking for very different amounts, reviewers
+who disagree 300/100/500 on the same applicant, both `Allocated` and `Direct`
+awards, and a real attestation under a restricted schema.
+
+Accounts and ids land in `deployments/<network>.seed.json`.
+
+For prerequisites, why the steps above are ordered the way they are, how to
+verify each one, and what to do when one fails partway, see
+[docs/deployment-runbook.md](docs/deployment-runbook.md).
+
+## Error Reference
+
+For a full list of error codes, causes, and recommended actions across all five contracts, see [docs/error-code-reference.md](docs/error-code-reference.md).
+
+## Learn more
+
+- [TTL Strategy](docs/ttl-strategy.md)
+- [Programme Metadata](docs/programme-metadata.md)
+- [Error Codes](docs/error-code-reference.md)
+- [Security Model and Trust Assumptions](docs/security-model.md)
+- [Integrator FAQ](docs/integrator-faq.md) — recurring questions, answered with
+  the reasoning behind the design rather than only the behaviour
+- [Upgrade and Compatibility](docs/upgrade-and-compatibility.md) — what stays
+  stable across releases, how a breaking change is signalled, and what to do
+  when one lands
+## TypeScript bindings
+
+`packages/` holds generated clients, checked in so a frontend can build without
+compiling the contracts. The four singleton contracts carry their deployed
+address as `networks.testnet`; `@milepost/program` does not, because every
+programme is its own contract.
+
+Bindings encode the interface at the moment they were generated, and a stale one
+fails at runtime rather than at build time — regenerate whenever an interface
+changes.
+
+## Not yet done
+
+- **Treasury multisig.** Fees and swept funds settle to a single address.
+- **Event query module.** Listings cannot be reconstructed yet.
+- **`Restricted` end to end.** `policy_spend` is tested standalone but has never
+  been wired to a live passkey wallet.
+
+## Security
+
+For security vulnerability reporting guidelines and scope, see [SECURITY.md](SECURITY.md).
+
+## Licence
+
+Apache-2.0
+

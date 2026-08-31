@@ -7,7 +7,7 @@
 //! authorise: transfers of one asset, to payees a steward has verified, within
 //! a spending cap.
 //!
-//! This is the piece that makes [`Mode::Restricted`] tranches meaningful. Paying
+//! This is the piece that makes `Mode::Restricted` tranches meaningful. Paying
 //! a school directly is accountable but paternalistic — the recipient never
 //! touches the money and cannot choose between two equally valid bookshops.
 //! Paying them with no restriction is dignified but unaccountable. A policy

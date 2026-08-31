@@ -47,6 +47,8 @@ pub enum Error {
     ExpiryInPast = 7,
     /// The schema restricts who may attest, and this attester is not on the list.
     AttesterNotAuthorized = 8,
+    /// A cycle was detected in the schema predecessor chain.
+    CycleDetected = 9,
 }
 
 /// A claim template. `definition` is an opaque, human-readable description of
@@ -61,9 +63,10 @@ pub struct Schema {
     pub definition: String,
     /// Whether attestations under this schema may later be revoked.
     pub revocable: bool,
-    /// When true, only `authority` may attest under this schema. When false,
-    /// anyone may, and consumers are responsible for checking the attester.
+    /// Whether `restricted` is set, only `authority` may attest under this schema.
     pub restricted: bool,
+    /// The uid of the predecessor schema, if any. Only the authority may set this.
+    pub predecessor: Option<BytesN<32>>,
 }
 
 #[contracttype]
@@ -140,13 +143,26 @@ impl Attest {
         definition: String,
         revocable: bool,
         restricted: bool,
+        predecessor: Option<BytesN<32>>,
     ) -> Result<BytesN<32>, Error> {
         authority.require_auth();
 
+        // Compute the schema uid first (from authority + definition).
         let mut preimage = Bytes::new(&env);
         preimage.append(&authority.clone().to_xdr(&env));
         preimage.append(&definition.clone().to_xdr(&env));
         let uid: BytesN<32> = env.crypto().sha256(&preimage).into();
+
+        // Only the authority may declare a predecessor.
+        // Reject cycles by walking the predecessor chain.
+        if let Some(ref pred_uid) = predecessor {
+            let schema = Self::schema(&env, pred_uid)?;
+            if schema.authority != authority {
+                return Err(Error::AttesterNotAuthorized);
+            }
+            // Check for cycles: the new schema's uid must not appear in the predecessor chain.
+            Self::check_cycle(&env, pred_uid, &uid)?;
+        }
 
         let key = Key::Schema(uid.clone());
         if env.storage().persistent().has(&key) {
@@ -159,6 +175,7 @@ impl Attest {
             definition,
             revocable,
             restricted,
+            predecessor,
         };
         env.storage().persistent().set(&key, &schema);
         env.storage()
@@ -171,6 +188,22 @@ impl Attest {
         }
         .publish(&env);
         Ok(uid)
+    }
+
+    fn check_cycle(env: &Env, start: &BytesN<32>, target: &BytesN<32>) -> Result<(), Error> {
+        // Walk the predecessor chain from `start` to detect if `target` appears in it.
+        // Limit depth to prevent infinite loops; schema chains should be shallow.
+        let mut current = start.clone();
+        for _ in 0..64usize {
+            if current == *target {
+                return Err(Error::CycleDetected);
+            }
+            match Self::schema(env, &current)?.predecessor {
+                Some(pred) => current = pred,
+                None => return Ok(()),
+            }
+        }
+        Ok(())
     }
 
     /// Make a claim about `subject`. Returns the attestation id that consumers

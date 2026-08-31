@@ -171,3 +171,77 @@
   padding: var(--space-4) var(--space-5);
   border-top: 1px solid var(--border);
 }
+
+.ui-field__control select,
+.ui-field__control textarea {
+  flex: 1; min-width: 0;
+  padding: var(--space-3) var(--space-4);
+  border: 0; background: transparent; color: inherit; font: inherit;
+  min-height: 44px;
+}
+.ui-field__control select:focus,
+.ui-field__control textarea:focus { outline: none; }
+.ui-field__control--multiline { align-items: stretch; }
+.ui-field__control textarea { resize: vertical; }
+
+.ui-radiogroup {
+  display: flex; flex-direction: column; gap: var(--space-3);
+  border: 0; padding: 0; margin: 0;
+}
+.ui-radio {
+  display: flex; align-items: flex-start; gap: var(--space-3);
+  padding: var(--space-4);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  cursor: pointer;
+  transition: border-color var(--transition-fast), background var(--transition-fast);
+}
+.ui-radio:hover { background: var(--surface-hover); }
+.ui-radio--selected { border-color: var(--accent); background: color-mix(in srgb, var(--accent) 6%, transparent); }
+.ui-radio input { margin-top: 0.2em; }
+.ui-radio__text { display: flex; flex-direction: column; gap: var(--space-1); }
+.ui-radio__label { font-weight: var(--weight-medium); }
+.ui-radio__description { font-size: var(--text-sm); color: var(--text-muted); }
+
+/* ── CopyButton ──────────────────────────────────────────────────────────── */
+.copy-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  padding: 0;
+  border: 1px solid transparent;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--text-muted);
+  cursor: pointer;
+  transition: color var(--transition-fast), background var(--transition-fast);
+  flex-shrink: 0;
+}
+.copy-button:hover {
+  color: var(--text-main);
+  background: var(--surface-hover);
+  border-color: var(--border);
+}
+.copy-button--copied {
+  color: var(--success);
+  border-color: color-mix(in srgb, var(--success) 35%, transparent);
+  background: color-mix(in srgb, var(--success) 8%, transparent);
+}
+
+/* ── AddressChip ─────────────────────────────────────────────────────────── */
+.address-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-1);
+  max-width: 100%;
+}
+.address-chip__text {
+  font-family: var(--font-numeric);
+  font-size: var(--text-sm);
+  color: var(--text-main);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
