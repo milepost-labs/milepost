@@ -140,6 +140,82 @@ fn funded_donor(f: &Fixture, amount: i128) -> Address {
     donor
 }
 
+fn setup_with_fee(quorum: u32, reviewer_count: u32, fee_bps: u32) -> Fixture {
+    let env = milepost_test_utils::new_test_env();
+
+    let asset = milepost_test_utils::register_token(&env);
+    let token = TokenClient::new(&env, &asset);
+    let mint = StellarAssetClient::new(&env, &asset);
+
+    let creator = Address::generate(&env);
+    let treasury = Address::generate(&env);
+    let verifier = Address::generate(&env);
+
+    let attest_id = env.register(milepost_attest::Attest, ());
+    let attest = milepost_attest::AttestClient::new(&env, &attest_id);
+    let schema = attest.register_schema(
+        &verifier,
+        &String::from_str(&env, "milestone-met:v1"),
+        &true,
+        &true,
+        &None,
+    );
+
+    let policy_id = env.register(policy::FakePolicy, ());
+    let policy = policy::FakePolicyClient::new(&env, &policy_id);
+
+    let record_id = env.register(milepost_record::Record, (creator.clone(),));
+    let record = milepost_record::RecordClient::new(&env, &record_id);
+
+    let mut reviewers = Vec::new(&env);
+    for _ in 0..reviewer_count {
+        reviewers.push_back(Address::generate(&env));
+    }
+
+    let id = env.register(
+        Programme,
+        (
+            ProgrammeConfig {
+                creator: creator.clone(),
+                token: asset,
+                treasury: treasury.clone(),
+                attest: attest_id,
+                record: record_id,
+                policy: policy_id,
+                schema: schema.clone(),
+                fee_bps,
+                apply_deadline: APPLY_DEADLINE,
+                review_deadline: REVIEW_DEADLINE,
+                release_deadline: RELEASE_DEADLINE,
+                sweep_deadline: SWEEP_DEADLINE,
+                quorum,
+                tranches: 3,
+                minimum_award: 0,
+                metadata_hash: BytesN::from_array(&env, &[7u8; 32]),
+            },
+            reviewers.clone(),
+            vec![&env, verifier.clone()],
+        ),
+    );
+    record.add_writer(&id);
+
+    let client = ProgrammeClient::new(&env, &id);
+    Fixture {
+        env: env.clone(),
+        client,
+        token,
+        mint,
+        attest,
+        policy,
+        record,
+        schema,
+        creator,
+        treasury,
+        reviewers,
+        verifier,
+    }
+}
+
 fn to_review(f: &Fixture) {
     f.env.ledger().set_timestamp(APPLY_DEADLINE + 1);
 }
@@ -2680,7 +2756,418 @@ mod proptests {
             );
         }
     }
+
+    // ---- budget and fee arithmetic fuzzing ----
+
+    /// Simulate the contract's tranche division logic in pure arithmetic.
+    /// Returns the vector of tranche amounts.
+    fn simulate_tranches(granted: i128, tranche_count: u32) -> std::vec::Vec<i128> {
+        let mut tranches = std::vec::Vec::with_capacity(tranche_count as usize);
+        let mut released = 0i128;
+        for t in 0..tranche_count {
+            let amount = if t + 1 == tranche_count {
+                granted - released
+            } else {
+                granted / tranche_count as i128
+            };
+            released += amount;
+            tranches.push(amount);
+        }
+        tranches
+    }
+
+    proptest! {
+        #[test]
+        fn tranche_sum_equals_granted(
+            granted in 1i128..=1_000_000_000i128,
+            tranche_count in 1u32..=100u32,
+        ) {
+            let tranches = simulate_tranches(granted, tranche_count);
+            let sum: i128 = tranches.iter().sum();
+            prop_assert_eq!(sum, granted, "tranches must sum to granted exactly");
+            prop_assert!(
+                tranches.iter().all(|&t| t > 0),
+                "no tranche may be zero or negative; got {tranches:?}"
+            );
+        }
+    }
+
+    proptest! {
+        #[test]
+        fn fee_plus_available_equals_total(
+            total in 1i128..=1_000_000_000_000i128,
+            fee_bps in 0u32..=1_000u32,
+        ) {
+            let fee = total * fee_bps as i128 / BPS_DENOMINATOR;
+            let available = total - fee;
+            prop_assert_eq!(fee + available, total, "fee + available must equal total");
+            prop_assert!(fee >= 0, "fee must be non-negative");
+            prop_assert!(available >= 0, "available must be non-negative");
+        }
+    }
+
+    /// Run the full refund flow with a custom fee_bps.
+    fn run_refunds_with_fee(
+        amounts: &[i128],
+        fee_bps: u32,
+    ) -> (Fixture, std::vec::Vec<Address>, i128) {
+        let f = setup_with_fee(1, 1, fee_bps);
+        let mut donors = std::vec::Vec::with_capacity(amounts.len());
+        for &amt in amounts {
+            let d = funded_donor(&f, amt);
+            f.client.contribute(&d, &amt);
+            donors.push(d);
+        }
+        f.env.ledger().set_timestamp(RELEASE_DEADLINE);
+        (f, donors, amounts.iter().sum())
+    }
+
+    proptest! {
+        #[test]
+        fn refund_pool_never_exceeded_with_varied_fees(
+            amounts in prop::collection::vec(1i128..=10_000i128, 1..=20),
+            fee_bps in 0u32..=1_000u32,
+        ) {
+            let total: i128 = amounts.iter().sum();
+            let unpaid = total - total * fee_bps as i128 / BPS_DENOMINATOR;
+            let (f, donors, _) = run_refunds_with_fee(&amounts, fee_bps);
+            let (sum, _) = claim_all(&f, &donors);
+
+            // 1. Sum of refunds must not exceed the refundable pool.
+            prop_assert!(
+                sum <= unpaid,
+                "refunded {sum} exceeds refundable pool {unpaid} (fee_bps={fee_bps})"
+            );
+
+            // 2. Money conservation: contract balance == total contributed minus
+            //    everything paid out.
+            prop_assert_eq!(
+                f.token.balance(&f.client.address),
+                total - sum,
+                "money leaked across the refund path"
+            );
+
+            // 3. Rounding dust is bounded by donor count.
+            let dust = unpaid - sum;
+            prop_assert!(
+                dust >= 0,
+                "dust went negative: {dust}"
+            );
+            prop_assert!(
+                (dust as usize) < donors.len(),
+                "dust {dust} is not accounted for among {} donors (fee_bps={fee_bps})",
+                donors.len()
+            );
+        }
+    }
+
+    proptest! {
+        #[test]
+        fn no_overflow_on_public_paths(
+            scale in 1i128..=100_000_000i128,
+            donor_count in 1u32..=5u32,
+            tranches in 1u32..=50u32,
+        ) {
+            // Enough reviewers for every tranche to get its own attestation,
+            // but capped at MAX_QUORUM so the constructor accepts the quorum.
+            let reviewer_count = tranches.min(MAX_QUORUM);
+            // Awards are the median of the votes; each vote stays within
+            // `scale`. Contributions give at least 2*scale per donor (with at
+            // least one donor, total >= 2*scale), so the available budget
+            // (>= 0.9 * 2*scale with the maximum 10% fee) always clears the
+            // largest possible award. `scale >= reviewer_count` also keeps
+            // every tranche >= 1 stroop.
+            let votes: std::vec::Vec<i128> = (0..reviewer_count)
+                .map(|i| (scale + i as i128).max(reviewer_count as i128))
+                .collect();
+            let n = votes.len() as u32;
+
+            // Construct programme with custom tranche count.
+            let f = setup_with(n, n, tranches);
+
+            // Contribute from multiple donors; each gives comfortably more than
+            // the largest possible award.
+            let mut donors = std::vec::Vec::with_capacity(donor_count as usize);
+            for _ in 0..donor_count {
+                let amt = 2 * scale + 1;
+                let d = funded_donor(&f, amt);
+                f.client.contribute(&d, &amt);
+                donors.push(d);
+            }
+
+            // Apply and review.
+            let applicant = Address::generate(&f.env);
+            let requested = *votes.iter().max().unwrap();
+            f.client.apply(&applicant, &requested, &hash(&f.env, 1));
+            to_review(&f);
+            for (i, v) in votes.iter().enumerate() {
+                f.client.review(&f.reviewers.get(i as u32).unwrap(), &applicant, v);
+            }
+
+            // Finalize and release all tranches.
+            let payee = Address::generate(&f.env);
+            f.client.allow_payee(&payee);
+            let award = f.client.finalize(&applicant, &payee, &Mode::Direct);
+            for t in 0..tranches {
+                f.client.release(
+                    &applicant,
+                    &proof(&f, &applicant, t as u8 + 1),
+                    &f.verifier,
+                );
+            }
+
+            // Core invariant: sum of tranches == granted exactly.
+            prop_assert_eq!(
+                f.client.get_award(&applicant).released,
+                award.granted,
+                "released must equal granted after all tranches"
+            );
+
+            // Fee conservation.
+            let total = donor_count as i128 * (2 * scale + 1);
+            let fee = f.client.fee();
+            let available = total - fee;
+            prop_assert_eq!(
+                fee + available,
+                total,
+                "fee + available must equal total contributions"
+            );
+
+            // Refund path: exercise proportional refunds for every donor.
+            f.env.ledger().set_timestamp(RELEASE_DEADLINE);
+            let mut refund_sum = 0i128;
+            for d in &donors {
+                if let Ok(Ok(amt)) = f.client.try_refund(d) {
+                    refund_sum += amt;
+                }
+            }
+            prop_assert!(
+                refund_sum <= available - award.granted,
+                "refunds {refund_sum} exceed remaining pool {}",
+                available - award.granted
+            );
+        }
+    }
+
+    // ---- allocation spend accounting fuzzing ----
+
+    /// Fully exercise the Allocated-mode accounting model across several
+    /// recipients and payees, interleaving releases (which credit escrow) and
+    /// spends (which draw it down), and assert the ledger invariants after
+    /// every step:
+    ///   * allocation_of(r) == released(r) - spent(r) exactly
+    ///   * spent(r) never exceeds released(r)
+    ///   * allocations never leak between recipients
+    ///   * a recipient cannot pay themselves (they are never a verified payee)
+    ///   * spending is possible before the sweep deadline and impossible at it
+    ///
+    /// `ops` is a sequence of `(is_release, recipient_idx, payee_idx, amount)`.
+    /// Release amounts come from the contract's tranche division; `ri` and `pi`
+    /// are taken modulo the generated recipient/payee counts so the strategy
+    /// stays independent of the vector lengths.
+    fn run_allocation_sequence(
+        grants: &[i128],
+        payee_count: usize,
+        ops: &[(bool, usize, usize, i128)],
+    ) {
+        let n = grants.len();
+        let tranches: u32 = 3;
+        // One reviewer per recipient; each recipient is finalised to themselves
+        // in Allocated mode and later directs to verified payees.
+        let f = setup(n as u32, n as u32);
+        f.env.ledger().set_timestamp(0);
+
+        let mut payees: std::vec::Vec<Address> = std::vec::Vec::with_capacity(payee_count);
+        for _ in 0..payee_count {
+            let p = Address::generate(&f.env);
+            f.client.allow_payee(&p);
+            payees.push(p);
+        }
+
+        let recipients: std::vec::Vec<Address> =
+            (0..n).map(|_| Address::generate(&f.env)).collect();
+
+        // Contribute a pool large enough to clear the sum of all grants plus the
+        // protocol fee (available >= 0.9 * contributed at the 10% ceiling).
+        let pool = grants.iter().sum::<i128>() * 2 + 1;
+        let donor = funded_donor(&f, pool);
+        f.client.contribute(&donor, &pool);
+
+        // Apply, review with a unanimous grant, and finalise each into escrow.
+        for (i, &grant) in grants.iter().enumerate() {
+            let r = &recipients[i];
+            f.client.apply(r, &grant, &hash(&f.env, 1));
+            to_review(&f);
+            for qi in 0..f.client.get_config().quorum {
+                f.client.review(&f.reviewers.get(qi).unwrap(), r, &grant);
+            }
+            f.client.finalize(r, r, &Mode::Allocated);
+        }
+
+        let mut released = std::vec![0i128; n];
+        let mut spent = std::vec![0i128; n];
+        let mut released_tranches = std::vec![0u32; n];
+
+        for &(is_release, ri, pi, amount) in ops {
+            let ri = ri % n;
+            let r = &recipients[ri];
+
+            if is_release {
+                // One proof unlocks one tranche; the programme is capped at
+                // `tranches` releases per award.
+                if released_tranches[ri] >= tranches {
+                    continue;
+                }
+                let amt = f.client.release(
+                    r,
+                    &proof(&f, r, released_tranches[ri] as u8 + 1),
+                    &f.verifier,
+                );
+                released_tranches[ri] += 1;
+                released[ri] += amt;
+            } else {
+                let p = &payees[pi % payees.len()];
+                match f.client.try_spend(r, p, &amount) {
+                    Ok(Ok(remaining)) => {
+                        spent[ri] += amount;
+                        assert_eq!(
+                            remaining,
+                            released[ri] - spent[ri],
+                            "spend returned the wrong remaining allocation"
+                        );
+                    }
+                    Ok(Err(_)) | Err(_) => {
+                        // Rejected (insufficient allocation), state unchanged.
+                    }
+                }
+            }
+
+            // Ledger invariant after every step.
+            assert_eq!(
+                f.client.allocation_of(r),
+                released[ri] - spent[ri],
+                "allocation drift for recipient {}",
+                ri
+            );
+            assert!(
+                spent[ri] <= released[ri],
+                "recipient {ri} spent {} of only {} released",
+                spent[ri],
+                released[ri]
+            );
+        }
+
+        // No leak between recipients: each allocation reflects its own ledger.
+        for i in 0..n {
+            assert_eq!(
+                f.client.allocation_of(&recipients[i]),
+                released[i] - spent[i],
+                "allocation leaked between recipients"
+            );
+            assert!(released[i] - spent[i] >= 0);
+        }
+
+        // A recipient cannot pay themselves: they were never verified as a payee.
+        for r in &recipients {
+            assert_eq!(
+                f.client.try_spend(r, r, &1),
+                Err(Ok(Error::PayeeNotVerified)),
+                "recipient was able to pay themselves"
+            );
+        }
+
+        // Spend still works before the sweep deadline, so the window is not
+        // closed early.
+        if payee_count > 0 && released[0] - spent[0] > 0 {
+            let (r, p) = (recipients[0].clone(), payees[0].clone());
+            let before = f.token.balance(&p);
+            let remaining = f.client.spend(&r, &p, &1);
+            assert_eq!(
+                remaining,
+                released[0] - spent[0] - 1,
+                "spend before the deadline should succeed"
+            );
+            assert_eq!(f.token.balance(&p), before + 1);
+        }
+
+        // At the sweep deadline spending closes on both sides of the boundary.
+        f.env.ledger().set_timestamp(SWEEP_DEADLINE);
+        for (i, r) in recipients.iter().enumerate() {
+            if released[i] - spent[i] > 0 && payee_count > 0 {
+                assert_eq!(
+                    f.client.try_spend(r, &payees[0], &1),
+                    Err(Ok(Error::SpendWindowClosed)),
+                    "spend must fail at the sweep deadline"
+                );
+            }
+        }
+    }
+
+    proptest! {
+        #[test]
+        fn allocations_account_for_every_release_and_spend(
+            grants in prop::collection::vec(500i128..=10_000i128, 2..=3),
+            payee_count in 1usize..=3usize,
+            ops in prop::collection::vec(
+                (any::<bool>(), 0usize..3usize, 0usize..3usize, 1i128..=500i128),
+                3..=12,
+            ),
+        ) {
+            run_allocation_sequence(&grants, payee_count, &ops);
+        }
+    }
+
+    proptest! {
+        #[test]
+        fn allocation_nevers_over_spends_across_many_small_tranches(
+            grant in 1_000i128..=50_000i128,
+            tranches in 1u32..=10u32,
+            spend_amounts in prop::collection::vec(1i128..=1_000i128, 1..=30),
+        ) {
+            // Sweep the boundary from both sides for a single recipient with a
+            // configurable tranche count, verifying total spent never exceeds
+            // what was released.
+            let f = setup_with(2, 3, tranches);
+            f.env.ledger().set_timestamp(0);
+            let recipient = Address::generate(&f.env);
+            let payee = Address::generate(&f.env);
+            f.client.allow_payee(&payee);
+
+            let donor = funded_donor(&f, grant * 2 + 1);
+            f.client.contribute(&donor, &(grant * 2 + 1));
+            f.client.apply(&recipient, &grant, &hash(&f.env, 1));
+            to_review(&f);
+            for qi in 0..f.client.get_config().quorum {
+                f.client.review(&f.reviewers.get(qi).unwrap(), &recipient, &grant);
+            }
+            f.client.finalize(&recipient, &recipient, &Mode::Allocated);
+
+            let mut released_total = 0i128;
+            let mut spent_total = 0i128;
+            for t in 0..tranches {
+                let amt = f.client.release(
+                    &recipient,
+                    &proof(&f, &recipient, t as u8 + 1),
+                    &f.verifier,
+                );
+                released_total += amt;
+            }
+            prop_assert_eq!(f.client.allocation_of(&recipient), released_total);
+
+            for &amt in &spend_amounts {
+                if let Ok(Ok(_)) = f.client.try_spend(&recipient, &payee, &amt) {
+                    spent_total += amt;
+                }
+                prop_assert!(spent_total <= released_total);
+                prop_assert_eq!(
+                    f.client.allocation_of(&recipient),
+                    released_total - spent_total
+                );
+            }
+        }
+    }
 }
+
 
 // ---- minimum award (issue #109) ----
 
