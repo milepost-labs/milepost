@@ -2994,12 +2994,15 @@ mod proptests {
         f.client.contribute(&donor, &pool);
 
         // Apply, review with a unanimous grant, and finalise each into escrow.
-        for (i, &grant) in grants.iter().enumerate() {
+        for i in 0..n {
             let r = &recipients[i];
-            f.client.apply(r, &grant, &hash(&f.env, 1));
-            to_review(&f);
+            f.client.apply(r, &grants[i], &hash(&f.env, 1));
+        }
+        to_review(&f);
+        for i in 0..n {
+            let r = &recipients[i];
             for qi in 0..f.client.get_config().quorum {
-                f.client.review(&f.reviewers.get(qi).unwrap(), r, &grant);
+                f.client.review(&f.reviewers.get(qi).unwrap(), r, &grants[i]);
             }
             f.client.finalize(r, r, &Mode::Allocated);
         }
@@ -3719,6 +3722,168 @@ fn setup_with_schema(
         reviewers,
         verifier,
     }
+}
+
+/// Two distinct `Programme` instances that share the same attestation registry,
+/// the same schema, and the same verifier — the configuration under which one
+/// attestation can legitimately release a tranche in both. This is the storage
+/// arrangement that cross-programme attestation reuse depends on, so the helper
+/// is shared with the test that locks the property in.
+struct TwoProgrammes {
+    env: Env,
+    a: Fixture,
+    b: Fixture,
+}
+
+/// Build a pair of programmes sharing schema and verifier. Both fund from the
+/// same token and the `TwoProgrammes` struct carries the shared attest/schema so
+/// a single proof can be minted and released against each programme.
+fn setup_two_programmes(quorum: u32, reviewer_count: u32) -> TwoProgrammes {
+    let env = Env::default();
+    env.mock_all_auths();
+
+    let issuer = Address::generate(&env);
+    let asset = env.register_stellar_asset_contract_v2(issuer);
+
+    let creator = Address::generate(&env);
+    let treasury = Address::generate(&env);
+    let verifier = Address::generate(&env);
+
+    let attest_id = env.register(milepost_attest::Attest, ());
+    let attest = milepost_attest::AttestClient::new(&env, &attest_id);
+    // Restricted so only `verifier` can ever attest; both programmes trust it.
+    let schema = attest.register_schema(
+        &verifier,
+        &String::from_str(&env, "milestone-met:v1"),
+        &true,
+        &true,
+        &None,
+    );
+
+    let policy_id = env.register(policy::FakePolicy, ());
+
+    let record_id = env.register(milepost_record::Record, (creator.clone(),));
+    let record = milepost_record::RecordClient::new(&env, &record_id);
+
+    let mut reviewers = Vec::new(&env);
+    for _ in 0..reviewer_count {
+        reviewers.push_back(Address::generate(&env));
+    }
+
+    let make_programme = || {
+        env.register(
+            Programme,
+            (
+                ProgrammeConfig {
+                    creator: creator.clone(),
+                    token: asset.address(),
+                    treasury: treasury.clone(),
+                    attest: attest_id.clone(),
+                    record: record_id.clone(),
+                    policy: policy_id.clone(),
+                    schema: schema.clone(),
+                    fee_bps: FEE_BPS,
+                    apply_deadline: APPLY_DEADLINE,
+                    review_deadline: REVIEW_DEADLINE,
+                    release_deadline: RELEASE_DEADLINE,
+                    sweep_deadline: SWEEP_DEADLINE,
+                    quorum,
+                    tranches: 3,
+                    minimum_award: 0,
+                    metadata_hash: BytesN::from_array(&env, &[7u8; 32]),
+                },
+                reviewers.clone(),
+                vec![&env, verifier.clone()],
+            ),
+        )
+    };
+    let id_a = make_programme();
+    let id_b = make_programme();
+
+    // Both programmes credit standing, so each must be an authorised writer.
+    record.add_writer(&id_a);
+    record.add_writer(&id_b);
+
+    let mk_fixture = |id: soroban_sdk::Address| Fixture {
+        env: env.clone(),
+        token: TokenClient::new(&env, &asset.address()),
+        mint: StellarAssetClient::new(&env, &asset.address()),
+        attest: milepost_attest::AttestClient::new(&env, &attest_id),
+        policy: policy::FakePolicyClient::new(&env, &policy_id),
+        record: milepost_record::RecordClient::new(&env, &record_id),
+        client: ProgrammeClient::new(&env, &id),
+        schema: schema.clone(),
+        creator: creator.clone(),
+        treasury: treasury.clone(),
+        reviewers: reviewers.clone(),
+        verifier: verifier.clone(),
+    };
+
+    TwoProgrammes {
+        env: env.clone(),
+        a: mk_fixture(id_a),
+        b: mk_fixture(id_b),
+    }
+}
+
+/// One attestation releases a tranche in each of two programmes that share a
+/// schema and verifier. An attestation is evidence about a recipient under a
+/// schema, **not** a payment authorisation, so a single proof can legitimately
+/// pay out in both funders' programmes. Locking this in: if it ever stops, the
+/// storage layout or the checks have changed in a way that was not intended.
+#[test]
+fn one_attestation_releases_a_tranche_in_two_programmes_that_share_schema() {
+    let t = setup_two_programmes(2, 3);
+    let recipient = Address::generate(&t.env);
+    let payee = Address::generate(&t.env);
+
+    // Open phase: contribute + apply for both **before** the shared clock is
+    // advanced, because `t.a` and `t.b` share one `Env`. Advancing to review
+    // for one would push the other past `contribute`'s Open-phase check.
+    let open_both = |f: &Fixture| {
+        let donor = funded_donor(f, 100_000);
+        f.client.contribute(&donor, &100_000);
+        f.client.apply(&recipient, &900, &hash(&f.env, 1));
+    };
+    open_both(&t.a);
+    open_both(&t.b);
+
+    // Review phase: advance the shared clock once, then review + finalize in
+    // both programmes.
+    to_review(&t.a);
+    let review_and_finalize_both = |f: &Fixture| {
+        for i in 0..f.client.get_config().quorum {
+            f.client.review(&f.reviewers.get(i).unwrap(), &recipient, &900);
+        }
+        f.client.allow_payee(&payee);
+        f.client.finalize(&recipient, &payee, &Mode::Direct);
+    };
+    review_and_finalize_both(&t.a);
+    review_and_finalize_both(&t.b);
+
+    // One proof, minted under the shared schema by the shared verifier.
+    let uid = proof(&t.a, &recipient, 7);
+
+    // The same attestation releases a tranche in the first programme...
+    let amount_a = t.a.client.release(&recipient, &uid, &t.a.verifier);
+    assert_eq!(amount_a, 300, "900 over 3 tranches");
+
+    // ...and a tranche in the second, returning success rather than an error.
+    // This *is* the cross-programme property: had the spent-marker leaked
+    // between programmes, `t.b`'s release would have been refused as already
+    // used. It releases successfully instead.
+    let amount_b = t.b.client.release(&recipient, &uid, &t.b.verifier);
+    assert_eq!(amount_b, 300, "the same proof pays out in the second programme too");
+
+    // Within a single programme, single use is still enforced.
+    assert_eq!(
+        t.a.client.try_release(&recipient, &uid, &t.a.verifier),
+        Err(Ok(Error::AttestationAlreadyUsed))
+    );
+    assert_eq!(
+        t.b.client.try_release(&recipient, &uid, &t.b.verifier),
+        Err(Ok(Error::AttestationAlreadyUsed))
+    );
 }
 
 #[test]

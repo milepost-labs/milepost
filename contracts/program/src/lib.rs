@@ -91,6 +91,32 @@
 //!   subject to strict boundary checks rather than a side-effect of pausing.
 //! - **Invariant preservation:** Refund and sweep paths remain active during a
 //!   pause so capital is never trapped.
+//!
+//! ## One attestation can pay out across programmes — on purpose
+//!
+//! An attestation is scoped to the recipient, the schema, and the attester who
+//! signed it, **not** to any particular programme. So the same attestation — one
+//! proof that "this recipient completed the term" — can release a tranche in two
+//! different programmes that both trust the same verifier and the same schema.
+//! Within a single programme reuse is still blocked: [`Error::AttestationAlreadyUsed`]
+//! rejects a second release of the same proof, covered by the
+//! `one_proof_unlocks_exactly_one_tranche` test.
+//!
+//! This cross-programme reuse is intended, not an accident of storage layout.
+//! Each programme keeps its own `Key::Used(attestation)` spent-set, so no
+//! programme can see another's. An attestation states a fact — "the recipient
+//! met the milestone" — not a payment authorisation. Two funders may each
+//! independently decide to pay on that milestone, and both should; blocking the
+//! second would refuse to pay for something that genuinely happened, with the
+//! winner decided arbitrarily by whichever programme happened to be claimed from
+//! first.
+//!
+//! A funder who wants an attestation to be exclusive to them — evidence only
+//! they can act on — already has an answer that needs no code change: register
+//! their **own** schema as [`restricted`](milepost_attest::Schema::restricted),
+//! which makes their address the only attester able to issue claims under it.
+//! That binds the evidence to them for every programme that opts into that
+//! schema.
 
 use soroban_sdk::{
     contract, contractclient, contracterror, contractevent, contractimpl, contracttype, token,
