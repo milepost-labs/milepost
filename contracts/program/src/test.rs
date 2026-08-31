@@ -3002,7 +3002,8 @@ mod proptests {
         for i in 0..n {
             let r = &recipients[i];
             for qi in 0..f.client.get_config().quorum {
-                f.client.review(&f.reviewers.get(qi).unwrap(), r, &grants[i]);
+                f.client
+                    .review(&f.reviewers.get(qi).unwrap(), r, &grants[i]);
             }
             f.client.finalize(r, r, &Mode::Allocated);
         }
@@ -3122,7 +3123,7 @@ mod proptests {
 
     proptest! {
         #[test]
-        fn allocation_nevers_over_spends_across_many_small_tranches(
+        fn allocation_never_over_spends_across_many_small_tranches(
             grant in 1_000i128..=50_000i128,
             tranches in 1u32..=10u32,
             spend_amounts in prop::collection::vec(1i128..=1_000i128, 1..=30),
@@ -3170,7 +3171,6 @@ mod proptests {
         }
     }
 }
-
 
 // ---- minimum award (issue #109) ----
 
@@ -3853,7 +3853,8 @@ fn one_attestation_releases_a_tranche_in_two_programmes_that_share_schema() {
     to_review(&t.a);
     let review_and_finalize_both = |f: &Fixture| {
         for i in 0..f.client.get_config().quorum {
-            f.client.review(&f.reviewers.get(i).unwrap(), &recipient, &900);
+            f.client
+                .review(&f.reviewers.get(i).unwrap(), &recipient, &900);
         }
         f.client.allow_payee(&payee);
         f.client.finalize(&recipient, &payee, &Mode::Direct);
@@ -3873,7 +3874,10 @@ fn one_attestation_releases_a_tranche_in_two_programmes_that_share_schema() {
     // between programmes, `t.b`'s release would have been refused as already
     // used. It releases successfully instead.
     let amount_b = t.b.client.release(&recipient, &uid, &t.b.verifier);
-    assert_eq!(amount_b, 300, "the same proof pays out in the second programme too");
+    assert_eq!(
+        amount_b, 300,
+        "the same proof pays out in the second programme too"
+    );
 
     // Within a single programme, single use is still enforced.
     assert_eq!(
