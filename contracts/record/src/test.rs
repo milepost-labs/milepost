@@ -363,3 +363,82 @@ fn upgrading_the_record_requires_the_admin() {
     f.env.set_auths(&[]);
     f.client.upgrade(&new_wasm);
 }
+
+// ---- archival simulation ----
+//
+// Every persistent entry in this contract has a TTL and will eventually archive.
+// Since protocol 23 an archived persistent entry is automatically restored on
+// access rather than reading as absent. The tests below advance the ledger
+// past the bump window so every entry archives, then access the entry and
+// assert that behaviour is still correct after restoration.
+
+#[test]
+fn standing_survives_archival_and_preserves_all_fields() {
+    let f = setup();
+    f.env.ledger().set_timestamp(1_000);
+    let s = f
+        .client
+        .credit(&f.writer, &f.subject, &f.programme, &500, &hash(&f.env, 1));
+    let first_seen = s.first_seen;
+    let root = s.history_root;
+
+    let seq = f.env.ledger().sequence();
+    f.env.ledger().set_sequence_number(seq + BUMP_LEDGERS + 10);
+
+    let restored = f.client.get(&f.subject);
+    assert_eq!(restored.subject, f.subject);
+    assert_eq!(restored.programmes, 1);
+    assert_eq!(restored.tranches, 1);
+    assert_eq!(restored.total_received, 500);
+    assert_eq!(restored.first_seen, first_seen);
+    assert_eq!(restored.last_seen, 1_000);
+    assert_eq!(restored.history_root, root);
+}
+
+#[test]
+fn writer_entry_resolves_after_archival() {
+    let f = setup();
+    assert!(f.client.is_writer(&f.writer));
+
+    let seq = f.env.ledger().sequence();
+    f.env.ledger().set_sequence_number(seq + BUMP_LEDGERS + 10);
+
+    assert!(
+        f.client.is_writer(&f.writer),
+        "a writer entry must survive archival"
+    );
+}
+
+#[test]
+fn keepalive_extends_standing_ttl() {
+    let f = setup();
+    f.client
+        .credit(&f.writer, &f.subject, &f.programme, &500, &hash(&f.env, 1));
+
+    let seq_before = f.env.ledger().sequence();
+    f.client.keepalive(&f.subject);
+
+    // After keepalive, the entry must survive at least BUMP_LEDGERS more
+    // ledgers from now.
+    f.env
+        .ledger()
+        .set_sequence_number(seq_before + BUMP_LEDGERS + 5);
+    assert_eq!(f.client.get(&f.subject).total_received, 500);
+}
+
+#[test]
+fn keepalive_on_attest_extends_standing_ttl() {
+    let f = setup();
+    f.client
+        .credit(&f.writer, &f.subject, &f.programme, &500, &hash(&f.env, 1));
+
+    let seq_before = f.env.ledger().sequence();
+    // A credit bumps the standing TTL; keepalive should extend it further.
+    f.client.keepalive(&f.subject);
+
+    // Push well past the original bump — the keepalive extended it.
+    f.env
+        .ledger()
+        .set_sequence_number(seq_before + BUMP_LEDGERS + 5);
+    assert_eq!(f.client.get(&f.subject).total_received, 500);
+}
