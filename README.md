@@ -1,6 +1,5 @@
 # Milepost
-
-*A milepost marks how far along the road you have come.*
+*A Milepost marks how far along the road you have come.*
 
 Conditional disbursement infrastructure on Stellar. A funder commits money to a
 programme; recipients receive it in tranches that unlock only when a trusted
@@ -13,9 +12,8 @@ Money moves at each milepost, and only at each milepost.
 
 ## The problem
 
-Most on-chain grant tooling stops at *selection*. It makes the vote transparent,
-transfers a lump sum, and ends. The unsolved part is everything after the
-transfer — did the money reach the person, could they spend it on the thing it
+Most on-chain grant tooling stops at *selection*. It makes the vote transparent, transfers a lump sum, and ends. The unsolved part is everything after the
+transfer (&mdash; did the money reach the person, could they spend it on the thing it
 was for, and can anyone prove it afterwards.
 
 That gap is why this is built on Stellar rather than an EVM chain:
