@@ -28,6 +28,10 @@ That gap is why this is built on Stellar rather than an EVM chain:
 - **Policy signers** mean a tranche can land in a recipient's own wallet and
   still only be spendable to verified payees.
 
+## Glossary
+
+New to the repo? Start with the [glossary](docs/glossary.md): it explains the Stellar, Soroban, and protocol terms the code and docs use without assuming prior domain knowledge.
+
 ## One protocol, many verticals
 
 Education is the demo scenario, not the design. The contracts carry no domain
