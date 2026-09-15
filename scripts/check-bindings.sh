@@ -33,7 +33,7 @@ EOF
 
 need_stellar() {
   if ! command -v stellar >/dev/null 2>&1; then
-    echo "error: stellar CLI not found on PATH (need 27.x to generate bindings)" >&2
+    echo "error: stellar CLI not found on PATH (install the version pinned by stellar/stellar-cli in .github/workflows/ci.yml)" >&2
     exit 1
   fi
 }

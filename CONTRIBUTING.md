@@ -198,27 +198,31 @@ which:
    published as pre-releases.
 4. Builds the five TypeScript binding packages at the tag's version, checks
    that each tarball actually contains `dist/`, and publishes them to npm as
-   `@milepost/*` with [provenance](https://docs.npmjs.com/generating-provenance-statements).
-   This runs *before* the GitHub Release is created, and every check that can
-   fail for a configuration reason (a missing `NPM_TOKEN`, a package that would
-   ship without `dist/`) runs before anything is published — so a broken
-   release stops cleanly instead of leaving a GitHub Release with no packages.
-   A pre-release tag publishes under the `next` dist-tag, so
-   `npm install @milepost/program` never resolves to one, and packages already
-   published at that version are skipped, so a failed release can be re-run.
+   `@milepost/*` through [trusted publishing](https://docs.npmjs.com/trusted-publishers),
+   which also attaches provenance. This runs *before* the GitHub Release is
+   created, so a broken release — a package that would ship without `dist/`, or
+   a trusted publisher that is missing or misconfigured — stops cleanly instead
+   of leaving a GitHub Release with no packages. A pre-release tag publishes
+   under the `next` dist-tag, so `npm install @milepost/program` never resolves
+   to one, and packages already published at that version are skipped, so a
+   failed release can be re-run.
 
 Nothing in the workflow edits `Cargo.toml` or commits back to the repo —
 tagging is a manual, deliberate act, not an automated bump.
 
 ### Tagging a release
 
-The first release needs two things set up once, outside the repository:
+Publishing needs no npm token. Each of the five packages on
+[npmjs.com](https://www.npmjs.com/) has a trusted publisher for GitHub Actions
+— organisation `milepost-labs`, repository `milepost`, workflow `release.yml`,
+no environment, direct publishing allowed — and the release job authenticates
+with its own short-lived OIDC credential. Those values are case-sensitive and
+npm does not check them when they are saved, so a mismatch only shows up as
+`ENEEDAUTH` at the publish step.
 
-* An `@milepost` organisation on [npmjs.com](https://www.npmjs.com/), with
-  publish rights for the account that owns the token below.
-* An `NPM_TOKEN` repository secret holding a granular access token that can
-  publish to that organisation. Nothing else needs it.
-
+A package has to exist on npm before a trusted publisher can be added to it, so
+a new binding package must be published once by hand before a release can take
+it over.
 
 ```sh
 git tag v0.2.0

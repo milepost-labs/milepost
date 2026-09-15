@@ -14,8 +14,8 @@ env:
 
 permissions:
   contents: write
-  # npm provenance: the registry uses this token to verify each package was
-  # built by this workflow, from this repository, at this commit.
+  # npm trusted publishing: this job's OIDC token is what authenticates the
+  # publish (there is no npm token), and it is what provenance is signed with.
   id-token: write
 
 jobs:
@@ -61,15 +61,16 @@ jobs:
           OUTPUT: CHANGES.md
 
       # Everything that can fail for a configuration reason runs before anything
-      # is published. The GitHub Release used to be created first, so a missing
-      # token left a public release with no npm packages behind it.
+      # is published, and the GitHub Release is created last, so a failed publish
+      # never leaves a public release with no packages behind it.
       - name: Setup Node for npm publish
         uses: actions/setup-node@v5
         with:
           node-version: 24
           registry-url: 'https://registry.npmjs.org'
-          cache: npm
-          cache-dependency-path: "**/package-lock.json"
+          # A release build must not restore dependencies from a cache that
+          # another run could have written.
+          package-manager-cache: false
 
       - name: Build TypeScript bindings
         run: |
@@ -92,19 +93,11 @@ jobs:
       - name: Verify bindings are publishable
         run: ./scripts/check-bindings-publishable.sh
 
-      - name: Check npm credentials
-        env:
-          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
-        run: |
-          if [ -z "$NODE_AUTH_TOKEN" ]; then
-            echo "::error::The NPM_TOKEN secret is not set. Nothing has been published."
-            exit 1
-          fi
-          npm whoami
-
+      # Authenticates through the trusted publisher set on each package on
+      # npmjs.com (milepost-labs / milepost / release.yml, direct publish
+      # allowed). If that is missing or wrong, the first publish fails with
+      # ENEEDAUTH — still before the GitHub Release is created.
       - name: Publish TypeScript bindings to npm
-        env:
-          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
         run: |
           set -euo pipefail
           VERSION="${GITHUB_REF_NAME#v}"
