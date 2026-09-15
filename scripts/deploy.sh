@@ -37,6 +37,17 @@ echo "==> Building"
 # than failing on it.
 (cd "$ROOT" && stellar contract build)
 
+if ! command -v jq >/dev/null 2>&1; then
+  echo "error: jq not found on PATH" >&2
+  exit 1
+fi
+
+# Taken just before the first deploy, so no event from this contract set can
+# be older than it. An indexer starts reading here instead of guessing, and can
+# tell whether the RPC still retains the whole history.
+DEPLOYED_LEDGER="$(stellar ledger latest --network "$NETWORK" --output json | jq -r '.sequence')"
+echo "==> Deploying from ledger $DEPLOYED_LEDGER"
+
 deploy() {
   local name="$1"; shift
   local wasm="$WASM_DIR/$name.wasm"
@@ -115,7 +126,8 @@ cat >"$OUT_FILE" <<EOF
   "registry": "$REGISTRY",
   "policy_spend": "$POLICY",
   "program_wasm": "$PROGRAM_WASM",
-  "fee_bps": $FEE_BPS
+  "fee_bps": $FEE_BPS,
+  "deployed_ledger": $DEPLOYED_LEDGER
 }
 EOF
 

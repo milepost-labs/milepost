@@ -94,17 +94,20 @@ Both arguments default to `testnet` and `milepost-deployer`. In order, this:
 
 1. Generates and Friendbot-funds the source identity if it doesn't already
    exist locally.
-2. Deploys `attest`.
-3. Deploys `record` with the deployer as its admin (temporary — see above).
-4. Uploads (not deploys) the `program` wasm, since `registry` instantiates
+2. Records the latest ledger as `deployed_ledger`, so an indexer knows where
+   this contract set's events begin.
+3. Deploys `attest`.
+4. Deploys `record` with the deployer as its admin (temporary — see above).
+5. Uploads (not deploys) the `program` wasm, since `registry` instantiates
    programmes from this hash rather than from a shared instance.
-5. Deploys `policy_spend` — one instance serves every restricted wallet.
-6. Deploys `registry`, wired to `attest`, `record`, `policy_spend`, and the
+6. Deploys `policy_spend` — one instance serves every restricted wallet.
+7. Deploys `registry`, wired to `attest`, `record`, `policy_spend`, and the
    uploaded programme wasm hash.
-7. Hands `record`'s admin to the now-deployed `registry`.
-8. Writes every id to `deployments/<network>.json` (gitignored —
-   environment-specific, regenerated freely) — **only on full success**. This
-   file's presence is itself the signal that the deploy actually completed.
+8. Hands `record`'s admin to the now-deployed `registry`.
+9. Writes every id, and `deployed_ledger`, to `deployments/<network>.json`
+   (gitignored — environment-specific, regenerated freely) — **only on full
+   success**. This file's presence is itself the signal that the deploy
+   actually completed.
 
 **Verify:**
 
@@ -112,9 +115,9 @@ Both arguments default to `testnet` and `milepost-deployer`. In order, this:
 cat deployments/testnet.json
 ```
 
-Confirm `attest`, `record`, `registry`, `policy_spend`, and `program_wasm`
-are all populated, then check the registry is live and has deployed nothing
-yet:
+Confirm `attest`, `record`, `registry`, `policy_spend`, `program_wasm`, and
+`deployed_ledger` are all populated, then check the registry is live and has
+deployed nothing yet:
 
 ```sh
 stellar contract invoke --id <registry-id> --source-account milepost-deployer \
