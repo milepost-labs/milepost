@@ -12,7 +12,7 @@
 
 - [ ] `cargo test`
 - [ ] `cargo clippy --all-targets -- -D warnings`
-- [ ] If a contract interface changed: milepost-frontend builds and tests against the new bindings (`./scripts/frontend-with-local-bindings.sh`)
+- [ ] If a contract interface or an event changed: milepost-frontend and milepost-indexer build and test against the new bindings (`./scripts/frontend-with-local-bindings.sh ../milepost-frontend ../milepost-indexer`)
 
 ## Contract Changes (if applicable)
 

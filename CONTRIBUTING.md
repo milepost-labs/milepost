@@ -65,15 +65,23 @@ Common commands and workflows are available via `just` (or standard `make`):
 
 ## 3. Frontend
 
-The web app lives in [milepost-frontend](https://github.com/milepost-labs/milepost-frontend), which has its own contributing
-guide and checks. If you change a contract's interface here, check the app still
-builds against it before opening the PR, with milepost-frontend cloned next to
-this repository:
+The web app lives in [milepost-frontend](https://github.com/milepost-labs/milepost-frontend), and the indexer that builds
+the lists it reads in [milepost-indexer](https://github.com/milepost-labs/milepost-indexer). Both have their own
+contributing guides and checks, and both install published `@milepost/*`
+versions, so neither sees a contract change until it is released.
+
+If you change a contract's interface, or any event it emits, check them against
+your change before opening the PR, with both cloned next to this repository:
 
 ```bash
-./scripts/frontend-with-local-bindings.sh ../milepost-frontend
+./scripts/frontend-with-local-bindings.sh ../milepost-frontend ../milepost-indexer
 npm run build --prefix ../milepost-frontend && npm test --prefix ../milepost-frontend
+npm run typecheck --prefix ../milepost-indexer && npm test --prefix ../milepost-indexer
 ```
+
+An event rename is the case to watch: the app may not touch the event at all,
+while the indexer stops decoding it and quietly publishes shorter lists. Its
+tests decode events through the bindings' own specs, so they fail on it.
 
 CI does the same on every PR, in the `bindings` job.
 
