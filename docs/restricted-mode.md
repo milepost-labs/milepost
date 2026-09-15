@@ -285,7 +285,7 @@ Guidance:
 | What | Value |
 |---|---|
 | smart-wallet WASM hash (testnet, v1 final) | `fdefad64b96837147e1c333e51f537b696eab925e9f147e63d597c04e3c903f0` |
-| policy_spend contract (testnet) | `CAWCAOO3VYQT3LFKX4IKD6FDEPCOI3N3URPMAALO3T7G5OCMQM5IA6BQ` |
+| policy_spend contract (testnet) | `CD2F5HMCPZCPXFHEFRNVNCQFYKYZZND4EIV3BQXK2NP7PYFY57OZIYTS` |
 | passkey-kit commit | `9a8c9ffc7dd7669ab86378167d698e53dda82174` |
 | policy signer limits (required) | `{ token_address -> null }` |
 | admin signer limits (required) | `null` (unlimited) |
