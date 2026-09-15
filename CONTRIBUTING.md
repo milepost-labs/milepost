@@ -72,7 +72,8 @@ Common commands and workflows are available via `just` (or standard `make`):
 * `just build` / `make build` — Build contract WASM artifacts
 * `just test` / `make test` — Run workspace tests (encodes WASM build order dependency)
 * `just lint` / `make lint` — Run `cargo fmt` check and `cargo clippy` (encodes WASM build order dependency)
-* `just frontend-build` / `make frontend-build` — Build TypeScript packages dist and frontend app
+* `just frontend-build` / `make frontend-build` — Build the frontend against the published `@milepost/*` bindings
+* `just frontend-local-bindings` / `make frontend-local-bindings` — Build and test the frontend against this checkout's bindings, after changing a contract
 * `just deploy` / `make deploy` — Deploy contracts using `./scripts/deploy.sh`
 * `just seed` / `make seed` — Seed protocol scenario data using `./scripts/seed.sh`
 * `just` / `make help` — List all available tasks

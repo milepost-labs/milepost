@@ -20,14 +20,17 @@ lint: build
     cargo fmt --all --check
     cargo clippy --all-targets --all-features -- -D warnings
 
-# Build TypeScript packages dist and frontend production bundle
+# Build the frontend against the @milepost/* versions it pins from npm
 frontend-build:
-    for p in attest policy-spend program record registry; do \
-        npm ci --prefix "packages/$$p"; \
-        npm run build --prefix "packages/$$p"; \
-    done
     npm ci --prefix frontend
     npm run build --prefix frontend
+
+# `npm ci --prefix frontend` puts the published versions back afterwards.
+# Build and test the frontend against this checkout's bindings, after changing a contract
+frontend-local-bindings:
+    ./scripts/frontend-with-local-bindings.sh
+    npm run build --prefix frontend
+    npm test --prefix frontend
 
 # Deploy contracts using deploy script
 deploy:

@@ -11,11 +11,11 @@
     "preview": "vite preview"
   },
   "dependencies": {
-    "@milepost/attest": "file:../packages/attest",
-    "@milepost/policy-spend": "file:../packages/policy-spend",
-    "@milepost/program": "file:../packages/program",
-    "@milepost/record": "file:../packages/record",
-    "@milepost/registry": "file:../packages/registry",
+    "@milepost/attest": "^0.1.0",
+    "@milepost/policy-spend": "^0.1.0",
+    "@milepost/program": "^0.1.0",
+    "@milepost/record": "^0.1.0",
+    "@milepost/registry": "^0.1.0",
     "@stellar/freighter-api": "^6.0.1",
     "buffer": "6.0.3",
     "lucide-react": "^1.31.0",

@@ -126,11 +126,9 @@ jobs:
 
   frontend:
     runs-on: ubuntu-latest
-    # Deliberately not `needs: check`. This job builds the binding packages
-    # from checked-in TypeScript and never touches the wasm, so serialising it
-    # behind the contract job only makes the pipeline longer — and skips
-    # frontend entirely whenever the contract job is red, which is exactly when
-    # you still want to know.
+    # Deliberately not `needs: check`. Serialising behind the contract job only
+    # makes the pipeline longer — and skips frontend entirely whenever the
+    # contract job is red, which is exactly when you still want to know.
     steps:
       - uses: actions/checkout@v7
       - uses: actions/setup-node@v7
@@ -140,25 +138,10 @@ jobs:
           cache: npm
           cache-dependency-path: "**/package-lock.json"
 
-      # `packages/*/dist` is gitignored, so a fresh checkout cannot resolve
-      # `@milepost/*` at all. The frontend imports its contract types from
-      # these, and without them tsc fails on a missing module rather than on
-      # anything real — which would make every other step here meaningless.
-      # Each package carries its own lockfile, so `npm ci` is exact.
-      - name: Build bindings
-        run: |
-          for p in attest policy-spend program record registry; do
-            npm ci --prefix "packages/$p"
-            npm run build --prefix "packages/$p"
-          done
-
-      # Nothing else inspects what `npm publish` would actually upload. A
-      # package that ships without dist/ installs cleanly and only fails when a
-      # consumer imports it, so check the tarball on every PR rather than
-      # discovering it when a release tag is pushed.
-      - name: Verify bindings are publishable
-        run: ./scripts/check-bindings-publishable.sh
-
+      # @milepost/* comes from npm at the versions frontend/package.json pins,
+      # the same way it will once the frontend has its own repository. Whether
+      # the frontend still works against bindings that have not been released
+      # yet is the `bindings` job's question.
       - name: Install
         run: npm ci --prefix frontend
 
@@ -187,3 +170,34 @@ jobs:
       # is the only place that needs to change when the policy changes.
       - name: Check npm dependencies for known advisories
         run: ./scripts/check-npm-advisories.sh
+
+  bindings:
+    runs-on: ubuntu-latest
+    # The frontend installs published @milepost/* versions, so its own job
+    # cannot see a contract change that has not been released. This one builds
+    # the bindings from this checkout, checks what a release would upload, and
+    # builds and tests the frontend against those builds — so a PR that would
+    # break the frontend fails here, not after the next release reaches it.
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 24
+          cache: npm
+          cache-dependency-path: "**/package-lock.json"
+
+      - name: Build bindings and install them into the frontend
+        run: ./scripts/frontend-with-local-bindings.sh
+
+      # Nothing else inspects what `npm publish` would actually upload. A
+      # package that ships without dist/ installs cleanly and only fails when a
+      # consumer imports it, so check the tarball on every PR rather than
+      # discovering it when a release tag is pushed.
+      - name: Verify bindings are publishable
+        run: ./scripts/check-bindings-publishable.sh
+
+      - name: Build frontend against local bindings
+        run: npm run build --prefix frontend
+
+      - name: Test frontend against local bindings
+        run: npm test --prefix frontend

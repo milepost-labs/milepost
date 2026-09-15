@@ -268,14 +268,16 @@ commands) between them.
 
 ## Development
 
-Requires Rust stable with the `wasm32v1-none` target and `stellar` CLI 27.x.
+Requires Rust stable with the `wasm32v1-none` target and the `stellar` CLI at the
+version CI pins (`stellar/stellar-cli` in `.github/workflows/ci.yml`).
 
 ### Task Runner (`just` or `make`)
 You can use `just` or `make` for quick task execution with correct build dependencies:
 * `just build` / `make build` — Build contract WASM artifacts
 * `just test` / `make test` — Run workspace tests (builds WASM first)
 * `just lint` / `make lint` — Run `cargo fmt` and `cargo clippy` (builds WASM first)
-* `just frontend-build` / `make frontend-build` — Build TypeScript packages dist and frontend app
+* `just frontend-build` / `make frontend-build` — Build the frontend against the published `@milepost/*` bindings
+* `just frontend-local-bindings` / `make frontend-local-bindings` — Build and test the frontend against this checkout's bindings, after changing a contract
 * `just deploy` / `make deploy` — Deploy contracts using `./scripts/deploy.sh`
 * `just seed` / `make seed` — Seed protocol scenario data using `./scripts/seed.sh`
 

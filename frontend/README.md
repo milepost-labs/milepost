@@ -1,21 +1,27 @@
 # Milepost frontend
 
 React 19 + TypeScript + Vite. Talks to the Soroban contracts through the
-generated bindings in [`packages/`](../packages).
+generated bindings, which it installs from npm as `@milepost/*` like any other
+dependency. Their source lives in [`packages/`](../packages).
 
 ## Running it
 
 ```sh
-# packages/*/dist is gitignored, so the bindings must be built first or
-# every import of @milepost/* fails on a missing module rather than on
-# anything real.
-for p in attest policy-spend program record registry; do
-  npm ci --prefix "../packages/$p" && npm run build --prefix "../packages/$p"
-done
-
 npm ci
 npm run dev
 ```
+
+**Against unreleased bindings.** `npm ci` installs the published versions that
+`package.json` pins, so a contract change is invisible here until it is
+released. After changing a contract and regenerating the bindings, run this from
+the repository root to use this checkout's bindings instead:
+
+```sh
+./scripts/frontend-with-local-bindings.sh
+```
+
+It leaves `package.json` and the lockfile untouched, and `npm ci` puts the
+published versions back.
 
 ```sh
 npm run build   # tsc -b && vite build

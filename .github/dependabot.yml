@@ -27,6 +27,12 @@ updates:
       interval: "weekly"
     open-pull-requests-limit: 5
     groups:
+      # First, because Dependabot puts a dependency in the first group it
+      # matches. A new @milepost/* version is a contract interface change and
+      # should arrive as its own PR, not inside a batch of tooling bumps.
+      milepost-bindings:
+        patterns:
+          - "@milepost/*"
       frontend-dependencies:
         patterns:
           - "*"
