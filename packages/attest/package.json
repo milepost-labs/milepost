@@ -1,11 +1,25 @@
 {
   "version": "0.1.0",
   "name": "@milepost/attest",
+  "description": "TypeScript client for Milepost's attest contract: schemas, attestations, revocation and expiry on Stellar Soroban.",
+  "license": "Apache-2.0",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/milepost-labs/milepost.git",
+    "directory": "packages/attest"
+  },
   "type": "module",
   "exports": "./dist/index.js",
   "typings": "dist/index.d.ts",
+  "files": [
+    "dist"
+  ],
   "scripts": {
-    "build": "tsc"
+    "build": "tsc",
+    "prepublishOnly": "npm run build"
+  },
+  "publishConfig": {
+    "access": "public"
   },
   "dependencies": {
     "@stellar/stellar-sdk": "^16.0.1",

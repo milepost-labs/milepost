@@ -1,11 +1,25 @@
 {
   "version": "0.1.0",
   "name": "@milepost/policy-spend",
+  "description": "TypeScript client for Milepost's policy_spend contract: a smart-wallet spend policy with allowlisted payees and per-window caps.",
+  "license": "Apache-2.0",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/milepost-labs/milepost.git",
+    "directory": "packages/policy-spend"
+  },
   "type": "module",
   "exports": "./dist/index.js",
   "typings": "dist/index.d.ts",
+  "files": [
+    "dist"
+  ],
   "scripts": {
-    "build": "tsc"
+    "build": "tsc",
+    "prepublishOnly": "npm run build"
+  },
+  "publishConfig": {
+    "access": "public"
   },
   "dependencies": {
     "@stellar/stellar-sdk": "^16.0.1",

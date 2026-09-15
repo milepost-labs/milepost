@@ -14,6 +14,9 @@ env:
 
 permissions:
   contents: write
+  # npm provenance: the registry uses this token to verify each package was
+  # built by this workflow, from this repository, at this commit.
+  id-token: write
 
 jobs:
   release:
@@ -57,6 +60,71 @@ jobs:
         env:
           OUTPUT: CHANGES.md
 
+      # Everything that can fail for a configuration reason runs before anything
+      # is published. The GitHub Release used to be created first, so a missing
+      # token left a public release with no npm packages behind it.
+      - name: Setup Node for npm publish
+        uses: actions/setup-node@v5
+        with:
+          node-version: 24
+          registry-url: 'https://registry.npmjs.org'
+          cache: npm
+          cache-dependency-path: "**/package-lock.json"
+
+      - name: Build TypeScript bindings
+        run: |
+          set -euo pipefail
+          VERSION="${GITHUB_REF_NAME#v}"
+          for p in attest policy-spend program record registry; do
+            (
+              cd "packages/$p"
+              # The committed version may already equal the tag (the first
+              # release is v0.1.0 and every package says 0.1.0), which plain
+              # `npm version` refuses.
+              npm version "$VERSION" --no-git-tag-version --allow-same-version
+              npm ci
+              npm run build
+              # Apache-2.0 requires the licence text to travel with the code.
+              cp ../../LICENSE .
+            )
+          done
+
+      - name: Verify bindings are publishable
+        run: ./scripts/check-bindings-publishable.sh
+
+      - name: Check npm credentials
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+        run: |
+          if [ -z "$NODE_AUTH_TOKEN" ]; then
+            echo "::error::The NPM_TOKEN secret is not set. Nothing has been published."
+            exit 1
+          fi
+          npm whoami
+
+      - name: Publish TypeScript bindings to npm
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+        run: |
+          set -euo pipefail
+          VERSION="${GITHUB_REF_NAME#v}"
+          # A pre-release must never become what `npm install @milepost/<name>`
+          # resolves to, so it goes out under `next` instead of `latest`.
+          case "$VERSION" in
+            *-*) DIST_TAG=next ;;
+            *)   DIST_TAG=latest ;;
+          esac
+          for p in attest policy-spend program record registry; do
+            NAME="@milepost/$p"
+            # Re-running a release that failed partway must not fail on the
+            # packages that already went out on the first attempt.
+            if npm view "$NAME@$VERSION" version >/dev/null 2>&1; then
+              echo "$NAME@$VERSION is already published, skipping"
+              continue
+            fi
+            (cd "packages/$p" && npm publish --provenance --access public --tag "$DIST_TAG")
+          done
+
       - name: Create release
         uses: softprops/action-gh-release@v2
         with:
@@ -67,27 +135,3 @@ jobs:
           files: |
             dist/*.wasm
             dist/checksums.txt
-
-      - name: Setup Node for NPM publish
-        uses: actions/setup-node@v5
-        with:
-          node-version: 24
-          registry-url: 'https://registry.npmjs.org'
-          cache: npm
-          cache-dependency-path: "**/package-lock.json"
-
-      - name: Publish TypeScript bindings to npm
-        env:
-          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
-        run: |
-          set -euo pipefail
-          VERSION=${GITHUB_REF_NAME#v}
-          for p in attest policy-spend program record registry; do
-            echo "Publishing packages/$p@$VERSION"
-            cd "packages/$p"
-            npm version "$VERSION" --no-git-tag-version
-            npm ci
-            npm run build
-            npm publish --access public
-            cd ../..
-          done

@@ -3,6 +3,21 @@
 Generated clients for the Milepost contracts, produced by
 `stellar contract bindings typescript` from the built wasm.
 
+## Installing
+
+Every release tag publishes all five packages to npm, at the tag's version:
+
+```sh
+npm install @milepost/program
+```
+
+Versions track protocol releases, not individual contracts:
+`@milepost/attest@0.2.0` is generated from the `v0.2.0` wasm even if `attest`
+itself did not change between releases. Pre-releases go out under the `next`
+dist-tag, so a plain install never picks one up.
+
+## Regenerating
+
 These are generated artefacts. Do not hand-edit them — regenerate instead:
 
 ```sh
@@ -16,6 +31,10 @@ deployed address — every programme is its own contract — so it is generated
 without one. A naive `stellar contract bindings typescript --wasm ... --overwrite`
 into `packages/` will drop those ids and wipe the rest of the package directory;
 do not do that.
+
+Only `src/index.ts` is generated. Each package's `package.json`,
+`tsconfig.json` and `README.md` are maintained by hand — the generator never
+touches them, and the drift check compares `src/index.ts` alone.
 
 CI re-runs the generator and fails if the committed interface does not match.
 To run the same check locally:

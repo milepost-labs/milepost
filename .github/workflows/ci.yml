@@ -152,6 +152,13 @@ jobs:
             npm run build --prefix "packages/$p"
           done
 
+      # Nothing else inspects what `npm publish` would actually upload. A
+      # package that ships without dist/ installs cleanly and only fails when a
+      # consumer imports it, so check the tarball on every PR rather than
+      # discovering it when a release tag is pushed.
+      - name: Verify bindings are publishable
+        run: ./scripts/check-bindings-publishable.sh
+
       - name: Install
         run: npm ci --prefix frontend
 
