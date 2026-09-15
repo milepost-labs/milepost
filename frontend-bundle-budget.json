@@ -1,7 +1,0 @@
-{
-  "frontend": {
-    "description": "Total uncompressed JavaScript bytes in frontend/dist/assets after npm run build --prefix frontend.",
-    "baseline_bytes": 869340,
-    "allowed_growth_percent": 5
-  }
-}

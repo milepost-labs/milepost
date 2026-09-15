@@ -218,8 +218,9 @@ Only needed if a contract's interface changed, or if you want the frontend to
 talk to ids other than the ones in the checked-in
 [`packages/testnet.json`](../packages/testnet.json). Deploying your own
 contract set in Step 2 does **not**, by itself, do either of these things —
-the frontend's `@milepost/*` packages carry whatever `networks.testnet` was
-last generated against, independent of what you just deployed.
+the published `@milepost/*` packages the frontend installs carry whatever
+`networks.testnet` they were generated against, independent of what you just
+deployed.
 
 ```sh
 cargo build --target wasm32v1-none --release   # if not already built
@@ -237,6 +238,11 @@ shared testnet set), edit `packages/testnet.json` with your new ids first,
 then run `generate-bindings.sh`. Do this deliberately — it's a shared file,
 and changing it repoints every other consumer of the "canonical" testnet
 deployment, not just your local frontend.
+
+The frontend, [milepost-frontend](https://github.com/milepost-labs/milepost-frontend), installs the *published* bindings from
+npm, so regenerating them here changes nothing it runs until either a release
+publishes them or you install them into a local milepost-frontend checkout with
+`./scripts/frontend-with-local-bindings.sh ../milepost-frontend`.
 
 **Verify:**
 

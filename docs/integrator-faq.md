@@ -226,7 +226,7 @@ but leaves you holding an unopened `Result` instead of the value, silently
 wrong rather than loudly wrong. The frontend's own hooks split on exactly this
 distinction: `useContractRead` is for infallible reads, `useContractResult` is
 for fallible ones and calls `.unwrap()` internally. See the doc comment at
-[frontend/src/hooks/useContractRead.ts:115-123](../frontend/src/hooks/useContractRead.ts#L115-L123)
+[milepost-frontend's src/hooks/useContractRead.ts:115-123](https://github.com/milepost-labs/milepost-frontend/blob/main/src/hooks/useContractRead.ts#L115-L123)
 for the same warning aimed at frontend contributors, and
 [packages/program/src/index.ts](../packages/program/src/index.ts) for the
 generated signatures themselves (search for `is_paused`, `is_verifier`, and
@@ -284,7 +284,7 @@ events (`Reviewed`, `Attested`, `PayeeChanged`, etc.) by an indexer. As of this
 writing that indexer does not exist yet (see "Not yet done" in the root
 README), so the frontend falls back to known/seeded addresses in places like
 the verifier queue — check
-[frontend/src/pages/VerifierDashboard.tsx](../frontend/src/pages/VerifierDashboard.tsx)
+[milepost-frontend's src/pages/VerifierDashboard.tsx](https://github.com/milepost-labs/milepost-frontend/blob/main/src/pages/VerifierDashboard.tsx)
 for how it currently works around this.
 
 See the attest module's rationale at

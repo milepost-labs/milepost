@@ -5,7 +5,7 @@ Welcome, and thank you for your interest in contributing to Milepost! This guide
 ## Table of Contents
 1. [Prerequisites](#1-prerequisites)
 2. [Local Setup](#2-local-setup)
-3. [Running Frontend Checks](#3-running-frontend-checks)
+3. [Frontend](#3-frontend)
 4. [Running Contract Checks](#4-running-contract-checks)
 5. [Documentation Standards](#5-documentation-standards)
 6. [Issue and PR Workflow](#6-issue-and-pr-workflow)
@@ -29,33 +29,17 @@ Welcome, and thank you for your interest in contributing to Milepost! This guide
 
 ## 2. Local Setup
 
-**Clone and install**
+**Clone**
 ```bash
 git clone https://github.com/milepost-labs/milepost.git
 cd milepost
-
-# Install frontend dependencies
-cd frontend
-npm install
-cd ..
 ```
 
-**Environment variables**
-Create `frontend/.env.local` with your local or testnet configurations. Example:
-```env
-VITE_NETWORK=testnet
-VITE_SOROBAN_RPC_URL=https://soroban-testnet.stellar.org
-```
-
-**Start the development server**
-```bash
-cd frontend
-npm run dev
-```
-Open [http://localhost:5173](http://localhost:5173/) to view the app.
+The web app is in its own repository, [milepost-frontend](https://github.com/milepost-labs/milepost-frontend), with its own
+setup guide.
 
 **Pre-commit hooks (opt-in)**
-To automatically check formatting (`rustfmt`) and linting (`eslint`) on changed files before each commit:
+To automatically check formatting (`rustfmt`) on changed files before each commit:
 ```bash
 ./scripts/install-hooks.sh
 ```
@@ -72,32 +56,26 @@ Common commands and workflows are available via `just` (or standard `make`):
 * `just build` / `make build` — Build contract WASM artifacts
 * `just test` / `make test` — Run workspace tests (encodes WASM build order dependency)
 * `just lint` / `make lint` — Run `cargo fmt` check and `cargo clippy` (encodes WASM build order dependency)
-* `just frontend-build` / `make frontend-build` — Build the frontend against the published `@milepost/*` bindings
-* `just frontend-local-bindings` / `make frontend-local-bindings` — Build and test the frontend against this checkout's bindings, after changing a contract
+* `just frontend-local-bindings` / `make frontend-local-bindings` — Build and test [milepost-frontend](https://github.com/milepost-labs/milepost-frontend), cloned next to this repository, against this checkout's bindings after changing a contract
 * `just deploy` / `make deploy` — Deploy contracts using `./scripts/deploy.sh`
 * `just seed` / `make seed` — Seed protocol scenario data using `./scripts/seed.sh`
 * `just` / `make help` — List all available tasks
 
 ---
 
-## 3. Running Frontend Checks
+## 3. Frontend
 
-All checks must pass before opening a PR. Run them from the `frontend/` directory:
+The web app lives in [milepost-frontend](https://github.com/milepost-labs/milepost-frontend), which has its own contributing
+guide and checks. If you change a contract's interface here, check the app still
+builds against it before opening the PR, with milepost-frontend cloned next to
+this repository:
 
 ```bash
-# Lint the codebase
-npm run lint
-
-# Build for production
-npm run build
+./scripts/frontend-with-local-bindings.sh ../milepost-frontend
+npm run build --prefix ../milepost-frontend && npm test --prefix ../milepost-frontend
 ```
 
-**Architecture note:** The frontend is built with React, Vite, and TypeScript. We utilize a custom CSS-variable design system in `index.css`. Please ensure any new components adhere to the existing slate/navy aesthetic rather than introducing new localized colors.
-
-**Testing the frontend:** Tests mock the contract clients — nothing should
-touch the network — and the reachability check fails on any module nothing
-imports. See the [frontend testing guide](docs/frontend-testing-guide.md) for
-how to mock a contract client and which behaviours are worth covering.
+CI does the same on every PR, in the `bindings` job.
 
 ---
 
@@ -161,9 +139,8 @@ Write imperative-mood subject lines under 72 characters. Put context in the body
 
 **Pull request checklist**
 Before marking a PR ready for review:
-* `npm run lint` passes
-* `npm run build` succeeds
 * Contract checks pass if Rust files were touched (`cargo fmt`, `cargo clippy`, `cargo test`)
+* If a contract interface changed, milepost-frontend still builds and tests against it (see [Frontend](#3-frontend))
 * PR description references the issue number(s) with `Closes #<number>`
 
 ---

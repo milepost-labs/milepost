@@ -5,13 +5,13 @@
 #
 # Scope
 # -----
-# Six lockfiles are audited independently: frontend/ and the five binding
-# packages in packages/. Each is audited with `--omit=dev`: the shipped
-# surface is production dependencies, and dev-only advisories (build
-# tooling) tend to be unfixable transitive noise that gets ignored. The
-# frontend handles wallet signing, so a compromised production dependency
-# there reaches transaction construction — that is the failure this check
-# exists for.
+# The five binding packages in packages/ are audited independently, each
+# with `--omit=dev`: the shipped surface is production dependencies, and
+# dev-only advisories (build tooling) tend to be unfixable transitive noise
+# that gets ignored. Apps build and sign transactions with these packages,
+# so a compromised production dependency in them reaches transaction
+# construction — that is the failure this check exists for.
+# milepost-frontend audits its own lockfile.
 #
 # Threshold
 # ---------
@@ -44,7 +44,7 @@ set -euo pipefail
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 THRESHOLD="${1:-high}"
 EXCEPTIONS_FILE="$ROOT/.github/npm-audit-exceptions.json"
-LOCKFILE_DIRS=(frontend packages/attest packages/policy-spend packages/program packages/record packages/registry)
+LOCKFILE_DIRS=(packages/attest packages/policy-spend packages/program packages/record packages/registry)
 
 case "$THRESHOLD" in
   low | moderate | high | critical) ;;

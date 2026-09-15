@@ -28,7 +28,7 @@ assignees: ''
 - [ ] <!-- Observable outcomes, not activities. "X returns Y when Z", not "look at X". -->
 - [ ] Tests cover the behaviour, including the failure cases
 - [ ] `cargo test` and `cargo clippy --all-targets -- -D warnings` pass
-      <!-- For frontend work: `npm run lint` and `npm run build` pass -->
+      <!-- Frontend work belongs in milepost-labs/milepost-frontend -->
 
 ## Definition of done
 

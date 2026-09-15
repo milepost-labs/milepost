@@ -20,17 +20,12 @@ lint: build
     cargo fmt --all --check
     cargo clippy --all-targets --all-features -- -D warnings
 
-# Build the frontend against the @milepost/* versions it pins from npm
-frontend-build:
-    npm ci --prefix frontend
-    npm run build --prefix frontend
-
-# `npm ci --prefix frontend` puts the published versions back afterwards.
-# Build and test the frontend against this checkout's bindings, after changing a contract
-frontend-local-bindings:
-    ./scripts/frontend-with-local-bindings.sh
-    npm run build --prefix frontend
-    npm test --prefix frontend
+# `npm ci` in the frontend checkout puts the published versions back afterwards.
+# Build and test milepost-frontend against this checkout's bindings, after changing a contract
+frontend-local-bindings frontend_dir="../milepost-frontend":
+    ./scripts/frontend-with-local-bindings.sh "{{frontend_dir}}"
+    npm run build --prefix "{{frontend_dir}}"
+    npm test --prefix "{{frontend_dir}}"
 
 # Deploy contracts using deploy script
 deploy:

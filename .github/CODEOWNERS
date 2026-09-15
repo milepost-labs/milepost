@@ -13,9 +13,6 @@
 contracts/ @adetomiwa21 @milepost-labs/contract-reviewers
 crates/ @adetomiwa21 @milepost-labs/contract-reviewers
 
-# Frontend Web Application
-frontend/ @adetomiwa21 @milepost-labs/frontend-reviewers
-
 # CI/CD Workflows and Action Specifications
 .github/workflows/ @adetomiwa21 @milepost-labs/devops-reviewers
 

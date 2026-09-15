@@ -124,70 +124,28 @@ jobs:
             exit 1
           fi
 
-  frontend:
-    runs-on: ubuntu-latest
-    # Deliberately not `needs: check`. Serialising behind the contract job only
-    # makes the pipeline longer — and skips frontend entirely whenever the
-    # contract job is red, which is exactly when you still want to know.
-    steps:
-      - uses: actions/checkout@v7
-      - uses: actions/setup-node@v7
-        with:
-          # eslint requires ^20.19 || ^22.13 || >=24; vite wants >=22.12.
-          node-version: 24
-          cache: npm
-          cache-dependency-path: "**/package-lock.json"
-
-      # @milepost/* comes from npm at the versions frontend/package.json pins,
-      # the same way it will once the frontend has its own repository. Whether
-      # the frontend still works against bindings that have not been released
-      # yet is the `bindings` job's question.
-      - name: Install
-        run: npm ci --prefix frontend
-
-      # `tsc -b && vite build`. This step is the reason the job exists: until
-      # now CI ran cargo only, so a PR touching nothing but .tsx went green
-      # without a line of TypeScript being compiled.
-      - name: Build
-        run: npm run build --prefix frontend
-
-      - name: Enforce frontend bundle size budget
-        run: ./scripts/check-frontend-bundle-size.sh >> "$GITHUB_STEP_SUMMARY"
-
-      # Not cosmetic. The React Compiler rules here catch render-purity and
-      # cascading-setState bugs that type-check cleanly and misbehave at
-      # runtime.
-      - name: Lint
-        run: npm run lint --prefix frontend
-
-      - name: Test
-        run: npm test --prefix frontend
-
-      # Six independent lockfiles: frontend/ plus the five binding packages.
-      # The frontend handles wallet signing, so a compromised production
-      # dependency there reaches transaction construction. The failure policy
-      # is deliberate and documented in scripts/check-npm-advisories.sh, which
-      # is the only place that needs to change when the policy changes.
-      - name: Check npm dependencies for known advisories
-        run: ./scripts/check-npm-advisories.sh
-
   bindings:
     runs-on: ubuntu-latest
-    # The frontend installs published @milepost/* versions, so its own job
-    # cannot see a contract change that has not been released. This one builds
-    # the bindings from this checkout, checks what a release would upload, and
-    # builds and tests the frontend against those builds — so a PR that would
-    # break the frontend fails here, not after the next release reaches it.
+    # The web app lives in milepost-frontend and installs published
+    # @milepost/* versions, so its own CI cannot see a contract change that has
+    # not been released. This job builds the bindings from this checkout, checks
+    # what a release would upload, and builds and tests milepost-frontend
+    # against those builds — so a PR here that would break the app fails here,
+    # not after the next release reaches it.
     steps:
       - uses: actions/checkout@v7
+      - uses: actions/checkout@v7
+        with:
+          repository: milepost-labs/milepost-frontend
+          path: milepost-frontend
       - uses: actions/setup-node@v7
         with:
           node-version: 24
           cache: npm
           cache-dependency-path: "**/package-lock.json"
 
-      - name: Build bindings and install them into the frontend
-        run: ./scripts/frontend-with-local-bindings.sh
+      - name: Build bindings and install them into milepost-frontend
+        run: ./scripts/frontend-with-local-bindings.sh milepost-frontend
 
       # Nothing else inspects what `npm publish` would actually upload. A
       # package that ships without dist/ installs cleanly and only fails when a
@@ -196,8 +154,16 @@ jobs:
       - name: Verify bindings are publishable
         run: ./scripts/check-bindings-publishable.sh
 
-      - name: Build frontend against local bindings
-        run: npm run build --prefix frontend
+      - name: Build milepost-frontend against local bindings
+        run: npm run build --prefix milepost-frontend
 
-      - name: Test frontend against local bindings
-        run: npm test --prefix frontend
+      - name: Test milepost-frontend against local bindings
+        run: npm test --prefix milepost-frontend
+
+      # Five independent lockfiles, one per binding package. Apps build and
+      # sign transactions with these packages, so a compromised production
+      # dependency in them reaches transaction construction. The failure policy
+      # is deliberate and documented in scripts/check-npm-advisories.sh, which
+      # is the only place that needs to change when the policy changes.
+      - name: Check npm dependencies for known advisories
+        run: ./scripts/check-npm-advisories.sh

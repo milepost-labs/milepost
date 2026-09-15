@@ -28,22 +28,5 @@ if [ -n "$STAGED_RS_FILES" ]; then
     fi
 fi
 
-# 2. Check Frontend linting on changed frontend files
-STAGED_FRONTEND_FILES=$(echo "$STAGED_FILES" | grep -E '^frontend/.*\.(js|jsx|ts|tsx)$' || true)
-
-if [ -n "$STAGED_FRONTEND_FILES" ]; then
-    echo "Checking frontend lint..."
-    REL_FRONTEND_FILES=$(echo "$STAGED_FRONTEND_FILES" | sed 's|^frontend/||')
-    if [ -n "$REL_FRONTEND_FILES" ]; then
-        if ! (cd frontend && npx eslint $REL_FRONTEND_FILES); then
-            echo ""
-            echo "❌ Frontend lint check failed on staged files."
-            echo "Fix ESLint errors in frontend, then stage them."
-            echo "To bypass this hook in an emergency, use 'git commit --no-verify'."
-            exit 1
-        fi
-    fi
-fi
-
 echo "✅ Pre-commit checks passed!"
 exit 0

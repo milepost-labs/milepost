@@ -23,5 +23,5 @@ if [ -d "$REPO_ROOT/.git/hooks" ]; then
 fi
 
 echo "✅ Pre-commit hooks successfully installed!"
-echo "Hooks run cargo fmt and frontend lint on changed files only."
+echo "Hooks run cargo fmt on changed files only."
 echo "To bypass hooks in emergencies, use 'git commit --no-verify'."
