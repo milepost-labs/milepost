@@ -54,15 +54,28 @@ REVIEW_DEADLINE=$((NOW + 600))
 RELEASE_DEADLINE=$((NOW + 86400))
 SWEEP_DEADLINE=$((NOW + 172800))
 
-echo "==> Registering the attestation schema"
-# Restricted: only the clinic may make this claim, so a forged attestation
-# cannot come from anywhere else.
-SCHEMA="$(invoke "$ATTEST" clinic register_schema \
-  --authority "$(addr clinic)" \
-  --definition "milepost:milestone-met:v1" \
-  --revocable true \
-  --restricted true | tr -d '"')"
-echo "    schema: $SCHEMA"
+# A schema's uid is derived from its authority and definition, so registering
+# the same one twice on an attest contract is refused. Reuse the schema an
+# earlier run recorded for this contract, or one passed in as SCHEMA.
+SCHEMA="${SCHEMA:-}"
+if [[ -z "$SCHEMA" && -f "$OUT_FILE" ]] &&
+  [[ "$(python3 -c "import json;print(json.load(open('$OUT_FILE')).get('attest',''))")" == "$ATTEST" ]]; then
+  SCHEMA="$(python3 -c "import json;print(json.load(open('$OUT_FILE'))['schema'])")"
+fi
+
+if [[ -n "$SCHEMA" ]]; then
+  echo "==> Reusing attestation schema $SCHEMA"
+else
+  echo "==> Registering the attestation schema"
+  # Restricted: only the clinic may make this claim, so a forged attestation
+  # cannot come from anywhere else.
+  SCHEMA="$(invoke "$ATTEST" clinic register_schema \
+    --authority "$(addr clinic)" \
+    --definition "milepost:milestone-met:v1" \
+    --revocable true \
+    --restricted true | tr -d '"')"
+  echo "    schema: $SCHEMA"
+fi
 
 echo "==> Creating the programme"
 PROGRAMME="$(invoke "$REGISTRY" creator create \
@@ -78,7 +91,8 @@ PROGRAMME="$(invoke "$REGISTRY" creator create \
   --metadata_hash "$(printf '%064d' 1)" \
   --reviewers "[\"$(addr reviewer-1)\",\"$(addr reviewer-2)\",\"$(addr reviewer-3)\"]" \
   --verifiers "[\"$(addr clinic)\"]" \
-  --name "Community health worker stipend 2026" | tr -d '"')"
+  --name "Community health worker stipend 2026" \
+  --minimum_award 100000000 | tr -d '"')"
 echo "    programme: $PROGRAMME"
 
 echo "==> Verifying the school as a payee"
