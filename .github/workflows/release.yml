@@ -95,8 +95,9 @@ jobs:
 
       # Authenticates through the trusted publisher set on each package on
       # npmjs.com (milepost-labs / milepost / release.yml, direct publish
-      # allowed). If that is missing or wrong, the first publish fails with
-      # ENEEDAUTH — still before the GitHub Release is created.
+      # allowed). If that is missing or wrong, npm uploads unauthenticated and the
+      # publish fails with E404 on that package — still before the GitHub Release
+      # is created, so re-running the failed job after fixing it is safe.
       - name: Publish TypeScript bindings to npm
         run: |
           set -euo pipefail

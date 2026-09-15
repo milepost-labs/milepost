@@ -212,13 +212,22 @@ tagging is a manual, deliberate act, not an automated bump.
 
 ### Tagging a release
 
-Publishing needs no npm token. Each of the five packages on
-[npmjs.com](https://www.npmjs.com/) has a trusted publisher for GitHub Actions
+Publishing needs no npm token, and token publishing is disallowed on all five
+packages. Each of them on [npmjs.com](https://www.npmjs.com/) has a trusted
+publisher for GitHub Actions
 — organisation `milepost-labs`, repository `milepost`, workflow `release.yml`,
 no environment, direct publishing allowed — and the release job authenticates
 with its own short-lived OIDC credential. Those values are case-sensitive and
-npm does not check them when they are saved, so a mismatch only shows up as
-`ENEEDAUTH` at the publish step.
+npm does not check them when they are saved. After adding one, reopen the
+package's settings and confirm the connection is listed: the form can be left
+without saving, and nothing warns you.
+
+A missing or mismatched trusted publisher does not fail as an authentication
+error. npm falls back to an unauthenticated upload, and the publish step fails
+with `E404 Not Found` on the `PUT` for that package ("could not be found or you
+do not have permission to access it"). Packages later in the loop are never
+attempted, nothing is published and the GitHub Release is not created, so fixing
+the configuration and re-running the failed job is enough — no new tag.
 
 A package has to exist on npm before a trusted publisher can be added to it, so
 a new binding package must be published once by hand before a release can take
