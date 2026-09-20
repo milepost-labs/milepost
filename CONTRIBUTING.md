@@ -35,10 +35,8 @@ git clone https://github.com/milepost-labs/milepost.git
 cd milepost
 ```
 
-The web app lives in [`frontend/`](frontend/) for the duration of the Wave
-programme, with its own setup guide in
-[frontend/CONTRIBUTING.md](frontend/CONTRIBUTING.md). Its own repository,
-milepost-labs/milepost-frontend, is archived while the app lives here.
+The web app is in [`frontend/`](frontend/), with its own setup guide in
+[frontend/CONTRIBUTING.md](frontend/CONTRIBUTING.md).
 
 **Pre-commit hooks (opt-in)**
 To automatically check formatting (`rustfmt`) on changed files before each commit:

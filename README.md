@@ -290,6 +290,30 @@ cargo build --target wasm32v1-none --release
 Build the wasm before running tests: `registry`'s tests instantiate a programme
 from its built artifact, the same way the registry does on-chain.
 
+## Web app
+
+The app is in [`frontend/`](frontend/): React 19, TypeScript and Vite, talking
+to the contracts through the generated bindings in `packages/`.
+
+```sh
+npm ci --prefix frontend
+npm run dev --prefix frontend     # http://localhost:5173
+```
+
+[frontend/README.md](frontend/README.md) covers how it is built and what it
+reads, [frontend/CONTRIBUTING.md](frontend/CONTRIBUTING.md) covers setup, checks
+and the environment variables, and
+[frontend/docs/testing-guide.md](frontend/docs/testing-guide.md) covers the
+no-network rule and how to mock a contract client.
+
+Its checks, from this repository's root:
+
+```sh
+npm run lint --prefix frontend
+npm run build --prefix frontend
+npm test --prefix frontend
+```
+
 ## Seeding a scenario
 
 ```sh

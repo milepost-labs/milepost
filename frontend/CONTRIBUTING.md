@@ -1,8 +1,9 @@
 # Contributing to Milepost frontend
 
 This is the web app for [Milepost](https://github.com/milepost-labs/milepost).
-Contract, bindings and protocol work happens in that repository; this one uses
-the published `@milepost/*` packages.
+It lives in `frontend/` and uses the published `@milepost/*` packages. Contract,
+bindings and protocol work happens in the same repository, outside this
+directory.
 
 ## Prerequisites
 
@@ -15,8 +16,8 @@ the published `@milepost/*` packages.
 ## Local setup
 
 ```sh
-git clone https://github.com/milepost-labs/milepost-frontend.git
-cd milepost-frontend
+git clone https://github.com/milepost-labs/milepost.git
+cd milepost/frontend
 npm ci
 npm run dev
 ```
@@ -64,6 +65,14 @@ an advisory exception only with a stated reason, in
 
 The [testing guide](docs/testing-guide.md) covers mocking a contract client,
 the no-network rule, and what the reachability check means when it fires.
+
+## Use what is already here
+
+`src/hooks/` covers reads, writes and wallet state, `src/components/state/` and
+`src/components/ui/` cover loading, empty, error and every input, and `src/lib/`
+covers amounts, dates, addresses and error messages. Use them rather than
+writing a second version; `src/pages/ProgrammeDetail.tsx` shows the pattern end
+to end.
 
 ## Styling
 
