@@ -1,0 +1,22 @@
+.paused-banner {
+  border-left: 4px solid var(--color-warning);
+  background-color: rgba(245, 158, 11, 0.08);
+  margin-bottom: 1.5rem;
+}
+
+.paused-banner__row {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.75rem;
+}
+
+.paused-banner__row > svg {
+  color: var(--color-warning);
+  flex-shrink: 0;
+  margin-top: 0.15rem;
+}
+
+.paused-banner__title {
+  margin: 0 0 0.25rem;
+  color: var(--color-warning);
+}

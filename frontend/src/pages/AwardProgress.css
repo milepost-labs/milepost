@@ -1,0 +1,93 @@
+.dashboard-container {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-6);
+}
+
+.dashboard-header {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+
+.dashboard-header h1 {
+  margin: 0;
+}
+
+.stats-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+  gap: var(--space-4);
+}
+
+.award-search {
+  display: flex;
+  align-items: flex-end;
+  gap: var(--space-3);
+}
+
+.award-search .ui-field {
+  flex: 1;
+}
+
+.award-search__actions {
+  display: flex;
+  gap: var(--space-2);
+}
+
+.tranche-progress {
+  margin-bottom: var(--space-5);
+}
+
+.tranche-progress__bar {
+  display: flex;
+  gap: 2px;
+  height: 20px;
+  border-radius: var(--radius-full);
+  overflow: hidden;
+  background: var(--surface-hover);
+}
+
+.tranche-progress__segment {
+  min-width: 4px;
+  background: var(--border);
+  transition: background var(--transition-fast);
+}
+
+.tranche-progress__segment--released {
+  background: var(--success);
+}
+
+.tranche-progress__label {
+  margin: var(--space-2) 0 0;
+  font-size: var(--text-sm);
+}
+
+.award-complete {
+  color: var(--success);
+  font-weight: var(--weight-medium);
+  margin: 0 0 var(--space-4);
+}
+
+.award-next-step {
+  color: var(--text-muted);
+  margin: 0 0 var(--space-4);
+}
+
+.mode-panel {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: var(--space-3);
+}
+
+.mode-panel__payee {
+  margin: 0;
+}
+
+@media (max-width: 640px) {
+  .award-search {
+    flex-direction: column;
+    align-items: stretch;
+  }
+}

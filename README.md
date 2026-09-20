@@ -276,7 +276,7 @@ You can use `just` or `make` for quick task execution with correct build depende
 * `just build` / `make build` — Build contract WASM artifacts
 * `just test` / `make test` — Run workspace tests (builds WASM first)
 * `just lint` / `make lint` — Run `cargo fmt` and `cargo clippy` (builds WASM first)
-* `just frontend-local-bindings` / `make frontend-local-bindings` — Build and test [milepost-frontend](https://github.com/milepost-labs/milepost-frontend), cloned next to this repository, against this checkout's bindings after changing a contract
+* `just frontend-local-bindings` / `make frontend-local-bindings` — Build and test the app in `frontend/` against this checkout's bindings after changing a contract
 * `just deploy` / `make deploy` — Deploy contracts using `./scripts/deploy.sh`
 * `just seed` / `make seed` — Seed protocol scenario data using `./scripts/seed.sh`
 
@@ -327,8 +327,8 @@ For a full list of error codes, causes, and recommended actions across all five 
 ## TypeScript bindings
 
 `packages/` holds generated clients, checked in so a frontend can build without
-compiling the contracts. The Milepost web app,
-[milepost-frontend](https://github.com/milepost-labs/milepost-frontend), installs them from npm. The four singleton contracts carry their deployed
+compiling the contracts. The Milepost web app, in [`frontend/`](frontend/),
+installs them from npm. The four singleton contracts carry their deployed
 address as `networks.testnet`; `@milepost/program` does not, because every
 programme is its own contract.
 

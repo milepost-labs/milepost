@@ -1,0 +1,49 @@
+name: ci
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  frontend:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          # eslint requires ^20.19 || ^22.13 || >=24; vite wants >=22.12.
+          node-version: 24
+          cache: npm
+
+      # @milepost/* comes from npm at the versions package.json pins. Whether
+      # the app still works against contract changes that have not been
+      # released is checked in milepost, whose `bindings` job builds this
+      # repository against the bindings from each of its PRs.
+      - name: Install
+        run: npm ci
+
+      # `tsc -b && vite build`, so type errors fail here.
+      - name: Build
+        run: npm run build
+
+      - name: Enforce bundle size budget
+        run: ./scripts/check-bundle-size.sh >> "$GITHUB_STEP_SUMMARY"
+
+      # Not cosmetic. The React Compiler rules here catch render-purity and
+      # cascading-setState bugs that type-check cleanly and misbehave at
+      # runtime.
+      - name: Lint
+        run: npm run lint
+
+      - name: Test
+        run: npm test
+
+      # The app builds and signs transactions, so a compromised production
+      # dependency reaches transaction construction. The failure policy is
+      # deliberate and documented in scripts/check-npm-advisories.sh.
+      - name: Check npm dependencies for known advisories
+        run: ./scripts/check-npm-advisories.sh

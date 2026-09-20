@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
 #
 # Install the binding packages built from this checkout into one or more
-# consumers — milepost-frontend, milepost-indexer — in place of the @milepost/*
-# versions their package.json pins from npm.
+# consumers (the app in frontend/, a milepost-indexer checkout) in place of the
+# @milepost/* versions their package.json pins from npm.
 #
 # Consumers depend on published versions, so on their own they never see a
 # contract change that has not been released. Run this after changing a
@@ -17,10 +17,9 @@
 #
 # Usage: ./scripts/frontend-with-local-bindings.sh [consumer-dir...]
 #
-# consumer-dir defaults to ../milepost-frontend, a clone of
-# milepost-labs/milepost-frontend next to this repository. Pass several to
-# install one set of builds into each of them, which is what CI does for
-# milepost-frontend and milepost-indexer.
+# consumer-dir defaults to frontend/, the app in this repository. Pass several
+# to install one set of builds into each of them, which is what CI does for
+# frontend/ and a milepost-indexer checkout.
 
 set -euo pipefail
 
@@ -28,10 +27,10 @@ ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 PACKAGES=(attest policy-spend program record registry)
 
 CONSUMERS=()
-for arg in "${@:-$ROOT/../milepost-frontend}"; do
+for arg in "${@:-$ROOT/frontend}"; do
   if [[ ! -f "$arg/package.json" ]] || ! grep -q '"@milepost/program"' "$arg/package.json"; then
     echo "error: $arg does not depend on @milepost/*" >&2
-    echo "pass a checkout of milepost-frontend or milepost-indexer, or clone one next to this repository" >&2
+    echo "pass frontend/ or a milepost-indexer checkout" >&2
     exit 1
   fi
   CONSUMERS+=("$(cd "$arg" && pwd)")

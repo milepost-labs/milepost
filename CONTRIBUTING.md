@@ -35,8 +35,10 @@ git clone https://github.com/milepost-labs/milepost.git
 cd milepost
 ```
 
-The web app is in its own repository, [milepost-frontend](https://github.com/milepost-labs/milepost-frontend), with its own
-setup guide.
+The web app lives in [`frontend/`](frontend/) for the duration of the Wave
+programme, with its own setup guide in
+[frontend/CONTRIBUTING.md](frontend/CONTRIBUTING.md). Its own repository,
+milepost-labs/milepost-frontend, is archived while the app lives here.
 
 **Pre-commit hooks (opt-in)**
 To automatically check formatting (`rustfmt`) on changed files before each commit:
@@ -56,7 +58,7 @@ Common commands and workflows are available via `just` (or standard `make`):
 * `just build` / `make build` — Build contract WASM artifacts
 * `just test` / `make test` — Run workspace tests (encodes WASM build order dependency)
 * `just lint` / `make lint` — Run `cargo fmt` check and `cargo clippy` (encodes WASM build order dependency)
-* `just frontend-local-bindings` / `make frontend-local-bindings` — Build and test [milepost-frontend](https://github.com/milepost-labs/milepost-frontend), cloned next to this repository, against this checkout's bindings after changing a contract
+* `just frontend-local-bindings` / `make frontend-local-bindings` — Build and test the app in `frontend/` against this checkout's bindings after changing a contract
 * `just deploy` / `make deploy` — Deploy contracts using `./scripts/deploy.sh`
 * `just seed` / `make seed` — Seed protocol scenario data using `./scripts/seed.sh`
 * `just` / `make help` — List all available tasks
@@ -65,17 +67,18 @@ Common commands and workflows are available via `just` (or standard `make`):
 
 ## 3. Frontend
 
-The web app lives in [milepost-frontend](https://github.com/milepost-labs/milepost-frontend), and the indexer that builds
-the lists it reads in [milepost-indexer](https://github.com/milepost-labs/milepost-indexer). Both have their own
-contributing guides and checks, and both install published `@milepost/*`
-versions, so neither sees a contract change until it is released.
+The web app lives in [`frontend/`](frontend/), and the indexer that builds the
+lists it reads in [milepost-indexer](https://github.com/milepost-labs/milepost-indexer).
+Both have their own contributing guides and checks, and both install published
+`@milepost/*` versions, so neither sees a contract change until it is released.
 
 If you change a contract's interface, or any event it emits, check them against
-your change before opening the PR, with both cloned next to this repository:
+your change before opening the PR, with milepost-indexer cloned next to this
+repository:
 
 ```bash
-./scripts/frontend-with-local-bindings.sh ../milepost-frontend ../milepost-indexer
-npm run build --prefix ../milepost-frontend && npm test --prefix ../milepost-frontend
+./scripts/frontend-with-local-bindings.sh frontend ../milepost-indexer
+npm run build --prefix frontend && npm test --prefix frontend
 npm run typecheck --prefix ../milepost-indexer && npm test --prefix ../milepost-indexer
 ```
 
@@ -148,7 +151,7 @@ Write imperative-mood subject lines under 72 characters. Put context in the body
 **Pull request checklist**
 Before marking a PR ready for review:
 * Contract checks pass if Rust files were touched (`cargo fmt`, `cargo clippy`, `cargo test`)
-* If a contract interface changed, milepost-frontend still builds and tests against it (see [Frontend](#3-frontend))
+* If a contract interface changed, the app in `frontend/` still builds and tests against it (see [Frontend](#3-frontend))
 * PR description references the issue number(s) with `Closes #<number>`
 
 ---

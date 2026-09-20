@@ -242,10 +242,10 @@ then run `generate-bindings.sh`. Do this deliberately — it's a shared file,
 and changing it repoints every other consumer of the "canonical" testnet
 deployment, not just your local frontend.
 
-The frontend, [milepost-frontend](https://github.com/milepost-labs/milepost-frontend), installs the *published* bindings from
-npm, so regenerating them here changes nothing it runs until either a release
-publishes them or you install them into a local milepost-frontend checkout with
-`./scripts/frontend-with-local-bindings.sh ../milepost-frontend`.
+The app in `frontend/` installs the *published* bindings from npm, so
+regenerating them here changes nothing it runs until either a release publishes
+them or you install them into it with
+`./scripts/frontend-with-local-bindings.sh frontend`.
 
 **Verify:**
 

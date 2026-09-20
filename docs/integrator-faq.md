@@ -226,7 +226,7 @@ but leaves you holding an unopened `Result` instead of the value, silently
 wrong rather than loudly wrong. The frontend's own hooks split on exactly this
 distinction: `useContractRead` is for infallible reads, `useContractResult` is
 for fallible ones and calls `.unwrap()` internally. See the doc comment at
-[milepost-frontend's src/hooks/useContractRead.ts:115-123](https://github.com/milepost-labs/milepost-frontend/blob/main/src/hooks/useContractRead.ts#L115-L123)
+[frontend/src/hooks/useContractRead.ts](../frontend/src/hooks/useContractRead.ts)
 for the same warning aimed at frontend contributors, and
 [packages/program/src/index.ts](../packages/program/src/index.ts) for the
 generated signatures themselves (search for `is_paused`, `is_verifier`, and
@@ -282,10 +282,11 @@ checked per-address (`is_reviewer(addr)`, `is_verifier(addr)`,
 `is_payee(addr)`) and full history is reconstructed off-chain from emitted
 events (`Reviewed`, `Attested`, `PayeeChanged`, etc.) by an indexer. As of this
 writing that indexer does not exist yet (see "Not yet done" in the root
-README), so the frontend falls back to known/seeded addresses in places like
-the verifier queue — check
-[milepost-frontend's src/pages/VerifierDashboard.tsx](https://github.com/milepost-labs/milepost-frontend/blob/main/src/pages/VerifierDashboard.tsx)
-for how it currently works around this.
+README), so the frontend reads those lists from the published index instead,
+in places like the verifier queue. Check
+[frontend/src/pages/VerifierDashboard.tsx](../frontend/src/pages/VerifierDashboard.tsx)
+for how it does that, and re-checks every entry against the contract before
+showing it.
 
 See the attest module's rationale at
 [contracts/attest/src/lib.rs:15-23](../contracts/attest/src/lib.rs#L15-L23),

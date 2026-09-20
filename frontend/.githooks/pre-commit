@@ -1,0 +1,22 @@
+#!/usr/bin/env bash
+set -e
+
+# Pre-commit hook: lint the staged JavaScript and TypeScript files only.
+# A fast, opt-in safeguard. Bypass in an emergency with: git commit --no-verify
+
+STAGED_FILES=$(git diff --cached --name-only --diff-filter=ACMR | grep -E '\.(js|jsx|ts|tsx)$' || true)
+
+if [ -z "$STAGED_FILES" ]; then
+    exit 0
+fi
+
+echo "Linting staged files..."
+if ! npx eslint $STAGED_FILES; then
+    echo ""
+    echo "❌ Lint failed on staged files."
+    echo "Fix the ESLint errors, then stage the files again."
+    echo "To bypass this hook in an emergency, use 'git commit --no-verify'."
+    exit 1
+fi
+
+echo "✅ Pre-commit checks passed!"

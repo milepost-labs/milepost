@@ -11,7 +11,7 @@
 # that gets ignored. Apps build and sign transactions with these packages,
 # so a compromised production dependency in them reaches transaction
 # construction — that is the failure this check exists for.
-# milepost-frontend audits its own lockfile.
+# The app in frontend/ audits its own lockfile, with its own copy of this script.
 #
 # Threshold
 # ---------

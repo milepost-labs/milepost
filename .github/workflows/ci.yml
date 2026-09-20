@@ -126,19 +126,15 @@ jobs:
 
   bindings:
     runs-on: ubuntu-latest
-    # The web app (milepost-frontend) and the indexer (milepost-indexer) install
-    # published @milepost/* versions, so their own CI cannot see a contract
-    # change that has not been released. This job builds the bindings from this
+    # The app lives in frontend/ and the indexer in its own repository, and both
+    # install published @milepost/* versions, so neither sees a contract change
+    # that has not been released. This job builds the bindings from this
     # checkout, checks what a release would upload, and builds and tests both
-    # against those builds — so a PR here that would break the app, or stop the
+    # against those builds, so a PR here that would break the app, or stop the
     # indexer decoding an event, fails here rather than after the next release
     # reaches them.
     steps:
       - uses: actions/checkout@v7
-      - uses: actions/checkout@v7
-        with:
-          repository: milepost-labs/milepost-frontend
-          path: milepost-frontend
       - uses: actions/checkout@v7
         with:
           repository: milepost-labs/milepost-indexer
@@ -150,7 +146,7 @@ jobs:
           cache-dependency-path: "**/package-lock.json"
 
       - name: Build bindings and install them into both consumers
-        run: ./scripts/frontend-with-local-bindings.sh milepost-frontend milepost-indexer
+        run: ./scripts/frontend-with-local-bindings.sh frontend milepost-indexer
 
       # Nothing else inspects what `npm publish` would actually upload. A
       # package that ships without dist/ installs cleanly and only fails when a
@@ -159,11 +155,24 @@ jobs:
       - name: Verify bindings are publishable
         run: ./scripts/check-bindings-publishable.sh
 
-      - name: Build milepost-frontend against local bindings
-        run: npm run build --prefix milepost-frontend
+      - name: Build the app against local bindings
+        run: npm run build --prefix frontend
 
-      - name: Test milepost-frontend against local bindings
-        run: npm test --prefix milepost-frontend
+      - name: Enforce the app's bundle size budget
+        run: ./frontend/scripts/check-bundle-size.sh >> "$GITHUB_STEP_SUMMARY"
+
+      # Not cosmetic. The React Compiler rules here catch render-purity and
+      # cascading-setState bugs that type-check cleanly and misbehave at runtime.
+      - name: Lint the app
+        run: npm run lint --prefix frontend
+
+      - name: Test the app against local bindings
+        run: npm test --prefix frontend
+
+      # The app has its own lockfile and its own copy of the advisory policy;
+      # the five binding lockfiles are checked at the end of this job.
+      - name: Check the app's dependencies for known advisories
+        run: ./frontend/scripts/check-npm-advisories.sh
 
       # The indexer decodes events with the spec each binding embeds, so a
       # renamed event or a changed field breaks it silently at runtime. Its

@@ -1,0 +1,90 @@
+.allowlist-manager-card {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+}
+
+.allowlist-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: var(--space-3);
+}
+
+.allowlist-title {
+  font-size: var(--step-1);
+  font-weight: 600;
+  margin: 0;
+}
+
+.allowlist-subtitle {
+  font-size: var(--step--1);
+  color: var(--color-text-muted, #64748b);
+  margin-top: var(--space-1);
+}
+
+.read-only-banner {
+  padding: var(--space-3);
+  background-color: var(--color-surface-hover, #f1f5f9);
+  border: 1px solid var(--color-border, #cbd5e1);
+  border-radius: var(--radius-sm, 4px);
+  font-size: var(--step--1);
+  color: var(--color-text-muted, #475569);
+}
+
+.allowlist-form {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+
+.allowlist-input-group {
+  display: flex;
+  gap: var(--space-2);
+}
+
+.check-payee-status {
+  font-size: var(--step--1);
+  color: var(--color-text-muted, #64748b);
+}
+
+.text-success {
+  color: var(--color-success, #16a34a);
+  font-weight: 600;
+}
+
+.allowlist-preview {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  padding-top: var(--space-2);
+  border-top: 1px solid var(--color-border, #e2e8f0);
+}
+
+.allowlist-preview h4 {
+  margin: 0;
+  font-size: var(--step-0);
+  font-weight: 600;
+}
+
+.payee-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: var(--space-2) var(--space-3);
+  background-color: var(--color-surface, #ffffff);
+  border: 1px solid var(--color-border, #e2e8f0);
+  border-radius: var(--radius-sm, 4px);
+}
+
+.payee-actions {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+}
+
+.no-payees-text {
+  font-size: var(--step--1);
+  color: var(--color-text-muted, #64748b);
+  margin: 0;
+}

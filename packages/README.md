@@ -18,13 +18,13 @@ dist-tag, so a plain install never picks one up.
 
 ## Testing the frontend against a change
 
-[milepost-frontend](https://github.com/milepost-labs/milepost-frontend) installs these packages from npm, so a change here
-only reaches it after a release. To check one before then, clone
-milepost-frontend next to this repository and, from this repository's root:
+The app in [`frontend/`](../frontend/) installs these packages from npm, so a
+change here only reaches it after a release. To check one before then, from
+this repository's root:
 
 ```sh
-./scripts/frontend-with-local-bindings.sh ../milepost-frontend
-npm run build --prefix ../milepost-frontend && npm test --prefix ../milepost-frontend
+./scripts/frontend-with-local-bindings.sh frontend
+npm run build --prefix frontend && npm test --prefix frontend
 ```
 
 CI does the same on every PR, in the `bindings` job.

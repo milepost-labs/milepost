@@ -1,0 +1,54 @@
+.remaining-cap-card {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+}
+
+.remaining-cap-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.remaining-cap-title {
+  font-size: var(--step-1);
+  font-weight: 600;
+  margin: 0;
+}
+
+.remaining-cap-stats {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  gap: var(--space-4);
+}
+
+.remaining-cap-progress-track {
+  width: 100%;
+  height: 8px;
+  background-color: var(--color-surface-hover, #e2e8f0);
+  border-radius: var(--radius-full, 9999px);
+  overflow: hidden;
+}
+
+.remaining-cap-progress-fill {
+  height: 100%;
+  background-color: var(--color-success, #22c55e);
+  transition: width 0.3s ease;
+}
+
+.remaining-cap-progress-fill--low {
+  background-color: var(--color-warning, #f59e0b);
+}
+
+.remaining-cap-reset-info {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  font-size: var(--step--1);
+  color: var(--color-text-muted, #64748b);
+}
+
+.remaining-cap-reset-value {
+  font-weight: 500;
+  color: var(--color-text, #0f172a);
+}

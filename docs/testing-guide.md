@@ -108,4 +108,4 @@ cargo test --all-features
 ./scripts/check-bindings.sh   # if you changed a contract's interface
 ```
 
-Frontend testing has its own guide, in milepost-frontend: [testing guide](https://github.com/milepost-labs/milepost-frontend/blob/main/docs/testing-guide.md).
+Frontend testing has its own guide: [frontend/docs/testing-guide.md](../frontend/docs/testing-guide.md).
