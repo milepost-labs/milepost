@@ -20,7 +20,9 @@ updates:
         patterns:
           - "*"
 
-  # Generated TypeScript SDK Packages
+  # Generated TypeScript SDK Packages. Minor and patch only, so one major that
+  # needs work cannot hold back a batch of safe updates; majors arrive as their
+  # own PRs. This matches the policy /frontend and milepost-indexer already use.
   - package-ecosystem: "npm"
     directory: "/packages/attest"
     schedule:
@@ -30,6 +32,19 @@ updates:
       package-attest-dependencies:
         patterns:
           - "*"
+        update-types:
+          - "minor"
+          - "patch"
+    ignore:
+      # The bindings are generated against SDK 16 and moving to 17 is a
+      # migration, not a bump: its public API returns Uint8Array where 16
+      # returned Buffer, so the bindings and both consumers change together.
+      - dependency-name: "@stellar/stellar-sdk"
+        update-types: ["version-update:semver-major"]
+      # typescript-eslint only supports TypeScript below 6.1. Remove once a
+      # typescript-eslint release accepts the next TypeScript major.
+      - dependency-name: "typescript"
+        update-types: ["version-update:semver-major"]
 
   - package-ecosystem: "npm"
     directory: "/packages/policy-spend"
@@ -40,6 +55,19 @@ updates:
       package-policy-spend-dependencies:
         patterns:
           - "*"
+        update-types:
+          - "minor"
+          - "patch"
+    ignore:
+      # The bindings are generated against SDK 16 and moving to 17 is a
+      # migration, not a bump: its public API returns Uint8Array where 16
+      # returned Buffer, so the bindings and both consumers change together.
+      - dependency-name: "@stellar/stellar-sdk"
+        update-types: ["version-update:semver-major"]
+      # typescript-eslint only supports TypeScript below 6.1. Remove once a
+      # typescript-eslint release accepts the next TypeScript major.
+      - dependency-name: "typescript"
+        update-types: ["version-update:semver-major"]
 
   - package-ecosystem: "npm"
     directory: "/packages/program"
@@ -50,6 +78,19 @@ updates:
       package-program-dependencies:
         patterns:
           - "*"
+        update-types:
+          - "minor"
+          - "patch"
+    ignore:
+      # The bindings are generated against SDK 16 and moving to 17 is a
+      # migration, not a bump: its public API returns Uint8Array where 16
+      # returned Buffer, so the bindings and both consumers change together.
+      - dependency-name: "@stellar/stellar-sdk"
+        update-types: ["version-update:semver-major"]
+      # typescript-eslint only supports TypeScript below 6.1. Remove once a
+      # typescript-eslint release accepts the next TypeScript major.
+      - dependency-name: "typescript"
+        update-types: ["version-update:semver-major"]
 
   - package-ecosystem: "npm"
     directory: "/packages/record"
@@ -60,6 +101,19 @@ updates:
       package-record-dependencies:
         patterns:
           - "*"
+        update-types:
+          - "minor"
+          - "patch"
+    ignore:
+      # The bindings are generated against SDK 16 and moving to 17 is a
+      # migration, not a bump: its public API returns Uint8Array where 16
+      # returned Buffer, so the bindings and both consumers change together.
+      - dependency-name: "@stellar/stellar-sdk"
+        update-types: ["version-update:semver-major"]
+      # typescript-eslint only supports TypeScript below 6.1. Remove once a
+      # typescript-eslint release accepts the next TypeScript major.
+      - dependency-name: "typescript"
+        update-types: ["version-update:semver-major"]
 
   - package-ecosystem: "npm"
     directory: "/packages/registry"
@@ -70,6 +124,19 @@ updates:
       package-registry-dependencies:
         patterns:
           - "*"
+        update-types:
+          - "minor"
+          - "patch"
+    ignore:
+      # The bindings are generated against SDK 16 and moving to 17 is a
+      # migration, not a bump: its public API returns Uint8Array where 16
+      # returned Buffer, so the bindings and both consumers change together.
+      - dependency-name: "@stellar/stellar-sdk"
+        update-types: ["version-update:semver-major"]
+      # typescript-eslint only supports TypeScript below 6.1. Remove once a
+      # typescript-eslint release accepts the next TypeScript major.
+      - dependency-name: "typescript"
+        update-types: ["version-update:semver-major"]
 
   # The web app, vendored into frontend/ for the wave. Minor and patch only, so
   # one major that needs work cannot hold back a batch of safe updates; majors
