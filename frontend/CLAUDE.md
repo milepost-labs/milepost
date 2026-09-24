@@ -254,13 +254,8 @@ Build these sections, in order:
 
 ## 6. Non-negotiables
 
-- **No invented data.** Several lists are still unwired and stand in for real
-  reads: recipient payees, a verifier's own attestations (currently kept in
-  browser storage in `VerifierDashboard.tsx`), a programme's verifier roster,
-  programme names, and the stale-index notice. Replace them with real reads or an
-  honest empty state. Fake numbers on a funding product are worse than a blank
-  panel. Note that `PLACEHOLDER_HISTORY` in `Standing.tsx` is a legitimate
-  textarea hint showing the expected JSON shape, not fake data — leave it.
+- **Stand-in data is expected right now — see §6a.** Design and layout come
+  first; wiring to real reads happens after the wave.
 - **Phase gating with reasons.** Disable an action and say which phase it needs.
 - **Every error through `explain()`.**
 - **Accessibility is not decoration.** Keyboard reachable, focus visible, labels
@@ -271,6 +266,35 @@ Build these sections, in order:
   heavy animation or chart library will break it — check before adding one.
 - **Tokens only.** No new hard-coded pixel or colour values in page CSS.
 - **Both themes.** Light and dark, every time.
+
+### 6a. Stand-in data during the design phase
+
+**This phase is about design and layout, not data correctness.** Several lists
+are not wired to real reads yet, and that is fine: build the screens with
+realistic stand-in data so the layout can be judged, and wire them up after the
+wave. Currently unwired are recipient payees, a verifier's own attestations
+(kept in browser storage in `VerifierDashboard.tsx`), a programme's verifier
+roster, programme names, and the stale-index notice. Five of these depend on
+indexer event handlers that do not exist yet, so they cannot be wired now even
+in principle.
+
+Two rules make that cheap to undo later:
+
+1. **Mark every stand-in.** Put fixtures in one obvious place per feature and
+   name them so they are greppable — `FIXTURE_`, or a `fixtures/` module. Do not
+   scatter literals through JSX. One `grep` should find all of it.
+2. **Shape stand-ins like the real thing.** Match the types the eventual read
+   returns, so swapping in the real call is a change of source and not a
+   rewrite of the component.
+
+Two carve-outs, because they mislead rather than illustrate:
+
+- **Do not fabricate the "Live on testnet" figures** in landing section 9. That
+  section claims to show real chain state. Either read `meta.json` and
+  `programmes.json`, which are live and working today, or drop the section until
+  it can. The index already serves one real programme and its awards.
+- **`PLACEHOLDER_HISTORY` in `Standing.tsx` is not stand-in data.** It is a
+  textarea hint showing the expected JSON shape. Leave it alone.
 
 ### Commands
 
