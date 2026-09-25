@@ -1,0 +1,464 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Libre+Franklin:wght@400;500;600;700;800&family=IBM+Plex+Mono:wght@400;500;600&display=swap">
+<style>
+:root,[data-theme="light"]{--bg:#f6f5f1;--surface:#ffffff;--surface-raised:#eceae4;--text:#16191e;--text-muted:#565c66;--accent:#4f55dc;--accent-strong:#3a40c4;--accent-contrast:#ffffff;--accent-soft:#e6e7fc;--locked:#b4b8bf;--refund:#cf5a41;--refund-soft:#fbe6e0;--success:#23855a;--success-soft:#dcf1e6;--warning:#9a6a00;--warning-soft:#fbf0d4;--code:#16191e;--code-text:#e6e8ec}
+[data-theme="dark"]{--bg:#16191e;--surface:#1f242b;--surface-raised:#282e37;--text:#edf0f3;--text-muted:#a4aab4;--accent:#7c82f7;--accent-strong:#9ba1ff;--accent-contrast:#0d0f13;--accent-soft:rgba(124,130,247,.16);--locked:#4b525c;--refund:#f0a08b;--refund-soft:rgba(240,160,139,.14);--success:#6fd3a2;--success-soft:rgba(111,211,162,.14);--warning:#f2c661;--warning-soft:rgba(242,198,97,.14);--code:#0f1216;--code-text:#d8dce2}
+html{scroll-behavior:smooth}body{margin:0}
+a{color:var(--accent);text-decoration:none}a:hover{color:var(--accent-strong);text-decoration:underline}
+button{font-family:inherit}
+:focus-visible{outline:2px solid var(--accent);outline-offset:3px;border-radius:6px}
+@media (prefers-reduced-motion: reduce){*{transition:none!important;animation:none!important;scroll-behavior:auto!important}}
+</style>
+</helmet>
+
+<div data-theme="{{ theme }}" style="background:var(--bg);color:var(--text);font-family:'Libre Franklin',system-ui,sans-serif;min-height:100vh;transition:background .2s,color .2s">
+
+<header style="position:sticky;top:0;z-index:20;background:var(--bg);box-shadow:0 1px 0 var(--surface-raised)">
+<nav aria-label="Main" style="max-width:1200px;margin:0 auto;padding:12px 24px;display:flex;align-items:center;gap:8px 20px;flex-wrap:wrap">
+<a href="#top" style="display:flex;align-items:center;min-height:44px;gap:10px;color:var(--text);font-weight:800;font-size:18px;letter-spacing:-.01em;text-decoration:none"><span aria-hidden="true" style="display:flex;gap:3px"><span style="width:9px;height:9px;border-radius:2px;background:var(--accent)"></span><span style="width:9px;height:9px;border-radius:2px;background:var(--accent)"></span><span style="width:9px;height:9px;border-radius:2px;background:var(--locked)"></span></span>Milepost</a>
+<div style="display:flex;align-items:center;font-size:14px;font-weight:600;white-space:nowrap">
+<div style="position:relative">
+<button type="button" onClick="{{ toggleMenu }}" aria-expanded="{{ menuOpen }}" aria-controls="appmenu" style="cursor:pointer;border:0;background:var(--surface);color:var(--text);border-radius:999px;padding:8px 14px;font-size:14px;font-weight:600;display:flex;align-items:center;gap:6px;min-height:44px;box-sizing:border-box">Menu <span aria-hidden="true">▾</span></button>
+<sc-if value="{{ menuOpen }}" hint-placeholder-val="{{ false }}">
+<div id="appmenu" style="position:absolute;top:44px;left:0;z-index:30;background:var(--surface);border-radius:14px;padding:8px;min-width:250px;box-shadow:0 12px 32px rgba(0,0,0,.18);display:flex;flex-direction:column">
+<span style="padding:8px 12px 4px;font-size:12px;font-weight:700;color:var(--text-muted)">On this page</span>
+<sc-for list="{{ anchors }}" as="p" hint-placeholder-count="4">
+<a href="{{ p.href }}" onClick="{{ closeMenu }}" style="padding:9px 12px;border-radius:9px;color:var(--text);font-size:14px;font-weight:600;text-decoration:none;min-height:44px;box-sizing:border-box;display:inline-flex;align-items:center;justify-content:center" style-hover="background:var(--surface-raised)">{{ p.label }}</a>
+</sc-for>
+<span style="padding:12px 12px 4px;font-size:12px;font-weight:700;color:var(--text-muted)">App</span>
+<sc-for list="{{ appPages }}" as="p" hint-placeholder-count="8">
+<a href="{{ p.href }}" style="display:flex;justify-content:space-between;gap:16px;padding:9px 12px;border-radius:9px;color:var(--text);font-size:14px;font-weight:600;text-decoration:none;min-height:44px;box-sizing:border-box" style-hover="background:var(--surface-raised)"><span>{{ p.label }}</span><span style="font-family:'IBM Plex Mono',monospace;font-size:12px;color:var(--text-muted)">{{ p.route }}</span></a>
+</sc-for>
+</div>
+</sc-if>
+</div>
+</div>
+<div style="margin-left:auto;display:flex;align-items:center;gap:10px;flex-wrap:nowrap">
+<button type="button" onClick="{{ toggleTheme }}" aria-label="{{ themeLabel }}" style="cursor:pointer;border:0;background:var(--surface);color:var(--text);border-radius:999px;width:44px;height:44px;font-size:16px;min-height:44px;box-sizing:border-box;display:inline-flex;align-items:center;justify-content:center">{{ themeIcon }}</button>
+<a href="Milepost App.dc.html#/directory" style="background:var(--accent);color:var(--accent-contrast);border-radius:999px;padding:10px 18px;font-size:14px;font-weight:700;text-decoration:none;min-height:44px;box-sizing:border-box;display:inline-flex;align-items:center;justify-content:center">Launch app</a>
+</div>
+</nav>
+</header>
+
+<main id="top" style="max-width:1200px;margin:0 auto;padding:0 24px">
+
+<section aria-labelledby="h-hero" style="padding:clamp(48px,8vw,96px) 0 56px;display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,420px),1fr));gap:48px;align-items:center">
+<div style="display:flex;flex-direction:column;gap:24px">
+<span style="align-self:flex-start;font-size:13px;font-weight:600;color:var(--accent-strong);background:var(--accent-soft);border-radius:999px;padding:6px 12px">Conditional disbursement on Stellar · testnet</span>
+<h1 id="h-hero" style="margin:0;font-size:clamp(38px,6vw,68px);line-height:1.02;letter-spacing:-.035em;font-weight:800;text-wrap:balance">Money moves at each milepost, and only at each milepost.</h1>
+<p style="margin:0;font-size:clamp(17px,2vw,20px);line-height:1.5;color:var(--text-muted);max-width:52ch;text-wrap:pretty">A funder commits money to a programme. Recipients receive it in tranches that unlock only when a trusted verifier confirms a condition was met.</p>
+<div style="display:flex;gap:12px;flex-wrap:wrap">
+<a href="Milepost App.dc.html#/directory" style="background:var(--accent);color:var(--accent-contrast);border-radius:999px;padding:15px 26px;font-size:16px;font-weight:700;text-decoration:none;min-height:44px;box-sizing:border-box;display:inline-flex;align-items:center;justify-content:center">Launch app</a>
+<a href="#how" style="background:var(--surface);color:var(--text);border-radius:999px;padding:15px 26px;font-size:16px;font-weight:700;text-decoration:none;min-height:44px;box-sizing:border-box;display:inline-flex;align-items:center;justify-content:center">How it works ↓</a>
+</div>
+<span style="font-size:13px;color:var(--text-muted)">Browsing programmes needs no {{ v.account }}.</span>
+</div>
+
+<div style="background:var(--surface);border-radius:24px;padding:28px;display:flex;flex-direction:column;gap:20px">
+<div style="display:flex;justify-content:space-between;align-items:baseline;gap:12px;flex-wrap:wrap"><span style="font-size:14px;font-weight:700">Try it: one award, three tranches</span><span style="font-size:12px;color:var(--text-muted)">Example</span></div>
+<div style="display:grid;grid-template-columns:repeat(3,1fr);gap:10px">
+<sc-for list="{{ heroTranches }}" as="t" hint-placeholder-count="3">
+<div style="border-radius:14px;padding:16px 14px;background:{{ t.bg }};color:{{ t.fg }};display:flex;flex-direction:column;gap:6px;transition:background .3s">
+<span style="font-size:12px;font-weight:600;opacity:.8">Tranche {{ t.n }}</span>
+<span style="font-family:'IBM Plex Mono',monospace;font-size:20px;font-weight:600">{{ t.amount }}</span>
+<span style="font-size:12px;font-weight:600">{{ t.state }}</span>
+</div>
+</sc-for>
+</div>
+<div style="display:flex;flex-direction:column;gap:6px;font-size:13px;color:var(--text-muted)"><span style="display:flex;justify-content:space-between"><span>Condition</span><span style="color:var(--text);font-weight:600">{{ heroCondition }}</span></span><span style="display:flex;justify-content:space-between"><span>Verifier</span><span style="color:var(--text);font-weight:600">{{ heroVerifier }}</span></span></div>
+<button type="button" onClick="{{ heroAct }}" style="cursor:pointer;border:0;border-radius:999px;padding:14px 20px;font-size:15px;font-weight:700;background:var(--text);color:var(--bg);min-height:44px;box-sizing:border-box;display:inline-flex;align-items:center;justify-content:center">{{ heroBtn }}</button>
+<p aria-live="polite" style="margin:0;font-size:14px;line-height:1.5;min-height:42px">{{ heroMsg }}</p>
+</div>
+</section>
+
+<section aria-labelledby="h-roles-quick" style="padding:0 0 72px">
+<h2 id="h-roles-quick" style="margin:0 0 14px;font-size:15px;font-weight:700;color:var(--text-muted)">What brings you here?</h2>
+<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,230px),1fr));gap:12px">
+<sc-for list="{{ roles }}" as="r" hint-placeholder-count="4">
+<a href="{{ r.href }}" style="background:var(--surface);border-radius:16px;padding:18px 20px;color:var(--text);text-decoration:none;display:flex;justify-content:space-between;align-items:center;gap:12px;transition:transform .15s" style-hover="background:var(--accent-soft);text-decoration:none"><span style="display:flex;flex-direction:column;gap:3px"><span style="font-size:17px;font-weight:700">{{ r.want }}</span><span style="font-size:13px;color:var(--text-muted)">{{ r.role }} dashboard</span></span><span aria-hidden="true" style="font-size:20px;color:var(--accent)">→</span></a>
+</sc-for>
+</div>
+</section>
+
+<section aria-labelledby="h-problem" style="padding:72px 0;display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,360px),1fr));gap:40px 64px">
+<div style="display:flex;flex-direction:column;gap:16px">
+<span style="font-size:13px;font-weight:700;color:var(--refund)">The problem</span>
+<h2 id="h-problem" style="margin:0;font-size:clamp(30px,4vw,44px);line-height:1.08;letter-spacing:-.03em;font-weight:800;text-wrap:balance">Most grant tools stop at selection.</h2>
+<p style="margin:0;font-size:17px;line-height:1.6;color:var(--text-muted);max-width:46ch">They make the vote transparent, transfer a lump sum, and end. Milepost is about everything after the transfer.</p>
+</div>
+<ol style="list-style:none;margin:0;padding:0;display:flex;flex-direction:column;gap:12px">
+<sc-for list="{{ questions }}" as="q" hint-placeholder-count="3">
+<li style="background:var(--surface);border-radius:16px;padding:20px 22px;display:flex;gap:18px;align-items:baseline"><span style="font-family:'IBM Plex Mono',monospace;font-size:14px;color:var(--refund);font-weight:600">{{ q.n }}</span><span style="font-size:clamp(18px,2.2vw,22px);font-weight:700;letter-spacing:-.015em;line-height:1.3">{{ q.q }}</span></li>
+</sc-for>
+</ol>
+</section>
+
+<section id="how" aria-labelledby="h-how" style="padding:72px 0;scroll-margin-top:80px">
+<div style="display:flex;flex-direction:column;gap:12px;margin-bottom:32px;max-width:720px">
+<span style="font-size:13px;font-weight:700;color:var(--accent-strong)">How it works</span>
+<h2 id="h-how" style="margin:0;font-size:clamp(30px,4vw,44px);line-height:1.08;letter-spacing:-.03em;font-weight:800">Seven steps. Money moves at three of them.</h2>
+<p style="margin:0;font-size:17px;line-height:1.6;color:var(--text-muted)">Step through a programme with an example budget of {{ v.budget }}. Each square is {{ v.square }}.</p>
+</div>
+
+<div role="tablist" aria-label="Money path steps" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,96px),1fr));gap:6px;margin-bottom:16px">
+<sc-for list="{{ steps }}" as="s" hint-placeholder-count="7">
+<button type="button" role="tab" aria-selected="{{ s.on }}" onClick="{{ s.pick }}" style="cursor:pointer;border:0;text-align:left;border-radius:14px;padding:14px;background:{{ s.bg }};color:{{ s.fg }};display:flex;flex-direction:column;gap:6px;transition:background .2s">
+<span style="display:flex;justify-content:space-between;align-items:center"><span style="font-family:'IBM Plex Mono',monospace;font-size:12px;opacity:.75">0{{ s.n }}</span><sc-if value="{{ s.moves }}" hint-placeholder-val="{{ false }}"><span aria-label="money moves" style="width:8px;height:8px;border-radius:2px;background:{{ s.dot }}"></span></sc-if></span>
+<span style="font-size:16px;font-weight:700">{{ s.name }}</span>
+</button>
+</sc-for>
+</div>
+
+<div role="tabpanel" style="background:var(--surface);border-radius:24px;padding:clamp(20px,4vw,36px);display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,340px),1fr));gap:32px 48px">
+<div style="display:flex;flex-direction:column;gap:14px">
+<span style="align-self:flex-start;font-size:12px;font-weight:700;border-radius:999px;padding:5px 11px;background:{{ cur.badgeBg }};color:{{ cur.badgeFg }}">{{ cur.badge }}</span>
+<h3 style="margin:0;font-size:clamp(26px,3vw,34px);letter-spacing:-.025em;font-weight:800">{{ cur.n }}. {{ cur.name }}</h3>
+<p style="margin:0;font-size:17px;line-height:1.6;max-width:48ch">{{ cur.plain }}</p>
+<p style="margin:0;font-size:15px;line-height:1.6;color:var(--text-muted);max-width:48ch">{{ cur.detail }}</p>
+<sc-if value="{{ isWeb3 }}" hint-placeholder-val="{{ false }}"><code style="align-self:flex-start;font-family:'IBM Plex Mono',monospace;font-size:13px;background:var(--surface-raised);border-radius:8px;padding:8px 12px">{{ cur.tech }}</code></sc-if>
+<div style="display:flex;gap:10px;margin-top:auto;padding-top:8px">
+<button type="button" onClick="{{ prevStep }}" disabled="{{ atFirst }}" style="cursor:pointer;border:0;border-radius:999px;padding:10px 18px;font-size:14px;font-weight:700;background:var(--surface-raised);color:var(--text);min-height:44px;box-sizing:border-box;display:inline-flex;align-items:center;justify-content:center">← Back</button>
+<button type="button" onClick="{{ nextStep }}" style="cursor:pointer;border:0;border-radius:999px;padding:10px 18px;font-size:14px;font-weight:700;background:var(--accent);color:var(--accent-contrast);min-height:44px;box-sizing:border-box;display:inline-flex;align-items:center;justify-content:center">{{ nextLabel }}</button>
+</div>
+</div>
+<div style="display:flex;flex-direction:column;gap:18px">
+<div aria-hidden="true" style="display:grid;grid-template-columns:repeat(10,1fr);gap:6px">
+<sc-for list="{{ squares }}" as="q" hint-placeholder-count="20">
+<span style="aspect-ratio:1;border-radius:5px;background:{{ q.bg }};box-shadow:{{ q.ring }};transition:background .35s"></span>
+</sc-for>
+</div>
+<ul style="list-style:none;margin:0;padding:0;display:flex;flex-direction:column;gap:8px">
+<sc-for list="{{ legend }}" as="l" hint-placeholder-count="4">
+<li style="display:flex;align-items:center;gap:10px;font-size:14px;opacity:{{ l.op }}"><span aria-hidden="true" style="width:14px;height:14px;border-radius:3px;background:{{ l.bg }}"></span><span style="flex:1">{{ l.label }}</span><span style="font-family:'IBM Plex Mono',monospace;font-weight:600">{{ l.amt }}</span></li>
+</sc-for>
+</ul>
+<span style="font-size:12px;color:var(--text-muted)">Example figures. The protocol fee is taken from contributions before they count as budget.</span>
+</div>
+</div>
+</section>
+
+<section aria-labelledby="h-stellar" style="padding:72px 0">
+<div style="display:flex;flex-direction:column;gap:12px;margin-bottom:28px;max-width:720px">
+<span style="font-size:13px;font-weight:700;color:var(--accent-strong)">Why Stellar</span>
+<h2 id="h-stellar" style="margin:0;font-size:clamp(30px,4vw,44px);line-height:1.08;letter-spacing:-.03em;font-weight:800">Built for people who have never used crypto.</h2>
+</div>
+<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,250px),1fr));gap:12px">
+<sc-for list="{{ stellar }}" as="s" hint-placeholder-count="4">
+<div style="background:var(--surface);border-radius:18px;padding:24px;display:flex;flex-direction:column;gap:10px">
+<span style="font-size:19px;font-weight:800;letter-spacing:-.015em">{{ s.t }}</span>
+<span style="font-size:15px;line-height:1.6;color:var(--text-muted)">{{ s.d }}</span>
+<sc-if value="{{ isWeb3 }}" hint-placeholder-val="{{ false }}"><span style="font-family:'IBM Plex Mono',monospace;font-size:12px;color:var(--accent-strong)">{{ s.tech }}</span></sc-if>
+</div>
+</sc-for>
+</div>
+</section>
+
+<section id="modes" aria-labelledby="h-modes" style="padding:72px 0;scroll-margin-top:80px">
+<div style="display:flex;flex-direction:column;gap:12px;margin-bottom:28px;max-width:720px">
+<span style="font-size:13px;font-weight:700;color:var(--accent-strong)">Three modes</span>
+<h2 id="h-modes" style="margin:0;font-size:clamp(30px,4vw,44px);line-height:1.08;letter-spacing:-.03em;font-weight:800">Who decides where the money goes?</h2>
+<p style="margin:0;font-size:17px;line-height:1.6;color:var(--text-muted)">Each programme picks one. They are not equivalent, and the trade-offs are stated plainly.</p>
+</div>
+<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,300px),1fr));gap:12px">
+<sc-for list="{{ modes }}" as="m" hint-placeholder-count="3">
+<div style="background:{{ m.bg }};border-radius:20px;padding:26px;display:flex;flex-direction:column;gap:16px;box-shadow:{{ m.ring }}">
+<div style="display:flex;justify-content:space-between;align-items:baseline;gap:12px"><span style="font-size:24px;font-weight:800;letter-spacing:-.02em">{{ m.name }}</span><sc-if value="{{ m.strongest }}" hint-placeholder-val="{{ false }}"><span style="font-size:12px;font-weight:700;background:var(--success-soft);color:var(--success);border-radius:999px;padding:4px 10px">Strongest guarantee</span></sc-if></div>
+<div style="display:flex;flex-direction:column;gap:4px"><span style="font-size:12px;font-weight:700;color:var(--text-muted)">Where the money goes</span><span style="font-size:15px;line-height:1.5">{{ m.where }}</span></div>
+<div style="display:flex;flex-direction:column;gap:4px"><span style="font-size:12px;font-weight:700;color:var(--text-muted)">Who chooses the payee</span><span style="font-size:15px;line-height:1.5">{{ m.who }}</span></div>
+<div style="display:flex;flex-direction:column;gap:4px"><span style="font-size:12px;font-weight:700;color:var(--text-muted)">Trade-off</span><span style="font-size:15px;line-height:1.5">{{ m.trade }}</span></div>
+<div style="display:flex;flex-direction:column;gap:6px;margin-top:auto"><span style="font-size:12px;font-weight:700;color:var(--text-muted)">Relies on</span><span style="font-size:14px;font-weight:600">{{ m.relies }}</span></div>
+</div>
+</sc-for>
+</div>
+<p style="margin:16px 0 0;font-size:15px;line-height:1.6;color:var(--text-muted);max-width:80ch">Allocated is stronger than Restricted because a misconfigured wallet quietly turns Restricted into no restriction at all. Allocated depends on nothing outside the contract.</p>
+</section>
+
+<section aria-labelledby="h-vert" style="padding:72px 0">
+<div style="display:flex;flex-direction:column;gap:12px;margin-bottom:28px;max-width:720px">
+<span style="font-size:13px;font-weight:700;color:var(--accent-strong)">One protocol, many verticals</span>
+<h2 id="h-vert" style="margin:0;font-size:clamp(30px,4vw,44px);line-height:1.08;letter-spacing:-.03em;font-weight:800">The contracts don't know what a school is.</h2>
+<p style="margin:0;font-size:17px;line-height:1.6;color:var(--text-muted)">A verifier attests a condition about a recipient. What those mean is configured per programme. Six examples:</p>
+</div>
+<div role="table" aria-label="Example verticals" style="display:flex;flex-direction:column;gap:6px">
+<div role="row" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,180px),1fr));gap:4px 16px;padding:0 20px 6px;font-size:12px;font-weight:700;color:var(--text-muted)"><span role="columnheader">Vertical</span><span role="columnheader">Verifier</span><span role="columnheader">Condition</span><span role="columnheader">Who gets paid</span></div>
+<sc-for list="{{ verticals }}" as="r" hint-placeholder-count="6">
+<div role="row" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,180px),1fr));gap:4px 16px;padding:16px 20px;border-radius:14px;background:var(--surface);font-size:15px;line-height:1.4" style-hover="background:var(--accent-soft)"><span role="cell" style="font-weight:700">{{ r.v }}</span><span role="cell">{{ r.who }}</span><span role="cell">{{ r.cond }}</span><span role="cell" style="color:var(--text-muted)">{{ r.paid }}</span></div>
+</sc-for>
+</div>
+</section>
+
+<section id="roles" aria-labelledby="h-roles" style="padding:72px 0;scroll-margin-top:80px">
+<div style="display:flex;flex-direction:column;gap:12px;margin-bottom:28px;max-width:720px">
+<span style="font-size:13px;font-weight:700;color:var(--accent-strong)">Roles</span>
+<h2 id="h-roles" style="margin:0;font-size:clamp(30px,4vw,44px);line-height:1.08;letter-spacing:-.03em;font-weight:800">Four people, one programme.</h2>
+</div>
+<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,250px),1fr));gap:12px">
+<sc-for list="{{ roles }}" as="r" hint-placeholder-count="4">
+<div style="background:var(--surface);border-radius:20px;padding:26px;display:flex;flex-direction:column;gap:12px">
+<span style="font-size:13px;font-weight:700;color:var(--accent-strong)">{{ r.role }}</span>
+<span style="font-size:21px;font-weight:800;letter-spacing:-.02em;line-height:1.2">{{ r.does }}</span>
+<span style="font-size:15px;line-height:1.6;color:var(--text-muted);flex:1">{{ r.body }}</span>
+<div style="display:flex;flex-wrap:wrap;gap:6px 14px;font-size:14px;font-weight:600"><sc-for list="{{ r.links }}" as="l"><a href="{{ l.href }}" style="display:inline-flex;align-items:center;min-height:44px">{{ l.label }}</a></sc-for></div>
+</div>
+</sc-for>
+</div>
+</section>
+
+<section aria-labelledby="h-limits" style="padding:72px 0">
+<div style="display:flex;flex-direction:column;gap:12px;margin-bottom:28px;max-width:720px">
+<span style="font-size:13px;font-weight:700;color:var(--accent-strong)">Guarantees and limits</span>
+<h2 id="h-limits" style="margin:0;font-size:clamp(30px,4vw,44px);line-height:1.08;letter-spacing:-.03em;font-weight:800">What the contracts promise, and what they don't.</h2>
+</div>
+<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,420px),1fr));gap:12px">
+<div style="background:var(--surface);border-radius:20px;padding:26px;display:flex;flex-direction:column;gap:18px">
+<span style="font-size:14px;font-weight:700;color:var(--success)">Guaranteed</span>
+<sc-for list="{{ guarantees }}" as="g" hint-placeholder-count="3"><div style="display:flex;flex-direction:column;gap:4px"><span style="font-size:17px;font-weight:700">{{ g.t }}</span><span style="font-size:15px;line-height:1.6;color:var(--text-muted)">{{ g.d }}</span></div></sc-for>
+</div>
+<div style="background:var(--surface);border-radius:20px;padding:26px;display:flex;flex-direction:column;gap:18px">
+<span style="font-size:14px;font-weight:700;color:var(--refund)">Limits, stated</span>
+<sc-for list="{{ limits }}" as="g" hint-placeholder-count="2"><div style="display:flex;flex-direction:column;gap:4px"><span style="font-size:17px;font-weight:700">{{ g.t }}</span><span style="font-size:15px;line-height:1.6;color:var(--text-muted)">{{ g.d }}</span></div></sc-for>
+</div>
+</div>
+</section>
+
+<section aria-labelledby="h-live" style="padding:72px 0">
+<div style="display:flex;align-items:flex-end;gap:16px;flex-wrap:wrap;margin-bottom:24px">
+<div style="display:flex;flex-direction:column;gap:12px;max-width:720px">
+<span style="font-size:13px;font-weight:700;color:var(--accent-strong)">Live on testnet</span>
+<h2 id="h-live" style="margin:0;font-size:clamp(30px,4vw,44px);line-height:1.08;letter-spacing:-.03em;font-weight:800">Read from the public index.</h2>
+<p style="margin:0;font-size:15px;line-height:1.6;color:var(--text-muted)">The index is rebuilt from contract events every few hours and is advisory. The app re-checks every entry on-chain before you act on it.</p>
+</div>
+<button type="button" onClick="{{ reloadIndex }}" style="margin-left:auto;cursor:pointer;border:0;border-radius:999px;padding:10px 18px;font-size:14px;font-weight:700;background:var(--surface);color:var(--text);min-height:44px;box-sizing:border-box;display:inline-flex;align-items:center;justify-content:center">Refresh</button>
+</div>
+<div aria-live="polite" aria-busy="{{ idxLoading }}">
+<sc-if value="{{ idxLoading }}" hint-placeholder-val="{{ true }}"><div style="background:var(--surface);border-radius:20px;padding:26px;font-size:15px;color:var(--text-muted)">Reading meta.json and programmes.json…</div></sc-if>
+<sc-if value="{{ idxError }}" hint-placeholder-val="{{ false }}"><div style="background:var(--refund-soft);border-radius:20px;padding:26px;display:flex;flex-direction:column;gap:6px"><span style="font-size:16px;font-weight:700;color:var(--refund)">Couldn't reach the index</span><span style="font-size:14px;color:var(--text-muted)">{{ idxErrorMsg }} · No figures are shown rather than guessed.</span></div></sc-if>
+<sc-if value="{{ idxOk }}" hint-placeholder-val="{{ false }}">
+<div style="display:flex;flex-direction:column;gap:12px">
+<sc-if value="{{ idxStale }}" hint-placeholder-val="{{ false }}"><div role="status" style="background:var(--warning-soft);color:var(--warning);border-radius:14px;padding:14px 18px;font-size:14px;font-weight:600">The index was last updated {{ idxAge }}. Figures may be behind the chain.</div></sc-if>
+<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,200px),1fr));gap:12px">
+<sc-for list="{{ idxStats }}" as="s" hint-placeholder-count="4">
+<div style="background:var(--surface);border-radius:18px;padding:22px;display:flex;flex-direction:column;gap:6px"><span style="font-family:'IBM Plex Mono',monospace;font-size:32px;font-weight:600;letter-spacing:-.02em">{{ s.v }}</span><span style="font-size:14px;color:var(--text-muted)">{{ s.k }}</span></div>
+</sc-for>
+</div>
+<sc-if value="{{ hasIdxRows }}" hint-placeholder-val="{{ false }}">
+<div style="display:flex;flex-direction:column;gap:6px">
+<sc-for list="{{ idxRows }}" as="r" hint-placeholder-count="1">
+<a href="{{ r.href }}" style="display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap;background:var(--surface);border-radius:14px;padding:14px 18px;color:var(--text);text-decoration:none" style-hover="background:var(--accent-soft);text-decoration:none"><span style="display:flex;flex-direction:column;gap:3px"><span style="font-size:16px;font-weight:700">{{ r.name }}</span><span style="font-family:'IBM Plex Mono',monospace;font-size:12px;color:var(--text-muted)">{{ r.id }}</span></span><span style="font-size:12px;font-weight:600;border-radius:999px;padding:4px 10px;background:var(--surface-raised);color:var(--text-muted)">{{ r.phase }}</span></a>
+</sc-for>
+</div>
+</sc-if>
+<span style="font-size:12px;color:var(--text-muted);font-family:'IBM Plex Mono',monospace">Source: milepost-labs.github.io/milepost-indexer/v1</span>
+</div>
+</sc-if>
+</div>
+</section>
+
+<section id="developers" aria-labelledby="h-dev" style="padding:72px 0;scroll-margin-top:80px;display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,420px),1fr));gap:40px 48px">
+<div style="display:flex;flex-direction:column;gap:14px">
+<span style="font-size:13px;font-weight:700;color:var(--accent-strong)">For developers</span>
+<h2 id="h-dev" style="margin:0;font-size:clamp(30px,4vw,44px);line-height:1.08;letter-spacing:-.03em;font-weight:800">Five contracts, typed bindings, a public index.</h2>
+<div style="background:var(--code);color:var(--code-text);border-radius:14px;padding:16px 18px;display:flex;align-items:center;gap:12px;font-family:'IBM Plex Mono',monospace;font-size:14px"><span style="flex:1;overflow-x:auto;white-space:nowrap">npm i @milepost/program @milepost/record</span><button type="button" onClick="{{ copyInstall }}" style="cursor:pointer;border:0;border-radius:8px;padding:6px 10px;font-size:12px;font-weight:600;background:rgba(255,255,255,.12);color:var(--code-text);min-height:44px;box-sizing:border-box;display:inline-flex;align-items:center;justify-content:center">{{ copyLabel }}</button></div>
+<div style="display:flex;flex-wrap:wrap;gap:8px 18px;font-size:15px;font-weight:600">
+<sc-for list="{{ docs }}" as="d" hint-placeholder-count="4"><a href="{{ d.href }}" style="display:inline-flex;align-items:center;min-height:44px">{{ d.label }}</a></sc-for>
+</div>
+</div>
+<ul style="list-style:none;margin:0;padding:0;display:flex;flex-direction:column;gap:6px">
+<sc-for list="{{ contracts }}" as="c" hint-placeholder-count="5">
+<li style="background:var(--surface);border-radius:14px;padding:16px 18px;display:grid;grid-template-columns:110px 1fr;gap:14px;align-items:baseline"><span style="font-family:'IBM Plex Mono',monospace;font-size:14px;font-weight:600;color:var(--accent-strong)">{{ c.n }}</span><span style="font-size:14px;line-height:1.5;color:var(--text-muted)">{{ c.d }}</span></li>
+</sc-for>
+<li style="background:var(--surface);border-radius:14px;padding:16px 18px;display:grid;grid-template-columns:110px 1fr;gap:14px;align-items:baseline"><span style="font-family:'IBM Plex Mono',monospace;font-size:14px;font-weight:600;color:var(--text-muted)">indexer</span><span style="font-size:14px;line-height:1.5;color:var(--text-muted)">Reads contract events and publishes JSON lists, because the contracts keep none.</span></li>
+</ul>
+</section>
+
+</main>
+
+<footer style="background:var(--surface);margin-top:48px">
+<div style="max-width:1200px;margin:0 auto;padding:36px 24px;display:flex;flex-wrap:wrap;gap:16px 32px;align-items:center;font-size:14px">
+<span style="font-weight:800">Milepost</span>
+<span style="color:var(--text-muted)">Pre-audit · testnet only</span>
+<div style="margin-left:auto;display:flex;flex-wrap:wrap;gap:8px 24px;font-weight:600">
+<a href="https://github.com/milepost-labs/milepost" style="display:inline-flex;align-items:center;min-height:44px">Repository</a>
+<a href="https://github.com/milepost-labs/milepost/blob/main/SECURITY.md" style="display:inline-flex;align-items:center;min-height:44px">Security policy</a>
+<a href="https://github.com/milepost-labs/milepost/blob/main/LICENSE" style="display:inline-flex;align-items:center;min-height:44px">Licence</a>
+</div>
+</div>
+</footer>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props="{&quot;theme&quot;:{&quot;editor&quot;:&quot;enum&quot;,&quot;options&quot;:[&quot;light&quot;,&quot;dark&quot;],&quot;default&quot;:&quot;light&quot;,&quot;tsType&quot;:&quot;'light'|'dark'&quot;}}">
+class Component extends DCLogic {
+  // Stand-in data for the design phase. grep FIXTURE_ to find all of it.
+  static FIXTURE_HERO_AWARD = { tranches: [500, 500, 500], condition: 'Term 1 enrolment confirmed', verifier: 'Registrar, Kisumu Academy' };
+  static FIXTURE_PATH_BUDGET = 10000;
+  static INDEX_BASE = 'https://milepost-labs.github.io/milepost-indexer/v1';
+  static STALE_AFTER_MS = 12 * 3600 * 1000;
+
+  state = { theme: null, lens: null, menu: false, released: 0, step: 0, copied: false, idx: { status: 'loading' } };
+
+  componentDidMount() { this.loadIndex(); }
+
+  async loadIndex() {
+    this.setState({ idx: { status: 'loading' } });
+    const get = async (p) => { const r = await fetch(Component.INDEX_BASE + p, { cache: 'no-store' }); if (!r.ok) throw new Error(p + ' returned ' + r.status); return r.json(); };
+    try {
+      const [meta, progs] = await Promise.all([get('/meta.json'), get('/programmes.json')]);
+      this.setState({ idx: { status: 'ok', meta, progs } });
+    } catch (e) { this.setState({ idx: { status: 'error', msg: String(e && e.message || e) } }); }
+  }
+
+  idxView() {
+    const { idx } = this.state;
+    if (idx.status !== 'ok') return { stats: [], rows: [], stale: false, age: '' };
+    const m = idx.meta || {}, p = idx.progs;
+    const list = Array.isArray(p) ? p : (p && (p.programmes || p.items || p.data)) || [];
+    const raw = m.generatedAt ?? m.updatedAt ?? m.lastUpdated ?? m.indexedAt ?? m.timestamp ?? m.lastRun;
+    let t = null;
+    if (typeof raw === 'number') t = raw < 1e12 ? raw * 1000 : raw; else if (raw) { const d = Date.parse(raw); if (!isNaN(d)) t = d; }
+    const ago = t ? Date.now() - t : null;
+    const fmt = (ms) => { const h = ms / 3600000; if (h < 1) return Math.max(1, Math.round(ms / 60000)) + ' min ago'; if (h < 48) return Math.round(h) + ' h ago'; return Math.round(h / 24) + ' days ago'; };
+    const ue = m.unhandledEvents;
+    const unhandled = ue == null ? null : Array.isArray(ue) ? ue.length : typeof ue === 'object' ? Object.keys(ue).length : ue;
+    const ledger = m.indexedToLedger ?? m.lastLedger ?? m.latestLedger ?? m.ledger;
+    const stats = [{ k: 'Programmes indexed', v: String(list.length) }];
+    if (t) stats.push({ k: 'Index updated', v: fmt(ago) });
+    if (ledger != null) stats.push({ k: 'Last ledger read', v: Number(ledger).toLocaleString() });
+    if (unhandled != null) stats.push({ k: 'Event types not yet indexed', v: String(unhandled) });
+    const rows = list.slice(0, 6).map((x, i) => {
+      const id = String(x.id ?? x.programmeId ?? x.address ?? x.contract ?? i);
+      const short = id.length > 18 ? id.slice(0, 8) + '…' + id.slice(-6) : id;
+      const ph = x.phase ?? x.state ?? x.status;
+      return { name: x.name || 'Programme ' + short, id: short, phase: ph != null ? String(ph) : 'Phase read on-chain in app', href: 'Milepost App.dc.html#/programme/' + encodeURIComponent(id) };
+    });
+    return { stats, rows, stale: t == null || ago > Component.STALE_AFTER_MS, age: t ? fmt(ago) : 'at an unknown time' };
+  }
+
+  renderVals() {
+    const S = this.state;
+    const theme = S.theme ?? this.props.theme ?? 'light';
+    const lens = 'everyday';
+    const web3 = false;
+    const cur$ = (n) => n.toLocaleString() + ' USDC';
+    const B = Component.FIXTURE_PATH_BUDGET, unit = B / 20;
+    const v = web3
+      ? { account: 'wallet connection', budget: cur$(B), square: cur$(unit) }
+      : { account: 'sign-in', budget: cur$(B), square: cur$(unit) };
+
+    const H = Component.FIXTURE_HERO_AWARD, rel = S.released, n = H.tranches.length;
+    const heroTranches = H.tranches.map((a, i) => ({
+      n: i + 1, amount: cur$(a),
+      state: i < rel ? 'Released' : i === rel ? 'Next: needs proof' : 'Locked',
+      bg: i < rel ? 'var(--accent)' : i === rel ? 'var(--accent-soft)' : 'var(--surface-raised)',
+      fg: i < rel ? 'var(--accent-contrast)' : 'var(--text)',
+    }));
+    const heroMsg = rel === 0 ? 'Nothing moves until the verifier confirms the condition. Press the button to play the verifier.'
+      : rel < n ? `Tranche ${rel} released. That proof is now spent — it can't unlock a second tranche.`
+      : 'All three tranches released, each by its own proof. The recipient\'s standing now records it.';
+
+    const P = [
+      { name: 'Contribute', moves: true, plain: 'Funders put money into a programme.', detail: 'The budget is contributions less the protocol fee.', tech: 'program.contribute(from, amount)', sq: { pool: 20 } },
+      { name: 'Apply', plain: 'Applicants ask for what they actually need.', detail: 'One person needs 200 for exam fees, another 5,000 for tuition. Equal splits are not funding.', tech: 'program.apply(applicant, requested)', sq: { pool: 20 } },
+      { name: 'Review', plain: 'Each reviewer approves an amount, up to what was asked.', detail: 'A reviewer cannot approve more than the request.', tech: 'program.review(reviewer, applicant, amount) · ExceedsRequested (11)', sq: { pool: 20 } },
+      { name: 'Finalize', plain: 'The award is the middle vote.', detail: 'The median, so neither one cautious reviewer nor one generous outlier decides. The award is fixed; nothing is transferred yet.', tech: 'program.finalize(applicant) · median · quorum ≤ MAX_QUORUM (16)', sq: { locked: 14, pool: 6 } },
+      { name: 'Attest', plain: 'A trusted verifier confirms the condition was met.', detail: 'A signed claim about the recipient, under a schema the programme chose.', tech: 'attest.attest(attester, schema, subject, data)', sq: { locked: 14, pool: 6 }, ring: 5 },
+      { name: 'Release', moves: true, plain: 'One confirmation unlocks one tranche.', detail: 'This is the milepost. A proof can be used once; the rest stays locked.', tech: 'program.release(recipient, attestation) · AttestationAlreadyUsed (22)', sq: { released: 5, locked: 9, pool: 6 } },
+      { name: 'Spend', moves: true, plain: 'The money reaches a verified payee.', detail: 'Paid directly, chosen by the recipient from escrow, or spent from their wallet under a policy. Unawarded budget is refunded to funders once the window closes.', tech: 'Direct · Allocated · Restricted · refund() · sweep()', sq: { released: 5, locked: 9, refund: 6 } },
+    ];
+    const st = S.step, c = P[st];
+    const steps = P.map((p, i) => ({ n: i + 1, name: p.name, moves: !!p.moves, on: i === st,
+      bg: i === st ? 'var(--text)' : 'var(--surface)', fg: i === st ? 'var(--bg)' : 'var(--text)', dot: 'var(--accent)',
+      pick: () => this.setState({ step: i }) }));
+    const order = [['released', 'var(--accent)'], ['locked', 'var(--locked)'], ['pool', 'var(--accent-soft)'], ['refund', 'var(--refund)']];
+    const squares = [];
+    order.forEach(([k, col]) => { for (let j = 0; j < (c.sq[k] || 0); j++) squares.push({ bg: col, ring: 'none' }); });
+    if (c.ring) squares[c.ring].ring = '0 0 0 3px var(--bg), 0 0 0 5px var(--accent)';
+    const legendDef = [['pool', 'var(--accent-soft)', 'Budget, not yet awarded'], ['locked', 'var(--locked)', 'Awarded, locked until a milepost'], ['released', 'var(--accent)', 'Released to the recipient'], ['refund', 'var(--refund)', 'Refundable to funders']];
+    const legend = legendDef.map(([k, bg, label]) => ({ bg, label, amt: cur$((c.sq[k] || 0) * unit), op: c.sq[k] ? 1 : 0.4 }));
+
+    const roleDefs = [
+      { role: 'Funder', want: 'I want to fund', does: 'Commit money to a programme', body: 'Contribute, follow every release, and get unawarded funds back in proportion.', links: [['Funder dashboard', '/funders'], ['Browse programmes', '/directory']] },
+      { role: 'Recipient', want: 'I need funding', does: 'Apply, then receive in tranches', body: 'Request what you need, track each tranche, and carry your standing to the next programme.', links: [['Recipient dashboard', '/recipients'], ['Standing', '/recipients/standing'], ['Spend policy', '/policy']] },
+      { role: 'Verifier', want: 'I confirm conditions', does: 'Attest that a condition was met', body: 'Each attestation you sign unlocks exactly one tranche for one recipient.', links: [['Verifier dashboard', '/verifiers'], ['Look up attestations', '/attestations']] },
+      { role: 'Admin', want: 'I run programmes', does: 'Deploy and settle programmes', body: 'Configure schemas and programmes through the registry, and finalize awards.', links: [['Registry admin', '/admin'], ['Finalize awards', '/finalize'], ['Register schema', '/schemas/register']] },
+    ];
+    const roles = roleDefs.map(r => ({ ...r, href: 'Milepost App.dc.html#' + r.links[0][1], links: r.links.map(([label, route]) => ({ label, href: 'Milepost App.dc.html#' + route })) }));
+
+    const pages = [['Programme directory', '/directory'], ['Programme', '/programme'], ['Funders', '/funders'], ['Recipients', '/recipients'], ['Verifiers', '/verifiers'], ['Finalize awards', '/finalize'], ['Spend policy', '/policy'], ['Admin', '/admin'], ['Attestation lookup', '/attestations']];
+
+    const iv = this.idxView();
+    const lensOpts = [['everyday', 'Everyday'], ['web3', 'Web3']].map(([k, label]) => ({ label, on: lens === k, bg: lens === k ? 'var(--text)' : 'transparent', fg: lens === k ? 'var(--bg)' : 'var(--text-muted)', pick: () => this.setState({ lens: k }) }));
+
+    return {
+      theme, isWeb3: web3, v, lensOpts,
+      themeIcon: theme === 'dark' ? '☀' : '☾', themeLabel: theme === 'dark' ? 'Switch to light theme' : 'Switch to dark theme',
+      toggleTheme: () => this.setState({ theme: theme === 'dark' ? 'light' : 'dark' }),
+      menuOpen: S.menu, toggleMenu: () => this.setState({ menu: !S.menu }), closeMenu: () => this.setState({ menu: false }),
+      anchors: [['How it works', '#how'], ['Modes', '#modes'], ['Roles', '#roles'], ['Developers', '#developers']].map(([label, href]) => ({ label, href })),
+      appPages: pages.map(([label, route]) => ({ label, route, href: 'Milepost App.dc.html#' + route })),
+      heroTranches, heroMsg, heroCondition: H.condition, heroVerifier: H.verifier,
+      heroBtn: rel < n ? `Verifier confirms · release tranche ${rel + 1}` : 'Start over',
+      heroAct: () => this.setState({ released: rel < n ? rel + 1 : 0 }),
+      roles,
+      questions: [{ n: '01', q: 'Did the money reach the person?' }, { n: '02', q: 'Could they spend it on the thing it was for?' }, { n: '03', q: 'Can anyone prove it afterwards?' }],
+      steps, squares, legend,
+      cur: { n: st + 1, name: c.name, plain: c.plain, detail: c.detail, tech: c.tech,
+        badge: c.moves ? 'Money moves' : 'No money moves', badgeBg: c.moves ? 'var(--accent)' : 'var(--surface-raised)', badgeFg: c.moves ? 'var(--accent-contrast)' : 'var(--text-muted)' },
+      atFirst: st === 0, nextLabel: st < 6 ? 'Next step →' : 'Start again',
+      prevStep: () => this.setState({ step: Math.max(0, st - 1) }), nextStep: () => this.setState({ step: st < 6 ? st + 1 : 0 }),
+      stellar: [
+        { t: 'Cash out locally', d: 'Anchors turn stablecoins into local money through bank and mobile-money off-ramps. Without them, the rest is theatre.', tech: 'SEP-24 · SEP-31' },
+        { t: 'No gas to buy', d: 'Transaction fees are sponsored, so recipients never need to hold XLM.', tech: 'Fee-bump / sponsored transactions' },
+        { t: 'Sign in with a passkey', d: 'Face ID or a fingerprint instead of a seed phrase.', tech: 'Passkey smart wallets (secp256r1)' },
+        { t: 'Spending rules in the wallet', d: 'A policy can limit grant money to one asset, verified payees and a cap.', tech: 'policy_spend signer' },
+      ],
+      modes: [
+        { name: 'Direct', where: 'Straight to a verified payee chosen at award time. The recipient never holds it.', who: 'Set at award time', trade: 'Accountable, but paternalistic.', relies: 'The contract', bg: 'var(--surface)', ring: 'none' },
+        { name: 'Allocated', strongest: true, where: 'Held in escrow. The recipient picks which verified payee receives it, and when.', who: 'The recipient, among verified payees', trade: 'Depends on nothing outside the contract.', relies: 'The contract', bg: 'var(--surface)', ring: 'inset 0 0 0 2px var(--success)' },
+        { name: 'Restricted', where: 'The recipient\'s own wallet, with a policy signer limiting asset, payees and cap.', who: 'The recipient, among verified payees', trade: 'Their key, their choice — but only as strong as the wallet setup.', relies: 'The contract and correct wallet configuration', bg: 'var(--surface)', ring: 'none' },
+      ],
+      verticals: [
+        { v: 'Education', who: 'School registrar', cond: 'Enrolment confirmed for the term', paid: 'The school' },
+        { v: 'Health worker stipends', who: 'Clinic supervisor', cond: 'Shifts worked this month', paid: 'The health worker' },
+        { v: 'Agricultural inputs', who: 'Extension officer', cond: 'Plot prepared for planting', paid: 'Seed and fertiliser supplier' },
+        { v: 'Vocational training', who: 'Training provider', cond: 'Module completed', paid: 'Provider, then trainee' },
+        { v: 'Humanitarian cash', who: 'Field partner', cond: 'Household registration checked', paid: 'The household, via an anchor' },
+        { v: 'SME microgrants', who: 'Programme accountant', cond: 'Milestone invoice approved', paid: 'The supplier on the invoice' },
+      ],
+      guarantees: [
+        { t: 'The budget is never exceeded', d: 'Awards that would overspend are rejected by the contract.' },
+        { t: 'Unused money goes back', d: 'Unawarded budget is refunded to contributors in proportion once the release window closes, then swept after a grace period.' },
+        { t: 'Standing travels with the recipient', d: 'A non-transferable record of what someone received and delivered, across every programme, that the next funder can underwrite against.' },
+      ],
+      limits: [
+        { t: 'Anyone can finalize, so order matters', d: 'Finalize is permissionless so no one can strand an applicant by not pressing a button. When a programme is oversubscribed, whoever finalizes first decides who is funded. The budget is protected; ordering fairness is not.' },
+        { t: 'Published lists are advisory', d: 'The index is rebuilt from events every few hours. Every entry is re-checked on-chain before it is acted on.' },
+      ],
+      idxLoading: S.idx.status === 'loading', idxError: S.idx.status === 'error', idxOk: S.idx.status === 'ok', idxErrorMsg: S.idx.msg || '',
+      idxStats: iv.stats, idxRows: iv.rows, hasIdxRows: iv.rows.length > 0, idxStale: iv.stale, idxAge: iv.age,
+      reloadIndex: () => this.loadIndex(),
+      contracts: [
+        { n: 'registry', d: 'Deploys programmes and holds protocol config. The trust chain starts here.' },
+        { n: 'program', d: 'One funding round: contributions, applications, review, awards, release, refunds.' },
+        { n: 'attest', d: 'General-purpose, schema-based attestations. Knows nothing else about the protocol.' },
+        { n: 'record', d: 'Portable, non-transferable standing. Counts and totals, never a list.' },
+        { n: 'policy_spend', d: 'Policy signer for smart wallets: one asset, verified payees, a cap.' },
+      ],
+      docs: [['README', 'README.md'], ['Contributing', 'CONTRIBUTING.md'], ['Glossary', 'docs/glossary.md'], ['End-to-end tutorial', 'docs/end-to-end-tutorial.md']].map(([label, f]) => ({ label, href: 'https://github.com/milepost-labs/milepost/blob/main/' + f })),
+      copyLabel: S.copied ? 'Copied' : 'Copy',
+      copyInstall: () => { try { navigator.clipboard.writeText('npm i @milepost/program @milepost/record'); } catch (e) {} this.setState({ copied: true }); setTimeout(() => this.setState({ copied: false }), 1500); },
+    };
+  }
+}
+</script>
+</body>
+</html>

@@ -1,0 +1,1451 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Libre+Franklin:wght@400;500;600;700;800&family=IBM+Plex+Mono:wght@400;500;600&display=swap">
+<style>
+:root,[data-theme="light"]{--bg:#f6f5f1;--surface:#ffffff;--surface-raised:#eceae4;--text:#16191e;--text-muted:#565c66;--accent:#4f55dc;--accent-strong:#3a40c4;--accent-contrast:#ffffff;--accent-soft:#e6e7fc;--locked:#b4b8bf;--refund:#cf5a41;--refund-soft:#fbe6e0;--success:#23855a;--success-soft:#dcf1e6;--warning:#9a6a00;--warning-soft:#fbf0d4}
+[data-theme="dark"]{--bg:#16191e;--surface:#1f242b;--surface-raised:#282e37;--text:#edf0f3;--text-muted:#a4aab4;--accent:#7c82f7;--accent-strong:#9ba1ff;--accent-contrast:#0d0f13;--accent-soft:rgba(124,130,247,.16);--locked:#4b525c;--refund:#f0a08b;--refund-soft:rgba(240,160,139,.14);--success:#6fd3a2;--success-soft:rgba(111,211,162,.14);--warning:#f2c661;--warning-soft:rgba(242,198,97,.14)}
+body{margin:0}a{color:var(--accent);text-decoration:none}a:hover{color:var(--accent-strong);text-decoration:underline}
+button,input,select{font-family:inherit}input::placeholder{color:var(--text-muted)}
+:focus-visible{outline:2px solid var(--accent);outline-offset:3px;border-radius:6px}
+@keyframes mp-pulse{0%,100%{opacity:.25}50%{opacity:1}}
+@media (prefers-reduced-motion: reduce){*{transition:none!important;animation:none!important}}
+</style>
+</helmet>
+
+<div data-theme="{{ theme }}" style="background:var(--bg);color:var(--text);font-family:'Libre Franklin',system-ui,sans-serif;min-height:100vh">
+
+<header style="position:sticky;top:0;z-index:20;background:var(--bg);box-shadow:0 1px 0 var(--surface-raised)">
+<nav aria-label="App" style="max-width:1200px;margin:0 auto;padding:12px 24px;display:flex;align-items:center;gap:8px 20px;flex-wrap:wrap">
+<a href="Milepost Home.dc.html" style="display:flex;align-items:center;min-height:44px;gap:10px;color:var(--text);font-weight:800;font-size:18px;text-decoration:none"><span aria-hidden="true" style="display:flex;gap:3px"><span style="width:9px;height:9px;border-radius:2px;background:var(--accent)"></span><span style="width:9px;height:9px;border-radius:2px;background:var(--accent)"></span><span style="width:9px;height:9px;border-radius:2px;background:var(--locked)"></span></span>Milepost</a>
+<div style="display:flex;gap:2px;flex-wrap:nowrap;overflow-x:auto;max-width:100%;scrollbar-width:none">
+<sc-for list="{{ nav }}" as="n" hint-placeholder-count="5">
+<a href="{{ n.href }}" aria-current="{{ n.current }}" style="padding:8px 12px;border-radius:999px;font-size:14px;font-weight:600;text-decoration:none;white-space:nowrap;background:{{ n.bg }};color:{{ n.fg }};min-height:44px;box-sizing:border-box;display:inline-flex;align-items:center;justify-content:center">{{ n.label }}</a>
+</sc-for>
+</div>
+<div style="margin-left:auto;display:flex;align-items:center;gap:10px">
+<span style="display:flex;align-items:center;gap:6px;font-size:13px;color:var(--text-muted)"><span aria-hidden="true" style="width:7px;height:7px;border-radius:999px;background:var(--success)"></span>Testnet</span>
+<button type="button" onClick="{{ toggleTheme }}" aria-label="{{ themeLabel }}" style="cursor:pointer;border:0;background:var(--surface);color:var(--text);border-radius:999px;width:44px;height:44px;font-size:16px;min-height:44px;box-sizing:border-box;display:inline-flex;align-items:center;justify-content:center">{{ themeIcon }}</button>
+<div style="position:relative">
+<button type="button" onClick="{{ headerAcct }}" aria-haspopup="true" aria-expanded="{{ acctMenu }}" style="cursor:pointer;border:0;border-radius:999px;padding:10px 16px;font-size:14px;font-weight:700;background:{{ signBg }};color:{{ signFg }};white-space:nowrap;min-height:44px;box-sizing:border-box;display:inline-flex;align-items:center;justify-content:center">{{ signLabel }}</button>
+<sc-if value="{{ acctMenu }}" hint-placeholder-val="{{ false }}">
+<div role="menu" style="position:absolute;right:0;top:48px;z-index:40;background:var(--surface);border-radius:14px;padding:8px;min-width:240px;box-shadow:0 12px 32px rgba(0,0,0,.2);display:flex;flex-direction:column">
+<div style="padding:10px 12px;display:flex;flex-direction:column;gap:2px"><span style="font-family:'IBM Plex Mono',monospace;font-size:13px;font-weight:600">{{ acctAddr }}</span><span style="font-size:12px;color:var(--text-muted)">Signed in with {{ acctMethod }} · Testnet</span></div>
+<a role="menuitem" href="#/funders" style="padding:10px 12px;border-radius:9px;color:var(--text);font-size:14px;font-weight:600;text-decoration:none;min-height:44px;box-sizing:border-box;display:inline-flex;align-items:center;justify-content:center" style-hover="background:var(--surface-raised)">My funding</a>
+<a role="menuitem" href="#/recipients/award-progress" style="padding:10px 12px;border-radius:9px;color:var(--text);font-size:14px;font-weight:600;text-decoration:none;min-height:44px;box-sizing:border-box;display:inline-flex;align-items:center;justify-content:center" style-hover="background:var(--surface-raised)">My awards</a>
+<a role="menuitem" href="#/policy" style="padding:10px 12px;border-radius:9px;color:var(--text);font-size:14px;font-weight:600;text-decoration:none;min-height:44px;box-sizing:border-box;display:inline-flex;align-items:center;justify-content:center" style-hover="background:var(--surface-raised)">Spend policy</a>
+<button type="button" role="menuitem" onClick="{{ signOut }}" style="cursor:pointer;border:0;background:transparent;text-align:left;padding:10px 12px;border-radius:9px;color:var(--refund);font-size:14px;font-weight:700;min-height:44px;box-sizing:border-box;display:inline-flex;align-items:center;justify-content:center">Sign out</button>
+</div>
+</sc-if>
+</div>
+</div>
+</nav>
+</header>
+
+<main style="max-width:1200px;margin:0 auto;padding:32px 24px 80px">
+
+<sc-if value="{{ isDirectory }}" hint-placeholder-val="{{ true }}">
+<section aria-labelledby="h-dir" style="display:flex;flex-direction:column;gap:24px">
+<div style="display:flex;align-items:flex-end;gap:16px 24px;flex-wrap:wrap">
+<div style="display:flex;flex-direction:column;gap:8px;flex:1;min-width:260px">
+<h1 id="h-dir" style="margin:0;font-size:clamp(30px,4vw,42px);letter-spacing:-.03em;font-weight:800">Programmes</h1>
+<p style="margin:0;font-size:16px;line-height:1.5;color:var(--text-muted);max-width:60ch">Fund one, apply to one, or follow where the money went. No sign-in needed to browse.</p>
+</div>
+<label style="display:flex;flex-direction:column;gap:6px;font-size:13px;font-weight:600;color:var(--text-muted);width:min(100%,320px)">Search
+<input type="search" value="{{ query }}" onInput="{{ onQuery }}" placeholder="Programme name or id" style="border:0;border-radius:12px;background:var(--surface);color:var(--text);padding:12px 14px;font-size:15px;min-height:44px;box-sizing:border-box"></label>
+</div>
+
+<div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">
+<div role="group" aria-label="Filter by phase" style="display:flex;gap:6px;flex-wrap:nowrap;overflow-x:auto;max-width:100%;scrollbar-width:none">
+<sc-for list="{{ filters }}" as="f" hint-placeholder-count="5">
+<button type="button" onClick="{{ f.pick }}" aria-pressed="{{ f.on }}" style="cursor:pointer;border:0;border-radius:999px;padding:9px 14px;min-height:44px;font-size:14px;font-weight:600;display:flex;align-items:center;gap:8px;background:{{ f.bg }};color:{{ f.fg }}">{{ f.label }}<span style="font-family:'IBM Plex Mono',monospace;font-size:12px;opacity:.7">{{ f.count }}</span></button>
+</sc-for>
+</div>
+<span style="margin-left:auto;font-size:13px;color:var(--text-muted)">{{ indexLine }}</span>
+</div>
+
+<sc-if value="{{ idxStale }}" hint-placeholder-val="{{ false }}"><div role="status" style="background:var(--warning-soft);color:var(--warning);border-radius:14px;padding:14px 18px;font-size:14px;font-weight:600">The public index was last updated {{ idxAge }}. New programmes may be missing. Anything you open is re-read on-chain.</div></sc-if>
+<sc-if value="{{ idxError }}" hint-placeholder-val="{{ false }}"><div role="alert" style="background:var(--refund-soft);border-radius:14px;padding:14px 18px;display:flex;align-items:center;gap:12px;flex-wrap:wrap"><span style="font-size:14px;font-weight:700;color:var(--refund)">Couldn't load the public index.</span><span style="font-size:14px;color:var(--text-muted)">{{ idxErrorMsg }}</span><button type="button" onClick="{{ reload }}" style="margin-left:auto;cursor:pointer;border:0;border-radius:999px;padding:8px 14px;font-size:13px;font-weight:700;background:var(--surface);color:var(--text);min-height:44px;box-sizing:border-box;display:inline-flex;align-items:center;justify-content:center">Try again</button></div></sc-if>
+
+<div aria-live="polite" aria-busy="{{ idxLoading }}">
+<sc-if value="{{ idxLoading }}" hint-placeholder-val="{{ false }}">
+<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(min(100%,340px),1fr));gap:14px"><sc-for list="{{ skeletons }}" as="k" hint-placeholder-count="3"><div style="background:var(--surface);border-radius:20px;height:230px;opacity:.6"></div></sc-for></div>
+</sc-if>
+<sc-if value="{{ showEmpty }}" hint-placeholder-val="{{ false }}">
+<div style="background:var(--surface);border-radius:20px;padding:40px 28px;display:flex;flex-direction:column;gap:8px;align-items:flex-start"><span style="font-size:18px;font-weight:700">{{ emptyTitle }}</span><span style="font-size:15px;color:var(--text-muted)">{{ emptyBody }}</span><button type="button" onClick="{{ clearFilters }}" style="margin-top:6px;cursor:pointer;border:0;border-radius:999px;padding:9px 16px;font-size:14px;font-weight:700;background:var(--surface-raised);color:var(--text);min-height:44px;box-sizing:border-box;display:inline-flex;align-items:center;justify-content:center">Clear filters</button></div>
+</sc-if>
+<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(min(100%,340px),1fr));gap:14px">
+<sc-for list="{{ cards }}" as="c" hint-placeholder-count="0">
+<a href="{{ c.href }}" style="background:var(--surface);border-radius:20px;padding:22px;display:flex;flex-direction:column;gap:16px;color:var(--text);text-decoration:none;transition:background .15s" style-hover="background:var(--accent-soft);text-decoration:none">
+<div style="display:flex;justify-content:space-between;align-items:flex-start;gap:12px">
+<span style="display:flex;flex-direction:column;gap:4px;min-width:0"><span style="font-size:18px;font-weight:800;letter-spacing:-.015em;line-height:1.25">{{ c.name }}</span><span style="font-family:'IBM Plex Mono',monospace;font-size:12px;color:var(--text-muted)">{{ c.short }}</span></span>
+<span style="flex:none;font-size:12px;font-weight:700;border-radius:999px;padding:5px 10px;background:{{ c.phaseBg }};color:{{ c.phaseFg }}">{{ c.phase }}</span>
+</div>
+<span style="font-size:14px;line-height:1.45;color:var(--text-muted)">{{ c.status }}</span>
+<div aria-hidden="true" style="display:grid;grid-template-columns:repeat(20,1fr);gap:3px"><sc-for list="{{ c.squares }}" as="q"><span style="aspect-ratio:1;border-radius:2px;background:{{ q }}"></span></sc-for></div>
+<div style="display:grid;grid-template-columns:repeat(3,1fr);gap:8px">
+<sc-for list="{{ c.figures }}" as="g"><span style="display:flex;flex-direction:column;gap:2px"><span style="font-size:12px;color:var(--text-muted)">{{ g.k }}</span><span style="font-family:'IBM Plex Mono',monospace;font-size:14px;font-weight:600">{{ g.v }}</span></span></sc-for>
+</div>
+<div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;font-size:12px;color:var(--text-muted)"><span style="border-radius:999px;padding:3px 9px;background:var(--surface-raised);font-weight:600">{{ c.mode }}</span><sc-if value="{{ c.sample }}" hint-placeholder-val="{{ false }}"><span style="border-radius:999px;padding:3px 9px;border:1px dashed var(--locked)">{{ c.sampleTag }}</span></sc-if><span style="margin-left:auto;font-weight:700;color:var(--accent-strong)">{{ c.cta }} →</span></div>
+</a>
+</sc-for>
+</div>
+</div>
+<p style="margin:0;font-size:13px;line-height:1.5;color:var(--text-muted)">This list comes from the public index, which is advisory. Phase and amounts shown here are read from each programme contract.</p>
+</section>
+</sc-if>
+
+<sc-if value="{{ isProgramme }}" hint-placeholder-val="{{ false }}">
+<section style="display:flex;flex-direction:column;gap:20px">
+<a href="#/directory" style="align-self:flex-start;font-size:14px;font-weight:600;display:inline-flex;align-items:center;min-height:44px">← All programmes</a>
+<sc-if value="{{ noProgramme }}" hint-placeholder-val="{{ false }}">
+<div style="background:var(--surface);border-radius:20px;padding:40px 28px;display:flex;flex-direction:column;gap:8px"><span style="font-size:20px;font-weight:800">Programme not found</span><span style="font-size:15px;color:var(--text-muted)">No programme with this id is in the index or on-chain. Check the link, or browse all programmes.</span></div>
+</sc-if>
+<sc-if value="{{ hasProgramme }}" hint-placeholder-val="{{ false }}">
+<div style="display:flex;flex-direction:column;gap:10px">
+<div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap"><span style="font-size:12px;font-weight:700;border-radius:999px;padding:5px 10px;background:{{ p.phaseBg }};color:{{ p.phaseFg }}">{{ p.phase }}</span><span style="font-size:12px;font-weight:600;border-radius:999px;padding:5px 10px;background:var(--surface);color:var(--text-muted)">{{ p.mode }} mode</span><sc-if value="{{ p.sample }}" hint-placeholder-val="{{ false }}"><span style="font-size:12px;border-radius:999px;padding:4px 9px;border:1px dashed var(--locked);color:var(--text-muted)">{{ p.sampleTag }}</span></sc-if></div>
+<h1 style="margin:0;font-size:clamp(28px,4.5vw,46px);line-height:1.08;letter-spacing:-.03em;font-weight:800;text-wrap:balance">{{ p.name }}</h1>
+<div style="display:flex;align-items:center;gap:8px 18px;flex-wrap:wrap;font-size:13px;color:var(--text-muted)">
+<button type="button" onClick="{{ copyId }}" aria-label="Copy programme id" style="cursor:pointer;border:0;border-radius:8px;padding:5px 10px;background:var(--surface);color:var(--text);font-family:'IBM Plex Mono',monospace;font-size:12px;min-height:44px;box-sizing:border-box;display:inline-flex;align-items:center;justify-content:center">{{ p.short }} · {{ copyLabel }}</button>
+<span>Created by <span style="font-family:'IBM Plex Mono',monospace">{{ p.creator }}</span></span>
+<span>Ledger {{ p.createdLedger }}</span>
+<span style="display:flex;align-items:center;gap:6px"><span aria-hidden="true" style="width:7px;height:7px;border-radius:999px;background:var(--warning)"></span>{{ p.chainLine }}</span>
+</div>
+</div>
+
+<ol aria-label="Programme phases" style="list-style:none;margin:0;padding:0;display:grid;grid-template-columns:repeat(3,1fr);gap:6px">
+<sc-for list="{{ p.phases }}" as="ph" hint-placeholder-count="3">
+<li aria-current="{{ ph.current }}" style="border-radius:14px;padding:14px 16px;background:{{ ph.bg }};color:{{ ph.fg }};display:flex;flex-direction:column;gap:4px"><span style="font-size:15px;font-weight:700">{{ ph.label }}</span><span style="font-size:12px;opacity:.8">{{ ph.note }}</span></li>
+</sc-for>
+</ol>
+<sc-if value="{{ p.cancelled }}" hint-placeholder-val="{{ false }}"><div role="status" style="background:var(--refund-soft);border-radius:14px;padding:14px 18px;font-size:14px;line-height:1.5"><b style="color:var(--refund)">This programme was cancelled.</b> No awards will be made. Contributors can claim their contributions back in full.</div></sc-if>
+
+<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,360px),1fr));gap:20px;align-items:start">
+
+<div style="display:flex;flex-direction:column;gap:20px;min-width:0">
+<div style="background:var(--surface);border-radius:20px;padding:24px;display:flex;flex-direction:column;gap:18px">
+<div style="display:flex;justify-content:space-between;align-items:baseline;gap:12px;flex-wrap:wrap"><h2 style="margin:0;font-size:18px;font-weight:800">Where the money is</h2><span style="font-size:13px;color:var(--text-muted)">Budget {{ p.budget }}</span></div>
+<div aria-hidden="true" style="display:grid;grid-template-columns:repeat(20,1fr);gap:4px"><sc-for list="{{ p.squares }}" as="q"><span style="aspect-ratio:1;border-radius:3px;background:{{ q }}"></span></sc-for></div>
+<ul style="list-style:none;margin:0;padding:0;display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,190px),1fr));gap:10px 20px">
+<sc-for list="{{ p.legend }}" as="l" hint-placeholder-count="4"><li style="display:flex;align-items:center;gap:10px;font-size:14px"><span aria-hidden="true" style="width:12px;height:12px;border-radius:3px;background:{{ l.bg }};flex:none"></span><span style="flex:1;color:var(--text-muted)">{{ l.label }}</span><span style="font-family:'IBM Plex Mono',monospace;font-weight:600">{{ l.v }}</span></li></sc-for>
+</ul>
+<div style="display:flex;flex-wrap:wrap;gap:6px 20px;font-size:13px;color:var(--text-muted);padding-top:4px"><span>Contributed <b style="color:var(--text);font-family:'IBM Plex Mono',monospace;font-weight:600">{{ p.contributed }}</b></span><span>Protocol fee <b style="color:var(--text);font-family:'IBM Plex Mono',monospace;font-weight:600">{{ p.fee }}</b></span><span>Quorum <b style="color:var(--text)">{{ p.quorum }} reviewers</b></span></div>
+</div>
+
+<div style="background:var(--surface);border-radius:20px;padding:8px;display:flex;flex-direction:column">
+<div role="tablist" aria-label="Programme details" style="display:flex;gap:4px;padding:4px;flex-wrap:wrap">
+<sc-for list="{{ tabs }}" as="t" hint-placeholder-count="3"><button type="button" role="tab" aria-selected="{{ t.on }}" onClick="{{ t.pick }}" style="cursor:pointer;border:0;border-radius:12px;padding:10px 14px;font-size:14px;font-weight:700;background:{{ t.bg }};color:{{ t.fg }};min-height:44px;box-sizing:border-box;display:inline-flex;align-items:center;justify-content:center">{{ t.label }}</button></sc-for>
+</div>
+<div role="tabpanel" style="padding:12px 16px 18px;display:flex;flex-direction:column;gap:10px">
+<sc-if value="{{ tabAwards }}" hint-placeholder-val="{{ true }}">
+<span style="font-size:13px;color:var(--text-muted)">{{ awardsNote }}</span>
+<sc-if value="{{ awardsLoading }}" hint-placeholder-val="{{ false }}"><span style="font-size:14px;color:var(--text-muted)">Reading awards…</span></sc-if>
+<sc-if value="{{ awardsEmpty }}" hint-placeholder-val="{{ false }}"><div style="background:var(--surface-raised);border-radius:14px;padding:18px;font-size:14px;line-height:1.5;color:var(--text-muted)">{{ awardsEmptyMsg }}</div></sc-if>
+<sc-for list="{{ awards }}" as="a" hint-placeholder-count="0">
+<div style="background:var(--bg);border-radius:14px;padding:14px 16px;display:grid;grid-template-columns:minmax(0,1fr) auto;gap:10px 16px;align-items:center">
+<span style="display:flex;flex-direction:column;gap:3px;min-width:0"><span style="font-family:'IBM Plex Mono',monospace;font-size:13px;font-weight:600">{{ a.who }}</span><span style="font-size:12px;color:var(--text-muted)">{{ a.sub }}</span></span>
+<span style="font-family:'IBM Plex Mono',monospace;font-size:15px;font-weight:600;text-align:right">{{ a.amount }}</span>
+<sc-if value="{{ a.hasTranches }}" hint-placeholder-val="{{ false }}"><div aria-label="{{ a.trancheLabel }}" style="grid-column:1/-1;display:flex;gap:4px"><sc-for list="{{ a.tranches }}" as="tr"><span style="flex:1;height:8px;border-radius:3px;background:{{ tr }}"></span></sc-for></div></sc-if>
+</div>
+</sc-for>
+</sc-if>
+<sc-if value="{{ tabVerifiers }}" hint-placeholder-val="{{ false }}">
+<span style="font-size:13px;color:var(--text-muted)">Verifiers whose attestations this programme accepts. Each attestation unlocks one tranche.</span>
+<sc-for list="{{ verifiers }}" as="vr" hint-placeholder-count="2"><div style="background:var(--bg);border-radius:14px;padding:14px 16px;display:flex;justify-content:space-between;gap:12px;flex-wrap:wrap"><span style="display:flex;flex-direction:column;gap:3px"><span style="font-size:15px;font-weight:700">{{ vr.label }}</span><span style="font-family:'IBM Plex Mono',monospace;font-size:12px;color:var(--text-muted)">{{ vr.address }}</span></span><span style="font-size:13px;color:var(--text-muted);align-self:center">Schema · {{ vr.schema }}</span></div></sc-for>
+</sc-if>
+<sc-if value="{{ tabTerms }}" hint-placeholder-val="{{ false }}">
+<sc-for list="{{ terms }}" as="tm" hint-placeholder-count="5"><div style="display:flex;justify-content:space-between;gap:16px;padding:10px 0;font-size:14px;flex-wrap:wrap"><span style="color:var(--text-muted)">{{ tm.k }}</span><span style="font-weight:600;text-align:right">{{ tm.v }}</span></div></sc-for>
+<div style="background:var(--bg);border-radius:14px;padding:14px 16px;font-size:14px;line-height:1.55"><b>{{ p.mode }} mode.</b> {{ modeNote }}</div>
+<a href="{{ keepHref }}" style="font-size:14px;font-weight:700;display:inline-flex;align-items:center;min-height:44px">Keep this programme's entries on the network →</a>
+</sc-if>
+</div>
+</div>
+</div>
+
+<aside aria-labelledby="h-act" style="background:var(--surface);border-radius:20px;padding:24px;display:flex;flex-direction:column;gap:14px;position:sticky;top:84px">
+<h2 id="h-act" style="margin:0;font-size:18px;font-weight:800">What you can do now</h2>
+<sc-if value="{{ signedOut }}" hint-placeholder-val="{{ true }}"><div style="background:var(--accent-soft);border-radius:14px;padding:14px 16px;font-size:14px;line-height:1.5;display:flex;flex-direction:column;gap:10px"><span>Sign in to act on this programme. Everything on this page stays readable without it.</span><button type="button" onClick="{{ toggleSignIn }}" style="align-self:flex-start;cursor:pointer;border:0;border-radius:999px;padding:9px 16px;font-size:14px;font-weight:700;background:var(--accent);color:var(--accent-contrast);min-height:44px;box-sizing:border-box;display:inline-flex;align-items:center;justify-content:center">Sign in</button></div></sc-if>
+<sc-for list="{{ actions }}" as="ac" hint-placeholder-count="5">
+<div style="border-radius:14px;padding:14px 16px;background:var(--bg);display:flex;flex-direction:column;gap:8px;opacity:{{ ac.op }}">
+<div style="display:flex;justify-content:space-between;align-items:center;gap:12px"><span style="display:flex;flex-direction:column;gap:2px"><span style="font-size:15px;font-weight:700">{{ ac.label }}</span><span style="font-size:12px;color:var(--text-muted)">{{ ac.who }}</span></span>
+<button type="button" onClick="{{ ac.go }}" disabled="{{ ac.disabled }}" aria-describedby="{{ ac.rid }}" style="cursor:pointer;border:0;border-radius:999px;padding:9px 14px;font-size:13px;font-weight:700;white-space:nowrap;background:{{ ac.bg }};color:{{ ac.fg }};min-height:44px;box-sizing:border-box;display:inline-flex;align-items:center;justify-content:center">{{ ac.btn }}</button></div>
+<span id="{{ ac.rid }}" style="font-size:13px;line-height:1.45;color:var(--text-muted)">{{ ac.reason }}</span>
+</div>
+</sc-for>
+<p aria-live="polite" style="margin:0;font-size:13px;color:var(--accent-strong);min-height:18px">{{ announce }}</p>
+</aside>
+</div>
+</sc-if>
+</section>
+</sc-if>
+
+<sc-if value="{{ isFunders }}" hint-placeholder-val="{{ false }}">
+<section aria-labelledby="h-fund" style="display:flex;flex-direction:column;gap:24px">
+<div style="display:flex;flex-direction:column;gap:8px">
+<h1 id="h-fund" style="margin:0;font-size:clamp(30px,4vw,42px);letter-spacing:-.03em;font-weight:800">Funding</h1>
+<p style="margin:0;font-size:16px;line-height:1.5;color:var(--text-muted);max-width:62ch">Put money into a programme and follow it. It only moves when a verifier confirms a condition, and whatever isn't awarded comes back to you.</p>
+</div>
+<a href="#/funders/propose" style="background:var(--surface);border-radius:18px;padding:18px 22px;display:flex;align-items:center;gap:12px 20px;flex-wrap:wrap;color:var(--text);text-decoration:none" style-hover="background:var(--accent-soft);text-decoration:none"><span style="flex:1;min-width:220px;display:flex;flex-direction:column;gap:3px"><span style="font-size:16px;font-weight:700">Want to fund something that isn't listed?</span><span style="font-size:14px;color:var(--text-muted)">Propose a programme. The admin reviews it and deploys it, then you contribute.</span></span><span style="font-size:14px;font-weight:700;color:var(--accent-strong)">Propose a programme →</span></a>
+
+<sc-if value="{{ signedOut }}" hint-placeholder-val="{{ true }}">
+<div style="background:var(--surface);border-radius:24px;padding:clamp(22px,4vw,36px);display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,300px),1fr));gap:28px 40px;align-items:center">
+<div style="display:flex;flex-direction:column;gap:14px">
+<h2 style="margin:0;font-size:24px;font-weight:800;letter-spacing:-.02em">Sign in to see your funding</h2>
+<p style="margin:0;font-size:15px;line-height:1.6;color:var(--text-muted)">Use a passkey (Face ID or fingerprint) or the Freighter extension. Network fees are covered, so you won't need XLM.</p>
+<div style="display:flex;gap:10px;flex-wrap:wrap"><button type="button" onClick="{{ toggleSignIn }}" style="cursor:pointer;border:0;border-radius:999px;padding:13px 22px;font-size:15px;font-weight:700;background:var(--accent);color:var(--accent-contrast);min-height:44px;box-sizing:border-box;display:inline-flex;align-items:center;justify-content:center">Sign in</button><a href="#/directory" style="border-radius:999px;padding:13px 22px;font-size:15px;font-weight:700;background:var(--surface-raised);color:var(--text);text-decoration:none;min-height:44px;box-sizing:border-box;display:inline-flex;align-items:center;justify-content:center">Browse programmes</a></div>
+</div>
+<ul style="list-style:none;margin:0;padding:0;display:flex;flex-direction:column;gap:8px">
+<li style="background:var(--bg);border-radius:14px;padding:14px 16px;display:flex;flex-direction:column;gap:3px"><span style="font-size:15px;font-weight:700">Every programme you've funded</span><span style="font-size:13px;color:var(--text-muted)">How much you put in, and where it sits now</span></li>
+<li style="background:var(--bg);border-radius:14px;padding:14px 16px;display:flex;flex-direction:column;gap:3px"><span style="font-size:15px;font-weight:700">Refunds you can claim</span><span style="font-size:13px;color:var(--text-muted)">Your share of anything that wasn't awarded</span></li>
+<li style="background:var(--bg);border-radius:14px;padding:14px 16px;display:flex;flex-direction:column;gap:3px"><span style="font-size:15px;font-weight:700">A way to contribute</span><span style="font-size:13px;color:var(--text-muted)">To any programme that is Open</span></li>
+</ul>
+</div>
+</sc-if>
+
+<sc-if value="{{ signedIn }}" hint-placeholder-val="{{ false }}">
+<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,200px),1fr));gap:12px">
+<div style="background:var(--surface);border-radius:18px;padding:20px;display:flex;flex-direction:column;gap:6px"><span style="font-size:13px;color:var(--text-muted)">You've contributed</span><span style="font-family:'IBM Plex Mono',monospace;font-size:24px;font-weight:600">{{ fTotalContrib }}</span></div>
+<div style="background:var(--surface);border-radius:18px;padding:20px;display:flex;flex-direction:column;gap:6px"><span style="font-size:13px;color:var(--text-muted)">Programmes</span><span style="font-family:'IBM Plex Mono',monospace;font-size:24px;font-weight:600">{{ fCount }}</span></div>
+<div style="background:var(--surface);border-radius:18px;padding:20px;display:flex;flex-direction:column;gap:6px"><span style="font-size:13px;color:var(--text-muted)">Refundable now</span><span style="font-family:'IBM Plex Mono',monospace;font-size:24px;font-weight:600;color:var(--refund)">{{ fRefundNow }}</span></div>
+</div>
+
+<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,380px),1fr));gap:20px;align-items:start">
+
+<div style="display:flex;flex-direction:column;gap:10px;min-width:0">
+<h2 style="margin:0 0 4px;font-size:18px;font-weight:800">Your contributions</h2>
+<sc-for list="{{ fContribs }}" as="c" hint-placeholder-count="3">
+<div style="background:var(--surface);border-radius:18px;padding:18px 20px;display:flex;flex-direction:column;gap:12px">
+<div style="display:flex;justify-content:space-between;align-items:flex-start;gap:12px"><a href="{{ c.href }}" style="font-size:16px;font-weight:700;color:var(--text);line-height:1.3;display:inline-flex;align-items:center;min-height:44px">{{ c.name }}</a><span style="flex:none;font-size:12px;font-weight:700;border-radius:999px;padding:4px 10px;background:{{ c.phaseBg }};color:{{ c.phaseFg }}">{{ c.phase }}</span></div>
+<div style="display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap"><span style="display:flex;flex-direction:column;gap:3px"><span style="font-family:'IBM Plex Mono',monospace;font-size:17px;font-weight:600">{{ c.amount }}</span><span style="font-size:13px;color:var(--text-muted);line-height:1.4">{{ c.note }}</span></span>
+<button type="button" onClick="{{ c.refund }}" disabled="{{ c.disabled }}" aria-disabled="{{ c.disabled }}" style="cursor:pointer;border:0;border-radius:999px;padding:9px 14px;font-size:13px;font-weight:700;background:{{ c.btnBg }};color:{{ c.btnFg }};min-height:44px;box-sizing:border-box;display:inline-flex;align-items:center;justify-content:center">{{ c.btn }}</button></div>
+</div>
+</sc-for>
+<span style="font-size:12px;color:var(--text-muted)">Sample contributions for the design phase.</span>
+</div>
+
+<div style="background:var(--surface);border-radius:20px;padding:24px;display:flex;flex-direction:column;gap:18px;position:sticky;top:84px">
+<div style="display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap"><h2 style="margin:0;font-size:18px;font-weight:800">Contribute</h2>
+<ol aria-label="Steps" style="list-style:none;margin:0;padding:0;display:flex;gap:4px"><sc-for list="{{ fStepper }}" as="s" hint-placeholder-count="3"><li style="font-size:12px;font-weight:700;border-radius:999px;padding:4px 10px;background:{{ s.bg }};color:{{ s.fg }}">{{ s.label }}</li></sc-for></ol></div>
+
+<sc-if value="{{ fAmount }}" hint-placeholder-val="{{ true }}">
+<fieldset style="border:0;margin:0;padding:0;display:flex;flex-direction:column;gap:8px"><legend style="font-size:13px;font-weight:700;color:var(--text-muted);padding:0;margin-bottom:8px">Programme · only Open programmes accept contributions</legend>
+<sc-for list="{{ fOpen }}" as="o" hint-placeholder-count="2"><button type="button" role="radio" aria-checked="{{ o.on }}" onClick="{{ o.pick }}" style="cursor:pointer;border:0;text-align:left;border-radius:12px;padding:12px 14px;font-size:15px;font-weight:600;background:{{ o.bg }};color:var(--text);box-shadow:{{ o.ring }}">{{ o.name }}</button></sc-for>
+<sc-if value="{{ fNoOpen }}" hint-placeholder-val="{{ false }}"><span style="font-size:14px;color:var(--text-muted)">No programme is Open right now.</span></sc-if>
+</fieldset>
+<div style="display:flex;flex-direction:column;gap:8px">
+<label for="fund-amt" style="font-size:13px;font-weight:700;color:var(--text-muted)">Amount</label>
+<div style="display:flex;align-items:center;gap:10px;background:var(--bg);border-radius:12px;padding:0 14px;box-shadow:{{ fAmtRing }}"><input id="fund-amt" inputmode="decimal" value="{{ fAmt }}" onInput="{{ fOnAmt }}" placeholder="0" aria-invalid="{{ fHasErr }}" aria-describedby="fund-amt-help" style="flex:1;min-width:0;border:0;background:transparent;color:var(--text);font-family:'IBM Plex Mono',monospace;font-size:22px;font-weight:600;padding:12px 0;min-height:44px"><span style="font-size:14px;font-weight:700;color:var(--text-muted)">USDC</span></div>
+<div style="display:flex;gap:6px;flex-wrap:wrap"><sc-for list="{{ fPresets }}" as="pr" hint-placeholder-count="3"><button type="button" onClick="{{ pr.pick }}" style="cursor:pointer;border:0;border-radius:999px;padding:7px 12px;font-size:13px;font-weight:600;background:var(--surface-raised);color:var(--text);font-family:'IBM Plex Mono',monospace;min-height:44px;box-sizing:border-box;display:inline-flex;align-items:center;justify-content:center">{{ pr.label }}</button></sc-for><span style="margin-left:auto;font-size:13px;color:var(--text-muted);align-self:center">Balance {{ fBalance }}</span></div>
+<span id="fund-amt-help" role="alert" style="font-size:13px;color:var(--refund);min-height:18px">{{ fAmtErr }}</span>
+</div>
+<div style="background:var(--bg);border-radius:14px;padding:14px 16px;display:flex;flex-direction:column;gap:8px;font-size:14px">
+<span style="display:flex;justify-content:space-between;gap:12px"><span style="color:var(--text-muted)">Protocol fee ({{ fFeePct }})</span><span style="font-family:'IBM Plex Mono',monospace">{{ fFee }}</span></span>
+<span style="display:flex;justify-content:space-between;gap:12px"><span style="color:var(--text-muted)">Added to the budget</span><span style="font-family:'IBM Plex Mono',monospace;font-weight:600">{{ fBudget }}</span></span>
+<span style="display:flex;justify-content:space-between;gap:12px"><span style="color:var(--text-muted)">Network fee</span><span>Covered for you</span></span>
+</div>
+<button type="button" onClick="{{ fContinue }}" disabled="{{ fDisabled }}" style="cursor:pointer;border:0;border-radius:999px;padding:14px 20px;font-size:15px;font-weight:700;background:{{ fContinueBg }};color:{{ fContinueFg }};min-height:44px;box-sizing:border-box;display:inline-flex;align-items:center;justify-content:center">Continue</button>
+</sc-if>
+
+<sc-if value="{{ fConfirm }}" hint-placeholder-val="{{ false }}">
+<div style="display:flex;flex-direction:column;gap:4px"><span style="font-size:13px;color:var(--text-muted)">You're contributing</span><span style="font-family:'IBM Plex Mono',monospace;font-size:30px;font-weight:600">{{ fTotal }}</span><span style="font-size:15px;font-weight:600">to {{ fProgName }}</span></div>
+<div style="background:var(--bg);border-radius:14px;padding:14px 16px;display:flex;flex-direction:column;gap:8px;font-size:14px">
+<span style="display:flex;justify-content:space-between;gap:12px"><span style="color:var(--text-muted)">Added to the budget</span><span style="font-family:'IBM Plex Mono',monospace;font-weight:600">{{ fBudget }}</span></span>
+<span style="display:flex;justify-content:space-between;gap:12px"><span style="color:var(--text-muted)">Protocol fee</span><span style="font-family:'IBM Plex Mono',monospace">{{ fFee }}</span></span>
+<span style="display:flex;justify-content:space-between;gap:12px"><span style="color:var(--text-muted)">If it isn't all awarded</span><span style="text-align:right">You get your share back</span></span>
+</div>
+<span style="display:flex;align-items:center;gap:8px;font-size:13px;color:var(--success)"><span aria-hidden="true">✓</span>Checked on-chain just now: the programme is Open.</span>
+<div style="display:flex;gap:10px"><button type="button" onClick="{{ fBack }}" style="cursor:pointer;border:0;border-radius:999px;padding:13px 18px;font-size:15px;font-weight:700;background:var(--surface-raised);color:var(--text);min-height:44px;box-sizing:border-box;display:inline-flex;align-items:center;justify-content:center">Back</button><button type="button" onClick="{{ fConfirmGo }}" style="flex:1;cursor:pointer;border:0;border-radius:999px;padding:13px 18px;font-size:15px;font-weight:700;background:var(--accent);color:var(--accent-contrast);min-height:44px;box-sizing:border-box;display:inline-flex;align-items:center;justify-content:center">Confirm and sign</button></div>
+</sc-if>
+
+<sc-if value="{{ fPending }}" hint-placeholder-val="{{ false }}">
+<div role="status" aria-live="polite" style="display:flex;flex-direction:column;gap:14px;align-items:flex-start;padding:10px 0">
+<div aria-hidden="true" style="display:flex;gap:5px">{{ pendingDots }}</div>
+<span style="font-size:18px;font-weight:700">Waiting for the network…</span>
+<span style="font-size:14px;line-height:1.5;color:var(--text-muted)">Usually a few seconds. You can leave this page; the contribution won't be lost.</span>
+</div>
+</sc-if>
+
+<sc-if value="{{ fError }}" hint-placeholder-val="{{ false }}">
+<div role="alert" style="background:var(--refund-soft);border-radius:14px;padding:16px 18px;display:flex;flex-direction:column;gap:6px"><span style="font-size:16px;font-weight:700;color:var(--refund)">Contribution didn't go through</span><span style="font-size:14px;line-height:1.5">{{ fErrMsg }}</span><span style="font-size:12px;color:var(--text-muted)">Nothing was transferred · {{ fErrCode }}</span></div>
+<div style="display:flex;gap:10px"><a href="{{ fProgHref }}" style="border-radius:999px;padding:13px 18px;font-size:15px;font-weight:700;background:var(--surface-raised);color:var(--text);text-decoration:none;min-height:44px;box-sizing:border-box;display:inline-flex;align-items:center;justify-content:center">View programme</a><button type="button" onClick="{{ fRetry }}" style="flex:1;cursor:pointer;border:0;border-radius:999px;padding:13px 18px;font-size:15px;font-weight:700;background:var(--accent);color:var(--accent-contrast);min-height:44px;box-sizing:border-box;display:inline-flex;align-items:center;justify-content:center">Try again</button></div>
+</sc-if>
+
+<sc-if value="{{ fDone }}" hint-placeholder-val="{{ false }}">
+<div style="display:flex;flex-direction:column;gap:4px"><span style="font-size:13px;font-weight:700;color:var(--success)">✓ Contribution confirmed</span><span style="font-family:'IBM Plex Mono',monospace;font-size:30px;font-weight:600">{{ fTotal }}</span><span style="font-size:15px;font-weight:600">to {{ fProgName }}</span></div>
+<div style="background:var(--bg);border-radius:14px;padding:14px 16px;display:flex;flex-direction:column;gap:8px;font-size:14px">
+<span style="display:flex;justify-content:space-between;gap:12px"><span style="color:var(--text-muted)">Transaction</span><span style="font-family:'IBM Plex Mono',monospace">{{ fTx }}</span></span>
+<span style="display:flex;justify-content:space-between;gap:12px"><span style="color:var(--text-muted)">Ledger</span><span style="font-family:'IBM Plex Mono',monospace">{{ fLedger }}</span></span>
+</div>
+<p style="margin:0;font-size:14px;line-height:1.55;color:var(--text-muted)">Next, applicants are reviewed and awards are set. Your money stays locked in the programme until a verifier confirms each milepost.</p>
+<div style="display:flex;gap:10px;flex-wrap:wrap"><a href="{{ fProgHref }}" style="border-radius:999px;padding:13px 18px;font-size:15px;font-weight:700;background:var(--accent);color:var(--accent-contrast);text-decoration:none;min-height:44px;box-sizing:border-box;display:inline-flex;align-items:center;justify-content:center">View programme</a><button type="button" onClick="{{ fReset }}" style="cursor:pointer;border:0;border-radius:999px;padding:13px 18px;font-size:15px;font-weight:700;background:var(--surface-raised);color:var(--text);min-height:44px;box-sizing:border-box;display:inline-flex;align-items:center;justify-content:center">Contribute again</button></div>
+</sc-if>
+</div>
+</div>
+<p aria-live="polite" style="margin:0;font-size:13px;color:var(--accent-strong);min-height:18px">{{ announce }}</p>
+</sc-if>
+</section>
+</sc-if>
+
+<sc-if value="{{ isRecipients }}" hint-placeholder-val="{{ false }}">
+<section aria-labelledby="h-rec" style="display:flex;flex-direction:column;gap:24px">
+<div style="display:flex;flex-direction:column;gap:8px">
+<h1 id="h-rec" style="margin:0;font-size:clamp(30px,4vw,42px);letter-spacing:-.03em;font-weight:800">Your funding</h1>
+<p style="margin:0;font-size:16px;line-height:1.5;color:var(--text-muted);max-width:62ch">Apply for what you need, see what's been released, and carry your record to the next programme.</p>
+</div>
+
+<sc-if value="{{ signedOut }}" hint-placeholder-val="{{ true }}">
+<div style="background:var(--surface);border-radius:24px;padding:clamp(22px,4vw,36px);display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,300px),1fr));gap:28px 40px;align-items:center">
+<div style="display:flex;flex-direction:column;gap:14px">
+<h2 style="margin:0;font-size:24px;font-weight:800;letter-spacing:-.02em">Sign in to see your awards</h2>
+<p style="margin:0;font-size:15px;line-height:1.6;color:var(--text-muted)">Use a passkey (Face ID or fingerprint) or the Freighter extension. No seed phrase, and you won't need XLM for fees.</p>
+<div style="display:flex;gap:10px;flex-wrap:wrap"><button type="button" onClick="{{ toggleSignIn }}" style="cursor:pointer;border:0;border-radius:999px;padding:13px 22px;font-size:15px;font-weight:700;background:var(--accent);color:var(--accent-contrast);min-height:44px;box-sizing:border-box;display:inline-flex;align-items:center;justify-content:center">Sign in</button><a href="#/directory" style="border-radius:999px;padding:13px 22px;font-size:15px;font-weight:700;background:var(--surface-raised);color:var(--text);text-decoration:none;min-height:44px;box-sizing:border-box;display:inline-flex;align-items:center;justify-content:center">Find a programme</a></div>
+</div>
+<ul style="list-style:none;margin:0;padding:0;display:flex;flex-direction:column;gap:8px">
+<li style="background:var(--bg);border-radius:14px;padding:14px 16px;display:flex;flex-direction:column;gap:3px"><span style="font-size:15px;font-weight:700">Each award and its tranches</span><span style="font-size:13px;color:var(--text-muted)">What's released, what's waiting on a verifier</span></li>
+<li style="background:var(--bg);border-radius:14px;padding:14px 16px;display:flex;flex-direction:column;gap:3px"><span style="font-size:15px;font-weight:700">Where your applications are</span><span style="font-size:13px;color:var(--text-muted)">Review votes and how the award is set</span></li>
+<li style="background:var(--bg);border-radius:14px;padding:14px 16px;display:flex;flex-direction:column;gap:3px"><span style="font-size:15px;font-weight:700">Your standing</span><span style="font-size:13px;color:var(--text-muted)">A record the next funder can rely on</span></li>
+</ul>
+</div>
+</sc-if>
+
+<sc-if value="{{ signedIn }}" hint-placeholder-val="{{ false }}">
+<nav aria-label="Recipient sections" style="display:flex;gap:6px;flex-wrap:wrap">
+<sc-for list="{{ rTabs }}" as="t" hint-placeholder-count="4"><a href="{{ t.href }}" aria-current="{{ t.current }}" style="border-radius:999px;padding:10px 16px;font-size:14px;font-weight:700;text-decoration:none;background:{{ t.bg }};color:{{ t.fg }};min-height:44px;box-sizing:border-box;display:inline-flex;align-items:center;justify-content:center">{{ t.label }}</a></sc-for>
+</nav>
+
+<sc-if value="{{ rAwardsTab }}" hint-placeholder-val="{{ true }}">
+<div style="display:flex;flex-direction:column;gap:16px">
+<sc-if value="{{ rNoAwards }}" hint-placeholder-val="{{ false }}"><div style="background:var(--surface);border-radius:20px;padding:28px;font-size:15px;color:var(--text-muted)">No awards yet. Once an application is finalized, it appears here.</div></sc-if>
+<sc-for list="{{ rAwards }}" as="a" hint-placeholder-count="2">
+<article style="background:var(--surface);border-radius:22px;padding:clamp(18px,3vw,28px);display:flex;flex-direction:column;gap:18px">
+<div style="display:flex;justify-content:space-between;align-items:flex-start;gap:12px;flex-wrap:wrap">
+<div style="display:flex;flex-direction:column;gap:4px"><a href="{{ a.href }}" style="font-size:20px;font-weight:800;letter-spacing:-.015em;color:var(--text)">{{ a.name }}</a><span style="font-size:14px;color:var(--text-muted)">{{ a.progress }} · {{ a.released }} of {{ a.granted }}</span></div>
+<span style="font-size:12px;font-weight:700;border-radius:999px;padding:5px 11px;background:var(--surface-raised);color:var(--text-muted)">{{ a.mode }} mode</span>
+</div>
+<ol aria-label="Tranches" style="list-style:none;margin:0;padding:0;display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,150px),1fr));gap:8px">
+<sc-for list="{{ a.track }}" as="t"><li style="border-radius:14px;padding:14px;background:{{ t.bg }};color:{{ t.fg }};display:flex;flex-direction:column;gap:4px;transition:background .3s"><span style="font-size:12px;font-weight:600;opacity:.8">Tranche {{ t.n }}</span><span style="font-family:'IBM Plex Mono',monospace;font-size:17px;font-weight:600">{{ t.amount }}</span><span style="font-size:12px;font-weight:700">{{ t.state }}</span></li></sc-for>
+</ol>
+<sc-if value="{{ a.canRelease }}" hint-placeholder-val="{{ false }}"><div style="background:var(--accent-soft);border-radius:14px;padding:14px 16px;display:flex;align-items:center;gap:12px 16px;flex-wrap:wrap"><span style="flex:1;min-width:200px;font-size:14px;line-height:1.5"><b>The verifier confirmed:</b> {{ a.condition }}. You can release the next tranche.</span><button type="button" onClick="{{ a.release }}" style="cursor:pointer;border:0;border-radius:999px;padding:11px 18px;font-size:14px;font-weight:700;background:var(--accent);color:var(--accent-contrast);min-height:44px;box-sizing:border-box;display:inline-flex;align-items:center;justify-content:center">Release tranche</button></div></sc-if>
+<sc-if value="{{ a.releasing }}" hint-placeholder-val="{{ false }}"><div role="status" style="background:var(--accent-soft);border-radius:14px;padding:14px 16px;font-size:14px;font-weight:600">Releasing… waiting for the network.</div></sc-if>
+<sc-if value="{{ a.releaseErr }}" hint-placeholder-val="{{ false }}"><div role="alert" style="background:var(--refund-soft);border-radius:14px;padding:14px 16px;display:flex;flex-direction:column;gap:4px;font-size:14px;line-height:1.5"><b style="color:var(--refund)">Tranche not released</b><span>{{ a.releaseErrMsg }}</span><span style="font-size:12px;color:var(--text-muted)">Nothing was transferred · program error 22</span></div></sc-if>
+<sc-if value="{{ a.waiting }}" hint-placeholder-val="{{ false }}"><div style="background:var(--bg);border-radius:14px;padding:14px 16px;font-size:14px;line-height:1.5"><b>Waiting on your verifier.</b> Next condition: {{ a.condition }}. You'll be able to release it here once they confirm.</div></sc-if>
+
+<sc-if value="{{ a.isAllocated }}" hint-placeholder-val="{{ false }}">
+<div style="border-top:1px solid var(--surface-raised);padding-top:16px;display:flex;flex-direction:column;gap:10px">
+<div style="display:flex;justify-content:space-between;gap:12px;flex-wrap:wrap"><span style="font-size:15px;font-weight:700">Held for you in escrow</span><span style="font-family:'IBM Plex Mono',monospace;font-size:15px;font-weight:600">{{ a.escrow }}</span></div>
+<sc-if value="{{ a.hasEscrow }}" hint-placeholder-val="{{ false }}">
+<span style="font-size:13px;color:var(--text-muted)">Choose which verified payee receives it.</span>
+<div role="radiogroup" aria-label="Payee" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,220px),1fr));gap:8px"><sc-for list="{{ a.payees }}" as="py"><button type="button" role="radio" aria-checked="{{ py.on }}" onClick="{{ py.pick }}" style="cursor:pointer;border:0;text-align:left;border-radius:12px;padding:12px 14px;background:{{ py.bg }};box-shadow:{{ py.ring }};color:var(--text);display:flex;flex-direction:column;gap:3px"><span style="font-size:14px;font-weight:700">{{ py.label }}</span><span style="font-family:'IBM Plex Mono',monospace;font-size:12px;color:var(--text-muted)">{{ py.address }}</span></button></sc-for></div>
+<button type="button" onClick="{{ a.send }}" style="align-self:flex-start;cursor:pointer;border:0;border-radius:999px;padding:11px 18px;font-size:14px;font-weight:700;background:var(--text);color:var(--bg);min-height:44px;box-sizing:border-box;display:inline-flex;align-items:center;justify-content:center">Send to payee</button>
+</sc-if>
+<sc-if value="{{ a.sentMsg }}" hint-placeholder-val="{{ false }}"><span style="font-size:14px;color:var(--success);font-weight:600">✓ {{ a.sentMsg }}</span></sc-if>
+</div>
+</sc-if>
+<sc-if value="{{ a.isRestricted }}" hint-placeholder-val="{{ false }}">
+<div style="border-top:1px solid var(--surface-raised);padding-top:16px;display:flex;flex-direction:column;gap:6px;font-size:14px;line-height:1.5"><span style="font-size:15px;font-weight:700">Released money goes to your own wallet</span><span style="color:var(--text-muted)">A spending policy limits it to USDC, verified payees, and a cap. <a href="#/policy">Check your spend policy</a>. If the policy isn't set up, there is no restriction at all.</span></div>
+</sc-if>
+</article>
+</sc-for>
+<span style="font-size:12px;color:var(--text-muted)">Sample awards and payees for the design phase.</span>
+</div>
+</sc-if>
+
+<sc-if value="{{ rApplyTab }}" hint-placeholder-val="{{ false }}">
+<div style="background:var(--surface);border-radius:22px;padding:clamp(18px,3vw,28px);display:flex;flex-direction:column;gap:18px;max-width:640px">
+<sc-if value="{{ rApplyForm }}" hint-placeholder-val="{{ true }}">
+<h2 style="margin:0;font-size:20px;font-weight:800">Apply for an award</h2>
+<fieldset style="border:0;margin:0;padding:0;display:flex;flex-direction:column;gap:8px"><legend style="font-size:13px;font-weight:700;color:var(--text-muted);padding:0;margin-bottom:8px">Programme · applications are only accepted while Open</legend>
+<sc-for list="{{ rOpen }}" as="o" hint-placeholder-count="2"><button type="button" role="radio" aria-checked="{{ o.on }}" onClick="{{ o.pick }}" style="cursor:pointer;border:0;text-align:left;border-radius:12px;padding:12px 14px;font-size:15px;font-weight:600;background:{{ o.bg }};color:var(--text);box-shadow:{{ o.ring }}">{{ o.name }}</button></sc-for>
+</fieldset>
+<div style="display:flex;flex-direction:column;gap:8px">
+<label for="apply-amt" style="font-size:13px;font-weight:700;color:var(--text-muted)">How much do you need?</label>
+<div style="display:flex;align-items:center;gap:10px;background:var(--bg);border-radius:12px;padding:0 14px;box-shadow:{{ rAmtRing }}"><input id="apply-amt" inputmode="decimal" value="{{ rAmt }}" onInput="{{ rOnAmt }}" placeholder="0" aria-describedby="apply-help" style="flex:1;min-width:0;border:0;background:transparent;color:var(--text);font-family:'IBM Plex Mono',monospace;font-size:22px;font-weight:600;padding:12px 0;min-height:44px"><span style="font-size:14px;font-weight:700;color:var(--text-muted)">USDC</span></div>
+<span id="apply-help" style="font-size:13px;line-height:1.5;color:var(--text-muted)">Ask for what you actually need. Reviewers can approve up to this amount, not more. Your award is the middle of their votes.</span>
+<span role="alert" style="font-size:13px;color:var(--refund);min-height:18px">{{ rAmtErr }}</span>
+</div>
+<button type="button" onClick="{{ rApplyGo }}" disabled="{{ rApplyDisabled }}" style="align-self:flex-start;cursor:pointer;border:0;border-radius:999px;padding:13px 22px;font-size:15px;font-weight:700;background:{{ rApplyBg }};color:{{ rApplyFg }};min-height:44px;box-sizing:border-box;display:inline-flex;align-items:center;justify-content:center">Submit application</button>
+</sc-if>
+<sc-if value="{{ rApplyPending }}" hint-placeholder-val="{{ false }}"><div role="status" style="display:flex;flex-direction:column;gap:12px;padding:10px 0"><div aria-hidden="true" style="display:flex;gap:5px">{{ pendingDots }}</div><span style="font-size:18px;font-weight:700">Submitting your application…</span></div></sc-if>
+<sc-if value="{{ rApplyDone }}" hint-placeholder-val="{{ false }}">
+<span style="font-size:13px;font-weight:700;color:var(--success)">✓ Application submitted</span>
+<span style="font-size:22px;font-weight:800;letter-spacing:-.015em">{{ rApplyAmt }} requested from {{ rApplyProg }}</span>
+<p style="margin:0;font-size:14px;line-height:1.55;color:var(--text-muted)">When applications close, reviewers each approve an amount. Follow it under Applications.</p>
+<div style="display:flex;gap:10px;flex-wrap:wrap"><a href="#/recipients/application-timeline" style="border-radius:999px;padding:12px 18px;font-size:14px;font-weight:700;background:var(--accent);color:var(--accent-contrast);text-decoration:none;min-height:44px;box-sizing:border-box;display:inline-flex;align-items:center;justify-content:center">Follow application</a><button type="button" onClick="{{ rApplyReset }}" style="cursor:pointer;border:0;border-radius:999px;padding:12px 18px;font-size:14px;font-weight:700;background:var(--surface-raised);color:var(--text);min-height:44px;box-sizing:border-box;display:inline-flex;align-items:center;justify-content:center">Apply to another</button></div>
+</sc-if>
+</div>
+</sc-if>
+
+<sc-if value="{{ rTimelineTab }}" hint-placeholder-val="{{ false }}">
+<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,380px),1fr));gap:16px">
+<sc-for list="{{ rApps }}" as="ap" hint-placeholder-count="2">
+<article style="background:var(--surface);border-radius:22px;padding:24px;display:flex;flex-direction:column;gap:16px">
+<div style="display:flex;justify-content:space-between;align-items:flex-start;gap:12px"><a href="{{ ap.href }}" style="font-size:18px;font-weight:800;color:var(--text);line-height:1.3">{{ ap.name }}</a><span style="flex:none;font-size:12px;font-weight:700;border-radius:999px;padding:4px 10px;background:{{ ap.phaseBg }};color:{{ ap.phaseFg }}">{{ ap.phase }}</span></div>
+<ol style="list-style:none;margin:0;padding:0;display:flex;flex-direction:column;gap:0">
+<sc-for list="{{ ap.steps }}" as="s"><li style="display:grid;grid-template-columns:18px 1fr;gap:12px;padding-bottom:14px"><span aria-hidden="true" style="width:12px;height:12px;border-radius:3px;margin-top:4px;background:{{ s.dot }}"></span><span style="display:flex;flex-direction:column;gap:2px"><span style="font-size:15px;font-weight:{{ s.fw }}">{{ s.t }} <span style="font-size:12px;font-weight:600;color:var(--text-muted)">· {{ s.label }}</span></span><span style="font-size:13px;line-height:1.45;color:var(--text-muted)">{{ s.d }}</span></span></li></sc-for>
+</ol>
+</article>
+</sc-for>
+</div>
+</sc-if>
+
+<sc-if value="{{ rStandingTab }}" hint-placeholder-val="{{ false }}">
+<div style="display:flex;flex-direction:column;gap:14px">
+<p style="margin:0;font-size:15px;line-height:1.6;color:var(--text-muted);max-width:66ch">Your standing is a record of what you've received and delivered across every programme. It can't be transferred, and it holds totals only, not a list of who funded you.</p>
+<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,220px),1fr));gap:12px">
+<sc-for list="{{ rStanding }}" as="s" hint-placeholder-count="3"><div style="background:var(--surface);border-radius:18px;padding:22px;display:flex;flex-direction:column;gap:6px"><span style="font-family:'IBM Plex Mono',monospace;font-size:26px;font-weight:600">{{ s.v }}</span><span style="font-size:14px;color:var(--text-muted)">{{ s.k }}</span></div></sc-for>
+</div>
+<div style="background:{{ rKeepBg }};border-radius:18px;padding:18px 20px;display:flex;align-items:center;gap:12px 20px;flex-wrap:wrap">
+<span style="flex:1;min-width:240px;display:flex;flex-direction:column;gap:3px"><span style="font-size:15px;font-weight:700">Stays on the network for about {{ rLiveDays }} more days</span><span style="font-size:13px;line-height:1.45;color:var(--text-muted)">Records are archived if nobody extends them. Anyone can extend one; it costs you nothing.</span></span>
+<button type="button" onClick="{{ rKeep }}" disabled="{{ rKept }}" style="cursor:pointer;border:0;border-radius:999px;padding:11px 18px;font-size:14px;font-weight:700;background:var(--text);color:var(--bg);min-height:44px;box-sizing:border-box;display:inline-flex;align-items:center;justify-content:center">{{ rKeepLabel }}</button>
+</div>
+<span style="font-size:12px;color:var(--text-muted)">Sample standing for the design phase.</span>
+</div>
+</sc-if>
+<p aria-live="polite" style="margin:0;font-size:13px;color:var(--accent-strong);min-height:18px">{{ announce }}</p>
+</sc-if>
+</section>
+</sc-if>
+
+<sc-if value="{{ isVerifiers }}" hint-placeholder-val="{{ false }}">
+<section aria-labelledby="h-ver" style="display:flex;flex-direction:column;gap:24px">
+<div style="display:flex;align-items:flex-end;gap:12px 24px;flex-wrap:wrap">
+<div style="display:flex;flex-direction:column;gap:8px;flex:1;min-width:260px">
+<h1 id="h-ver" style="margin:0;font-size:clamp(30px,4vw,42px);letter-spacing:-.03em;font-weight:800">Verify conditions</h1>
+<p style="margin:0;font-size:16px;line-height:1.5;color:var(--text-muted);max-width:62ch">When you confirm a condition, you sign an attestation. Each one unlocks exactly one tranche for one recipient, and can't be used twice.</p>
+</div>
+<a href="#/attestations" style="font-size:14px;font-weight:700;display:inline-flex;align-items:center;min-height:44px">Look up an attestation →</a>
+</div>
+
+<sc-if value="{{ signedOut }}" hint-placeholder-val="{{ true }}">
+<div style="background:var(--surface);border-radius:24px;padding:clamp(22px,4vw,36px);display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,300px),1fr));gap:28px 40px;align-items:center">
+<div style="display:flex;flex-direction:column;gap:14px">
+<h2 style="margin:0;font-size:24px;font-weight:800;letter-spacing:-.02em">Sign in with your verifier account</h2>
+<p style="margin:0;font-size:15px;line-height:1.6;color:var(--text-muted)">Use the account the programme registered as its verifier. Passkey or Freighter both work.</p>
+<button type="button" onClick="{{ toggleSignIn }}" style="align-self:flex-start;cursor:pointer;border:0;border-radius:999px;padding:13px 22px;font-size:15px;font-weight:700;background:var(--accent);color:var(--accent-contrast);min-height:44px;box-sizing:border-box;display:inline-flex;align-items:center;justify-content:center">Sign in</button>
+</div>
+<ul style="list-style:none;margin:0;padding:0;display:flex;flex-direction:column;gap:8px">
+<li style="background:var(--bg);border-radius:14px;padding:14px 16px;display:flex;flex-direction:column;gap:3px"><span style="font-size:15px;font-weight:700">Claims waiting for you</span><span style="font-size:13px;color:var(--text-muted)">Recipients whose next tranche needs your confirmation</span></li>
+<li style="background:var(--bg);border-radius:14px;padding:14px 16px;display:flex;flex-direction:column;gap:3px"><span style="font-size:15px;font-weight:700">Attestations you've signed</span><span style="font-size:13px;color:var(--text-muted)">And whether each has released a tranche yet</span></li>
+<li style="background:var(--bg);border-radius:14px;padding:14px 16px;display:flex;flex-direction:column;gap:3px"><span style="font-size:15px;font-weight:700">Programmes you verify for</span><span style="font-size:13px;color:var(--text-muted)">With the condition each one asks you to check</span></li>
+</ul>
+</div>
+</sc-if>
+
+<sc-if value="{{ signedIn }}" hint-placeholder-val="{{ false }}">
+<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,180px),1fr));gap:12px">
+<sc-for list="{{ vStats }}" as="s" hint-placeholder-count="3"><div style="background:var(--surface);border-radius:18px;padding:20px;display:flex;flex-direction:column;gap:6px"><span style="font-size:13px;color:var(--text-muted)">{{ s.k }}</span><span style="font-family:'IBM Plex Mono',monospace;font-size:26px;font-weight:600">{{ s.v }}</span></div></sc-for>
+</div>
+
+<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,420px),1fr));gap:20px;align-items:start">
+<div style="display:flex;flex-direction:column;gap:10px;min-width:0">
+<h2 style="margin:0 0 4px;font-size:18px;font-weight:800">Waiting for your confirmation</h2>
+<sc-if value="{{ vEmpty }}" hint-placeholder-val="{{ false }}"><div style="background:var(--surface);border-radius:18px;padding:24px;font-size:15px;color:var(--text-muted)">Nothing waiting. New claims appear here when a recipient's next tranche needs you.</div></sc-if>
+<sc-for list="{{ vQueue }}" as="q" hint-placeholder-count="3">
+<article style="background:var(--surface);border-radius:18px;padding:18px 20px;display:flex;flex-direction:column;gap:14px;box-shadow:{{ q.ring }}">
+<div style="display:flex;justify-content:space-between;align-items:flex-start;gap:12px;flex-wrap:wrap">
+<span style="display:flex;flex-direction:column;gap:4px"><span style="font-size:16px;font-weight:700;line-height:1.35">{{ q.condition }}</span><span style="font-size:13px;color:var(--text-muted)">{{ q.programme }} · {{ q.trancheLabel }}</span></span>
+<span style="font-family:'IBM Plex Mono',monospace;font-size:13px;background:var(--bg);border-radius:8px;padding:4px 8px">{{ q.subject }}</span>
+</div>
+<sc-if value="{{ q.closed }}" hint-placeholder-val="{{ true }}"><div style="display:flex;gap:8px;flex-wrap:wrap"><button type="button" onClick="{{ q.openIt }}" style="cursor:pointer;border:0;border-radius:999px;padding:10px 16px;font-size:14px;font-weight:700;background:var(--accent);color:var(--accent-contrast);min-height:44px;box-sizing:border-box;display:inline-flex;align-items:center;justify-content:center">Review claim</button><button type="button" onClick="{{ q.decline }}" style="cursor:pointer;border:0;border-radius:999px;padding:10px 16px;font-size:14px;font-weight:700;background:var(--surface-raised);color:var(--text);min-height:44px;box-sizing:border-box;display:inline-flex;align-items:center;justify-content:center">Can't confirm</button></div></sc-if>
+<sc-if value="{{ q.open }}" hint-placeholder-val="{{ false }}">
+<div style="background:var(--bg);border-radius:14px;padding:14px 16px;display:flex;flex-direction:column;gap:8px;font-size:14px">
+<span style="display:flex;justify-content:space-between;gap:12px;flex-wrap:wrap"><span style="color:var(--text-muted)">Schema</span><span style="font-family:'IBM Plex Mono',monospace">{{ q.schema }}</span></span>
+<span style="display:flex;justify-content:space-between;gap:12px;flex-wrap:wrap"><span style="color:var(--text-muted)">Recipient</span><span style="font-family:'IBM Plex Mono',monospace">{{ q.subject }}</span></span>
+<span style="display:flex;justify-content:space-between;gap:12px;flex-wrap:wrap"><span style="color:var(--text-muted)">Requested at ledger</span><span style="font-family:'IBM Plex Mono',monospace">{{ q.requested }}</span></span>
+</div>
+<label style="display:flex;flex-direction:column;gap:6px;font-size:13px;font-weight:700;color:var(--text-muted)">Reference (optional)
+<input value="{{ vNote }}" onInput="{{ vOnNote }}" placeholder="e.g. register page, invoice number" style="border:0;border-radius:12px;background:var(--bg);color:var(--text);padding:12px 14px;font-size:15px;font-weight:400;min-height:44px"></label>
+<button type="button" role="checkbox" aria-checked="{{ vChecked }}" onClick="{{ vToggleCheck }}" style="cursor:pointer;border:0;background:transparent;color:var(--text);display:flex;align-items:flex-start;gap:12px;text-align:left;padding:4px 0;font-size:14px;line-height:1.5"><span aria-hidden="true" style="flex:none;width:22px;height:22px;border-radius:6px;background:{{ vCheckBg }};box-shadow:inset 0 0 0 2px var(--accent);color:var(--accent-contrast);font-size:14px;font-weight:800;display:flex;align-items:center;justify-content:center">{{ vCheckMark }}</span><span>I checked this myself and the condition is met. Signing releases money and can't be undone.</span></button>
+<sc-if value="{{ q.error }}" hint-placeholder-val="{{ false }}"><div role="alert" style="background:var(--refund-soft);border-radius:14px;padding:14px 16px;display:flex;flex-direction:column;gap:4px;font-size:14px;line-height:1.5"><b style="color:var(--refund)">Attestation not signed</b><span>{{ q.errMsg }}</span><span style="font-size:12px;color:var(--text-muted)">Nothing was recorded · attest error 1</span></div></sc-if>
+<sc-if value="{{ q.pending }}" hint-placeholder-val="{{ false }}"><div role="status" style="display:flex;align-items:center;gap:12px;font-size:14px;font-weight:600"><span aria-hidden="true" style="display:flex;gap:4px">{{ pendingDots }}</span>Signing…</div></sc-if>
+<sc-if value="{{ q.idle }}" hint-placeholder-val="{{ true }}"><div style="display:flex;gap:8px;flex-wrap:wrap"><button type="button" onClick="{{ q.close }}" style="cursor:pointer;border:0;border-radius:999px;padding:11px 16px;font-size:14px;font-weight:700;background:var(--surface-raised);color:var(--text);min-height:44px;box-sizing:border-box;display:inline-flex;align-items:center;justify-content:center">Cancel</button><button type="button" onClick="{{ q.signIt }}" disabled="{{ q.signDisabled }}" style="cursor:pointer;border:0;border-radius:999px;padding:11px 18px;font-size:14px;font-weight:700;background:{{ q.signBg }};color:{{ q.signFg }};min-height:44px;box-sizing:border-box;display:inline-flex;align-items:center;justify-content:center">Confirm and sign</button></div></sc-if>
+</sc-if>
+</article>
+</sc-for>
+</div>
+
+<div style="display:flex;flex-direction:column;gap:10px;min-width:0">
+<h2 style="margin:0 0 4px;font-size:18px;font-weight:800">Signed by you</h2>
+<sc-for list="{{ vMine }}" as="m" hint-placeholder-count="2">
+<div style="background:var(--surface);border-radius:16px;padding:16px 18px;display:flex;flex-direction:column;gap:8px">
+<div style="display:flex;justify-content:space-between;gap:12px;flex-wrap:wrap"><span style="font-family:'IBM Plex Mono',monospace;font-size:13px;font-weight:600">{{ m.uid }}</span><span style="font-size:12px;font-weight:700;border-radius:999px;padding:3px 9px;background:{{ m.stBg }};color:{{ m.stFg }}">{{ m.status }}</span></div>
+<span style="font-size:13px;color:var(--text-muted);line-height:1.45">{{ m.programme }} · {{ m.subject }} · {{ m.schema }} · ledger {{ m.ledger }}</span>
+</div>
+</sc-for>
+<span style="font-size:12px;color:var(--text-muted)">Sample queue and attestations for the design phase.</span>
+</div>
+</div>
+<p aria-live="polite" style="margin:0;font-size:13px;color:var(--accent-strong);min-height:18px">{{ announce }}</p>
+</sc-if>
+</section>
+</sc-if>
+
+<sc-if value="{{ isAdmin }}" hint-placeholder-val="{{ false }}">
+<section aria-labelledby="h-adm" style="display:flex;flex-direction:column;gap:24px">
+<div style="display:flex;flex-direction:column;gap:8px">
+<h1 id="h-adm" style="margin:0;font-size:clamp(30px,4vw,42px);letter-spacing:-.03em;font-weight:800">Run programmes</h1>
+<p style="margin:0;font-size:16px;line-height:1.5;color:var(--text-muted);max-width:62ch">Finalize awards, deploy new programmes through the registry, and register what verifiers sign.</p>
+</div>
+<nav aria-label="Admin sections" style="display:flex;gap:6px;flex-wrap:wrap">
+<sc-for list="{{ aTabs }}" as="t" hint-placeholder-count="4"><a href="{{ t.href }}" aria-current="{{ t.current }}" style="border-radius:999px;padding:10px 16px;font-size:14px;font-weight:700;text-decoration:none;background:{{ t.bg }};color:{{ t.fg }};min-height:44px;box-sizing:border-box;display:inline-flex;align-items:center;justify-content:center">{{ t.label }}</a></sc-for>
+</nav>
+
+<sc-if value="{{ aFinalize }}" hint-placeholder-val="{{ true }}">
+<div style="display:flex;flex-direction:column;gap:16px">
+<div style="background:var(--accent-soft);border-radius:16px;padding:14px 18px;font-size:14px;line-height:1.55">Anyone can finalize, so no one can strand an applicant by not pressing a button. You don't need an admin account.</div>
+<label style="display:flex;flex-direction:column;gap:6px;font-size:13px;font-weight:700;color:var(--text-muted);max-width:520px">Programme
+<select value="{{ aFinValue }}" onChange="{{ aFinPick }}" style="border:0;border-radius:12px;background:var(--surface);color:var(--text);padding:12px 14px;font-size:15px;font-weight:600;min-height:44px"><sc-for list="{{ aFinOptions }}" as="o"><option value="{{ o.value }}" selected="{{ o.selected }}">{{ o.label }}</option></sc-for></select></label>
+<sc-if value="{{ aHasFinProg }}" hint-placeholder-val="{{ false }}">
+<sc-if value="{{ aFinNotReview }}" hint-placeholder-val="{{ false }}"><div role="status" style="background:var(--surface);border-radius:18px;padding:22px;font-size:15px;color:var(--text-muted)">{{ aFinNotReviewMsg }}</div></sc-if>
+<sc-if value="{{ aFinIsReview }}" hint-placeholder-val="{{ false }}">
+<div style="background:var(--surface);border-radius:20px;padding:22px;display:flex;flex-direction:column;gap:12px">
+<div style="display:flex;justify-content:space-between;gap:12px;flex-wrap:wrap;font-size:14px"><span><b>Budget</b> <span style="font-family:'IBM Plex Mono',monospace">{{ aFinBudget }}</span></span><span style="color:var(--text-muted)">Awarded <span style="font-family:'IBM Plex Mono',monospace;color:var(--text)">{{ aFinAwarded }}</span> · Left <span style="font-family:'IBM Plex Mono',monospace;color:var(--text)">{{ aFinRemaining }}</span></span></div>
+<div aria-hidden="true" style="display:flex;height:12px;border-radius:6px;overflow:hidden;background:var(--surface-raised)"><sc-for list="{{ aFinBar }}" as="b"><span style="width:{{ b.w }};background:{{ b.bg }};transition:width .4s"></span></sc-for></div>
+<sc-if value="{{ aOversub }}" hint-placeholder-val="{{ false }}"><div role="status" style="background:var(--warning-soft);color:var(--warning);border-radius:12px;padding:12px 14px;font-size:14px;line-height:1.5;font-weight:600">{{ aOversubMsg }}</div></sc-if>
+</div>
+<sc-if value="{{ aNoApps }}" hint-placeholder-val="{{ false }}"><div style="background:var(--surface);border-radius:18px;padding:22px;font-size:15px;color:var(--text-muted)">No applications to finalize.</div></sc-if>
+<div style="display:flex;flex-direction:column;gap:8px">
+<sc-for list="{{ aApps }}" as="ap" hint-placeholder-count="0">
+<div style="background:var(--surface);border-radius:16px;padding:16px 18px;display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,160px),1fr));gap:10px 18px;align-items:center">
+<span style="display:flex;flex-direction:column;gap:3px"><span style="font-family:'IBM Plex Mono',monospace;font-size:14px;font-weight:600">{{ ap.who }}</span><span style="font-size:12px;color:var(--text-muted)">Asked {{ ap.requested }}</span></span>
+<span style="display:flex;flex-direction:column;gap:3px"><span style="font-size:13px;font-weight:700">{{ ap.votes }}</span><span style="font-family:'IBM Plex Mono',monospace;font-size:12px;color:var(--text-muted)">{{ ap.votesList }}</span></span>
+<span style="display:flex;flex-direction:column;gap:3px"><span style="font-size:12px;color:var(--text-muted)">Median</span><span style="font-family:'IBM Plex Mono',monospace;font-size:15px;font-weight:600">{{ ap.median }}</span></span>
+<button type="button" onClick="{{ ap.go }}" disabled="{{ ap.disabled }}" style="justify-self:end;cursor:pointer;border:0;border-radius:999px;padding:10px 16px;font-size:14px;font-weight:700;background:{{ ap.bg }};color:{{ ap.fg }};min-height:44px;box-sizing:border-box;display:inline-flex;align-items:center;justify-content:center">{{ ap.btn }}</button>
+<span style="grid-column:1/-1;font-size:13px;line-height:1.45;color:{{ ap.reasonColor }}">{{ ap.reason }}</span>
+</div>
+</sc-for>
+</div>
+</sc-if>
+</sc-if>
+</div>
+</sc-if>
+
+<sc-if value="{{ aDeploy }}" hint-placeholder-val="{{ false }}">
+<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,380px),1fr));gap:20px;align-items:start">
+<div style="background:var(--surface);border-radius:22px;padding:clamp(18px,3vw,28px);display:flex;flex-direction:column;gap:18px">
+<sc-if value="{{ dForm }}" hint-placeholder-val="{{ true }}">
+<h2 style="margin:0;font-size:20px;font-weight:800">New programme</h2>
+<sc-if value="{{ dFromProposal }}" hint-placeholder-val="{{ false }}"><div style="background:var(--accent-soft);border-radius:14px;padding:14px 16px;display:flex;flex-direction:column;gap:6px"><span style="font-size:14px;font-weight:700">Pre-filled from a funder's proposal</span><sc-for list="{{ dProposalRows }}" as="r"><span style="display:flex;justify-content:space-between;gap:12px;font-size:13px;flex-wrap:wrap"><span style="color:var(--text-muted)">{{ r.k }}</span><span style="text-align:right">{{ r.v }}</span></span></sc-for><span style="font-size:12px;color:var(--text-muted)">Check the terms with them before deploying. Deployed terms can't be changed.</span></div></sc-if>
+<sc-if value="{{ dBadProposal }}" hint-placeholder-val="{{ false }}"><div role="alert" style="background:var(--refund-soft);border-radius:14px;padding:12px 14px;font-size:14px">This proposal link is damaged and couldn't be read. Ask the funder to send it again.</div></sc-if>
+<label style="display:flex;flex-direction:column;gap:6px;font-size:13px;font-weight:700;color:var(--text-muted)">Name
+<input value="{{ dName }}" onInput="{{ dOnName }}" placeholder="e.g. Health worker stipends 2027" style="border:0;border-radius:12px;background:var(--bg);color:var(--text);padding:12px 14px;font-size:15px;font-weight:400;min-height:44px"></label>
+<fieldset style="border:0;margin:0;padding:0;display:flex;flex-direction:column;gap:8px"><legend style="font-size:13px;font-weight:700;color:var(--text-muted);padding:0;margin-bottom:8px">Mode · where released money goes</legend>
+<sc-for list="{{ dModes }}" as="m" hint-placeholder-count="3"><button type="button" role="radio" aria-checked="{{ m.on }}" onClick="{{ m.pick }}" style="cursor:pointer;border:0;text-align:left;border-radius:12px;padding:12px 14px;background:{{ m.bg }};box-shadow:{{ m.ring }};color:var(--text);display:flex;flex-direction:column;gap:3px"><span style="font-size:15px;font-weight:700">{{ m.m }}</span><span style="font-size:13px;color:var(--text-muted)">{{ m.d }}</span></button></sc-for>
+</fieldset>
+<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,140px),1fr));gap:12px">
+<label style="display:flex;flex-direction:column;gap:6px;font-size:13px;font-weight:700;color:var(--text-muted)">Reviewer quorum
+<input inputmode="numeric" value="{{ dQuorum }}" onInput="{{ dOnQuorum }}" style="border:0;border-radius:12px;background:var(--bg);color:var(--text);padding:12px 14px;font-family:'IBM Plex Mono',monospace;font-size:16px;min-height:44px"><span role="alert" style="font-size:12px;font-weight:400;color:var(--refund)">{{ dQErr }}</span></label>
+<label style="display:flex;flex-direction:column;gap:6px;font-size:13px;font-weight:700;color:var(--text-muted)">Tranches per award
+<input inputmode="numeric" value="{{ dTranches }}" onInput="{{ dOnTranches }}" style="border:0;border-radius:12px;background:var(--bg);color:var(--text);padding:12px 14px;font-family:'IBM Plex Mono',monospace;font-size:16px;min-height:44px"><span role="alert" style="font-size:12px;font-weight:400;color:var(--refund)">{{ dTErr }}</span></label>
+</div>
+<label style="display:flex;flex-direction:column;gap:6px;font-size:13px;font-weight:700;color:var(--text-muted)">Attestation schema
+<select value="{{ dSchema }}" onChange="{{ dOnSchema }}" style="border:0;border-radius:12px;background:var(--bg);color:var(--text);padding:12px 14px;font-family:'IBM Plex Mono',monospace;font-size:14px;min-height:44px"><sc-for list="{{ dSchemaOpts }}" as="o"><option value="{{ o.value }}" selected="{{ o.selected }}">{{ o.label }}</option></sc-for></select></label>
+<span style="font-size:13px;line-height:1.5;color:var(--text-muted)">{{ dHint }}</span>
+<button type="button" onClick="{{ dGo }}" disabled="{{ dDisabled }}" style="align-self:flex-start;cursor:pointer;border:0;border-radius:999px;padding:13px 22px;font-size:15px;font-weight:700;background:{{ dBg }};color:{{ dFg }};min-height:44px;box-sizing:border-box;display:inline-flex;align-items:center;justify-content:center">Deploy programme</button>
+</sc-if>
+<sc-if value="{{ dPending }}" hint-placeholder-val="{{ false }}"><div role="status" style="display:flex;flex-direction:column;gap:12px;padding:10px 0"><div aria-hidden="true" style="display:flex;gap:5px">{{ pendingDots }}</div><span style="font-size:18px;font-weight:700">Deploying through the registry…</span></div></sc-if>
+<sc-if value="{{ dDone }}" hint-placeholder-val="{{ false }}">
+<span style="font-size:13px;font-weight:700;color:var(--success)">✓ Programme deployed</span>
+<span style="font-size:18px;font-weight:800;line-height:1.35">{{ dSummary }}</span>
+<p style="margin:0;font-size:14px;line-height:1.55;color:var(--text-muted)">It opens for contributions and applications now. It will appear in the public index after the next indexer run, usually within a few hours.</p>
+<button type="button" onClick="{{ dReset }}" style="align-self:flex-start;cursor:pointer;border:0;border-radius:999px;padding:12px 18px;font-size:14px;font-weight:700;background:var(--surface-raised);color:var(--text);min-height:44px;box-sizing:border-box;display:inline-flex;align-items:center;justify-content:center">Deploy another</button>
+</sc-if>
+</div>
+<div style="background:var(--surface);border-radius:22px;padding:24px;display:flex;flex-direction:column;gap:6px">
+<h2 style="margin:0 0 8px;font-size:18px;font-weight:800">Protocol config</h2>
+<sc-for list="{{ cfgRows }}" as="r" hint-placeholder-count="5"><div style="display:flex;justify-content:space-between;gap:12px;padding:8px 0;font-size:14px;flex-wrap:wrap"><span style="color:var(--text-muted)">{{ r.k }}</span><span style="font-family:'IBM Plex Mono',monospace">{{ r.v }}</span></div></sc-for>
+<span style="font-size:12px;color:var(--text-muted);margin-top:6px">Read from the registry. Sample values for the design phase.</span>
+</div>
+</div>
+</sc-if>
+
+<sc-if value="{{ aSchemas }}" hint-placeholder-val="{{ false }}">
+<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,380px),1fr));gap:20px;align-items:start">
+<div style="background:var(--surface);border-radius:22px;padding:clamp(18px,3vw,28px);display:flex;flex-direction:column;gap:16px">
+<sc-if value="{{ hForm }}" hint-placeholder-val="{{ true }}">
+<h2 style="margin:0;font-size:20px;font-weight:800">Register a schema</h2>
+<label style="display:flex;flex-direction:column;gap:6px;font-size:13px;font-weight:700;color:var(--text-muted)">Schema name
+<input value="{{ hName }}" onInput="{{ hOnName }}" placeholder="shifts-confirmed/v1" style="border:0;border-radius:12px;background:var(--bg);color:var(--text);padding:12px 14px;font-family:'IBM Plex Mono',monospace;font-size:14px;min-height:44px"><span role="alert" style="font-size:12px;font-weight:400;color:var(--refund)">{{ hNameErr }}</span></label>
+<label style="display:flex;flex-direction:column;gap:6px;font-size:13px;font-weight:700;color:var(--text-muted)">Fields
+<textarea value="{{ hFields }}" onInput="{{ hOnFields }}" rows="3" placeholder="programme: address, tranche: u32" style="border:0;border-radius:12px;background:var(--bg);color:var(--text);padding:12px 14px;font-family:'IBM Plex Mono',monospace;font-size:14px;resize:vertical"></textarea></label>
+<button type="button" role="checkbox" aria-checked="{{ hRevocable }}" onClick="{{ hToggleRev }}" style="cursor:pointer;border:0;background:transparent;color:var(--text);display:flex;align-items:center;gap:12px;text-align:left;padding:4px 0;font-size:14px"><span aria-hidden="true" style="flex:none;width:22px;height:22px;border-radius:6px;background:{{ hRevBg }};box-shadow:inset 0 0 0 2px var(--accent);color:var(--accent-contrast);font-weight:800;display:flex;align-items:center;justify-content:center">{{ hRevMark }}</span>Attesters can revoke attestations under this schema</button>
+<span style="font-size:13px;line-height:1.5;color:var(--text-muted)">{{ hHint }}</span>
+<button type="button" onClick="{{ hGo }}" disabled="{{ hDisabled }}" style="align-self:flex-start;cursor:pointer;border:0;border-radius:999px;padding:13px 22px;font-size:15px;font-weight:700;background:{{ hBg }};color:{{ hFg }};min-height:44px;box-sizing:border-box;display:inline-flex;align-items:center;justify-content:center">Register schema</button>
+</sc-if>
+<sc-if value="{{ hPending }}" hint-placeholder-val="{{ false }}"><div role="status" style="display:flex;flex-direction:column;gap:12px;padding:10px 0"><div aria-hidden="true" style="display:flex;gap:5px">{{ pendingDots }}</div><span style="font-size:18px;font-weight:700">Registering…</span></div></sc-if>
+<sc-if value="{{ hDone }}" hint-placeholder-val="{{ false }}"><span style="font-size:13px;font-weight:700;color:var(--success)">✓ Schema registered</span><span style="font-family:'IBM Plex Mono',monospace;font-size:18px;font-weight:600">{{ hNewName }}</span><button type="button" onClick="{{ hReset }}" style="align-self:flex-start;cursor:pointer;border:0;border-radius:999px;padding:12px 18px;font-size:14px;font-weight:700;background:var(--surface-raised);color:var(--text);min-height:44px;box-sizing:border-box;display:inline-flex;align-items:center;justify-content:center">Register another</button></sc-if>
+</div>
+<div style="display:flex;flex-direction:column;gap:8px">
+<h2 style="margin:0 0 4px;font-size:18px;font-weight:800">Registered schemas</h2>
+<sc-for list="{{ hSchemas }}" as="s" hint-placeholder-count="2"><div style="background:var(--surface);border-radius:16px;padding:16px 18px;display:flex;flex-direction:column;gap:6px"><div style="display:flex;justify-content:space-between;gap:12px;flex-wrap:wrap"><span style="font-family:'IBM Plex Mono',monospace;font-size:14px;font-weight:600">{{ s.id }}</span><span style="font-size:12px;font-weight:600;color:var(--text-muted)">{{ s.rev }}</span></div><span style="font-family:'IBM Plex Mono',monospace;font-size:12px;color:var(--text-muted)">{{ s.fields }}</span></div></sc-for>
+<span style="font-size:12px;color:var(--text-muted)">Sample schemas for the design phase.</span>
+</div>
+</div>
+</sc-if>
+
+<sc-if value="{{ aKeepalive }}" hint-placeholder-val="{{ false }}">
+<div style="display:flex;flex-direction:column;gap:16px;max-width:820px">
+<div style="background:var(--accent-soft);border-radius:16px;padding:14px 18px;font-size:14px;line-height:1.55">The network archives stored entries that nobody extends. Anyone can extend them, and network fees are covered. An archived award or contribution can't be released or refunded until it's restored.</div>
+<label style="display:flex;flex-direction:column;gap:6px;font-size:13px;font-weight:700;color:var(--text-muted);max-width:520px">Programme
+<select value="{{ kValue }}" onChange="{{ kPick }}" style="border:0;border-radius:12px;background:var(--surface);color:var(--text);padding:12px 14px;font-size:15px;font-weight:600;min-height:44px"><sc-for list="{{ kOptions }}" as="o"><option value="{{ o.value }}" selected="{{ o.selected }}">{{ o.label }}</option></sc-for></select></label>
+<div style="background:var(--surface);border-radius:20px;padding:8px;display:flex;flex-direction:column">
+<sc-for list="{{ kRows }}" as="r" hint-placeholder-count="4">
+<div style="padding:14px 16px;display:grid;grid-template-columns:minmax(0,1fr) auto;gap:8px 16px;align-items:center">
+<span style="display:flex;flex-direction:column;gap:2px"><span style="font-size:15px;font-weight:700">{{ r.label }}</span><span style="font-size:13px;color:var(--text-muted)">{{ r.note }} · {{ r.days }}</span></span>
+<button type="button" onClick="{{ r.go }}" disabled="{{ r.disabled }}" style="cursor:pointer;border:0;border-radius:999px;padding:9px 14px;font-size:13px;font-weight:700;background:var(--surface-raised);color:var(--text);min-height:44px;box-sizing:border-box;display:inline-flex;align-items:center;justify-content:center">{{ r.btn }}</button>
+<div aria-hidden="true" style="grid-column:1/-1;height:6px;border-radius:3px;background:var(--surface-raised);overflow:hidden"><span style="display:block;height:100%;width:{{ r.w }};background:{{ r.bar }};transition:width .4s"></span></div>
+</div>
+</sc-for>
+</div>
+<sc-if value="{{ kHasLow }}" hint-placeholder-val="{{ false }}"><button type="button" onClick="{{ kExtendLow }}" style="align-self:flex-start;cursor:pointer;border:0;border-radius:999px;padding:12px 20px;font-size:14px;font-weight:700;background:var(--accent);color:var(--accent-contrast);min-height:44px;box-sizing:border-box;display:inline-flex;align-items:center;justify-content:center">Extend the {{ kLowCount }} under 30 days</button></sc-if>
+<span style="font-size:12px;color:var(--text-muted)">Sample lifetimes for the design phase.</span>
+</div>
+</sc-if>
+
+<sc-if value="{{ aStanding }}" hint-placeholder-val="{{ false }}">
+<div style="background:var(--surface);border-radius:22px;padding:clamp(18px,3vw,28px);display:flex;flex-direction:column;gap:16px;max-width:720px">
+<h2 style="margin:0;font-size:20px;font-weight:800">Look up a recipient's standing</h2>
+<div style="display:flex;gap:10px;flex-wrap:wrap">
+<label style="flex:1;min-width:220px;display:flex;flex-direction:column;gap:6px;font-size:13px;font-weight:700;color:var(--text-muted)">Recipient address
+<input value="{{ lValue }}" onInput="{{ lOnInput }}" placeholder="G…" style="border:0;border-radius:12px;background:var(--bg);color:var(--text);padding:12px 14px;font-family:'IBM Plex Mono',monospace;font-size:14px;min-height:44px"></label>
+<button type="button" onClick="{{ lGo }}" style="align-self:flex-end;cursor:pointer;border:0;border-radius:999px;padding:12px 20px;font-size:14px;font-weight:700;background:var(--accent);color:var(--accent-contrast);min-height:44px">Look up</button>
+</div>
+<sc-if value="{{ lDone }}" hint-placeholder-val="{{ false }}">
+<div aria-live="polite" style="display:flex;flex-direction:column;gap:4px">
+<span style="font-family:'IBM Plex Mono',monospace;font-size:13px;color:var(--text-muted)">{{ lAddr }}</span>
+<sc-for list="{{ lRows }}" as="r"><div style="display:flex;justify-content:space-between;gap:12px;padding:10px 0;font-size:15px"><span style="color:var(--text-muted)">{{ r.k }}</span><span style="font-family:'IBM Plex Mono',monospace;font-weight:600">{{ r.v }}</span></div></sc-for>
+<span style="font-size:12px;color:var(--text-muted)">Sample standing for the design phase. Standing is written only by programmes the registry deployed.</span>
+</div>
+</sc-if>
+</div>
+</sc-if>
+<p aria-live="polite" style="margin:0;font-size:13px;color:var(--accent-strong);min-height:18px">{{ announce }}</p>
+</section>
+</sc-if>
+
+<sc-if value="{{ isPropose }}" hint-placeholder-val="{{ false }}">
+<section aria-labelledby="h-prop" style="display:flex;flex-direction:column;gap:20px;max-width:760px">
+<a href="#/funders" style="align-self:flex-start;font-size:14px;font-weight:600;display:inline-flex;align-items:center;min-height:44px">← Funding</a>
+<div style="display:flex;flex-direction:column;gap:8px">
+<h1 id="h-prop" style="margin:0;font-size:clamp(30px,4vw,42px);letter-spacing:-.03em;font-weight:800">Propose a programme</h1>
+<p style="margin:0;font-size:16px;line-height:1.5;color:var(--text-muted)">Only the registry admin can deploy programmes. Describe what you want to fund; you'll get a proposal to send them. Once it's deployed and Open, you contribute like any funder.</p>
+</div>
+<ol aria-label="How it works" style="list-style:none;margin:0;padding:0;display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,160px),1fr));gap:8px">
+<li style="background:var(--surface);border-radius:14px;padding:12px 14px;font-size:13px;line-height:1.4"><b style="display:block;font-size:14px">1 · You describe it</b>What it pays for and when</li>
+<li style="background:var(--surface);border-radius:14px;padding:12px 14px;font-size:13px;line-height:1.4"><b style="display:block;font-size:14px">2 · Send to the admin</b>By email, issue or link</li>
+<li style="background:var(--surface);border-radius:14px;padding:12px 14px;font-size:13px;line-height:1.4"><b style="display:block;font-size:14px">3 · Admin deploys</b>Opens pre-filled for them</li>
+<li style="background:var(--surface);border-radius:14px;padding:12px 14px;font-size:13px;line-height:1.4"><b style="display:block;font-size:14px">4 · You fund it</b>When it shows as Open</li>
+</ol>
+
+<div style="background:var(--surface);border-radius:22px;padding:clamp(18px,3vw,28px);display:flex;flex-direction:column;gap:16px">
+<sc-if value="{{ pForm }}" hint-placeholder-val="{{ true }}">
+<label style="display:flex;flex-direction:column;gap:6px;font-size:13px;font-weight:700;color:var(--text-muted)">Programme name
+<input value="{{ pName }}" onInput="{{ pOnName }}" placeholder="e.g. Midwife stipends, Turkana 2027" style="border:0;border-radius:12px;background:var(--bg);color:var(--text);padding:12px 14px;font-size:15px;font-weight:400;min-height:44px"></label>
+<label style="display:flex;flex-direction:column;gap:6px;font-size:13px;font-weight:700;color:var(--text-muted)">What should the money pay for?
+<textarea value="{{ pPurpose }}" onInput="{{ pOnPurpose }}" rows="2" placeholder="Who receives it and what it's for" style="border:0;border-radius:12px;background:var(--bg);color:var(--text);padding:12px 14px;font-size:15px;font-weight:400;resize:vertical"></textarea></label>
+<label style="display:flex;flex-direction:column;gap:6px;font-size:13px;font-weight:700;color:var(--text-muted)">What must happen before each tranche is released?
+<input value="{{ pCondition }}" onInput="{{ pOnCondition }}" placeholder="e.g. Monthly shifts confirmed by the clinic" style="border:0;border-radius:12px;background:var(--bg);color:var(--text);padding:12px 14px;font-size:15px;font-weight:400;min-height:44px"></label>
+<label style="display:flex;flex-direction:column;gap:6px;font-size:13px;font-weight:700;color:var(--text-muted)">Who could confirm it? (optional)
+<input value="{{ pVerifier }}" onInput="{{ pOnVerifier }}" placeholder="An organisation or role you trust" style="border:0;border-radius:12px;background:var(--bg);color:var(--text);padding:12px 14px;font-size:15px;font-weight:400;min-height:44px"></label>
+<fieldset style="border:0;margin:0;padding:0;display:flex;flex-direction:column;gap:8px"><legend style="font-size:13px;font-weight:700;color:var(--text-muted);padding:0;margin-bottom:8px">Where should released money go?</legend>
+<div role="radiogroup" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,180px),1fr));gap:8px"><sc-for list="{{ pModes }}" as="m" hint-placeholder-count="3"><button type="button" role="radio" aria-checked="{{ m.on }}" onClick="{{ m.pick }}" style="cursor:pointer;border:0;text-align:left;border-radius:12px;padding:12px 14px;background:{{ m.bg }};box-shadow:{{ m.ring }};color:var(--text);display:flex;flex-direction:column;gap:3px"><span style="font-size:15px;font-weight:700">{{ m.m }}</span><span style="font-size:12px;color:var(--text-muted)">{{ m.d }}</span></button></sc-for></div>
+</fieldset>
+<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,180px),1fr));gap:12px">
+<label style="display:flex;flex-direction:column;gap:6px;font-size:13px;font-weight:700;color:var(--text-muted)">You plan to fund (optional)
+<span style="display:flex;align-items:center;gap:8px;background:var(--bg);border-radius:12px;padding:0 14px"><input inputmode="decimal" value="{{ pAmount }}" onInput="{{ pOnAmount }}" placeholder="0" style="flex:1;min-width:0;border:0;background:transparent;color:var(--text);font-family:'IBM Plex Mono',monospace;font-size:16px;padding:12px 0;min-height:44px"><span style="font-size:13px">USDC</span></span><span role="alert" style="font-size:12px;font-weight:400;color:var(--refund)">{{ pAmtErr }}</span></label>
+<label style="display:flex;flex-direction:column;gap:6px;font-size:13px;font-weight:700;color:var(--text-muted)">Tranches per award
+<input inputmode="numeric" value="{{ pTranches }}" onInput="{{ pOnTranches }}" style="border:0;border-radius:12px;background:var(--bg);color:var(--text);padding:12px 14px;font-family:'IBM Plex Mono',monospace;font-size:16px;min-height:44px"></label>
+</div>
+<label style="display:flex;flex-direction:column;gap:6px;font-size:13px;font-weight:700;color:var(--text-muted)">How can the admin reach you?
+<input value="{{ pContact }}" onInput="{{ pOnContact }}" placeholder="Email or handle" style="border:0;border-radius:12px;background:var(--bg);color:var(--text);padding:12px 14px;font-size:15px;font-weight:400;min-height:44px"></label>
+<button type="button" onClick="{{ pNext }}" disabled="{{ pDisabled }}" style="align-self:flex-start;cursor:pointer;border:0;border-radius:999px;padding:13px 22px;font-size:15px;font-weight:700;background:{{ pBg }};color:{{ pFg }};min-height:44px;box-sizing:border-box;display:inline-flex;align-items:center;justify-content:center">Review proposal</button>
+</sc-if>
+<sc-if value="{{ pReview }}" hint-placeholder-val="{{ false }}">
+<h2 style="margin:0;font-size:20px;font-weight:800">Send it to the admin</h2>
+<pre style="margin:0;background:var(--bg);border-radius:14px;padding:16px;font-family:'IBM Plex Mono',monospace;font-size:13px;line-height:1.6;white-space:pre-wrap;word-break:break-word">{{ pSummary }}</pre>
+<div style="display:flex;gap:10px;flex-wrap:wrap">
+<a href="{{ pMailto }}" style="border-radius:999px;padding:12px 18px;font-size:14px;font-weight:700;background:var(--accent);color:var(--accent-contrast);text-decoration:none;min-height:44px;box-sizing:border-box;display:inline-flex;align-items:center;justify-content:center">Email {{ pAdminEmail }}</a>
+<a href="{{ pIssue }}" target="_blank" rel="noopener" style="border-radius:999px;padding:12px 18px;font-size:14px;font-weight:700;background:var(--surface-raised);color:var(--text);text-decoration:none;min-height:44px;box-sizing:border-box;display:inline-flex;align-items:center;justify-content:center">Open a GitHub issue</a>
+<button type="button" onClick="{{ pCopy }}" style="cursor:pointer;border:0;border-radius:999px;padding:12px 18px;font-size:14px;font-weight:700;background:var(--surface-raised);color:var(--text);min-height:44px;box-sizing:border-box;display:inline-flex;align-items:center;justify-content:center">{{ pCopyLabel }}</button>
+</div>
+<p style="margin:0;font-size:13px;line-height:1.55;color:var(--text-muted)">Nothing is sent on-chain and nothing is stored in the app. The proposal includes a link that opens the Deploy form pre-filled for the admin. When your programme appears as Open in Programmes, you can contribute.</p>
+<button type="button" onClick="{{ pEdit }}" style="align-self:flex-start;cursor:pointer;border:0;background:transparent;color:var(--accent);font-size:14px;font-weight:700;padding:0;min-height:44px">← Edit proposal</button>
+<p aria-live="polite" style="margin:0;font-size:13px;color:var(--accent-strong);min-height:18px">{{ announce }}</p>
+</sc-if>
+</div>
+</section>
+</sc-if>
+
+<sc-if value="{{ isAttestations }}" hint-placeholder-val="{{ false }}">
+<section aria-labelledby="h-att" style="display:flex;flex-direction:column;gap:20px;max-width:760px">
+<div style="display:flex;flex-direction:column;gap:8px">
+<h1 id="h-att" style="margin:0;font-size:clamp(30px,4vw,42px);letter-spacing:-.03em;font-weight:800">Look up an attestation</h1>
+<p style="margin:0;font-size:16px;line-height:1.5;color:var(--text-muted)">Check what a verifier signed, about whom, and whether it has already released a tranche. No sign-in needed.</p>
+</div>
+<form role="search" onSubmit="{{ attGo }}" style="display:flex;gap:10px;flex-wrap:wrap">
+<label style="flex:1;min-width:220px;display:flex;flex-direction:column;gap:6px;font-size:13px;font-weight:700;color:var(--text-muted)">Attestation id or address
+<input value="{{ attQ }}" onInput="{{ attOnInput }}" placeholder="Attestation id, recipient or verifier" style="border:0;border-radius:12px;background:var(--surface);color:var(--text);padding:12px 14px;font-family:'IBM Plex Mono',monospace;font-size:14px;min-height:44px"></label>
+<button type="submit" style="align-self:flex-end;cursor:pointer;border:0;border-radius:999px;padding:12px 20px;min-height:44px;font-size:14px;font-weight:700;background:var(--accent);color:var(--accent-contrast)">Look up</button>
+</form>
+<div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;font-size:13px;color:var(--text-muted)"><span>Sample ids:</span><sc-for list="{{ attExamples }}" as="x" hint-placeholder-count="2"><button type="button" onClick="{{ x.pick }}" style="cursor:pointer;border:0;border-radius:8px;padding:5px 9px;background:var(--surface);color:var(--text);font-family:'IBM Plex Mono',monospace;font-size:12px;min-height:44px;box-sizing:border-box;display:inline-flex;align-items:center;justify-content:center">{{ x.label }}</button></sc-for></div>
+<div aria-live="polite" style="display:flex;flex-direction:column;gap:12px">
+<sc-if value="{{ attNone }}" hint-placeholder-val="{{ false }}"><div style="background:var(--surface);border-radius:18px;padding:22px;display:flex;flex-direction:column;gap:4px"><span style="font-size:16px;font-weight:700">Nothing found for “{{ attSearchedText }}”</span><span style="font-size:14px;color:var(--text-muted)">Check the id. Attestations are read on-chain; archived ones need a keepalive before they can be read.</span></div></sc-if>
+<sc-for list="{{ attHits }}" as="h" hint-placeholder-count="0">
+<article style="background:var(--surface);border-radius:20px;padding:22px;display:flex;flex-direction:column;gap:10px">
+<div style="display:flex;justify-content:space-between;gap:12px;flex-wrap:wrap;align-items:center"><span style="font-family:'IBM Plex Mono',monospace;font-size:15px;font-weight:600;word-break:break-all">{{ h.uid }}</span><span style="font-size:12px;font-weight:700;border-radius:999px;padding:4px 10px;background:{{ h.stBg }};color:{{ h.stFg }}">{{ h.status }}</span></div>
+<sc-for list="{{ h.rows }}" as="r"><div style="display:flex;justify-content:space-between;gap:12px;padding:6px 0;font-size:14px;flex-wrap:wrap"><span style="color:var(--text-muted)">{{ r.k }}</span><span style="font-family:'IBM Plex Mono',monospace">{{ r.v }}</span></div></sc-for>
+</article>
+</sc-for>
+<sc-if value="{{ attSearchedYet }}" hint-placeholder-val="{{ false }}"><span style="font-size:12px;color:var(--text-muted)">Sample attestations for the design phase.</span></sc-if>
+</div>
+</section>
+</sc-if>
+
+<sc-if value="{{ isPolicy }}" hint-placeholder-val="{{ false }}">
+<section aria-labelledby="h-pol" style="display:flex;flex-direction:column;gap:20px">
+<div style="display:flex;flex-direction:column;gap:8px">
+<h1 id="h-pol" style="margin:0;font-size:clamp(30px,4vw,42px);letter-spacing:-.03em;font-weight:800">Spend policy</h1>
+<p style="margin:0;font-size:16px;line-height:1.5;color:var(--text-muted);max-width:66ch">In Restricted mode, grant money lands in your own wallet. A policy signer keeps it to USDC, verified payees, and a cap. This page checks that it's set up.</p>
+</div>
+<sc-if value="{{ signedOut }}" hint-placeholder-val="{{ true }}">
+<div style="background:var(--surface);border-radius:22px;padding:28px;display:flex;flex-direction:column;gap:12px;align-items:flex-start;max-width:640px"><span style="font-size:20px;font-weight:800">Sign in to check your wallet</span><span style="font-size:15px;line-height:1.55;color:var(--text-muted)">You'll see whether a policy signer is installed, which payees it allows, and how much of the cap is used.</span><button type="button" onClick="{{ toggleSignIn }}" style="cursor:pointer;border:0;border-radius:999px;padding:12px 20px;font-size:15px;font-weight:700;background:var(--accent);color:var(--accent-contrast);min-height:44px;box-sizing:border-box;display:inline-flex;align-items:center;justify-content:center">Sign in</button></div>
+</sc-if>
+<sc-if value="{{ signedIn }}" hint-placeholder-val="{{ false }}">
+<sc-if value="{{ pMissing }}" hint-placeholder-val="{{ false }}"><div role="alert" style="background:var(--refund-soft);border-radius:18px;padding:18px 20px;display:flex;align-items:center;gap:12px 20px;flex-wrap:wrap"><span style="flex:1;min-width:240px;display:flex;flex-direction:column;gap:4px"><b style="font-size:16px;color:var(--refund)">No policy on this wallet</b><span style="font-size:14px;line-height:1.5">Without it, Restricted mode has no restriction at all: released money can be sent anywhere. Set it up before releasing a tranche.</span></span><button type="button" onClick="{{ pSetUp }}" disabled="{{ pSetDisabled }}" style="cursor:pointer;border:0;border-radius:999px;padding:12px 18px;font-size:14px;font-weight:700;background:{{ pSetBg }};color:{{ pSetFg }};min-height:44px;box-sizing:border-box;display:inline-flex;align-items:center;justify-content:center">Set up policy</button></div></sc-if>
+<sc-if value="{{ pPending }}" hint-placeholder-val="{{ false }}"><div role="status" style="background:var(--surface);border-radius:18px;padding:18px 20px;display:flex;align-items:center;gap:12px;font-size:15px;font-weight:700"><span aria-hidden="true" style="display:flex;gap:4px">{{ pendingDots }}</span>Installing the policy signer…</div></sc-if>
+<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,340px),1fr));gap:16px;align-items:start">
+<div style="background:var(--surface);border-radius:20px;padding:22px;display:flex;flex-direction:column;gap:10px">
+<h2 style="margin:0 0 4px;font-size:18px;font-weight:800">Checks</h2>
+<sc-for list="{{ pChecks }}" as="c" hint-placeholder-count="4"><div style="display:flex;align-items:center;gap:12px;font-size:15px"><span aria-hidden="true" style="flex:none;width:26px;height:26px;border-radius:8px;background:{{ c.bg }};color:{{ c.fg }};font-weight:800;display:flex;align-items:center;justify-content:center">{{ c.mark }}</span>{{ c.t }}</div></sc-for>
+</div>
+<sc-if value="{{ pInstalled }}" hint-placeholder-val="{{ false }}">
+<div style="background:var(--surface);border-radius:20px;padding:22px;display:flex;flex-direction:column;gap:14px">
+<h2 style="margin:0;font-size:18px;font-weight:800">Cap</h2>
+<div aria-hidden="true" style="height:12px;border-radius:6px;background:var(--surface-raised);overflow:hidden"><span style="display:block;height:100%;width:{{ pPct }};background:var(--accent)"></span></div>
+<div style="display:flex;justify-content:space-between;gap:12px;flex-wrap:wrap;font-size:14px"><span>Spent <b style="font-family:'IBM Plex Mono',monospace">{{ pSpent }}</b></span><span style="color:var(--text-muted)">Left <b style="font-family:'IBM Plex Mono',monospace;color:var(--text)">{{ pLeft }}</b> of {{ pCap }}</span></div>
+<h3 style="margin:6px 0 0;font-size:15px;font-weight:700">Allowed payees</h3>
+<sc-for list="{{ pPayees }}" as="p" hint-placeholder-count="2"><span style="font-family:'IBM Plex Mono',monospace;font-size:13px;background:var(--bg);border-radius:10px;padding:10px 12px">{{ p.a }}</span></sc-for>
+</div>
+</sc-if>
+</div>
+<span style="font-size:12px;color:var(--text-muted)">Sample policy for the design phase. Allocated mode doesn't need this: money stays in escrow until you choose a payee.</span>
+<p aria-live="polite" style="margin:0;font-size:13px;color:var(--accent-strong);min-height:18px">{{ announce }}</p>
+</sc-if>
+</section>
+</sc-if>
+
+<sc-if value="{{ isOther }}" hint-placeholder-val="{{ false }}">
+<section aria-labelledby="h-404" style="background:var(--surface);border-radius:24px;padding:clamp(28px,6vw,56px);display:flex;flex-direction:column;gap:14px;align-items:flex-start;max-width:720px">
+<span aria-hidden="true" style="display:flex;gap:4px"><span style="width:14px;height:14px;border-radius:3px;background:var(--accent)"></span><span style="width:14px;height:14px;border-radius:3px;background:var(--locked)"></span><span style="width:14px;height:14px;border-radius:3px;background:var(--locked)"></span></span>
+<h1 id="h-404" style="margin:0;font-size:clamp(28px,4vw,40px);font-weight:800;letter-spacing:-.025em">This page doesn't exist</h1>
+<p style="margin:0;font-size:16px;line-height:1.55;color:var(--text-muted)">Nothing lives at <span style="font-family:'IBM Plex Mono',monospace;color:var(--text)">{{ route }}</span>. If you followed a link to a programme, it may not be in the public index yet.</p>
+<div style="display:flex;gap:10px;flex-wrap:wrap"><a href="#/directory" style="border-radius:999px;padding:12px 20px;font-size:15px;font-weight:700;background:var(--accent);color:var(--accent-contrast);text-decoration:none;min-height:44px;box-sizing:border-box;display:inline-flex;align-items:center;justify-content:center">Browse programmes</a><a href="Milepost Home.dc.html" style="border-radius:999px;padding:12px 20px;font-size:15px;font-weight:700;background:var(--surface-raised);color:var(--text);text-decoration:none;min-height:44px;box-sizing:border-box;display:inline-flex;align-items:center;justify-content:center">Home</a></div>
+</section>
+</sc-if>
+
+</main>
+
+<sc-if value="{{ sheetOpen }}" hint-placeholder-val="{{ false }}">
+<div onClick="{{ closeSheet }}" style="position:fixed;inset:0;z-index:50;background:rgba(10,12,16,.55);display:flex;align-items:center;justify-content:center;padding:16px">
+<div role="dialog" aria-modal="true" aria-labelledby="h-sign" onClick="{{ stopProp }}" style="background:var(--surface);color:var(--text);border-radius:24px;padding:clamp(20px,4vw,30px);width:min(100%,440px);box-sizing:border-box;display:flex;flex-direction:column;gap:16px;box-shadow:0 24px 60px rgba(0,0,0,.3)">
+<div style="display:flex;justify-content:space-between;align-items:center;gap:12px"><h2 id="h-sign" style="margin:0;font-size:22px;font-weight:800;letter-spacing:-.02em">Sign in</h2><button type="button" onClick="{{ closeSheet }}" aria-label="Close" style="cursor:pointer;border:0;background:var(--surface-raised);color:var(--text);border-radius:999px;width:44px;height:44px;font-size:16px;min-height:44px;box-sizing:border-box;display:inline-flex;align-items:center;justify-content:center">✕</button></div>
+<sc-if value="{{ sheetChoose }}" hint-placeholder-val="{{ true }}">
+<button type="button" onClick="{{ pickPasskey }}" style="cursor:pointer;border:0;text-align:left;border-radius:16px;padding:16px 18px;background:var(--accent-soft);color:var(--text);box-shadow:inset 0 0 0 2px var(--accent);display:flex;flex-direction:column;gap:4px"><span style="display:flex;justify-content:space-between;gap:10px;align-items:center"><span style="font-size:17px;font-weight:800">Passkey</span><span style="font-size:11px;font-weight:700;border-radius:999px;padding:3px 8px;background:var(--accent);color:var(--accent-contrast)">Recommended</span></span><span style="font-size:14px;line-height:1.45;color:var(--text-muted)">Face ID, fingerprint or device PIN. No seed phrase, nothing to install. Creates a smart wallet if you don't have one.</span></button>
+<button type="button" onClick="{{ pickFreighter }}" style="cursor:pointer;border:0;text-align:left;border-radius:16px;padding:16px 18px;background:var(--bg);color:var(--text);display:flex;flex-direction:column;gap:4px"><span style="font-size:17px;font-weight:800">Freighter</span><span style="font-size:14px;line-height:1.45;color:var(--text-muted)">Browser extension wallet for Stellar.</span></button>
+<p style="margin:0;font-size:13px;line-height:1.5;color:var(--text-muted)">Network fees are covered, so you won't need to hold XLM. Browsing never needs sign-in.</p>
+</sc-if>
+<sc-if value="{{ sheetWaiting }}" hint-placeholder-val="{{ false }}">
+<div role="status" aria-live="polite" style="display:flex;flex-direction:column;gap:12px;padding:8px 0 4px"><div aria-hidden="true" style="display:flex;gap:5px">{{ pendingDots }}</div><span style="font-size:18px;font-weight:700">{{ sheetWaitTitle }}</span><span style="font-size:14px;line-height:1.5;color:var(--text-muted)">{{ sheetWaitBody }}</span></div>
+</sc-if>
+</div>
+</div>
+</sc-if>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props="{&quot;theme&quot;:{&quot;editor&quot;:&quot;enum&quot;,&quot;options&quot;:[&quot;light&quot;,&quot;dark&quot;],&quot;default&quot;:&quot;light&quot;,&quot;tsType&quot;:&quot;'light'|'dark'&quot;},&quot;showSamples&quot;:{&quot;editor&quot;:&quot;boolean&quot;,&quot;default&quot;:true,&quot;tsType&quot;:&quot;boolean&quot;,&quot;section&quot;:&quot;Design phase&quot;},&quot;simulateFailure&quot;:{&quot;editor&quot;:&quot;boolean&quot;,&quot;default&quot;:false,&quot;tsType&quot;:&quot;boolean&quot;,&quot;section&quot;:&quot;Design phase&quot;}}">
+class Component extends DCLogic {
+  static INDEX_BASE = 'https://milepost-labs.github.io/milepost-indexer/v1';
+  static STALE_AFTER_MS = 12 * 3600 * 1000;
+  static STROOP = 1e7;
+
+  // ---- Stand-ins for the design phase. grep FIXTURE_ to find all of it. ----
+  // Shaped like the index entry: { id, name, creator, createdLedger }. Names are unwired.
+  static FIXTURE_PROGRAMMES = [
+    { id: 'CBQ4SCHOOLBURSARY2026XK3ZP7M2QWJ5T8VN4RD6HY', name: 'Secondary school bursaries 2026', creator: 'GAKR7W…D2QX', createdLedger: 4811204 },
+    { id: 'CCM2SMALLHOLDERINPUTSLR26A9FK3XU7PZ4E8QT2BN', name: 'Smallholder inputs, long rains', creator: 'GD5TQ4…9LKA', createdLedger: 4798551 },
+    { id: 'CDV7VOCATIONALCOHORT3PL5QZ2WM8RT4HX6KJ9A3FC', name: 'Vocational bursaries, cohort 3', creator: 'GB2ZHM…Q7RP', createdLedger: 4702316 },
+    { id: 'CA3NSMEMICROGRANTSQ2V8TX4QK7PL2RZ9MD5HW6JUB', name: 'SME supplier microgrants Q2', creator: 'GCX8NE…4FTM', createdLedger: 4611087 },
+    { id: 'CBF9FLOODRESPONSETANA6QW2XM4RP7KZ3HT8LN5DVA', name: 'Flood response cash transfers', creator: 'GAKR7W…D2QX', createdLedger: 4655420 },
+  ];
+  // Shaped like useProgramme()'s on-chain read. Amounts in stroops (strings), as the bindings return i128.
+  static FIXTURE_CHAIN = {
+    CBQ4SCHOOLBURSARY2026XK3ZP7M2QWJ5T8VN4RD6HY: { phase: 'Open', mode: 'Direct', contributed: '126000000000', fee: '1260000000', awarded: '0', released: '0', refundable: '0', quorum: 3, applicants: 41, closesInDays: 9 },
+    CCM2SMALLHOLDERINPUTSLR26A9FK3XU7PZ4E8QT2BN: { phase: 'Open', mode: 'Allocated', contributed: '48500000000', fee: '485000000', awarded: '0', released: '0', refundable: '0', quorum: 3, applicants: 12, closesInDays: 21 },
+    CDV7VOCATIONALCOHORT3PL5QZ2WM8RT4HX6KJ9A3FC: { phase: 'Review', mode: 'Direct', contributed: '80000000000', fee: '800000000', awarded: '31500000000', released: '0', refundable: '0', quorum: 5, applicants: 64 },
+    CA3NSMEMICROGRANTSQ2V8TX4QK7PL2RZ9MD5HW6JUB: { phase: 'Settled', mode: 'Restricted', contributed: '150000000000', fee: '1500000000', awarded: '132000000000', released: '88000000000', refundable: '16500000000', quorum: 3, applicants: 38 },
+    CBF9FLOODRESPONSETANA6QW2XM4RP7KZ3HT8LN5DVA: { phase: 'Cancelled', mode: 'Direct', contributed: '22000000000', fee: '220000000', awarded: '0', released: '0', refundable: '21780000000', quorum: 3, applicants: 0 },
+  };
+  static FIXTURE_CHAIN_DEFAULT = { phase: 'Settled', mode: 'Allocated', contributed: '60000000000', fee: '600000000', awarded: '52000000000', released: '17500000000', refundable: '0', quorum: 3, applicants: 23 };
+  // Shaped like awards.json entries.
+  static FIXTURE_AWARDS = [
+    { recipient: 'GBQX4M…7KDA', granted: '12000000000', released: '4000000000', tranches: 3, tranchesReleased: 1, payee: 'GCPAY1…Q2LM', mode: 'Restricted', updatedLedger: 4630112 },
+    { recipient: 'GC7HLP…2WQE', granted: '4500000000', released: '3000000000', tranches: 3, tranchesReleased: 2, payee: 'GCPAY2…7HTR', mode: 'Restricted', updatedLedger: 4641870 },
+    { recipient: 'GDR2VN…9MXT', granted: '9000000000', released: '0', tranches: 2, tranchesReleased: 0, payee: 'GCPAY3…4WKD', mode: 'Restricted', updatedLedger: 4622004 },
+    { recipient: 'GA6TJW…5RBN', granted: '2000000000', released: '2000000000', tranches: 1, tranchesReleased: 1, payee: 'GCPAY4…8NBE', mode: 'Restricted', updatedLedger: 4635519 },
+  ];
+  // Verifier roster is unwired (needs an indexer handler). Shape: { address, label, schema }.
+  static FIXTURE_VERIFIERS = [
+    { address: 'GCVR4T…8QHN', label: 'Programme verifier A', schema: 'condition-met/v1' },
+    { address: 'GDLX2P…3WKA', label: 'Programme verifier B', schema: 'condition-met/v1' },
+  ];
+  static FIXTURE_ACCOUNT = 'GD4KQ2…2QXW';
+  static FIXTURE_BALANCE = '52500000000';
+  // Shaped like a per-address read of program.contribution(funder) joined with the programme id.
+  static FIXTURE_CONTRIBUTIONS = [
+    { programmeId: 'CBQ4SCHOOLBURSARY2026XK3ZP7M2QWJ5T8VN4RD6HY', amount: '10000000000', ledger: 4815532, refunded: false },
+    { programmeId: 'CA3NSMEMICROGRANTSQ2V8TX4QK7PL2RZ9MD5HW6JUB', amount: '20000000000', ledger: 4613904, refunded: false },
+    { programmeId: 'CBF9FLOODRESPONSETANA6QW2XM4RP7KZ3HT8LN5DVA', amount: '5000000000', ledger: 4656011, refunded: false },
+  ];
+  static FIXTURE_TX = { hash: '7c1e9a…f04b2d', ledger: 4853391 };
+
+  // Mirrors frontend/src/lib/errors.ts explain(error, 'program') for the codes this screen can hit.
+  static EXPLAIN = {
+    1: 'The account you signed in with isn\'t allowed to do this.',
+    2: 'This programme has moved to a different phase since the page loaded, so it no longer accepts contributions.',
+    3: 'Enter an amount greater than zero.',
+    14: 'There isn\'t enough unawarded budget left for this award. The contract never lets awards exceed the budget.',
+    22: 'This attestation has already released a tranche. Each milepost needs its own confirmation from the verifier.',
+    30: 'That payee isn\'t verified for this programme.',
+  };
+  // Shaped like awards.json entries for the signed-in recipient, plus the pending-attestation flag the app reads from attest.
+  // '$indexed0' resolves to the first programme in the live index.
+  static FIXTURE_MY_AWARDS = [
+    { programmeId: 'CA3NSMEMICROGRANTSQ2V8TX4QK7PL2RZ9MD5HW6JUB', recipient: 'GD4KQ2…2QXW', granted: '40000000000', released: '13300000000', tranches: 3, tranchesReleased: 1, payee: null, mode: 'Restricted', updatedLedger: 4640021, attestationReady: true, condition: 'Supplier invoice for milestone 2 approved' },
+    { programmeId: '$indexed0', recipient: 'GD4KQ2…2QXW', granted: '30000000000', released: '10000000000', tranches: 3, tranchesReleased: 1, payee: null, mode: 'Allocated', updatedLedger: 4851002, attestationReady: false, condition: 'Shifts for this month confirmed by supervisor', escrow: '10000000000' },
+  ];
+  // Shaped like program.application(applicant) reads.
+  static FIXTURE_APPLICATIONS = [
+    { programmeId: 'CDV7VOCATIONALCOHORT3PL5QZ2WM8RT4HX6KJ9A3FC', requested: '12000000000', submittedLedger: 4704410, votes: ['12000000000', '9000000000'], quorum: 5 },
+    { programmeId: 'CBQ4SCHOOLBURSARY2026XK3ZP7M2QWJ5T8VN4RD6HY', requested: '5000000000', submittedLedger: 4818330, votes: [], quorum: 3 },
+  ];
+  // Shaped like record.standing(recipient): aggregates only.
+  static FIXTURE_STANDING = { programmes: 3, received: '46300000000', tranchesReleased: 5, tranchesAwarded: 9, liveForDays: 23 };
+  // Claims awaiting this verifier. Shaped like a pending-release read joined with the programme's schema.
+  static FIXTURE_VERIFIER_QUEUE = [
+    { id: 'q1', programmeId: '$indexed0', subject: 'GBQX4M…7KDA', schema: 'condition-met/v1', condition: 'Shifts for September confirmed', tranche: 2, tranches: 3, requestedLedger: 4852210 },
+    { id: 'q2', programmeId: '$indexed0', subject: 'GC7HLP…2WQE', schema: 'condition-met/v1', condition: 'Shifts for September confirmed', tranche: 2, tranches: 3, requestedLedger: 4852611 },
+    { id: 'q3', programmeId: 'CA3NSMEMICROGRANTSQ2V8TX4QK7PL2RZ9MD5HW6JUB', subject: 'GDR2VN…9MXT', schema: 'invoice-approved/v1', condition: 'Supplier invoice for milestone 1 approved', tranche: 1, tranches: 2, requestedLedger: 4849907 },
+  ];
+  // This verifier's own attestations. Currently kept in browser storage in VerifierDashboard.tsx; unwired.
+  static FIXTURE_MY_ATTESTATIONS = [
+    { uid: 'att_9f21…c3e0', programmeId: '$indexed0', subject: 'GA6TJW…5RBN', schema: 'condition-met/v1', ledger: 4846120, used: true },
+    { uid: 'att_4b7d…11af', programmeId: 'CA3NSMEMICROGRANTSQ2V8TX4QK7PL2RZ9MD5HW6JUB', subject: 'GBQX4M…7KDA', schema: 'invoice-approved/v1', ledger: 4838402, used: false },
+  ];
+  static ATTEST_EXPLAIN = { 1: 'This account isn\'t registered as an attester for this schema. Ask the programme admin to add you.' };
+  // Shaped like registry.config().
+  static FIXTURE_PROTOCOL_CONFIG = { treasury: 'GTREAS…X4QM', feeBps: 100, attest: 'CATTST…9KPL', record: 'CRECRD…2HVW', admin: 'GADMIN…7QZE' };
+  // Applications in review for the Review-phase sample programme. Shaped like program.application(applicant) + votes.
+  static FIXTURE_REVIEW_APPLICATIONS = [
+    { applicant: 'GAPL01…4KDM', requested: '12000000000', votes: ['12000000000', '11000000000', '10000000000', '12000000000', '9000000000'] },
+    { applicant: 'GAPL02…8WQT', requested: '20000000000', votes: ['18000000000', '20000000000', '15000000000', '18000000000', '19000000000'] },
+    { applicant: 'GAPL03…2NRA', requested: '15000000000', votes: ['15000000000', '15000000000', '14000000000', '15000000000', '12000000000'] },
+    { applicant: 'GAPL04…6JHE', requested: '9000000000', votes: ['9000000000', '8000000000', '9000000000'] },
+    { applicant: 'GAPL05…3PXC', requested: '8000000000', votes: ['6000000000', '8000000000', '5000000000', '6000000000', '7000000000'] },
+  ];
+  static FIXTURE_SCHEMAS = [
+    { id: 'condition-met/v1', fields: 'programme: address, tranche: u32', revocable: false },
+    { id: 'invoice-approved/v1', fields: 'programme: address, tranche: u32, invoice_ref: string', revocable: true },
+  ];
+  // Shaped like attest.get(uid).
+  static FIXTURE_ATTESTATIONS = [
+    { uid: 'a9f21c3e0b7d4e11', schema: 'condition-met/v1', attester: 'GCVR4T…8QHN', subject: 'GA6TJW…5RBN', data: { tranche: 1 }, ledger: 4846120, revoked: false, used: true },
+    { uid: 'a4b7d11af82c9e03', schema: 'invoice-approved/v1', attester: 'GDLX2P…3WKA', subject: 'GBQX4M…7KDA', data: { tranche: 2, invoice_ref: 'INV-2026-0418' }, ledger: 4838402, revoked: false, used: false },
+  ];
+  // Shaped like a policy_spend read for the signed-in wallet.
+  static FIXTURE_POLICY = { installed: false, asset: 'USDC', cap: '15000000000', spent: '4200000000', payees: ['GCPAY7…3KTM', 'GCPAY8…9QRA'] };
+  // Where proposals go. Not on-chain: the registry has no inbox. Set per deployment.
+  static FIXTURE_ADMIN_CONTACT = { email: 'programmes@example.org', issues: 'https://github.com/milepost-labs/milepost/issues/new' };
+  // Shaped like per-entry TTL reads (ledgers left, shown as days). Unwired.
+  static FIXTURE_TTL = [
+    { key: 'instance', label: 'Programme contract', note: 'Terms, phase and budget', liveForDays: 61 },
+    { key: 'awards', label: 'Awards', note: '4 entries', liveForDays: 12 },
+    { key: 'contribs', label: 'Contributions', note: '9 entries, needed for refunds', liveForDays: 44 },
+    { key: 'apps', label: 'Applications and votes', note: '23 entries', liveForDays: 27 },
+  ];
+  // Verified payees for the programme (unwired).
+  static FIXTURE_PAYEES = [
+    { address: 'GCPAY7…3KTM', label: 'Verified payee · Pharmacy' },
+    { address: 'GCPAY8…9QRA', label: 'Verified payee · Transport co-op' },
+  ];
+  explain(code) { return { code, msg: Component.EXPLAIN[code] || 'Something went wrong. Nothing was transferred.' }; }
+
+  state = { sheet: false, sheetStep: 'choose', sheetMethod: null, acctMenu: false, ttlExt: {}, ttlPid: null, prop: { name: '', purpose: '', condition: '', verifier: '', mode: 'Allocated', amount: '', tranches: '3', contact: '', step: 'form' }, propCopied: false, depFrom: null, attQ: '', attSearched: '', polStep: null, fin: {}, finPid: null, dep: { name: '', mode: 'Allocated', quorum: '3', tranches: '3', schema: 'condition-met/v1', step: 'form' }, sch: { name: '', fields: '', revocable: false, step: 'form' }, lookup: '', lookupDone: false, vq: {}, vOpen: null, vChecked: false, vNote: '', vSigned: [], rel: {}, sent: {}, payeePick: {}, apply: { pid: null, amt: '', step: 'form' }, kept: false, fund: { step: 'amount', pid: null, amt: '' }, refunded: {}, theme: null, route: '', signedIn: false, phase: 'All', q: '', tab: 'awards', copied: false, announce: '', idx: { status: 'loading' }, awards: {} };
+
+  componentDidMount() {
+    this.onHash = () => this.setState(s => ({ route: this.readRoute(), announce: '', tab: 'awards', fund: s.fund.step === 'pending' ? s.fund : { step: 'amount', pid: null, amt: '' } }));
+    window.addEventListener('hashchange', this.onHash);
+    this.onKey = (e) => { if (e.key === 'Escape') this.setState({ sheet: false, acctMenu: false }); };
+    window.addEventListener('keydown', this.onKey);
+    const sp = new URLSearchParams(window.location.search);
+    this.setState({ route: this.readRoute(), signedIn: sp.get('signedin') === '1' || this.state.signedIn, theme: sp.get('theme') || this.state.theme });
+    this.loadIndex();
+  }
+  componentWillUnmount() { window.removeEventListener('hashchange', this.onHash); window.removeEventListener('keydown', this.onKey); }
+  readRoute() { const h = (window.location.hash || '').replace(/^#/, ''); if (h === '/programme' || h === '/programme/') { window.location.replace('#/directory'); return '/directory'; } return h || '/directory'; }
+
+  async getJSON(p) { const r = await fetch(Component.INDEX_BASE + p, { cache: 'no-store' }); if (!r.ok) throw new Error(p + ' returned ' + r.status); return r.json(); }
+  async loadIndex() {
+    this.setState({ idx: { status: 'loading' } });
+    try { const [meta, progs] = await Promise.all([this.getJSON('/meta.json'), this.getJSON('/programmes.json')]); this.setState({ idx: { status: 'ok', meta, list: Array.isArray(progs) ? progs : (progs.programmes || []) } }); }
+    catch (e) { this.setState({ idx: { status: 'error', msg: String(e && e.message || e), list: [] } }); }
+  }
+  async loadAwards(id) {
+    if (this.state.awards[id]) return;
+    this.setState(s => ({ awards: { ...s.awards, [id]: { status: 'loading' } } }));
+    try { const a = await this.getJSON('/programmes/' + encodeURIComponent(id) + '/awards.json'); this.setState(s => ({ awards: { ...s.awards, [id]: { status: 'ok', list: Array.isArray(a) ? a : (a.awards || []) } } })); }
+    catch (e) { this.setState(s => ({ awards: { ...s.awards, [id]: { status: 'error', msg: String(e && e.message || e) } } })); }
+  }
+
+  usdc(s) { const n = Number(s || 0) / Component.STROOP; return n.toLocaleString(undefined, { maximumFractionDigits: 2 }) + ' USDC'; }
+  shortId(id) { id = String(id); return id.length > 16 ? id.slice(0, 6) + '…' + id.slice(-6) : id; }
+  phaseColors(ph) { return ({ Open: ['var(--accent-soft)', 'var(--accent-strong)'], Review: ['var(--warning-soft)', 'var(--warning)'], Settled: ['var(--success-soft)', 'var(--success)'], Cancelled: ['var(--refund-soft)', 'var(--refund)'] })[ph] || ['var(--surface-raised)', 'var(--text-muted)']; }
+  squares(c, n) {
+    const budget = Number(c.contributed) - Number(c.fee); if (budget <= 0) return Array(n).fill('var(--surface-raised)');
+    const r = Math.round(Number(c.released) / budget * n), aw = Math.round(Number(c.awarded) / budget * n), rf = Math.round(Number(c.refundable) / budget * n);
+    const out = []; for (let i = 0; i < n; i++) out.push(i < r ? 'var(--accent)' : i < aw ? 'var(--locked)' : i >= n - rf ? 'var(--refund)' : 'var(--accent-soft)');
+    return out;
+  }
+  allProgrammes() {
+    const real = (this.state.idx.list || []).map(x => ({ ...x, sample: false }));
+    const showFx = this.props.showSamples ?? true;
+    return real.concat(showFx ? Component.FIXTURE_PROGRAMMES.map(x => ({ ...x, sample: true })) : []);
+  }
+  chainOf(p) { return Component.FIXTURE_CHAIN[p.id] || Component.FIXTURE_CHAIN_DEFAULT; }
+
+  renderVals() {
+    const S = this.state;
+    const theme = S.theme ?? this.props.theme ?? 'light';
+    const fullRoute = S.route || '/directory';
+    const [route, qs] = fullRoute.split('?');
+    const query = new URLSearchParams(qs || '');
+    const isDirectory = route === '/directory' || route === '/';
+    const progMatch = route.match(/^\/programme(?:\/(.+))?$/);
+    const isProgramme = !!progMatch;
+    const isFunders = route === '/funders';
+    const isRecipients = route.startsWith('/recipients');
+    const isVerifiers = route === '/verifiers';
+    const isAdmin = route.startsWith('/admin') || route === '/finalize' || route.startsWith('/schemas') || route === '/keepalive';
+    const isPropose = route === '/funders/propose';
+    const isAttestations = route === '/attestations';
+    const isPolicy = route === '/policy';
+    const navDef = [['Programmes', '/directory'], ['Fund', '/funders'], ['Get funded', '/recipients'], ['Verify', '/verifiers'], ['Admin', '/admin']];
+    const nav = navDef.map(([label, r]) => { const on = r === '/directory' ? (isDirectory || isProgramme) : r === '/admin' ? isAdmin : r === '/funders' ? route.startsWith('/funders') : route.startsWith(r); return { label, href: '#' + r, current: on ? 'page' : undefined, bg: on ? 'var(--surface)' : 'transparent', fg: on ? 'var(--text)' : 'var(--text-muted)' }; });
+
+    const idx = S.idx, meta = idx.meta || {};
+    const t = meta.indexedAt ? (typeof meta.indexedAt === 'number' ? (meta.indexedAt < 1e12 ? meta.indexedAt * 1000 : meta.indexedAt) : Date.parse(meta.indexedAt)) : null;
+    const ago = t ? Date.now() - t : null;
+    const fmtAgo = (ms) => { const h = ms / 3600000; return h < 1 ? Math.max(1, Math.round(ms / 60000)) + ' min ago' : h < 48 ? Math.round(h) + ' h ago' : Math.round(h / 24) + ' days ago'; };
+
+    const all = this.allProgrammes();
+    const withChain = all.map(p => ({ p, c: this.chainOf(p) }));
+    const phases = ['All', 'Open', 'Review', 'Settled', 'Cancelled'];
+    const q = S.q.trim().toLowerCase();
+    const matchQ = (x) => !q || (x.p.name || '').toLowerCase().includes(q) || String(x.p.id).toLowerCase().includes(q);
+    const filters = phases.map(ph => { const on = S.phase === ph; return { label: ph, on, count: withChain.filter(x => matchQ(x) && (ph === 'All' || x.c.phase === ph)).length, bg: on ? 'var(--text)' : 'var(--surface)', fg: on ? 'var(--bg)' : 'var(--text)', pick: () => this.setState({ phase: ph }) }; });
+    const shown = withChain.filter(x => matchQ(x) && (S.phase === 'All' || x.c.phase === S.phase)).sort((a, b) => (b.p.createdLedger || 0) - (a.p.createdLedger || 0));
+    const statusOf = (c) => c.phase === 'Open' ? `Taking contributions and applications · ${c.applicants} applied${c.closesInDays ? ` · closes in ${c.closesInDays} days` : ''}` : c.phase === 'Review' ? `Reviewers are voting on ${c.applicants} applications. Awards are not final.` : c.phase === 'Settled' ? 'Awards are final. Tranches release as verifiers confirm conditions.' : 'Cancelled. Contributors can claim a full refund.';
+    const ctaOf = (ph) => ({ Open: 'Fund or apply', Review: 'Follow review', Settled: 'See releases', Cancelled: 'Claim refund' })[ph];
+    const cards = shown.map(({ p, c }) => { const [pb, pf] = this.phaseColors(c.phase); return {
+      name: p.name || 'Unnamed programme', short: this.shortId(p.id), phase: c.phase, phaseBg: pb, phaseFg: pf, status: statusOf(c), mode: c.mode, sample: true, sampleTag: p.sample ? 'Sample data' : 'Sample chain read', cta: ctaOf(c.phase),
+      href: '#/programme/' + encodeURIComponent(p.id), squares: this.squares(c, 20),
+      figures: [{ k: 'Budget', v: this.usdc(Number(c.contributed) - Number(c.fee)) }, { k: 'Awarded', v: this.usdc(c.awarded) }, { k: 'Released', v: this.usdc(c.released) }] }; });
+    const realCount = (idx.list || []).length;
+    const indexLine = idx.status === 'ok' ? `${realCount} in the public index${t ? ' · updated ' + fmtAgo(ago) : ''}` : idx.status === 'loading' ? 'Reading the public index…' : '';
+
+    // programme detail
+    let p = null, hasProgramme = false, noProgramme = false, actions = [], tabs = [], awards = [], awardsNote = '', awardsLoading = false, awardsEmpty = false, awardsEmptyMsg = '', terms = [], modeNote = '';
+    if (isProgramme) {
+      const id = progMatch[1] ? decodeURIComponent(progMatch[1]) : (all[0] && all[0].id);
+      const found = all.find(x => String(x.id) === String(id));
+      if (!found && idx.status === 'loading') { /* wait */ }
+      else if (!found) noProgramme = true;
+      else {
+        hasProgramme = true;
+        const c = this.chainOf(found), [pb, pf] = this.phaseColors(c.phase);
+        const budget = Number(c.contributed) - Number(c.fee);
+        const order = ['Open', 'Review', 'Settled'], ci = order.indexOf(c.phase);
+        const notes = { Open: 'Contributions and applications', Review: 'Reviewers vote; anyone can finalize', Settled: 'Releases at mileposts; refunds after window' };
+        p = { name: found.name || 'Unnamed programme', short: this.shortId(found.id), creator: found.creator ? this.shortId(found.creator) : '—', createdLedger: found.createdLedger ? Number(found.createdLedger).toLocaleString() : '—', sample: true, sampleTag: found.sample ? 'Sample data' : 'Sample chain read', chainLine: 'Phase and amounts: sample until on-chain reads are wired',
+          phase: c.phase, phaseBg: pb, phaseFg: pf, mode: c.mode, cancelled: c.phase === 'Cancelled',
+          budget: this.usdc(budget), contributed: this.usdc(c.contributed), fee: this.usdc(c.fee), quorum: c.quorum,
+          squares: this.squares(c, 40),
+          legend: [{ bg: 'var(--accent-soft)', label: 'Not yet awarded', v: this.usdc(Math.max(0, budget - Number(c.awarded) - Number(c.refundable))) }, { bg: 'var(--locked)', label: 'Awarded, locked', v: this.usdc(Number(c.awarded) - Number(c.released)) }, { bg: 'var(--accent)', label: 'Released', v: this.usdc(c.released) }, { bg: 'var(--refund)', label: 'Refundable', v: this.usdc(c.refundable) }],
+          phases: order.map((ph, i) => { const cur = i === ci, done = ci > i; return { label: (done ? '✓ ' : '') + ph, note: cur ? 'Now · ' + notes[ph] : notes[ph], current: cur ? 'step' : undefined, bg: cur ? 'var(--text)' : 'var(--surface)', fg: cur ? 'var(--bg)' : done ? 'var(--text)' : 'var(--text-muted)' }; }) };
+        const signed = S.signedIn;
+        const needs = { Open: 'while the programme is Open', Review: 'during Review', Settled: 'once the programme is Settled' };
+        const A = [
+          { k: 'contribute', label: 'Contribute', who: 'Funders', ok: c.phase === 'Open', need: 'Open', go: '/funders', btn: 'Contribute' },
+          { k: 'apply', label: 'Apply for an award', who: 'Recipients', ok: c.phase === 'Open', need: 'Open', go: '/recipients', btn: 'Apply' },
+          { k: 'finalize', label: 'Finalize awards', who: 'Anyone', ok: c.phase === 'Review', need: 'Review', go: '/finalize', btn: 'Finalize', extra: ' In an oversubscribed round, whoever finalizes first decides the order.' },
+          { k: 'release', label: 'Release a tranche', who: 'Recipients, with a verifier\'s attestation', ok: c.phase === 'Settled', need: 'Settled', go: '/recipients/award-progress', btn: 'Release' },
+          { k: 'refund', label: 'Claim a refund', who: 'Funders', ok: c.phase === 'Cancelled' || (c.phase === 'Settled' && Number(c.refundable) > 0), need: 'Settled', go: '/funders', btn: 'Refund', custom: c.phase === 'Settled' ? 'Refunds open after the release window closes.' : null },
+        ];
+        actions = A.map(a => {
+          const enabled = a.ok && signed;
+          const reason = !a.ok ? (a.custom || `Available only ${needs[a.need]}. This programme is ${c.phase}.`) : !signed ? `Sign in to ${a.label.toLowerCase()}.` : (a.k === 'refund' ? `${this.usdc(c.refundable)} is refundable, in proportion to what each funder put in.` : a.k === 'finalize' ? 'Needs quorum votes on the application.' + a.extra : 'Re-checked on-chain when you continue.');
+          return { label: a.label, who: a.who, btn: a.btn, reason, rid: 'why-' + a.k, disabled: !enabled, op: a.ok ? 1 : 0.62,
+            bg: enabled ? 'var(--accent)' : 'var(--surface-raised)', fg: enabled ? 'var(--accent-contrast)' : 'var(--text-muted)',
+            go: () => { if (enabled) { this.setState({ announce: `Opening ${a.label.toLowerCase()}…` }); window.location.hash = a.go + '?programme=' + encodeURIComponent(found.id); } } };
+        });
+        tabs = [['awards', 'Awards'], ['verifiers', 'Verifiers'], ['terms', 'Terms']].map(([k, label]) => ({ label, on: S.tab === k, bg: S.tab === k ? 'var(--surface-raised)' : 'transparent', fg: S.tab === k ? 'var(--text)' : 'var(--text-muted)', pick: () => this.setState({ tab: k }) }));
+        if (found.sample) {
+          const list = c.phase === 'Settled' ? Component.FIXTURE_AWARDS : [];
+          awards = list.map(a => this.awardRow(a));
+          awardsNote = 'Awards are the median of reviewer votes. Listed from the public index, advisory.';
+          awardsEmpty = list.length === 0; awardsEmptyMsg = c.phase === 'Open' ? 'No awards yet. Applications are still open.' : c.phase === 'Review' ? 'No awards are final yet. Each is set once it reaches quorum and someone finalizes it.' : 'No awards were made.';
+        } else {
+          const st = S.awards[found.id];
+          if (!st) setTimeout(() => this.loadAwards(found.id), 0);
+          awardsLoading = !st || st.status === 'loading';
+          awardsNote = 'From the public index (awards.json), advisory. Each award is re-read on-chain before it is acted on.';
+          if (st && st.status === 'ok') { awards = st.list.map(a => this.awardRow(a)); awardsEmpty = awards.length === 0; awardsEmptyMsg = 'The index has no awards for this programme yet.'; }
+          if (st && st.status === 'error') { awardsEmpty = true; awardsEmptyMsg = 'Couldn\'t load awards from the index. ' + st.msg; }
+        }
+        terms = [{ k: 'Asset', v: 'USDC' }, { k: 'Mode', v: c.mode }, { k: 'Reviewer quorum', v: c.quorum + ' votes (max 16)' }, { k: 'Award rule', v: 'Median of reviewer votes' }, { k: 'Unawarded budget', v: 'Refunded in proportion, then swept after a grace period' }];
+        modeNote = ({ Direct: 'Each award is paid straight to a verified payee chosen at award time. The recipient never holds the money.', Allocated: 'Released money is held in escrow. The recipient chooses which verified payee receives it, and when. This depends on nothing outside the contract.', Restricted: 'Released money goes to the recipient\'s own wallet, limited by a policy signer to one asset, verified payees and a cap. It is only as strong as that wallet\'s configuration.' })[c.mode];
+      }
+    }
+
+    return {
+      theme, route, nav,
+      pendingDots: [0, 1, 2, 3].map(i => React.createElement('span', { key: i, style: { width: 12, height: 12, borderRadius: 3, background: 'var(--accent)', animation: `mp-pulse 1.2s ${i * 0.15}s ease-in-out infinite` } })),
+      themeIcon: theme === 'dark' ? '☀' : '☾', themeLabel: theme === 'dark' ? 'Switch to light theme' : 'Switch to dark theme',
+      toggleTheme: () => this.setState({ theme: theme === 'dark' ? 'light' : 'dark' }),
+      signLabel: S.signedIn ? Component.FIXTURE_ACCOUNT : 'Sign in', signBg: S.signedIn ? 'var(--surface)' : 'var(--accent)', signFg: S.signedIn ? 'var(--text)' : 'var(--accent-contrast)',
+      toggleSignIn: () => S.signedIn ? this.setState({ signedIn: false, acctMenu: false, announce: 'Signed out.' }) : this.setState({ sheet: true, sheetStep: 'choose', sheetMethod: null }),
+      headerAcct: () => S.signedIn ? this.setState({ acctMenu: !S.acctMenu }) : this.setState({ sheet: true, sheetStep: 'choose', sheetMethod: null }),
+      acctMenu: S.acctMenu && S.signedIn, acctAddr: Component.FIXTURE_ACCOUNT, acctMethod: S.sheetMethod === 'freighter' ? 'Freighter' : 'Passkey',
+      signOut: () => this.setState({ signedIn: false, acctMenu: false, announce: 'Signed out.' }),
+      sheetOpen: S.sheet, sheetChoose: S.sheetStep === 'choose', sheetWaiting: S.sheetStep === 'waiting',
+      sheetWaitTitle: S.sheetMethod === 'freighter' ? 'Approve in Freighter' : 'Confirm it\'s you',
+      sheetWaitBody: S.sheetMethod === 'freighter' ? 'A Freighter window should open. Approve the connection there.' : 'Use Face ID, your fingerprint, or your device PIN. No seed phrase, nothing to install.',
+      closeSheet: () => this.setState({ sheet: false }),
+      stopProp: (e) => e.stopPropagation(),
+      pickPasskey: () => this.startSignIn('passkey'), pickFreighter: () => this.startSignIn('freighter'),
+      signedOut: !S.signedIn, signedIn: S.signedIn,
+      isDirectory, isProgramme, isFunders, isOther: !isDirectory && !isProgramme && !isFunders && !isRecipients && !isVerifiers && !isAdmin && !isAttestations && !isPolicy && !isPropose, isPropose, ...this.proposeVals(isPropose), isRecipients, isVerifiers, isAdmin, isAttestations, isPolicy,
+      ...this.lookupVals(isAttestations), ...this.policyVals(isPolicy),
+      ...this.adminVals(isAdmin, route, query, all),
+      ...this.verifierVals(isVerifiers, all),
+      ...this.funderVals(isFunders, query, all),
+      ...this.recipientVals(isRecipients, route, query, all),
+      otherTitle: (navDef.find(n => route.startsWith(n[1])) || ['This screen'])[0],
+      query: S.q, onQuery: (e) => this.setState({ q: e.target.value }), filters, cards, indexLine,
+      idxLoading: idx.status === 'loading', idxError: idx.status === 'error', idxErrorMsg: idx.msg || '', reload: () => this.loadIndex(),
+      idxStale: idx.status === 'ok' && (!t || ago > Component.STALE_AFTER_MS), idxAge: t ? fmtAgo(ago) : 'at an unknown time',
+      skeletons: [1, 2, 3], showEmpty: idx.status !== 'loading' && cards.length === 0,
+      emptyTitle: q ? `No programmes match “${S.q}”` : `No ${S.phase === 'All' ? '' : S.phase.toLowerCase() + ' '}programmes right now`,
+      emptyBody: 'Try another phase, or clear the search.',
+      clearFilters: () => this.setState({ q: '', phase: 'All' }),
+      p, hasProgramme, noProgramme, actions, tabs, awards, awardsNote, awardsLoading, awardsEmpty, awardsEmptyMsg, terms, modeNote,
+      keepHref: progMatch && progMatch[1] ? '#/keepalive?programme=' + progMatch[1] : '#/keepalive',
+      tabAwards: S.tab === 'awards', tabVerifiers: S.tab === 'verifiers', tabTerms: S.tab === 'terms',
+      verifiers: Component.FIXTURE_VERIFIERS,
+      copyLabel: S.copied ? 'Copied' : 'Copy',
+      copyId: () => { const m = route.match(/^\/programme\/(.+)$/); try { navigator.clipboard.writeText(m ? decodeURIComponent(m[1]) : ''); } catch (e) {} this.setState({ copied: true }); setTimeout(() => this.setState({ copied: false }), 1500); },
+      announce: S.announce,
+    };
+  }
+
+  funderVals(isFunders, query, all) {
+    if (!isFunders) return {};
+    const S = this.state, F = S.fund, st = (patch) => this.setState({ fund: { ...F, ...patch } });
+    const byId = Object.fromEntries(all.map(p => [String(p.id), p]));
+    const open = all.filter(p => this.chainOf(p).phase === 'Open');
+    const qp = query.get('programme');
+    const pid = F.pid ?? (qp && open.find(p => p.id === qp) ? qp : (open[0] && open[0].id));
+    const prog = byId[pid];
+    const bal = Number(Component.FIXTURE_BALANCE);
+    const amtNum = Number(String(F.amt).replace(/,/g, ''));
+    const stroops = isFinite(amtNum) ? Math.round(amtNum * Component.STROOP) : NaN;
+    let amtErr = '';
+    if (F.amt !== '' && (!isFinite(amtNum) || amtNum <= 0)) amtErr = this.explain(3).msg;
+    else if (stroops > bal) amtErr = `That's more than your balance of ${this.usdc(bal)}.`;
+    const pc = prog ? this.chainOf(prog) : null;
+    const feeRate = pc && Number(pc.contributed) ? Number(pc.fee) / Number(pc.contributed) : 0.01;
+    const valid = F.amt !== '' && !amtErr && !!prog;
+
+    const contribs = Component.FIXTURE_CONTRIBUTIONS.map(c => {
+      const p = byId[c.programmeId]; const ch = p ? this.chainOf(p) : {};
+      const share = Number(ch.contributed) ? Number(c.amount) / Number(ch.contributed) : 0;
+      const refundable = Math.floor(share * Number(ch.refundable || 0));
+      const done = S.refunded[c.programmeId] || c.refunded;
+      const canRefund = !done && refundable > 0 && (ch.phase === 'Cancelled' || ch.phase === 'Settled');
+      const [pb, pf] = this.phaseColors(ch.phase);
+      const note = done ? `Refunded ${this.usdc(refundable)}.` : canRefund ? `${this.usdc(refundable)} refundable, your share of unawarded budget.` : ch.phase === 'Open' ? 'Still open. Refunds, if any, come after the release window.' : ch.phase === 'Review' ? 'In review. Your share is settled once awards are final.' : 'Nothing to refund. Every unit was awarded.';
+      return { name: p ? p.name : this.shortId(c.programmeId), href: '#/programme/' + encodeURIComponent(c.programmeId), phase: ch.phase, phaseBg: pb, phaseFg: pf, amount: this.usdc(c.amount), note, canRefund, refundable,
+        btnBg: canRefund ? 'var(--accent)' : 'var(--surface-raised)', btnFg: canRefund ? 'var(--accent-contrast)' : 'var(--text-muted)', btn: done ? 'Refunded' : 'Claim refund',
+        refund: () => { if (canRefund) this.setState(s => ({ refunded: { ...s.refunded, [c.programmeId]: true }, announce: `Refund of ${this.usdc(refundable)} sent to your account.` })); } };
+    });
+    const total = Component.FIXTURE_CONTRIBUTIONS.reduce((a, c) => a + Number(c.amount), 0);
+    const refundNow = contribs.filter(c => c.canRefund).reduce((a, c) => a + c.refundable, 0);
+
+    const confirm = () => {
+      st({ step: 'pending', pid });
+      clearTimeout(this.fundT);
+      this.fundT = setTimeout(() => {
+        if (this.props.simulateFailure) this.setState(s => ({ fund: { ...s.fund, step: 'error', err: this.explain(2) } }));
+        else this.setState(s => ({ fund: { ...s.fund, step: 'done' }, announce: 'Contribution confirmed.' }));
+      }, 1800);
+    };
+    const step = F.step;
+    const stepIdx = { amount: 0, confirm: 1, pending: 2, error: 2, done: 2 }[step];
+    return {
+      fStepper: ['Amount', 'Confirm', 'Receipt'].map((l, i) => ({ label: (i < stepIdx ? '✓ ' : '') + l, bg: i === stepIdx ? 'var(--text)' : 'var(--surface-raised)', fg: i === stepIdx ? 'var(--bg)' : 'var(--text-muted)' })),
+      fAmount: step === 'amount', fConfirm: step === 'confirm', fPending: step === 'pending', fDone: step === 'done', fError: step === 'error',
+      fOpen: open.map(p => ({ name: p.name, id: p.id, on: p.id === pid, bg: p.id === pid ? 'var(--accent-soft)' : 'var(--bg)', ring: p.id === pid ? 'inset 0 0 0 2px var(--accent)' : 'none', pick: () => st({ pid: p.id }) })),
+      fNoOpen: open.length === 0,
+      fAmt: F.amt, fOnAmt: (e) => st({ amt: e.target.value }), fAmtErr: amtErr, fHasErr: !!amtErr,
+      fPresets: [100, 500, 1000].map(n => ({ label: n.toLocaleString(), pick: () => st({ amt: String(n) }) })),
+      fBalance: this.usdc(bal),
+      fFee: valid ? this.usdc(stroops * feeRate) : '—', fBudget: valid ? this.usdc(stroops * (1 - feeRate)) : '—', fFeePct: (feeRate * 100).toFixed(1).replace(/\.0$/, '') + '%',
+      fTotal: valid ? this.usdc(stroops) : '—', fProgName: prog ? prog.name : '—',
+      fCanContinue: valid, fContinueBg: valid ? 'var(--accent)' : 'var(--surface-raised)', fContinueFg: valid ? 'var(--accent-contrast)' : 'var(--text-muted)',
+      fContinue: () => { if (valid) st({ step: 'confirm', pid }); },
+      fBack: () => st({ step: 'amount' }), fConfirmGo: confirm,
+      fReset: () => this.setState({ fund: { step: 'amount', pid: null, amt: '' } }),
+      fRetry: () => st({ step: 'confirm' }),
+      fErrMsg: F.err ? F.err.msg : '', fErrCode: F.err ? 'program error ' + F.err.code : '',
+      fTx: Component.FIXTURE_TX.hash, fLedger: Component.FIXTURE_TX.ledger.toLocaleString(),
+      fProgHref: prog ? '#/programme/' + encodeURIComponent(prog.id) : '#/directory',
+      fAmtRing: amtErr ? 'inset 0 0 0 2px var(--refund)' : 'none', fDisabled: !valid,
+      fContribs: contribs.map(c => ({ ...c, disabled: !c.canRefund })), fTotalContrib: this.usdc(total), fRefundNow: this.usdc(refundNow), fCount: String(contribs.length),
+    };
+  }
+
+  recipientVals(on, route, query, all) {
+    if (!on) return {};
+    const S = this.state;
+    const byId = Object.fromEntries(all.map(p => [String(p.id), p]));
+    const real0 = all.find(p => !p.sample);
+    const resolve = (id) => id === '$indexed0' ? (real0 ? real0.id : null) : id;
+    const tabDefs = [['awards', 'My awards', '/recipients/award-progress'], ['apply', 'Apply', '/recipients'], ['timeline', 'Applications', '/recipients/application-timeline'], ['standing', 'Standing', '/recipients/standing']];
+    const tab = route === '/recipients/standing' ? 'standing' : route === '/recipients/application-timeline' ? 'timeline' : route === '/recipients' && (query.has('programme') || query.has('apply')) ? 'apply' : 'awards';
+    const rTabs = tabDefs.map(([k, label, r]) => ({ label, href: '#' + (k === 'awards' ? '/recipients/award-progress' : k === 'apply' ? '/recipients?apply=1' : r), on: tab === k, current: tab === k ? 'page' : undefined, bg: tab === k ? 'var(--text)' : 'var(--surface)', fg: tab === k ? 'var(--bg)' : 'var(--text)' }));
+
+    const awards = Component.FIXTURE_MY_AWARDS.map((a, i) => ({ ...a, programmeId: resolve(a.programmeId), key: 'a' + i })).filter(a => a.programmeId && byId[a.programmeId]).map(a => {
+      const p = byId[a.programmeId], rs = S.rel[a.key];
+      const releasedN = a.tranchesReleased + (rs === 'done' ? 1 : 0);
+      const per = Number(a.granted) / a.tranches;
+      const ready = a.attestationReady && rs !== 'done';
+      const track = []; for (let t = 0; t < a.tranches; t++) track.push({ n: t + 1, amount: this.usdc(per), state: t < releasedN ? 'Released' : t === releasedN ? (ready ? 'Proof received' : 'Waiting for proof') : 'Locked', bg: t < releasedN ? 'var(--accent)' : t === releasedN ? 'var(--accent-soft)' : 'var(--surface-raised)', fg: t < releasedN ? 'var(--accent-contrast)' : 'var(--text)' });
+      const escrow = Number(a.escrow || 0) + (rs === 'done' && a.mode === 'Allocated' ? per : 0);
+      const pick = S.payeePick[a.key] ?? 0, sent = S.sent[a.key];
+      const release = () => {
+        this.setState(s => ({ rel: { ...s.rel, [a.key]: 'pending' } }));
+        setTimeout(() => this.setState(s => this.props.simulateFailure ? { rel: { ...s.rel, [a.key]: 'error' } } : { rel: { ...s.rel, [a.key]: 'done' }, announce: `Tranche ${releasedN + 1} released.` }), 1600);
+      };
+      return {
+        name: p.name, href: '#/programme/' + encodeURIComponent(a.programmeId), mode: a.mode, granted: this.usdc(a.granted), released: this.usdc(per * releasedN), progress: `${releasedN} of ${a.tranches} tranches released`, track, condition: a.condition,
+        canRelease: ready && rs !== 'pending', releasing: rs === 'pending', releaseErr: rs === 'error', releaseErrMsg: this.explain(22).msg, release,
+        waiting: !ready && releasedN < a.tranches, allDone: releasedN >= a.tranches,
+        isAllocated: a.mode === 'Allocated', isRestricted: a.mode === 'Restricted', isDirect: a.mode === 'Direct',
+        escrow: this.usdc(sent ? 0 : escrow), hasEscrow: escrow > 0 && !sent, sentMsg: sent ? `Sent to ${Component.FIXTURE_PAYEES[pick].label.replace('Verified payee · ', '')}.` : '',
+        payees: Component.FIXTURE_PAYEES.map((py, j) => ({ label: py.label, address: py.address, on: j === pick, bg: j === pick ? 'var(--accent-soft)' : 'var(--surface)', ring: j === pick ? 'inset 0 0 0 2px var(--accent)' : 'none', pick: () => this.setState(s => ({ payeePick: { ...s.payeePick, [a.key]: j } })) })),
+        send: () => this.setState(s => ({ sent: { ...s.sent, [a.key]: true }, announce: 'Payment sent from escrow to the verified payee.' })),
+      };
+    });
+
+    const A = S.apply, open = all.filter(p => this.chainOf(p).phase === 'Open');
+    const qp = query.get('programme');
+    const apid = A.pid ?? (qp && open.find(p => p.id === qp) ? qp : (open[0] && open[0].id));
+    const an = Number(String(A.amt).replace(/,/g, ''));
+    const aErr = A.amt !== '' && (!isFinite(an) || an <= 0) ? this.explain(3).msg : '';
+    const aValid = A.amt !== '' && !aErr && !!apid;
+    const setA = (patch) => this.setState({ apply: { ...A, ...patch } });
+
+    const apps = Component.FIXTURE_APPLICATIONS.map(ap => {
+      const p = byId[ap.programmeId]; if (!p) return null; const ch = this.chainOf(p);
+      const v = ap.votes.length, q = ap.quorum;
+      const sorted = ap.votes.map(Number).sort((x, y) => x - y);
+      const median = v ? (v % 2 ? sorted[(v - 1) / 2] : (sorted[v / 2 - 1] + sorted[v / 2]) / 2) : null;
+      const steps = [
+        { t: 'Applied', d: `Asked for ${this.usdc(ap.requested)} · ledger ${ap.submittedLedger.toLocaleString()}`, s: 'done' },
+        { t: 'Review', d: ch.phase === 'Open' ? 'Starts when applications close.' : `${v} of ${q} reviewer votes in`, s: ch.phase === 'Open' ? 'todo' : 'now' },
+        { t: 'Award set', d: v >= q ? `Median of votes: ${this.usdc(median)}` : `Needs ${q} votes. The award will be the median, not the lowest or the average.`, s: v >= q ? 'done' : 'todo' },
+        { t: 'Tranches', d: 'Released one at a time as a verifier confirms each condition.', s: 'todo' },
+      ].map(x => ({ ...x, dot: x.s === 'done' ? 'var(--accent)' : x.s === 'now' ? 'var(--warning)' : 'var(--locked)', fw: x.s === 'now' ? 800 : 700, label: x.s === 'now' ? 'Now' : x.s === 'done' ? 'Done' : 'Next' }));
+      const [pb, pf] = this.phaseColors(ch.phase);
+      return { name: p.name, href: '#/programme/' + encodeURIComponent(p.id), phase: ch.phase, phaseBg: pb, phaseFg: pf, steps };
+    }).filter(Boolean);
+
+    const st = Component.FIXTURE_STANDING;
+    return {
+      rTabs, rAwardsTab: tab === 'awards', rApplyTab: tab === 'apply', rTimelineTab: tab === 'timeline', rStandingTab: tab === 'standing',
+      rAwards: awards, rNoAwards: awards.length === 0,
+      rOpen: open.map(p => ({ name: p.name, on: p.id === apid, bg: p.id === apid ? 'var(--accent-soft)' : 'var(--bg)', ring: p.id === apid ? 'inset 0 0 0 2px var(--accent)' : 'none', pick: () => setA({ pid: p.id }) })),
+      rAmt: A.amt, rOnAmt: (e) => setA({ amt: e.target.value }), rAmtErr: aErr, rAmtRing: aErr ? 'inset 0 0 0 2px var(--refund)' : 'none',
+      rApplyForm: A.step === 'form', rApplyPending: A.step === 'pending', rApplyDone: A.step === 'done',
+      rApplyDisabled: !aValid, rApplyBg: aValid ? 'var(--accent)' : 'var(--surface-raised)', rApplyFg: aValid ? 'var(--accent-contrast)' : 'var(--text-muted)',
+      rApplyGo: () => { if (!aValid) return; setA({ step: 'pending', pid: apid }); setTimeout(() => this.setState(s => ({ apply: { ...s.apply, step: 'done' }, announce: 'Application submitted.' })), 1500); },
+      rApplyReset: () => this.setState({ apply: { pid: null, amt: '', step: 'form' } }),
+      rApplyAmt: aValid ? this.usdc(an * Component.STROOP) : '', rApplyProg: (byId[apid] || {}).name || '',
+      rApps: apps,
+      rStanding: [{ k: 'Programmes that funded you', v: String(st.programmes) }, { k: 'Total received', v: this.usdc(st.received) }, { k: 'Tranches delivered', v: `${st.tranchesReleased} of ${st.tranchesAwarded}` }],
+      rLiveDays: S.kept ? '90' : String(st.liveForDays), rKeepLow: !S.kept && st.liveForDays < 30,
+      rKeep: () => this.setState({ kept: true, announce: 'Standing extended for about 90 days.' }), rKept: S.kept,
+      rKeepBg: !S.kept && st.liveForDays < 30 ? 'var(--warning-soft)' : 'var(--surface)', rKeepLabel: S.kept ? 'Extended' : 'Extend now',
+    };
+  }
+
+  verifierVals(on, all) {
+    if (!on) return {};
+    const S = this.state;
+    const byId = Object.fromEntries(all.map(p => [String(p.id), p]));
+    const real0 = all.find(p => !p.sample);
+    const resolve = (id) => id === '$indexed0' ? (real0 ? real0.id : null) : id;
+    const nameOf = (id) => (byId[id] || {}).name || this.shortId(id || '');
+    const queue = Component.FIXTURE_VERIFIER_QUEUE.map(q => ({ ...q, programmeId: resolve(q.programmeId) })).filter(q => q.programmeId);
+    const pendingQ = queue.filter(q => !['done', 'declined'].includes(S.vq[q.id]));
+    const openId = S.vOpen && pendingQ.find(q => q.id === S.vOpen) ? S.vOpen : null;
+    const setQ = (id, v, extra) => this.setState(s => ({ vq: { ...s.vq, [id]: v }, ...(extra || {}) }));
+    const sign = (q) => {
+      setQ(q.id, 'pending');
+      setTimeout(() => {
+        if (this.props.simulateFailure) setQ(q.id, 'error');
+        else this.setState(s => ({ vq: { ...s.vq, [q.id]: 'done' }, vOpen: null, vChecked: false, vNote: '', announce: `Attestation signed. ${q.subject} can now release tranche ${q.tranche}.`,
+          vSigned: [{ uid: 'att_' + Math.random().toString(16).slice(2, 6) + '…' + Math.random().toString(16).slice(2, 6), programmeId: q.programmeId, subject: q.subject, schema: q.schema, ledger: 4853400 + s.vSigned.length * 3, used: false }, ...s.vSigned] }));
+      }, 1600);
+    };
+    const vQueue = pendingQ.map(q => {
+      const st = S.vq[q.id], open = q.id === openId;
+      return { ...q, programme: nameOf(q.programmeId), trancheLabel: `Tranche ${q.tranche} of ${q.tranches}`, requested: q.requestedLedger.toLocaleString(), open, closed: !open,
+        pending: st === 'pending', error: st === 'error', errMsg: Component.ATTEST_EXPLAIN[1], idle: st !== 'pending',
+        bg: open ? 'var(--surface)' : 'var(--surface)', ring: open ? 'inset 0 0 0 2px var(--accent)' : 'none',
+        openIt: () => this.setState({ vOpen: q.id, vChecked: false, vNote: '' }),
+        close: () => this.setState({ vOpen: null }),
+        decline: () => setQ(q.id, 'declined', { vOpen: null, announce: 'Marked as not confirmed. Nothing was sent; the tranche stays locked.' }),
+        signIt: () => { if (S.vChecked) sign(q); },
+        signDisabled: !S.vChecked || st === 'pending', signBg: S.vChecked ? 'var(--accent)' : 'var(--surface-raised)', signFg: S.vChecked ? 'var(--accent-contrast)' : 'var(--text-muted)' };
+    });
+    const mine = S.vSigned.concat(Component.FIXTURE_MY_ATTESTATIONS.map(a => ({ ...a, programmeId: resolve(a.programmeId) })).filter(a => a.programmeId));
+    const programmes = new Set(queue.map(q => q.programmeId).concat(mine.map(m => m.programmeId)));
+    return {
+      vQueue, vEmpty: vQueue.length === 0,
+      vChecked: S.vChecked, vToggleCheck: () => this.setState({ vChecked: !S.vChecked }), vCheckMark: S.vChecked ? '✓' : '', vCheckBg: S.vChecked ? 'var(--accent)' : 'var(--bg)',
+      vNote: S.vNote, vOnNote: (e) => this.setState({ vNote: e.target.value }),
+      vStats: [{ k: 'Waiting for you', v: String(vQueue.length) }, { k: 'Signed', v: String(mine.length) }, { k: 'Programmes', v: String(programmes.size) }],
+      vMine: mine.map(m => ({ uid: m.uid, programme: nameOf(m.programmeId), subject: m.subject, schema: m.schema, ledger: m.ledger.toLocaleString(), status: m.used ? 'Used to release a tranche' : 'Not used yet', stBg: m.used ? 'var(--accent-soft)' : 'var(--surface-raised)', stFg: m.used ? 'var(--accent-strong)' : 'var(--text-muted)' })),
+    };
+  }
+
+  adminVals(on, route, query, all) {
+    if (!on) return {};
+    const S = this.state;
+    const tab = route === '/finalize' ? 'finalize' : route.startsWith('/schemas') ? 'schemas' : route === '/admin/standing' ? 'standing' : route === '/keepalive' ? 'keepalive' : 'deploy';
+    const aTabs = [['finalize', 'Finalize awards', '/finalize'], ['deploy', 'Deploy programme', '/admin'], ['schemas', 'Schemas', '/schemas/register'], ['standing', 'Standing', '/admin/standing'], ['keepalive', 'Keepalive', '/keepalive']]
+      .map(([k, label, r]) => ({ label, href: '#' + r, current: tab === k ? 'page' : undefined, bg: tab === k ? 'var(--text)' : 'var(--surface)', fg: tab === k ? 'var(--bg)' : 'var(--text)' }));
+    const out = { aTabs, aFinalize: tab === 'finalize', aDeploy: tab === 'deploy', aSchemas: tab === 'schemas', aStanding: tab === 'standing', aKeepalive: tab === 'keepalive' };
+
+    // Keepalive
+    const kpid = S.ttlPid ?? query.get('programme') ?? (all[0] && all[0].id);
+    const kp = all.find(p => p.id === kpid);
+    const ext = (k) => S.ttlExt[kpid + ':' + k];
+    const extend = (keys) => { keys.forEach(k => this.setState(s => ({ ttlExt: { ...s.ttlExt, [kpid + ':' + k]: 'pending' } })));
+      setTimeout(() => this.setState(s => { const n = { ...s.ttlExt }; keys.forEach(k => n[kpid + ':' + k] = 'done'); return { ttlExt: n, announce: `Extended ${keys.length} entr${keys.length > 1 ? 'ies' : 'y'} for about 90 days.` }; }), 1300); };
+    const rows = Component.FIXTURE_TTL.map(t => { const st = ext(t.key), days = st === 'done' ? 90 : t.liveForDays, low = days < 30;
+      return { label: t.label, note: t.note, days: `~${days} days left`, w: Math.min(100, days / 90 * 100).toFixed(0) + '%', bar: low ? 'var(--warning)' : 'var(--accent)', low,
+        btn: st === 'done' ? 'Extended' : st === 'pending' ? 'Extending…' : 'Extend', disabled: st === 'done' || st === 'pending', go: () => extend([t.key]) }; });
+    const lowKeys = Component.FIXTURE_TTL.filter(t => !ext(t.key) && t.liveForDays < 30).map(t => t.key);
+    Object.assign(out, {
+      kOptions: all.map(p => ({ label: p.name, value: p.id, selected: p.id === kpid })), kValue: kpid || '', kPick: (e) => this.setState({ ttlPid: e.target.value }),
+      kRows: rows, kProg: kp ? kp.name : '', kLowCount: lowKeys.length, kHasLow: lowKeys.length > 0,
+      kExtendLow: () => lowKeys.length && extend(lowKeys),
+    });
+
+    // Finalize
+    const review = all.filter(p => this.chainOf(p).phase === 'Review');
+    const qp = query.get('programme');
+    const fpid = S.finPid ?? (qp && all.find(p => p.id === qp) ? qp : (review[0] && review[0].id));
+    const fp = all.find(p => p.id === fpid), fc = fp ? this.chainOf(fp) : null;
+    if (fp && fc) {
+      const budget = Number(fc.contributed) - Number(fc.fee);
+      const median = (vs) => { const s = vs.map(Number).sort((a, b) => a - b), n = s.length; return n % 2 ? s[(n - 1) / 2] : (s[n / 2 - 1] + s[n / 2]) / 2; };
+      const apps = fc.phase === 'Review' && fp.id === 'CDV7VOCATIONALCOHORT3PL5QZ2WM8RT4HX6KJ9A3FC' ? Component.FIXTURE_REVIEW_APPLICATIONS : [];
+      const finalizedSum = apps.reduce((a, ap) => a + (S.fin[fp.id + ap.applicant] === 'done' ? median(ap.votes) : 0), 0);
+      const awarded = Number(fc.awarded) + finalizedSum, remaining = budget - awarded;
+      const wanted = apps.filter(ap => ap.votes.length >= fc.quorum && S.fin[fp.id + ap.applicant] !== 'done').reduce((a, ap) => a + median(ap.votes), 0);
+      out.aFinProg = fp.name; out.aFinPhase = fc.phase; out.aFinIsReview = fc.phase === 'Review'; out.aFinNotReview = fc.phase !== 'Review';
+      out.aFinNotReviewMsg = `Finalizing is available only during Review. This programme is ${fc.phase}.`;
+      out.aFinBudget = this.usdc(budget); out.aFinAwarded = this.usdc(awarded); out.aFinRemaining = this.usdc(remaining);
+      out.aFinBar = [{ w: (awarded / budget * 100).toFixed(1) + '%', bg: 'var(--locked)' }, { w: (Math.max(0, remaining) / budget * 100).toFixed(1) + '%', bg: 'var(--accent-soft)' }];
+      out.aOversub = wanted > remaining; out.aOversubMsg = `Awards ready to finalize total ${this.usdc(wanted)}, but only ${this.usdc(remaining)} is left. Whoever finalizes first is funded first. The budget is protected; the order is not.`;
+      out.aApps = apps.map(ap => {
+        const key = fp.id + ap.applicant, st = S.fin[key], v = ap.votes.length, ready = v >= fc.quorum, m = median(ap.votes);
+        const can = ready && st !== 'done' && st !== 'pending' && S.signedIn;
+        return { who: ap.applicant, requested: this.usdc(ap.requested), votes: `${v} of ${fc.quorum} votes`, median: ready ? this.usdc(m) : '—',
+          votesList: ap.votes.map(x => this.usdc(x).replace(' USDC', '')).join(' · '),
+          reason: st === 'done' ? 'Finalized. The award is fixed.' : st === 'error' ? this.explain(14).msg : !ready ? `Needs ${fc.quorum - v} more vote${fc.quorum - v > 1 ? 's' : ''} before anyone can finalize.` : !S.signedIn ? 'Sign in to finalize. Anyone can.' : `Award will be ${this.usdc(m)}, the median.`,
+          reasonColor: st === 'error' ? 'var(--refund)' : st === 'done' ? 'var(--success)' : 'var(--text-muted)',
+          btn: st === 'done' ? 'Finalized' : st === 'pending' ? 'Finalizing…' : 'Finalize', disabled: !can,
+          bg: can ? 'var(--accent)' : 'var(--surface-raised)', fg: can ? 'var(--accent-contrast)' : 'var(--text-muted)',
+          go: () => { if (!can) return; this.setState(s => ({ fin: { ...s.fin, [key]: 'pending' } }));
+            setTimeout(() => this.setState(s => { const rem = budget - Number(fc.awarded) - apps.reduce((a, x) => a + (s.fin[fp.id + x.applicant] === 'done' ? median(x.votes) : 0), 0);
+              return m > rem ? { fin: { ...s.fin, [key]: 'error' }, announce: 'Finalize failed: not enough budget left.' } : { fin: { ...s.fin, [key]: 'done' }, announce: `Award finalized at ${this.usdc(m)}.` }; }), 1300); } };
+      });
+      out.aNoApps = apps.length === 0;
+    }
+    out.aHasFinProg = !!fp;
+    out.aFinOptions = review.concat(all.filter(p => !review.includes(p))).map(p => ({ label: p.name + ' · ' + this.chainOf(p).phase, value: p.id, selected: p.id === fpid }));
+    out.aFinPick = (e) => this.setState({ finPid: e.target.value });
+    out.aFinValue = fpid || '';
+
+    // Deploy (optionally pre-filled from a funder's proposal link)
+    const enc = query.get('proposal');
+    let proposal = null;
+    if (enc) { try { proposal = JSON.parse(decodeURIComponent(escape(atob(enc)))); } catch (e) { proposal = { bad: true }; } }
+    if (enc && S.depFrom !== enc && proposal && !proposal.bad) setTimeout(() => this.setState({ depFrom: enc, dep: { ...S.dep, step: 'form', name: proposal.name || '', mode: proposal.mode || 'Allocated', tranches: String(proposal.tranches || '3') } }), 0);
+    out.dFromProposal = !!(proposal && !proposal.bad);
+    out.dBadProposal = !!(proposal && proposal.bad);
+    if (proposal && !proposal.bad) out.dProposalRows = [['From', proposal.contact || proposal.funder || '—'], ['Plans to fund', proposal.amount ? Number(proposal.amount).toLocaleString() + ' USDC' : '—'], ['What it pays for', proposal.purpose || '—'], ['Condition', proposal.condition || '—'], ['Verifier', proposal.verifier || '—']].map(([k, v]) => ({ k, v }));
+    const D = S.dep, setD = (patch) => this.setState({ dep: { ...D, ...patch } });
+    const qn = Number(D.quorum), tn = Number(D.tranches);
+    const qErr = !(qn >= 1 && qn <= 16 && Number.isInteger(qn)) ? 'Quorum must be a whole number from 1 to 16 (MAX_QUORUM).' : '';
+    const tErr = !(tn >= 1 && Number.isInteger(tn)) ? 'At least one tranche.' : '';
+    const dValid = D.name.trim() && !qErr && !tErr && S.signedIn;
+    const cfg = Component.FIXTURE_PROTOCOL_CONFIG;
+    Object.assign(out, {
+      dName: D.name, dOnName: (e) => setD({ name: e.target.value }),
+      dModes: [['Direct', 'Paid straight to a payee set at award time.'], ['Allocated', 'Held in escrow; recipient picks a verified payee. Strongest.'], ['Restricted', 'Recipient\'s wallet, limited by a policy signer. Only as strong as that setup.']].map(([m, d]) => ({ m, d, on: D.mode === m, bg: D.mode === m ? 'var(--accent-soft)' : 'var(--bg)', ring: D.mode === m ? 'inset 0 0 0 2px var(--accent)' : 'none', pick: () => setD({ mode: m }) })),
+      dQuorum: D.quorum, dOnQuorum: (e) => setD({ quorum: e.target.value }), dQErr: qErr,
+      dTranches: D.tranches, dOnTranches: (e) => setD({ tranches: e.target.value }), dTErr: tErr,
+      dSchemaOpts: Component.FIXTURE_SCHEMAS.map(s => ({ label: s.id, value: s.id, selected: s.id === D.schema })), dOnSchema: (e) => setD({ schema: e.target.value }), dSchema: D.schema,
+      dForm: D.step === 'form', dPending: D.step === 'pending', dDone: D.step === 'done',
+      dDisabled: !dValid, dBg: dValid ? 'var(--accent)' : 'var(--surface-raised)', dFg: dValid ? 'var(--accent-contrast)' : 'var(--text-muted)',
+      dHint: !S.signedIn ? 'Sign in with the registry admin account to deploy.' : !D.name.trim() ? 'Give the programme a name.' : 'The registry deploys it and becomes its admin of record. Terms can\'t be changed afterwards.',
+      dGo: () => { if (!dValid) return; setD({ step: 'pending' }); setTimeout(() => this.setState(s => ({ dep: { ...s.dep, step: 'done' }, announce: 'Programme deployed.' })), 1600); },
+      dReset: () => this.setState({ dep: { name: '', mode: 'Allocated', quorum: '3', tranches: '3', schema: 'condition-met/v1', step: 'form' } }),
+      dSummary: `${D.name || 'Programme'} · ${D.mode} · quorum ${D.quorum} · ${D.tranches} tranches · ${D.schema}`,
+      cfgRows: [{ k: 'Protocol fee', v: (cfg.feeBps / 100) + '%' }, { k: 'Treasury', v: cfg.treasury }, { k: 'Attest contract', v: cfg.attest }, { k: 'Record contract', v: cfg.record }, { k: 'Registry admin', v: cfg.admin }],
+    });
+
+    // Schemas
+    const H = S.sch, setH = (patch) => this.setState({ sch: { ...H, ...patch } });
+    const hValid = /^[a-z0-9-]+\/v\d+$/.test(H.name.trim()) && H.fields.trim() && S.signedIn;
+    Object.assign(out, {
+      hName: H.name, hOnName: (e) => setH({ name: e.target.value }), hFields: H.fields, hOnFields: (e) => setH({ fields: e.target.value }),
+      hRevocable: H.revocable, hToggleRev: () => setH({ revocable: !H.revocable }), hRevMark: H.revocable ? '✓' : '', hRevBg: H.revocable ? 'var(--accent)' : 'var(--bg)',
+      hNameErr: H.name && !/^[a-z0-9-]+\/v\d+$/.test(H.name.trim()) ? 'Use lowercase words and a version, like shifts-confirmed/v1.' : '',
+      hForm: H.step === 'form', hPending: H.step === 'pending', hDone: H.step === 'done',
+      hDisabled: !hValid, hBg: hValid ? 'var(--accent)' : 'var(--surface-raised)', hFg: hValid ? 'var(--accent-contrast)' : 'var(--text-muted)',
+      hHint: !S.signedIn ? 'Sign in to register a schema.' : 'Schemas describe what a verifier signs. They carry no protocol vocabulary.',
+      hGo: () => { if (!hValid) return; setH({ step: 'pending' }); setTimeout(() => this.setState(s => ({ sch: { ...s.sch, step: 'done' }, announce: 'Schema registered.' })), 1400); },
+      hReset: () => this.setState({ sch: { name: '', fields: '', revocable: false, step: 'form' } }),
+      hSchemas: Component.FIXTURE_SCHEMAS.concat(H.step === 'done' ? [{ id: H.name.trim(), fields: H.fields.trim(), revocable: H.revocable }] : []).map(s => ({ ...s, rev: s.revocable ? 'Revocable' : 'Not revocable' })),
+      hNewName: H.name.trim(),
+    });
+
+    // Standing lookup
+    const st = Component.FIXTURE_STANDING;
+    Object.assign(out, {
+      lValue: S.lookup, lOnInput: (e) => this.setState({ lookup: e.target.value, lookupDone: false }),
+      lGo: () => { if (S.lookup.trim()) this.setState({ lookupDone: true }); },
+      lDone: S.lookupDone, lAddr: S.lookup.trim(),
+      lRows: [{ k: 'Programmes', v: String(st.programmes) }, { k: 'Total received', v: this.usdc(st.received) }, { k: 'Tranches delivered', v: `${st.tranchesReleased} of ${st.tranchesAwarded}` }, { k: 'Live for', v: `~${st.liveForDays} days` }],
+    });
+    return out;
+  }
+
+  startSignIn(method) {
+    this.setState({ sheetStep: 'waiting', sheetMethod: method });
+    clearTimeout(this.signT);
+    this.signT = setTimeout(() => this.setState({ signedIn: true, sheet: false, sheetStep: 'choose', announce: 'Signed in.' }), 1400);
+  }
+
+  proposeVals(on) {
+    if (!on) return {};
+    const S = this.state, P = S.prop, setP = (patch) => this.setState({ prop: { ...P, ...patch } });
+    const amt = Number(String(P.amount).replace(/,/g, ''));
+    const amtErr = P.amount !== '' && (!isFinite(amt) || amt <= 0) ? this.explain(3).msg : '';
+    const valid = P.name.trim() && P.purpose.trim() && P.condition.trim() && P.contact.trim() && !amtErr;
+    const payload = { name: P.name.trim(), purpose: P.purpose.trim(), condition: P.condition.trim(), verifier: P.verifier.trim(), mode: P.mode, amount: P.amount ? amt : null, tranches: Number(P.tranches) || 3, contact: P.contact.trim(), funder: S.signedIn ? Component.FIXTURE_ACCOUNT : null };
+    const enc = btoa(unescape(encodeURIComponent(JSON.stringify(payload))));
+    const base = window.location.href.split('#')[0];
+    const link = base + '#/admin?proposal=' + encodeURIComponent(enc);
+    const summary = [`Programme: ${payload.name}`, `Pays for: ${payload.purpose}`, `Condition for each tranche: ${payload.condition}`, `Verifier: ${payload.verifier || 'to be agreed'}`, `Mode: ${payload.mode}`, `Tranches per award: ${payload.tranches}`, `I plan to fund: ${payload.amount ? payload.amount.toLocaleString() + ' USDC' : 'to be agreed'}`, `Contact: ${payload.contact}`, payload.funder ? `Wallet: ${payload.funder}` : '', '', `Open pre-filled in Deploy: ${link}`].filter(x => x !== null).join('\n');
+    const C = Component.FIXTURE_ADMIN_CONTACT;
+    return {
+      pName: P.name, pOnName: (e) => setP({ name: e.target.value }),
+      pPurpose: P.purpose, pOnPurpose: (e) => setP({ purpose: e.target.value }),
+      pCondition: P.condition, pOnCondition: (e) => setP({ condition: e.target.value }),
+      pVerifier: P.verifier, pOnVerifier: (e) => setP({ verifier: e.target.value }),
+      pAmount: P.amount, pOnAmount: (e) => setP({ amount: e.target.value }), pAmtErr: amtErr,
+      pTranches: P.tranches, pOnTranches: (e) => setP({ tranches: e.target.value }),
+      pContact: P.contact, pOnContact: (e) => setP({ contact: e.target.value }),
+      pModes: [['Direct', 'Paid straight to a payee'], ['Allocated', 'Escrow; recipient picks the payee'], ['Restricted', 'Recipient\'s wallet, with a spend policy']].map(([m, d]) => ({ m, d, on: P.mode === m, bg: P.mode === m ? 'var(--accent-soft)' : 'var(--bg)', ring: P.mode === m ? 'inset 0 0 0 2px var(--accent)' : 'none', pick: () => setP({ mode: m }) })),
+      pForm: P.step === 'form', pReview: P.step === 'review',
+      pDisabled: !valid, pBg: valid ? 'var(--accent)' : 'var(--surface-raised)', pFg: valid ? 'var(--accent-contrast)' : 'var(--text-muted)',
+      pNext: () => { if (valid) setP({ step: 'review' }); }, pEdit: () => setP({ step: 'form' }),
+      pSummary: summary, pLink: link,
+      pMailto: 'mailto:' + C.email + '?subject=' + encodeURIComponent('Programme proposal: ' + payload.name) + '&body=' + encodeURIComponent(summary),
+      pIssue: C.issues + '?title=' + encodeURIComponent('Programme proposal: ' + payload.name) + '&body=' + encodeURIComponent(summary) + '&labels=programme-proposal',
+      pAdminEmail: C.email,
+      pCopyLabel: S.propCopied ? 'Copied' : 'Copy proposal',
+      pCopy: () => { try { navigator.clipboard.writeText(summary); } catch (e) {} this.setState({ propCopied: true, announce: 'Proposal copied.' }); setTimeout(() => this.setState({ propCopied: false }), 1500); },
+    };
+  }
+
+  lookupVals(on) {
+    if (!on) return {};
+    const S = this.state, q = S.attSearched.trim().toLowerCase();
+    const hits = q ? Component.FIXTURE_ATTESTATIONS.filter(a => a.uid.toLowerCase() === q || a.subject.toLowerCase().includes(q) || a.attester.toLowerCase().includes(q)) : [];
+    return {
+      attQ: S.attQ, attOnInput: (e) => this.setState({ attQ: e.target.value }),
+      attGo: (e) => { if (e && e.preventDefault) e.preventDefault(); this.setState({ attSearched: S.attQ }); },
+      attExamples: Component.FIXTURE_ATTESTATIONS.map(a => ({ label: a.uid, pick: () => this.setState({ attQ: a.uid, attSearched: a.uid }) })),
+      attSearchedYet: !!q, attNone: !!q && hits.length === 0, attSearchedText: S.attSearched.trim(),
+      attHits: hits.map(a => ({ uid: a.uid, rows: [{ k: 'Schema', v: a.schema }, { k: 'Attester', v: a.attester }, { k: 'Subject', v: a.subject }, { k: 'Signed at ledger', v: a.ledger.toLocaleString() }].concat(Object.entries(a.data).map(([k, v]) => ({ k, v: String(v) }))),
+        status: a.revoked ? 'Revoked' : a.used ? 'Used to release a tranche' : 'Valid, not used yet', stBg: a.revoked ? 'var(--refund-soft)' : a.used ? 'var(--accent-soft)' : 'var(--success-soft)', stFg: a.revoked ? 'var(--refund)' : a.used ? 'var(--accent-strong)' : 'var(--success)' })),
+    };
+  }
+
+  policyVals(on) {
+    if (!on) return {};
+    const S = this.state, P = Component.FIXTURE_POLICY;
+    const installed = S.polStep === 'done' || (P.installed && S.polStep !== 'removed');
+    const pct = Math.min(100, Number(P.spent) / Number(P.cap) * 100);
+    const checks = [
+      ['Policy signer installed on your wallet', installed],
+      ['Only USDC can be sent', installed],
+      ['Only verified payees can receive', installed],
+      [`Spending cap of ${this.usdc(P.cap)}`, installed],
+    ].map(([t, ok]) => ({ t, mark: ok ? '✓' : '!', bg: ok ? 'var(--success-soft)' : 'var(--refund-soft)', fg: ok ? 'var(--success)' : 'var(--refund)' }));
+    return {
+      pInstalled: installed, pMissing: !installed && S.polStep !== 'pending', pPending: S.polStep === 'pending',
+      pChecks: checks, pCap: this.usdc(P.cap), pSpent: this.usdc(P.spent), pLeft: this.usdc(Number(P.cap) - Number(P.spent)), pPct: pct.toFixed(1) + '%',
+      pPayees: P.payees.map(a => ({ a })),
+      pSetUp: () => { if (!S.signedIn) return; this.setState({ polStep: 'pending' }); setTimeout(() => this.setState({ polStep: 'done', announce: 'Spend policy installed.' }), 1600); },
+      pSetDisabled: !S.signedIn, pSetBg: S.signedIn ? 'var(--accent)' : 'var(--surface-raised)', pSetFg: S.signedIn ? 'var(--accent-contrast)' : 'var(--text-muted)',
+    };
+  }
+
+  awardRow(a) {
+    const who = a.recipient ?? a.applicant ?? a.address ?? a.account ?? 'Unknown recipient';
+    const amt = a.granted ?? a.amount ?? a.award;
+    const n = Number(a.tranches ?? 0), r = Number(a.tranchesReleased ?? 0);
+    const tranches = []; for (let i = 0; i < n; i++) tranches.push(i < r ? 'var(--accent)' : 'var(--locked)');
+    const rel = a.released != null ? ' · ' + this.usdc(a.released) + ' released' : '';
+    return { who: this.shortId(who), sub: n ? `${r} of ${n} tranches${rel}` : 'Tranche status read on-chain', amount: amt != null ? this.usdc(amt) : '—', hasTranches: n > 0, tranches, trancheLabel: `${r} of ${n} tranches released` };
+  }
+}
+</script>
+</body>
+</html>
