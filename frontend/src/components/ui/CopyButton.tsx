@@ -15,9 +15,12 @@ export interface CopyButtonProps {
   value: string;
   /** Accessible label, e.g. "Copy address" or "Copy transaction hash". */
   label?: string;
+  /** Shows "Copy"/"Copied" as visible text next to the icon, for a button
+   * that stands alone rather than sitting inline next to other text. */
+  showLabel?: boolean;
 }
 
-export function CopyButton({ value, label = 'Copy' }: CopyButtonProps) {
+export function CopyButton({ value, label = 'Copy', showLabel = false }: CopyButtonProps) {
   const [copied, setCopied] = useState(false);
 
   const handleCopy = useCallback(async () => {
@@ -32,14 +35,22 @@ export function CopyButton({ value, label = 'Copy' }: CopyButtonProps) {
   }, [value]);
 
   return (
-    <button
-      type="button"
-      className={`copy-button${copied ? ' copy-button--copied' : ''}`}
-      onClick={handleCopy}
-      aria-label={copied ? 'Copied!' : label}
-      title={copied ? 'Copied!' : label}
-    >
-      {copied ? <Check size={14} aria-hidden="true" /> : <Copy size={14} aria-hidden="true" />}
-    </button>
+    // aria-label mutation on the button alone is not reliably announced —
+    // a visually-hidden live region is what actually gets read out.
+    <span className="copy-button-wrap">
+      <button
+        type="button"
+        className={`copy-button${copied ? ' copy-button--copied' : ''}${showLabel ? ' copy-button--labelled' : ''}`}
+        onClick={handleCopy}
+        aria-label={copied ? 'Copied!' : label}
+        title={copied ? 'Copied!' : label}
+      >
+        {copied ? <Check size={14} aria-hidden="true" /> : <Copy size={14} aria-hidden="true" />}
+        {showLabel && <span aria-hidden="true">{copied ? 'Copied' : 'Copy'}</span>}
+      </button>
+      <span role="status" className="visually-hidden">
+        {copied ? 'Copied to clipboard' : ''}
+      </span>
+    </span>
   );
 }

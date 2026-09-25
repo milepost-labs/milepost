@@ -6,6 +6,10 @@
   gap: 8rem;
   padding-bottom: 0; /* Full bleed footer takes care of this */
   position: relative;
+  /* The background shapes deliberately sit past the right edge. `clip`, not
+     `hidden`, so this does not become a scroll container and anchor links and
+     the sticky header keep working. */
+  overflow-x: clip;
 }
 
 /* Subtle Background Shapes */
@@ -239,6 +243,9 @@
   font-size: 1.25rem;
 }
 
+/* Used across this page's markup but never defined, so every muted line was
+   rendering in the main text colour. */
+.text-muted { color: var(--text-muted); }
 .text-error { color: var(--color-error); }
 .text-success { color: var(--color-success); }
 
@@ -552,6 +559,201 @@ code {
   padding: 0.2rem 0.4rem;
   border-radius: 4px;
   font-family: monospace;
+}
+
+/* For developers */
+.eyebrow {
+  display: block;
+  margin-bottom: var(--space-2);
+  color: var(--accent-strong);
+  font-weight: var(--weight-bold);
+  font-size: var(--text-sm);
+}
+
+.developers-section {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, var(--grid-min-column)), 1fr));
+  gap: var(--space-7);
+  align-items: start;
+  padding: var(--space-8) 0;
+  scroll-margin-top: var(--space-8);
+}
+
+/* Grid items default to min-width: auto, which would let the install line
+   widen this column past the viewport instead of scrolling inside its box. */
+.developers-intro {
+  min-width: 0;
+}
+
+.install-block {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-4);
+  flex-wrap: wrap;
+  margin-bottom: var(--space-6);
+  padding: var(--space-4) var(--space-5);
+  background: var(--code);
+  border-radius: var(--radius-lg);
+}
+
+.install-command {
+  /* Without these the flex item grows to the full command's width and the
+     scrollbar below never engages. */
+  flex: 1;
+  min-width: 0;
+  margin: 0;
+  overflow-x: auto;
+  color: var(--code-text);
+  font-family: var(--font-numeric);
+  font-size: var(--text-sm);
+}
+/* Overrides the page-wide `code` rule's own background/padding so the
+   command reads as one block, not a chip nested inside the dark panel. */
+.install-command code {
+  padding: 0;
+  background: none;
+  border-radius: 0;
+  color: inherit;
+  font-family: inherit;
+}
+
+/* The shared button's muted colour is for light surfaces; on the code block
+   it has to follow the block's own text colour to stay readable. */
+.install-block .copy-button {
+  color: var(--code-text);
+  background: color-mix(in srgb, var(--code-text) 12%, transparent);
+  border-color: transparent;
+}
+.install-block .copy-button:hover {
+  color: var(--code-text);
+  background: color-mix(in srgb, var(--code-text) 20%, transparent);
+}
+
+.doc-links {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2) var(--space-6);
+  margin-bottom: var(--space-6);
+}
+
+.doc-links a {
+  display: inline-flex;
+  align-items: center;
+  min-height: 44px;
+  color: var(--accent-strong);
+  font-weight: var(--weight-medium);
+}
+.doc-links a:hover {
+  text-decoration: underline;
+}
+
+.contract-list {
+  /* One grid for all rows, shared through subgrid, so the name column is as
+     wide as the longest name and every description starts at the same x. */
+  display: grid;
+  grid-template-columns: max-content 1fr;
+  gap: var(--space-2) var(--space-4);
+  padding: 0;
+  margin: 0;
+  list-style: none;
+}
+
+.contract-row {
+  display: grid;
+  grid-column: 1 / -1;
+  grid-template-columns: subgrid;
+  align-items: baseline;
+  padding: var(--space-4) var(--space-5);
+  background: var(--surface-color);
+  border-radius: var(--radius-lg);
+  font-size: var(--text-sm);
+}
+
+.contract-row p {
+  margin: 0;
+}
+
+.contract-name {
+  padding: 0;
+  background: none;
+  color: var(--accent-strong);
+  font-family: var(--font-numeric);
+  font-weight: var(--weight-semibold);
+}
+a.contract-name:hover {
+  text-decoration: underline;
+}
+
+/* The link text alone is shorter than a 44px tap target; stretching its hit
+   area over the whole row fixes that without making this row taller than the
+   others. The focus ring moves to the row to match what is clickable. */
+.contract-row:has(a.contract-name) {
+  position: relative;
+}
+a.contract-name::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+}
+a.contract-name:focus-visible {
+  outline: none;
+}
+.contract-row:has(a.contract-name:focus-visible) {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+@media (max-width: 640px) {
+  .contract-list {
+    grid-template-columns: 1fr;
+  }
+
+  .contract-row {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-1);
+  }
+}
+
+/* Footer */
+.landing-footer {
+  padding: var(--space-7) 0 var(--space-6);
+  border-top: 1px solid var(--surface-border);
+}
+
+.landing-footer-inner {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-4) var(--space-6);
+}
+
+.landing-footer-brand {
+  font-weight: var(--weight-bold);
+}
+
+.landing-footer-note {
+  color: var(--text-muted);
+  font-size: var(--text-sm);
+}
+
+.landing-footer-links {
+  margin-left: auto;
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2) var(--space-6);
+}
+
+.landing-footer-links a {
+  display: inline-flex;
+  align-items: center;
+  min-height: 44px;
+  color: var(--text-muted);
+}
+.landing-footer-links a:hover {
+  color: var(--text-main);
 }
 
 @media (max-width: 992px) {

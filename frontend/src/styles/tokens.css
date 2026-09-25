@@ -78,6 +78,11 @@
 
   /* Radius ladder, smallest surface to largest. The existing sm/md/lg stay
      for pages that already use them. */
+  /* Minimum column widths for auto-fit grids: a column narrower than this
+     wraps to the next row instead of squeezing its content. */
+  --grid-min-card: 16rem;
+  --grid-min-column: 26rem;
+
   --radius-sm: 6px;
   --radius-md: 10px;
   --radius-lg: 16px;
@@ -115,11 +120,22 @@
   --border: var(--surface-border);
   --surface: var(--surface-color);
   --surface-raised: var(--glass-bg);
+
+  /* Eyebrow/label text and hover links — a step darker than --accent so it
+     holds up as small, non-bold text. Used first by the landing sections. */
+  --accent-strong: hsl(215, 80%, 32%);
+  /* The developers-section code block is dark in both themes; code is read
+     against a fixed console-style background, not the page surface. */
+  --code: #16191e;
+  --code-text: #e6e8ec;
 }
 
 [data-theme='dark'] {
   --accent: var(--color-primary-dark);
   --accent-contrast: hsl(222 47% 11%);
+  --accent-strong: hsl(215, 90%, 75%);
+  --code: #0f1216;
+  --code-text: #d8dce2;
   --elevation-1: 0 1px 2px rgba(0, 0, 0, 0.4);
   --elevation-2: 0 4px 12px rgba(0, 0, 0, 0.45);
   --elevation-3: 0 12px 32px rgba(0, 0, 0, 0.5);
@@ -141,7 +157,7 @@
 
 /* Every interactive element gets a visible ring. Removing focus outlines
    without replacing them makes an app unusable by keyboard. */
-:is(a, button, input, select, textarea, [tabindex]:not([tabindex="-1"])):focus-visible {
+:is(a, button, summary, input, select, textarea, [tabindex]:not([tabindex="-1"])):focus-visible {
   outline: 2px solid var(--accent);
   outline-offset: var(--focus-offset);
 }

@@ -229,6 +229,15 @@
   border-color: color-mix(in srgb, var(--success) 35%, transparent);
   background: color-mix(in srgb, var(--success) 8%, transparent);
 }
+.copy-button--labelled {
+  width: auto;
+  height: auto;
+  min-height: 44px;
+  padding: var(--space-2) var(--space-4);
+  gap: var(--space-2);
+  border-color: var(--border);
+  font-weight: var(--weight-medium);
+}
 
 /* ── AddressChip ─────────────────────────────────────────────────────────── */
 .address-chip {

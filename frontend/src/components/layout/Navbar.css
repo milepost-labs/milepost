@@ -47,9 +47,95 @@
   color: var(--bg-color);
 }
 
+.nav-menu {
+  position: relative;
+  flex-shrink: 0;
+}
+
+.nav-menu__trigger {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+  min-height: 44px;
+  padding: var(--space-2) var(--space-3);
+  border-radius: var(--radius-md);
+  color: var(--text-main);
+  font-weight: var(--weight-medium);
+  font-size: 0.95rem;
+  cursor: pointer;
+  list-style: none;
+  user-select: none;
+}
+.nav-menu__trigger::-webkit-details-marker { display: none; }
+.nav-menu__trigger:hover { background: var(--surface-hover); }
+
+.nav-menu__chevron { transition: transform var(--transition-fast); }
+.nav-menu[open] .nav-menu__chevron { transform: rotate(180deg); }
+
+.nav-menu__panel {
+  position: absolute;
+  top: calc(100% + var(--space-2));
+  left: 0;
+  z-index: 110;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+  width: max-content;
+  min-width: min(280px, calc(100vw - var(--space-6)));
+  max-width: min(calc(100vw - var(--space-6)), 360px);
+  max-height: min(70vh, 480px);
+  overflow-y: auto;
+  padding: var(--space-4);
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--elevation-3);
+}
+
+.nav-menu__group {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+}
+
+.nav-menu__group-label {
+  padding: 0 var(--space-2);
+  font-size: var(--text-xs);
+  font-weight: var(--weight-semibold);
+  color: var(--text-muted);
+}
+
+/* Path sits under the label rather than beside it: side by side, the longest
+   paths either squeezed their labels onto two lines or were cut off at 360px. */
+.nav-menu__item {
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  min-height: 44px;
+  padding: var(--space-1) var(--space-2);
+  border-radius: var(--radius-sm);
+  color: var(--text-main) !important;
+}
+.nav-menu__item:hover { background: var(--surface-hover); }
+
+.nav-menu__item-path {
+  color: var(--text-muted);
+  font-size: var(--text-xs);
+  overflow-wrap: anywhere;
+}
+
+@media (max-width: 480px) {
+  .nav-menu__panel {
+    left: auto;
+    right: 0;
+  }
+}
+
 .navbar-links {
   display: flex;
-  gap: 2rem;
+  /* Was 2rem; the Menu trigger now shares this row, and eight pills at 2rem
+     pushed Connect Wallet off-screen at 1280px. Pills carry their own padding. */
+  gap: var(--space-2);
   align-items: center;
 }
 
@@ -91,6 +177,15 @@
   color: var(--text-main);
 }
 
+/* The eight pills plus Menu, brand and wallet need about 1170px. Below that
+   they push the header off-screen, and the Menu already lists every one of
+   these routes with its path, so the Menu is the nav. */
+@media (max-width: 1199px) {
+  .navbar-links {
+    display: none;
+  }
+}
+
 @media (max-width: 768px) {
   .navbar {
     padding: 0.75rem 1rem;
@@ -100,25 +195,6 @@
   .navbar-container {
     flex-wrap: wrap;
     gap: 0.5rem;
-  }
-
-  .navbar-links {
-    order: 3;
-    width: 100%;
-    justify-content: space-between;
-    gap: 0.5rem;
-    padding-top: 0.5rem;
-    border-top: 1px solid var(--surface-border);
-  }
-
-  .nav-link {
-    flex: 1;
-    text-align: center;
-    padding: var(--space-2) var(--space-1);
-    min-height: 44px;
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
   }
 
   .navbar-actions {

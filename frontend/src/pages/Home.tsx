@@ -2,6 +2,55 @@ import React, { useEffect, useRef } from 'react';
 import { Link } from 'react-router-dom';
 import './Home.css';
 import { ArrowRight, CheckCircle, Shield, Zap, Lock, Unlock, ArrowUpRight } from 'lucide-react';
+import { CopyButton } from '../components/ui/CopyButton';
+
+/**
+ * Repository docs and README describe one repository — the public
+ * milepost-labs/milepost, never this wave checkout — so every outbound link
+ * here points there.
+ */
+const REPO_URL = 'https://github.com/milepost-labs/milepost';
+
+const INSTALL_COMMAND =
+  'npm install @milepost/registry @milepost/program @milepost/attest @milepost/record @milepost/policy-spend';
+
+/**
+ * `docs/end-to-end-tutorial.md`, named in issue #259, does not exist in the
+ * repository yet and writing it is explicitly out of scope for this issue —
+ * linking to it would be a dead link, which the acceptance criteria forbid.
+ * Omitted here; add it back once that doc exists.
+ */
+const DOC_LINKS = [
+  { label: 'README', href: `${REPO_URL}#readme` },
+  { label: 'Contributing', href: `${REPO_URL}/blob/main/CONTRIBUTING.md` },
+  { label: 'Glossary', href: `${REPO_URL}/blob/main/docs/glossary.md` },
+];
+
+const CONTRACTS = [
+  {
+    name: 'registry',
+    description: 'Deploys programmes and holds protocol config. The trust chain starts here.',
+  },
+  {
+    name: 'program',
+    description: 'One funding round: contributions, applications, review, awards, release, refunds.',
+  },
+  {
+    name: 'attest',
+    description: 'General-purpose, schema-based attestations. Knows nothing else about the protocol.',
+  },
+  { name: 'record', description: 'Portable, non-transferable standing. Counts and totals, never a list.' },
+  {
+    name: 'policy_spend',
+    description: 'Policy signer for smart wallets: one asset, verified payees, a cap.',
+  },
+];
+
+const INDEXER = {
+  name: 'milepost-indexer',
+  href: 'https://github.com/milepost-labs/milepost-indexer',
+  description: 'Reads contract events and publishes JSON lists, because the contracts keep none.',
+};
 
 export const Home: React.FC = () => {
   const observerRef = useRef<IntersectionObserver | null>(null);
@@ -205,6 +254,70 @@ export const Home: React.FC = () => {
           </div>
         </div>
       </section>
+
+      {/* For developers */}
+      <section id="developers" className="developers-section scroll-animate">
+        <div className="developers-intro">
+          <div className="section-header">
+            <span className="eyebrow">For developers</span>
+            <h2>Five contracts, typed bindings, a public index.</h2>
+          </div>
+
+          <div className="install-block">
+            <pre className="install-command">
+              <code>{INSTALL_COMMAND}</code>
+            </pre>
+            <CopyButton value={INSTALL_COMMAND} label="Copy install command" showLabel />
+          </div>
+
+          <nav className="doc-links" aria-label="Documentation">
+            {DOC_LINKS.map((link) => (
+              <a key={link.label} href={link.href} target="_blank" rel="noreferrer noopener">
+                {link.label}
+              </a>
+            ))}
+          </nav>
+        </div>
+
+        <ul className="contract-list">
+          {CONTRACTS.map((contract) => (
+            <li key={contract.name} className="contract-row">
+              <code className="contract-name">{contract.name}</code>
+              <p className="text-muted">{contract.description}</p>
+            </li>
+          ))}
+          <li className="contract-row">
+            <a
+              className="contract-name"
+              href={INDEXER.href}
+              target="_blank"
+              rel="noreferrer noopener"
+            >
+              {INDEXER.name}
+            </a>
+            <p className="text-muted">{INDEXER.description}</p>
+          </li>
+        </ul>
+      </section>
+
+      {/* Footer */}
+      <footer className="landing-footer" role="contentinfo">
+        <div className="landing-footer-inner">
+          <span className="landing-footer-brand">Milepost</span>
+          <span className="landing-footer-note">Pre-audit · testnet only</span>
+          <nav className="landing-footer-links" aria-label="Footer">
+            <a href={REPO_URL} target="_blank" rel="noreferrer noopener">
+              Repository
+            </a>
+            <a href={`${REPO_URL}/blob/main/SECURITY.md`} target="_blank" rel="noreferrer noopener">
+              Security policy
+            </a>
+            <a href={`${REPO_URL}/blob/main/LICENSE`} target="_blank" rel="noreferrer noopener">
+              Licence
+            </a>
+          </nav>
+        </div>
+      </footer>
     </div>
   );
 };

@@ -1,3 +1,4 @@
+import type { ReactElement } from "react";
 import { BrowserRouter as Router, Routes, Route } from "react-router-dom";
 import { ThemeProvider } from "./context/ThemeContext";
 import { SorobanProvider } from "./context/SorobanContext";
@@ -20,6 +21,26 @@ import { AttestationLookup } from "./pages/AttestationLookup";
 import { RegisterSchema } from "./pages/RegisterSchema";
 import { NotFound } from "./pages/NotFound";
 import { ErrorBoundary } from "./components/ErrorBoundary";
+import { APP_ROUTES } from "./routes";
+
+// Keyed by the same paths as APP_ROUTES, so the header Menu (built from that
+// list) can never point at a path this router does not also serve.
+const ROUTE_ELEMENTS: Record<string, ReactElement> = {
+  "/directory": <ProgrammeDirectory />,
+  "/programme": <ProgrammeDetail />,
+  "/funders": <FunderDashboard />,
+  "/recipients": <RecipientDashboard />,
+  "/recipients/standing": <Standing />,
+  "/recipients/award-progress": <AwardProgress />,
+  "/recipients/application-timeline": <ApplicationTimeline />,
+  "/verifiers": <VerifierDashboard />,
+  "/finalize": <FinalizeAwards />,
+  "/policy": <SpendPolicy />,
+  "/admin": <RegistryAdmin />,
+  "/admin/standing": <AdminDashboard />,
+  "/attestations": <AttestationLookup />,
+  "/schemas/register": <RegisterSchema />,
+};
 
 function App() {
   return (
@@ -31,30 +52,17 @@ function App() {
               <Routes>
                 <Route path="/" element={<Layout />}>
                   <Route index element={<Home />} />
-                  <Route path="directory" element={<ProgrammeDirectory />} />
-                  <Route path="funders" element={<FunderDashboard />} />
-                  <Route path="programme" element={<ProgrammeDetail />} />
+                  {APP_ROUTES.map(({ path }) => (
+                    <Route
+                      key={path}
+                      path={path.slice(1)}
+                      element={ROUTE_ELEMENTS[path]}
+                    />
+                  ))}
                   <Route
                     path="programme/:programmeId"
                     element={<ProgrammeDetail />}
                   />
-                  <Route path="recipients" element={<RecipientDashboard />} />
-                  <Route path="recipients/standing" element={<Standing />} />
-                  <Route
-                    path="recipients/award-progress"
-                    element={<AwardProgress />}
-                  />
-                  <Route
-                    path="recipients/application-timeline"
-                    element={<ApplicationTimeline />}
-                  />
-                  <Route path="verifiers" element={<VerifierDashboard />} />
-                  <Route path="policy" element={<SpendPolicy />} />
-                  <Route path="admin" element={<RegistryAdmin />} />
-                  <Route path="admin/standing" element={<AdminDashboard />} />
-                  <Route path="finalize" element={<FinalizeAwards />} />
-                  <Route path="attestations" element={<AttestationLookup />} />
-                  <Route path="schemas/register" element={<RegisterSchema />} />
                   <Route path="*" element={<NotFound />} />
                 </Route>
               </Routes>
