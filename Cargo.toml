@@ -10,7 +10,7 @@ license = "Apache-2.0"
 repository = "https://github.com/milepost-labs/milepost"
 
 [workspace.dependencies]
-soroban-sdk = "27.0.6"
+soroban-sdk = "28.0.0"
 milepost-types = { path = "crates/types" }
 
 # Soroban contracts are billed by deployed WASM size and by CPU instructions, so
