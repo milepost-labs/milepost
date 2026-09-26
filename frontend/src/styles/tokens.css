@@ -82,6 +82,7 @@
      wraps to the next row instead of squeezing its content. */
   --grid-min-card: 16rem;
   --grid-min-column: 26rem;
+  --grid-min-programme-card: 21.25rem; /* 340px — directory card column */
 
   --radius-sm: 6px;
   --radius-md: 10px;

@@ -1,214 +1,251 @@
-import { useEffect, useState } from 'react';
-import { Link } from 'react-router-dom';
-import type { Phase, ProgrammeConfig } from '@milepost/program';
-import { useSoroban } from '../context/useSoroban';
-import { useContractRead } from '../hooks/useContractRead';
-import { AsyncView, Empty } from '../components/state/AsyncStates';
-import { Badge, Button, Card, PhaseBadge, Stat } from '../components/ui';
-import { formatAmount } from '../lib/amount';
-import { explain } from '../lib/errors';
+import { useCallback, useMemo } from 'react';
+import { Link, useSearchParams } from 'react-router-dom';
+import { MoneyRow } from '../components/programme/MoneyRow';
+import '../components/programme/phasePill.css';
+import { Skeleton, Empty } from '../components/state/AsyncStates';
+import { useIndexedList } from '../hooks';
+import { fetchMeta, fetchProgrammes, isStale } from '../lib/indexer';
+import {
+  DIRECTORY_PHASES,
+  filterProgrammes,
+  formatAgo,
+  formatUsdc,
+  mergeProgrammes,
+  phaseCounts,
+  programmeCta,
+  programmeStatus,
+  shortId,
+  type DirectoryPhase,
+  type DirectoryProgramme,
+} from '../lib/programmeView';
 import './ProgrammeDirectory.css';
 
-interface ProgrammeItem {
-  nonceIndex: number;
-  status: 'loading' | 'loaded' | 'error';
-  address?: string;
-  config?: ProgrammeConfig;
-  phase?: Phase;
-  budget?: bigint;
-  error?: string;
-}
+const asPhase = (value: string | null): DirectoryPhase =>
+  DIRECTORY_PHASES.includes(value as DirectoryPhase) ? (value as DirectoryPhase) : 'All';
 
-const formatXlm = (amount: bigint) => formatAmount(amount, { asset: 'XLM' });
-const shorten = (address: string) => `${address.slice(0, 6)}…${address.slice(-6)}`;
-const formatDate = (seconds: bigint) => new Date(Number(seconds) * 1000).toLocaleDateString();
-
+/**
+ * `/directory` — every programme, narrowed by a search box and phase pills.
+ *
+ * The list comes from the public index and is advisory; the chain values shown
+ * on each card are stand-ins (`FIXTURE_CHAIN`) until the per-programme reads
+ * are wired, and every card says so. Filter state lives in the URL so a
+ * filtered view can be linked and survives a reload.
+ */
 export const ProgrammeDirectory = () => {
-  const { registry, programmeAt } = useSoroban();
-  const nonceRead = useContractRead(() => registry.nonce(), [registry]);
+  const [params, setParams] = useSearchParams();
+  const query = params.get('q') ?? '';
+  const phase = asPhase(params.get('phase'));
 
-  const [programmes, setProgrammes] = useState<Record<number, ProgrammeItem>>({});
+  const metaRead = useIndexedList(async () => ({ meta: await fetchMeta(), readAt: Date.now() }), []);
+  const listRead = useIndexedList(() => fetchProgrammes(), []);
 
-  useEffect(() => {
-    if (nonceRead.data === null) return;
-    const count = Number(nonceRead.data);
-    if (count === 0) return;
+  const setQuery = useCallback(
+    (value: string) => {
+      const next = new URLSearchParams(params);
+      if (value) next.set('q', value);
+      else next.delete('q');
+      setParams(next, { replace: true });
+    },
+    [params, setParams],
+  );
 
-    let cancelled = false;
+  const setPhase = useCallback(
+    (value: DirectoryPhase) => {
+      const next = new URLSearchParams(params);
+      if (value === 'All') next.delete('phase');
+      else next.set('phase', value);
+      setParams(next, { replace: true });
+    },
+    [params, setParams],
+  );
 
-    // Derive and fetch each programme progressively
-    for (let i = 0; i < count; i += 1) {
-      (async () => {
-        try {
-          const { result: address } = await registry.programme_address({ n: BigInt(i) });
-          if (cancelled) return;
+  const clearFilters = useCallback(() => {
+    const next = new URLSearchParams(params);
+    next.delete('q');
+    next.delete('phase');
+    setParams(next, { replace: true });
+  }, [params, setParams]);
 
-          setProgrammes((prev) => ({
-            ...prev,
-            [i]: { nonceIndex: i, status: 'loading', address },
-          }));
+  const all = useMemo(() => mergeProgrammes(listRead.data), [listRead.data]);
+  const counts = useMemo(() => phaseCounts(all, query), [all, query]);
+  const shown = useMemo(
+    () =>
+      filterProgrammes(all, query, phase).sort(
+        (a, b) => (b.createdLedger ?? 0) - (a.createdLedger ?? 0),
+      ),
+    [all, query, phase],
+  );
 
-          const progClient = programmeAt(address);
+  const loading = listRead.loading || metaRead.loading;
+  const error = listRead.error ?? metaRead.error;
+  const meta = metaRead.data?.meta ?? null;
+  const now = metaRead.data?.readAt ?? null;
+  const indexedCount = listRead.data?.length ?? 0;
+  const indexedAt = meta ? Date.parse(meta.indexedAt) : Number.NaN;
+  const stale = meta ? isStale(meta) : false;
 
-          const [configRes, phaseRes, budgetRes] = await Promise.all([
-            progClient.get_config().catch(() => null),
-            progClient.get_phase().catch(() => null),
-            progClient.budget().catch(() => null),
-          ]);
+  const age = now !== null && !Number.isNaN(indexedAt) ? now - indexedAt : null;
+  const ageText = age === null ? 'at an unknown time' : formatAgo(age);
 
-          if (cancelled) return;
+  const indexLine = loading
+    ? 'Reading the public index…'
+    : meta
+      ? `${indexedCount} in the public index${age === null ? '' : ` · updated ${ageText}`}`
+      : '';
 
-          if (!configRes || !phaseRes) {
-            setProgrammes((prev) => ({
-              ...prev,
-              [i]: {
-                ...prev[i],
-                address,
-                status: 'error',
-                error: 'Could not read programme contract data.',
-              },
-            }));
-            return;
-          }
-
-          setProgrammes((prev) => ({
-            ...prev,
-            [i]: {
-              nonceIndex: i,
-              status: 'loaded',
-              address,
-              config: configRes.result.unwrap(),
-              phase: phaseRes.result.unwrap(),
-              budget: budgetRes ? budgetRes.result.unwrap() : 0n,
-            },
-          }));
-        } catch (err) {
-          if (cancelled) return;
-          const explained = explain(err, 'program');
-          setProgrammes((prev) => ({
-            ...prev,
-            [i]: {
-              nonceIndex: i,
-              status: 'error',
-              error: explained.message,
-            },
-          }));
-        }
-      })();
-    }
-
-    return () => {
-      cancelled = true;
-    };
-  }, [registry, nonceRead.data, programmeAt]);
+  const showEmpty = !loading && shown.length === 0;
 
   return (
     <div className="directory-container">
-      <header className="directory-header">
-        <h1>Programme Directory</h1>
-        <p className="typo-text text-muted">
-          All grant programmes deployed on Stellar, derived deterministically from the registry.
-        </p>
-      </header>
+      <section aria-labelledby="directory-heading" className="directory-section">
+        <div className="directory-top">
+          <div className="directory-top__copy">
+            <h1 id="directory-heading">Programmes</h1>
+            <p className="directory-top__lede">
+              Fund one, apply to one, or follow where the money went. No sign-in needed to
+              browse.
+            </p>
+          </div>
+          <label className="directory-search">
+            <span className="directory-search__label">Search</span>
+            <input
+              type="search"
+              value={query}
+              onChange={(event) => setQuery(event.target.value)}
+              placeholder="Programme name or id"
+            />
+          </label>
+        </div>
 
-      <AsyncView {...nonceRead} onRetry={nonceRead.refetch}>
-        {(nonceCount) => {
-          const count = Number(nonceCount);
-          if (count === 0) {
-            return (
-              <Empty
-                title="No programmes found"
-                description="The registry currently contains no deployed programmes."
-              />
-            );
-          }
+        <div className="directory-controls">
+          <div role="group" aria-label="Filter by phase" className="directory-filters">
+            {DIRECTORY_PHASES.map((option) => {
+              const on = option === phase;
+              return (
+                <button
+                  key={option}
+                  type="button"
+                  className={`directory-filter${on ? ' directory-filter--on' : ''}`}
+                  aria-pressed={on}
+                  onClick={() => setPhase(option)}
+                >
+                  {option}
+                  <span className="directory-filter__count numeric">{counts[option]}</span>
+                </button>
+              );
+            })}
+          </div>
+          <span className="directory-indexline">{indexLine}</span>
+        </div>
 
-          const items: ProgrammeItem[] = Array.from({ length: count }, (_, i) => programmes[i] ?? { nonceIndex: i, status: 'loading' });
+        {stale && (
+          <div role="status" className="directory-banner directory-banner--stale">
+            The public index was last updated {ageText}. New programmes may be missing.
+            Anything you open is re-read on-chain.
+          </div>
+        )}
 
-          return (
+        {error != null && (
+          <div role="alert" className="directory-banner directory-banner--error">
+            <span className="directory-banner__title">Couldn&apos;t load the public index.</span>
+            <span className="directory-banner__body">
+              The list below is the sample set only.
+            </span>
+            <button
+              type="button"
+              className="directory-banner__retry"
+              onClick={() => {
+                listRead.refetch();
+                metaRead.refetch();
+              }}
+            >
+              Try again
+            </button>
+          </div>
+        )}
+
+        <div aria-live="polite" aria-busy={loading} className="directory-body">
+          {loading && (
             <div className="directory-grid">
-              {items.map((item) => {
-                if (item.status === 'loading') {
-                  return (
-                    <Card key={item.nonceIndex} className="directory-card directory-card--loading">
-                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                        <span className="typo-text text-muted">Programme #{item.nonceIndex}</span>
-                        <Badge tone="neutral">Loading…</Badge>
-                      </div>
-                      <p className="numeric text-muted" style={{ margin: '0.5rem 0' }}>
-                        {item.address ? shorten(item.address) : 'Deriving address…'}
-                      </p>
-                    </Card>
-                  );
-                }
-
-                if (item.status === 'error' || !item.address || !item.config || !item.phase) {
-                  return (
-                    <Card key={item.nonceIndex} className="directory-card directory-card--error">
-                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                        <span className="typo-text text-muted">Programme #{item.nonceIndex}</span>
-                        <Badge tone="danger">Unreadable</Badge>
-                      </div>
-                      <p className="numeric" style={{ margin: '0.5rem 0 0.25rem', fontSize: '0.875rem' }}>
-                        {item.address ? shorten(item.address) : 'Derived contract'}
-                      </p>
-                      <p className="typo-text text-muted" style={{ fontSize: '0.75rem' }}>
-                        {item.error || 'Failed to load details'}
-                      </p>
-                      {item.address && (
-                        <Link to={`/programme/${item.address}`} style={{ fontSize: '0.875rem', marginTop: '0.5rem', display: 'inline-block' }}>
-                          Attempt view &rarr;
-                        </Link>
-                      )}
-                    </Card>
-                  );
-                }
-
-                return (
-                  <Card key={item.nonceIndex} className="directory-card">
-                    <div className="directory-card__header">
-                      <div>
-                        <span className="directory-card__nonce">Programme #{item.nonceIndex}</span>
-                        <h3 className="numeric directory-card__address" title={item.address}>
-                          {shorten(item.address)}
-                        </h3>
-                      </div>
-                      <PhaseBadge phase={item.phase.tag} />
-                    </div>
-
-                    <div className="directory-card__stats">
-                      <Stat
-                        label="Net budget"
-                        value={item.budget !== undefined ? formatXlm(item.budget) : '0.00 XLM'}
-                        numeric
-                      />
-                      <Stat
-                        label="Apply deadline"
-                        value={formatDate(item.config.apply_deadline)}
-                      />
-                    </div>
-
-                    <div className="directory-card__details">
-                      <p style={{ margin: 0, fontSize: '0.875rem', color: 'var(--color-muted)' }}>
-                        Creator: <span className="numeric" title={item.config.creator}>{shorten(item.config.creator)}</span>
-                      </p>
-                      <p style={{ margin: '0.25rem 0 0', fontSize: '0.875rem', color: 'var(--color-muted)' }}>
-                        Tranches: <strong className="numeric">{item.config.tranches}</strong> &bull; Quorum: <strong className="numeric">{item.config.quorum}</strong>
-                      </p>
-                    </div>
-
-                    <div className="directory-card__actions">
-                      <Link to={`/programme/${item.address}`}>
-                        <Button fullWidth>View programme</Button>
-                      </Link>
-                    </div>
-                  </Card>
-                );
-              })}
+              {[0, 1, 2].map((i) => (
+                <Skeleton key={i} variant="card" label="Loading programmes" />
+              ))}
             </div>
-          );
-        }}
-      </AsyncView>
+          )}
+
+          {showEmpty && (
+            <Empty
+              title={
+                query
+                  ? `No programmes match “${query}”`
+                  : `No ${phase === 'All' ? '' : `${phase.toLowerCase()} `}programmes right now`
+              }
+              description="Try another phase, or clear the search."
+              onClearFilters={clearFilters}
+            />
+          )}
+
+          {!loading && shown.length > 0 && (
+            <div className="directory-grid">
+              {shown.map((programme) => (
+                <ProgrammeCard key={programme.id} programme={programme} />
+              ))}
+            </div>
+          )}
+        </div>
+
+        <p className="directory-footnote">
+          This list comes from the public index, which is advisory. The chain values shown on
+          each card are samples until the per-programme reads are wired.
+        </p>
+      </section>
     </div>
   );
 };
+
+function ProgrammeCard({ programme }: { programme: DirectoryProgramme }) {
+  const { chain } = programme;
+  const budget = BigInt(chain.contributed) - BigInt(chain.fee);
+  const href = `/programme/${encodeURIComponent(programme.id)}`;
+
+  return (
+    <Link to={href} className="directory-card-link">
+      <article className="directory-card-new">
+        <div className="directory-card-new__head">
+          <span className="directory-card-new__title">
+            <span className="directory-card-new__name">{programme.name}</span>
+            <span className="directory-card-new__id numeric">{shortId(programme.id)}</span>
+          </span>
+          <span className={`phase-pill phase-pill--${chain.phase.toLowerCase()}`}>{chain.phase}</span>
+        </div>
+
+        <span className="directory-card-new__status">{programmeStatus(chain)}</span>
+
+        <MoneyRow chain={chain} count={20} variant="card" />
+
+        <div className="directory-card-new__figures">
+          <Figure label="Budget" value={formatUsdc(budget)} />
+          <Figure label="Awarded" value={formatUsdc(chain.awarded)} />
+          <Figure label="Released" value={formatUsdc(chain.released)} />
+        </div>
+
+        <div className="directory-card-new__foot">
+          <span className="directory-card-new__mode">{chain.mode}</span>
+          <span className="directory-card-new__sample">
+            {programme.sample ? 'Sample data' : 'Sample chain read'}
+          </span>
+          <span className="directory-card-new__cta">{programmeCta(chain.phase)} →</span>
+        </div>
+      </article>
+    </Link>
+  );
+}
+
+function Figure({ label, value }: { label: string; value: string }) {
+  return (
+    <span className="directory-figure">
+      <span className="directory-figure__label">{label}</span>
+      <span className="directory-figure__value numeric">{value}</span>
+    </span>
+  );
+}

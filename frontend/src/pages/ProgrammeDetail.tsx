@@ -1,9 +1,8 @@
 import { useEffect, useMemo, useState } from "react";
 import { Link } from "react-router-dom";
-import type { Phase, ProgrammeConfig } from "@milepost/program";
+import type { ProgrammeConfig } from "@milepost/program";
 import {
   AlertTriangle,
-  CalendarClock,
   CheckCircle2,
   FileText,
   Landmark,
@@ -13,10 +12,13 @@ import {
 } from "lucide-react";
 import { AsyncView } from "../components/state/AsyncStates";
 import { PausedBanner } from "../components/programme/PausedBanner";
-import { AddressChip, Badge, Button, Card, Field, PhaseBadge, Stat, Table } from "../components/ui";
+import { ProgrammeHeader } from "../components/programme/ProgrammeHeader";
+import { Badge, Button, Card, Field, PhaseBadge, Stat, Table } from "../components/ui";
 import { useSoroban } from "../context/useSoroban";
-import { useContractRead, useContractResult, useProgramme } from "../hooks";
+import { useContractRead, useContractResult, useIndexedList, useProgramme } from "../hooks";
 import { formatAmount, percentOf } from "../lib/amount";
+import { fetchProgrammes } from "../lib/indexer";
+import { chainFor } from "../fixtures/programmes";
 import { registryVerificationCopy } from "../lib/registryVerification";
 import "./ProgrammeDetail.css";
 
@@ -541,6 +543,20 @@ export const ProgrammeDetail = () => {
 
   const phaseName = phase.data?.tag ?? "Loading";
   const activeDeadline = config.data ? nextDeadline(config.data, nowMs) : null;
+
+  // Name, creator and created ledger live in the published index; phase is read
+  // on-chain. Mode is not on the programme contract (it is chosen per award), so
+  // it — and any amount the index cannot supply — comes from the sample read and
+  // is tagged as such until the wiring lands.
+  const indexRead = useIndexedList(() => fetchProgrammes(), []);
+  const indexEntry = useMemo(
+    () => (indexRead.data ?? []).find((entry) => entry.id === programmeId) ?? null,
+    [indexRead.data, programmeId],
+  );
+  const chain = chainFor(programmeId);
+  const phaseTag = phase.data?.tag ?? chain.phase;
+  const readStatus = phase.data ? "live" : "sample";
+  const sampleTag = readStatus === "live" ? null : "Sample chain read";
   const contributedLessFee = figures
     ? maxBigint(figures.totalContributed - figures.fee, ZERO)
     : ZERO;
@@ -585,53 +601,23 @@ export const ProgrammeDetail = () => {
     <div className="programme-detail">
       <PausedBanner client={programme} />
 
-      <header className="programme-hero glass-panel animate-fade-up">
-        <div className="programme-hero__copy">
-          <Badge tone="accent">Live testnet programme</Badge>
-          <h1>Programme detail</h1>
-          <p className="typo-text text-muted">
-            A live read of the programme contract: phase, deadlines, funding,
-            awards, releases, and governance metadata.
-          </p>
-          <div className="programme-id">
-            <AddressChip address={programmeId} verified={isRegistered.data ?? undefined} copyLabel="Copy programme contract" />
-          </div>
-          {isDefault && (
-            <p className="programme-hero__hint">
-              Showing the seeded demo programme. Add a contract id after{" "}
-              <span className="numeric">/programme/</span> to inspect another
-              programme.
-            </p>
-          )}
-        </div>
-
-        <div className="programme-hero__status">
-          <AsyncView {...phase} onRetry={phase.refetch} contract="program">
-            {(value: Phase) => <PhaseBadge phase={value.tag} />}
-          </AsyncView>
-          <AsyncView {...config} onRetry={config.refetch} contract="program">
-            {(value: ProgrammeConfig) => {
-              const upcoming = nextDeadline(value, nowMs);
-
-              return upcoming ? (
-                <div className="next-deadline">
-                  <CalendarClock aria-hidden="true" />
-                  <span>{upcoming.label}</span>
-                  <strong>
-                    {getRelativeDeadline(value[upcoming.key], nowMs)}
-                  </strong>
-                </div>
-              ) : (
-                <div className="next-deadline">
-                  <CalendarClock aria-hidden="true" />
-                  <span>Timeline complete</span>
-                  <strong>No upcoming deadline</strong>
-                </div>
-              );
-            }}
-          </AsyncView>
-        </div>
-      </header>
+      <ProgrammeHeader
+        id={programmeId}
+        name={indexEntry?.name ?? "Programme detail"}
+        creator={config.data?.creator ?? null}
+        createdLedger={indexEntry?.createdLedger ?? null}
+        phase={phaseTag}
+        mode={chain.mode}
+        sampleTag={sampleTag}
+        readStatus={readStatus}
+        cancelled={phaseTag === "Cancelled"}
+      />
+      {isDefault && (
+        <p className="programme-hero__hint">
+          Showing the seeded demo programme. Add a contract id after{" "}
+          <span className="numeric">/programme/</span> to inspect another programme.
+        </p>
+      )}
 
       <section
         className="programme-stats animate-fade-up"

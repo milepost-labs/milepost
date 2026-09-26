@@ -1,0 +1,18 @@
+.money-row {
+  display: grid;
+  grid-template-columns: repeat(20, 1fr);
+  width: 100%;
+}
+
+.money-row--card {
+  gap: 3px;
+}
+
+.money-row--detail {
+  gap: 4px;
+}
+
+.money-row__square {
+  aspect-ratio: 1;
+  border-radius: var(--radius-square);
+}
