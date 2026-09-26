@@ -107,6 +107,35 @@
 .ui-field__message { font-size: var(--text-sm); color: var(--text-muted); }
 .ui-field__message--error { color: var(--danger); }
 
+/* Amount input: large mono figure with a trailing unit. Invalid is an inset
+   ring rather than a border colour, so the field does not change size. */
+.ui-amount { display: flex; flex-direction: column; gap: var(--space-2); }
+.ui-field--amount .ui-field__control input {
+  font-family: var(--font-numeric);
+  font-size: var(--text-amount-input);
+  font-weight: var(--weight-semibold);
+}
+.ui-field--amount .ui-field__control--error {
+  border-color: var(--border);
+  box-shadow: inset 0 0 0 2px var(--danger);
+}
+.ui-field--amount .ui-field__suffix { font-family: var(--font-numeric); font-weight: var(--weight-semibold); }
+.ui-field--amount .ui-field__message--error { font-size: var(--text-caption); }
+.ui-amount__presets { display: flex; flex-wrap: wrap; gap: var(--space-2); }
+.ui-amount__preset {
+  min-height: 44px;
+  padding: 0 var(--space-4);
+  border: 0;
+  border-radius: var(--radius-full);
+  background: var(--surface-raised);
+  color: var(--text-main);
+  font: inherit;
+  font-family: var(--font-numeric);
+  cursor: pointer;
+}
+.ui-amount__preset[aria-pressed='true'] { background: var(--text-main); color: var(--surface); }
+.ui-amount__preset:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+
 .ui-badge {
   display: inline-flex; align-items: center;
   padding: var(--space-1) var(--space-3);
@@ -233,8 +262,8 @@
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: 28px;
-  height: 28px;
+  width: var(--tap-min);
+  height: var(--tap-min);
   padding: 0;
   border: 1px solid transparent;
   border-radius: var(--radius-sm);
@@ -270,6 +299,9 @@
   align-items: center;
   gap: var(--space-1);
   max-width: 100%;
+  padding: var(--space-1) var(--space-1) var(--space-1) var(--space-3);
+  border-radius: var(--radius-chip);
+  background: var(--surface-raised);
 }
 .address-chip__text {
   font-family: var(--font-numeric);
@@ -279,3 +311,10 @@
   text-overflow: ellipsis;
   white-space: nowrap;
 }
+.address-chip__verified {
+  display: inline-flex;
+  align-items: center;
+  flex-shrink: 0;
+}
+.address-chip__verified--success { color: var(--success); }
+.address-chip__verified--warning { color: var(--warning); }
