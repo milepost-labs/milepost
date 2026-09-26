@@ -68,6 +68,51 @@ export const ROLES: Role[] = [
   },
 ];
 
+/**
+ * The four ways someone arrives at the page, in their own words, each a
+ * direct link to the route for that role. This is landing section 2 — the
+ * cards sit directly below the hero so a visitor does not have to read the
+ * whole page to find their own door.
+ *
+ * `path` must be a route the app actually serves; `routes.test.ts` checks it.
+ */
+export interface RoleEntry {
+  /** The role stated as the visitor would say it, not as the protocol names it. */
+  want: string;
+  /** The dashboard this card opens, used for the quieter second line. */
+  role: string;
+  path: string;
+}
+
+export const ROLE_ENTRIES: RoleEntry[] = [
+  { want: 'I want to fund', role: 'Funder', path: '/funders' },
+  { want: 'I need funding', role: 'Recipient', path: '/recipients' },
+  { want: 'I confirm conditions', role: 'Verifier', path: '/verifiers' },
+  { want: 'I run programmes', role: 'Admin', path: '/admin' },
+];
+
+/**
+ * Landing section 3. The project exists because grant tooling stops at
+ * selection; this states that plainly, then asks the three questions the rest
+ * of the product answers. `eyebrow` is rendered in `--refund`, not the accent,
+ * so the section reads as a problem rather than a feature.
+ */
+export interface ProblemQuestion {
+  n: string;
+  question: string;
+}
+
+export const PROBLEM_EYEBROW = 'The problem';
+export const PROBLEM_HEADING = 'Most grant tools stop at selection.';
+export const PROBLEM_BODY =
+  'They make the vote transparent, transfer a lump sum, and end. Milepost is about everything after the transfer.';
+
+export const PROBLEM_QUESTIONS: ProblemQuestion[] = [
+  { n: '01', question: 'Did the money reach the person?' },
+  { n: '02', question: 'Could they spend it on the thing it was for?' },
+  { n: '03', question: 'Can anyone prove it afterwards?' },
+];
+
 export interface Claim {
   title: string;
   detail: string;

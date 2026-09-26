@@ -33,6 +33,8 @@
   --page-pad-bottom: var(--space-10);
   --section-pad-y: var(--space-9);
   --tap-min: 44px;
+  /* Sign-in sheet and confirmation dialogs: centered, max-width 440px. */
+  --modal-max-width: 27.5rem;
 
   /* Fonts. UI is Libre Franklin; numbers, addresses, ids and code are
      IBM Plex Mono so figures line up in columns. */
@@ -53,6 +55,7 @@
   --text-body-lg: 1.0625rem; /* 17 */
   --text-panel: 1.25rem;     /* 20 — panel heading, upper end */
   --text-amount-input: 1.375rem; /* 22 */
+  --text-question: clamp(1.125rem, 2.2vw, 1.375rem); /* 18–22 — landing problem questions */
 
   /* Display sizes for page and landing headings. */
   --text-h1: clamp(1.875rem, 4vw, 2.625rem);        /* 30–42 */
@@ -119,7 +122,11 @@
   --warning: var(--color-warning);
   --border: var(--surface-border);
   --surface: var(--surface-color);
-  --surface-raised: var(--glass-bg);
+  /* The raised step of the redesign's three-step background ladder
+     (--bg → --surface → --surface-raised). It must be a solid, distinct
+     shade: it is what separates chips, tracks and rows now that the design
+     uses no borders or dividers. Glass panels keep their own --glass-bg. */
+  --surface-raised: #eceae4;
 
   /* Design-reference ground and text steps. The redesign separates by
      background step (--bg → --surface → --surface-raised) with no borders. */
@@ -172,6 +179,8 @@
   --accent-strong: hsl(215, 90%, 75%);
   --bg: var(--bg-color);
   --text: var(--text-main);
+  --surface: #1f242b;
+  --surface-raised: #282e37;
   --accent-soft: rgba(124, 130, 247, 0.16);
   --locked: #4b525c;
   --refund-soft: rgba(240, 160, 139, 0.14);
