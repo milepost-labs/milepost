@@ -1,9 +1,8 @@
 import { useEffect, useMemo, useState } from "react";
 import { Link } from "react-router-dom";
-import type { Phase, ProgrammeConfig } from "@milepost/program";
+import type { ProgrammeConfig } from "@milepost/program";
 import {
   AlertTriangle,
-  CalendarClock,
   CheckCircle2,
   FileText,
   Landmark,
@@ -13,11 +12,13 @@ import {
 } from "lucide-react";
 import { AsyncView } from "../components/state/AsyncStates";
 import { PausedBanner } from "../components/programme/PausedBanner";
+import { ProgrammeHeader } from "../components/programme/ProgrammeHeader";
 import { WhereTheMoneyIs } from "../components/programme/WhereTheMoneyIs";
 import { ProgrammeTabs } from "../components/programme/ProgrammeTabs";
-import { AddressChip, Badge, Button, Card, Field, PhaseBadge, Stat, Table } from "../components/ui";
+import { Badge, Button, Card, Field, PhaseBadge, Stat, Table } from "../components/ui";
 import { useSoroban } from "../context/useSoroban";
-import { useContractRead, useContractResult, useProgramme } from "../hooks";
+import { useContractRead, useContractResult, useIndexedList, useProgramme } from "../hooks";
+import { fetchProgrammes } from "../lib/indexer";
 import { formatAmount } from "../lib/amount";
 import { registryVerificationCopy } from "../lib/registryVerification";
 import "./ProgrammeDetail.css";
@@ -552,6 +553,13 @@ export const ProgrammeDetail = () => {
 
   const phaseName = phase.data?.tag ?? "Loading";
   const activeDeadline = config.data ? nextDeadline(config.data, nowMs) : null;
+  // Name and created ledger come from the published index; the phase is read
+  // on-chain and is never taken from the index or a sample.
+  const indexRead = useIndexedList(() => fetchProgrammes(), []);
+  const indexEntry = useMemo(
+    () => (indexRead.data ?? []).find((entry) => entry.id === programmeId) ?? null,
+    [indexRead.data, programmeId],
+  );
   // The contract opens refunds on cancellation or once the release deadline
   // has passed; the money panel shows refundable funds only from then.
   const refundsOpen =
@@ -581,53 +589,22 @@ export const ProgrammeDetail = () => {
     <div className="programme-detail">
       <PausedBanner client={programme} />
 
-      <header className="programme-hero glass-panel animate-fade-up">
-        <div className="programme-hero__copy">
-          <Badge tone="accent">Live testnet programme</Badge>
-          <h1>Programme detail</h1>
-          <p className="typo-text text-muted">
-            A live read of the programme contract: phase, deadlines, funding,
-            awards, releases, and governance metadata.
-          </p>
-          <div className="programme-id">
-            <AddressChip address={programmeId} verified={isRegistered.data ?? undefined} copyLabel="Copy programme contract" />
-          </div>
-          {isDefault && (
-            <p className="programme-hero__hint">
-              Showing the seeded demo programme. Add a contract id after{" "}
-              <span className="numeric">/programme/</span> to inspect another
-              programme.
-            </p>
-          )}
-        </div>
-
-        <div className="programme-hero__status">
-          <AsyncView {...phase} onRetry={phase.refetch} contract="program">
-            {(value: Phase) => <PhaseBadge phase={value.tag} />}
-          </AsyncView>
-          <AsyncView {...config} onRetry={config.refetch} contract="program">
-            {(value: ProgrammeConfig) => {
-              const upcoming = nextDeadline(value, nowMs);
-
-              return upcoming ? (
-                <div className="next-deadline">
-                  <CalendarClock aria-hidden="true" />
-                  <span>{upcoming.label}</span>
-                  <strong>
-                    {getRelativeDeadline(value[upcoming.key], nowMs)}
-                  </strong>
-                </div>
-              ) : (
-                <div className="next-deadline">
-                  <CalendarClock aria-hidden="true" />
-                  <span>Timeline complete</span>
-                  <strong>No upcoming deadline</strong>
-                </div>
-              );
-            }}
-          </AsyncView>
-        </div>
-      </header>
+      <ProgrammeHeader
+        id={programmeId}
+        name={indexEntry?.name ?? "Programme detail"}
+        creator={config.data?.creator ?? null}
+        createdLedger={indexEntry?.createdLedger ?? null}
+        phase={phase.data?.tag ?? null}
+        phaseError={Boolean(phase.error)}
+        verified={isRegistered.data ?? undefined}
+      />
+      {isDefault && (
+        <p className="programme-hero__hint">
+          Showing the seeded demo programme. Add a contract id after{" "}
+          <span className="numeric">/programme/</span> to inspect another
+          programme.
+        </p>
+      )}
 
       <section
         className="programme-stats animate-fade-up"
