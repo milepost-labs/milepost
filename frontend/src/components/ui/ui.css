@@ -153,31 +153,48 @@
 .ui-table__scroll { width: 100%; border-radius: var(--radius-md); }
 .ui-table__scroll:focus { outline: none; }
 .ui-table__scroll:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
-.ui-table { width: 100%; border-collapse: collapse; }
-.ui-table th, .ui-table td {
-  padding: var(--space-3) var(--space-4);
-  text-align: left;
-  border-bottom: 1px solid var(--border);
+/* No rules or dividers: rows are separated by space and a background step. */
+.ui-table { width: 100%; border-collapse: separate; border-spacing: 0 var(--space-2); }
+.ui-table th, .ui-table td { padding: var(--space-3) var(--space-4); text-align: left; }
+.ui-table th {
+  padding-block: var(--space-1);
+  font-size: var(--text-sm);
+  color: var(--text-muted);
+  font-weight: var(--weight-medium);
 }
-.ui-table th { font-size: var(--text-sm); color: var(--text-muted); font-weight: var(--weight-medium); }
+.ui-table tbody td { background: var(--surface-raised); }
+.ui-table tbody tr td:first-child { border-radius: var(--radius-row) 0 0 var(--radius-row); }
+.ui-table tbody tr td:last-child { border-radius: 0 var(--radius-row) var(--radius-row) 0; }
 .numeric-col { text-align: right; }
 
-/* Stack into cards rather than scroll sideways — a phone is the likely device. */
+/* Stack into cards rather than scroll sideways — a phone is the likely device.
+   The header row is hidden visually but stays in the accessibility tree, and
+   every cell repeats its column header through `data-label`. */
 @media (max-width: 640px) {
-  .ui-table thead { display: none; }
+  .ui-table thead {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    padding: 0;
+    margin: -1px;
+    overflow: hidden;
+    clip: rect(0 0 0 0);
+    white-space: nowrap;
+  }
   .ui-table, .ui-table tbody, .ui-table tr, .ui-table td { display: block; width: 100%; }
-  .ui-table tr {
-    margin-bottom: var(--space-4);
-    border: 1px solid var(--border);
-    border-radius: var(--radius-md);
+  .ui-table tbody tr {
+    margin-bottom: var(--space-2);
+    background: var(--surface-raised);
+    border-radius: var(--radius-row);
     overflow: hidden;
   }
-  .ui-table td {
+  .ui-table tbody td {
     display: flex; justify-content: space-between; gap: var(--space-4);
     text-align: right;
-    border-bottom: 1px solid var(--border);
+    background: none;
+    border-radius: 0;
+    overflow-wrap: anywhere;
   }
-  .ui-table td:last-child { border-bottom: 0; }
   .ui-table td::before {
     content: attr(data-label);
     font-size: var(--text-sm);
@@ -187,24 +204,49 @@
   .numeric-col { text-align: right; }
 }
 
+/* ── List / ListRow ─────────────────────────────────────────────────────── */
+/* Card-like rows for dashboards. Same rule as the table: no dividers, the
+   background step and space do the separating. */
+.ui-list {
+  display: flex; flex-direction: column; gap: var(--space-2);
+  margin: 0; padding: 0; list-style: none;
+}
+.ui-list-row {
+  display: flex; align-items: center; gap: var(--space-4);
+  min-height: var(--tap-min);
+  padding: var(--space-4);
+  background: var(--surface);
+  border-radius: var(--radius-row);
+}
+.ui-list-row__leading { display: inline-flex; align-items: center; flex-shrink: 0; }
+.ui-list-row__main { display: flex; flex-direction: column; gap: var(--space-1); min-width: 0; flex: 1; }
+.ui-list-row__title { font-weight: var(--weight-semibold); }
+.ui-list-row__meta { font-size: var(--text-sm); color: var(--text-muted); }
+.ui-list-row__trailing {
+  display: inline-flex; align-items: center; gap: var(--space-2);
+  margin-left: auto; flex-shrink: 0;
+}
+
 .ui-modal__backdrop {
   position: fixed; inset: 0; z-index: 50;
   display: flex; align-items: center; justify-content: center;
   padding: var(--space-4);
-  background: rgba(15, 23, 42, 0.45);
+  background: var(--backdrop);
 }
 .ui-modal {
-  width: min(32rem, 100%);
+  width: min(var(--modal-max-width), 100%);
   max-height: 90vh;
   overflow: auto;
   background: var(--surface);
-  border-radius: var(--radius-lg);
-  box-shadow: var(--elevation-3);
+  /* 24px: the largest radius, shared with hero-level panels. */
+  border-radius: var(--radius-hero-lg);
+  /* Only floating layers cast a shadow; the backdrop itself has none. */
+  box-shadow: var(--shadow-dialog);
 }
 .ui-modal__header {
   display: flex; align-items: center; justify-content: space-between;
-  padding: var(--space-4) var(--space-5);
-  border-bottom: 1px solid var(--border);
+  gap: var(--space-4);
+  padding: var(--space-5) var(--space-5) 0;
 }
 .ui-modal__title { font-size: var(--text-lg); font-weight: var(--weight-semibold); margin: 0; }
 .ui-modal__close {
@@ -219,11 +261,13 @@
   color: var(--text-main);
   background: var(--surface-hover);
 }
-.ui-modal__body { padding: var(--space-5); }
+.ui-modal__body { padding: var(--space-4) var(--space-5) var(--space-5); }
+/* Action area separated by background step, not a divider. */
 .ui-modal__footer {
   display: flex; justify-content: flex-end; gap: var(--space-3);
   padding: var(--space-4) var(--space-5);
-  border-top: 1px solid var(--border);
+  background: var(--surface-raised);
+  border-radius: 0 0 var(--radius-hero-lg) var(--radius-hero-lg);
 }
 
 .ui-field__control select,

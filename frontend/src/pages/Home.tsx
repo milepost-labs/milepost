@@ -4,6 +4,8 @@ import './Home.css';
 import { Shield, Zap, Lock, Unlock } from 'lucide-react';
 import { CopyButton } from '../components/ui/CopyButton';
 import { HeroDemo } from '../components/landing/HeroDemo';
+import { RoleEntryCards } from '../components/landing/RoleEntryCards';
+import { ProblemSection } from '../components/landing/ProblemSection';
 import { GUARANTEES, LIMITS, ROLES, type Claim } from './homeContent';
 import { LiveIndex } from '../components/home/LiveIndex';
 
@@ -129,6 +131,12 @@ export const Home: React.FC = () => {
         </div>
         <HeroDemo />
       </section>
+
+      {/* Role entry cards (landing section 2): route visitors in one click. */}
+      <RoleEntryCards />
+
+      {/* The problem (landing section 3): why the project exists. */}
+      <ProblemSection />
 
       {/* Paradigm Shift (Full Width Grid) */}
       <section className="compare-section full-width scroll-animate">
