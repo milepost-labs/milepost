@@ -6,7 +6,6 @@ import { CopyButton } from '../components/ui/CopyButton';
 import { HeroDemo } from '../components/landing/HeroDemo';
 import { GUARANTEES, LIMITS, ROLES, type Claim } from './homeContent';
 import { LiveIndex } from '../components/home/LiveIndex';
-import { ROLES } from './homeContent';
 
 /**
  * Repository docs and README describe one repository — the public
