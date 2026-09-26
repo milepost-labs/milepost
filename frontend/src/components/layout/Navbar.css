@@ -177,6 +177,13 @@
   color: var(--text-main);
 }
 
+/* The connection pill already supplies a background and a status dot; the
+   chip inside it only needs its own copy control, not a second chip fill. */
+.connected-badge .address-chip {
+  background: transparent;
+  padding: 0;
+}
+
 /* The eight pills plus Menu, brand and wallet need about 1170px. Below that
    they push the header off-screen, and the Menu already lists every one of
    these routes with its path, so the Menu is the nav. */

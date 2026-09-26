@@ -208,8 +208,8 @@
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: 28px;
-  height: 28px;
+  width: var(--tap-min);
+  height: var(--tap-min);
   padding: 0;
   border: 1px solid transparent;
   border-radius: var(--radius-sm);
@@ -245,6 +245,9 @@
   align-items: center;
   gap: var(--space-1);
   max-width: 100%;
+  padding: var(--space-1) var(--space-1) var(--space-1) var(--space-3);
+  border-radius: var(--radius-chip);
+  background: var(--surface-raised);
 }
 .address-chip__text {
   font-family: var(--font-numeric);
@@ -254,3 +257,10 @@
   text-overflow: ellipsis;
   white-space: nowrap;
 }
+.address-chip__verified {
+  display: inline-flex;
+  align-items: center;
+  flex-shrink: 0;
+}
+.address-chip__verified--success { color: var(--success); }
+.address-chip__verified--warning { color: var(--warning); }

@@ -13,7 +13,7 @@ import {
 } from "lucide-react";
 import { AsyncView } from "../components/state/AsyncStates";
 import { PausedBanner } from "../components/programme/PausedBanner";
-import { Badge, Button, Card, Field, PhaseBadge, Stat, Table } from "../components/ui";
+import { AddressChip, Badge, Button, Card, Field, PhaseBadge, Stat, Table } from "../components/ui";
 import { useSoroban } from "../context/useSoroban";
 import { useContractRead, useContractResult, useProgramme } from "../hooks";
 import { formatAmount, percentOf } from "../lib/amount";
@@ -593,12 +593,9 @@ export const ProgrammeDetail = () => {
             A live read of the programme contract: phase, deadlines, funding,
             awards, releases, and governance metadata.
           </p>
-          <p
-            className="programme-id numeric"
-            aria-label={`Programme contract ${programmeId}`}
-          >
-            {programmeId}
-          </p>
+          <div className="programme-id">
+            <AddressChip address={programmeId} verified={isRegistered.data ?? undefined} copyLabel="Copy programme contract" />
+          </div>
           {isDefault && (
             <p className="programme-hero__hint">
               Showing the seeded demo programme. Add a contract id after{" "}

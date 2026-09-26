@@ -26,12 +26,6 @@
 
 .programme-id {
   max-width: 100%;
-  padding: var(--space-3) var(--space-4);
-  border: 1px solid var(--border);
-  border-radius: var(--radius-md);
-  color: var(--text-muted);
-  background: var(--surface);
-  overflow-wrap: anywhere;
 }
 
 .programme-hero__hint {
