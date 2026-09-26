@@ -1,0 +1,106 @@
+.verifiers-tab {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+  width: 100%;
+  box-sizing: border-box;
+}
+
+.verifiers-tab__intro {
+  margin: 0;
+  font-size: var(--text-caption);
+  color: var(--text-muted);
+  line-height: var(--leading-body);
+}
+
+.verifiers-tab__note-card {
+  background: var(--surface-raised);
+  border-radius: var(--radius-row);
+  padding: var(--space-3) var(--space-4);
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  font-size: var(--text-caption);
+  color: var(--text-muted);
+  line-height: var(--leading-body);
+}
+
+.verifiers-tab__badge {
+  align-self: flex-start;
+  font-size: var(--text-xs);
+  font-weight: var(--weight-bold);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  padding: 2px 8px;
+  border-radius: var(--radius-full);
+  background: var(--warning-soft);
+  color: var(--warning-strong, var(--text));
+}
+
+.verifiers-tab__explanation,
+.verifiers-tab__distinction {
+  margin: 0;
+}
+
+.verifiers-tab__explanation strong,
+.verifiers-tab__distinction strong {
+  color: var(--text);
+}
+
+.verifiers-tab__list {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  width: 100%;
+}
+
+.verifiers-tab__card {
+  background: var(--bg);
+  border-radius: var(--radius-row);
+  padding: var(--space-3) var(--space-4);
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: var(--space-3);
+  flex-wrap: wrap;
+  box-sizing: border-box;
+}
+
+.verifiers-tab__card-info {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  min-width: 0;
+}
+
+.verifiers-tab__label {
+  font-size: var(--text-md);
+  font-weight: var(--weight-bold);
+  color: var(--text);
+}
+
+.verifiers-tab__address {
+  font-family: var(--font-numeric);
+  font-size: var(--text-xs);
+  color: var(--text-muted);
+  overflow-wrap: anywhere;
+}
+
+.verifiers-tab__schema {
+  font-size: var(--text-caption);
+  color: var(--text-muted);
+  align-self: center;
+  white-space: nowrap;
+}
+
+@media (max-width: 480px) {
+  .verifiers-tab__card {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: var(--space-2);
+  }
+
+  .verifiers-tab__schema {
+    align-self: flex-start;
+  }
+}
