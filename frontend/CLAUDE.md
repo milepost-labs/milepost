@@ -159,6 +159,7 @@ React 19 + TypeScript + Vite. `react-router-dom` 7, `lucide-react` for icons,
 /admin/standing                AdminDashboard
 /attestations                  AttestationLookup
 /schemas/register              RegisterSchema
+/admin/payees                  PayeeManagement
 *                              NotFound
 ```
 

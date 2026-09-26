@@ -4,6 +4,7 @@ import { Client as Registry, networks } from '@milepost/registry';
 import { Client as Programme } from '@milepost/program';
 import { Client as Attest, networks as attestNetworks } from '@milepost/attest';
 import { Client as Record, networks as recordNetworks } from '@milepost/record';
+import { Client as PolicySpend, networks as policyNetworks } from '@milepost/policy-spend';
 
 /**
  * Contract clients, constructed once.
@@ -28,6 +29,7 @@ export function SorobanProvider({ children }: { children: ReactNode }) {
       registry: new Registry({ ...networks.testnet, rpcUrl: RPC_URL }),
       attest: new Attest({ ...attestNetworks.testnet, rpcUrl: RPC_URL }),
       record: new Record({ ...recordNetworks.testnet, rpcUrl: RPC_URL }),
+      policy: new PolicySpend({ ...policyNetworks.testnet, rpcUrl: RPC_URL }),
       programmeAt,
       demoProgramme: programmeAt(DEMO_PROGRAMME_ID),
       rpcUrl: RPC_URL,
