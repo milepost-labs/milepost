@@ -13,10 +13,12 @@ import {
 } from "lucide-react";
 import { AsyncView } from "../components/state/AsyncStates";
 import { PausedBanner } from "../components/programme/PausedBanner";
+import { WhereTheMoneyIs } from "../components/programme/WhereTheMoneyIs";
+import { ProgrammeTabs } from "../components/programme/ProgrammeTabs";
 import { Badge, Button, Card, Field, PhaseBadge, Stat, Table } from "../components/ui";
 import { useSoroban } from "../context/useSoroban";
 import { useContractRead, useContractResult, useProgramme } from "../hooks";
-import { formatAmount, percentOf } from "../lib/amount";
+import { formatAmount } from "../lib/amount";
 import { registryVerificationCopy } from "../lib/registryVerification";
 import "./ProgrammeDetail.css";
 
@@ -68,12 +70,7 @@ const timelineSteps: TimelineStep[] = [
   },
 ];
 
-const maxBigint = (value: bigint, minimum: bigint) =>
-  value > minimum ? value : minimum;
-const minBigint = (value: bigint, maximum: bigint) =>
-  value < maximum ? value : maximum;
 const formatXlm = (amount: bigint) => formatAmount(amount, { asset: "XLM" });
-const formatPercent = (value: number) => `${value.toFixed(2)}%`;
 const formatAddress = (address: string) =>
   `${address.slice(0, 8)}...${address.slice(-8)}`;
 
@@ -115,9 +112,6 @@ function nextDeadline(
   );
 }
 
-function formatFeeBps(feeBps: number): string {
-  return `${(feeBps / 100).toFixed(2)}%`;
-}
 
 /**
  * Canonical JSON serialization matching docs/programme-metadata.md:
@@ -541,27 +535,6 @@ export const ProgrammeDetail = () => {
 
   const phaseName = phase.data?.tag ?? "Loading";
   const activeDeadline = config.data ? nextDeadline(config.data, nowMs) : null;
-  const contributedLessFee = figures
-    ? maxBigint(figures.totalContributed - figures.fee, ZERO)
-    : ZERO;
-  const grantedRemaining = figures
-    ? maxBigint(figures.budget - figures.totalGranted, ZERO)
-    : ZERO;
-  const releasedRemaining = figures
-    ? maxBigint(figures.totalGranted - figures.totalReleased, ZERO)
-    : ZERO;
-  const releasedSegment = figures
-    ? minBigint(maxBigint(figures.totalReleased, ZERO), figures.budget)
-    : ZERO;
-  const grantedSegment = figures
-    ? minBigint(
-        maxBigint(figures.totalGranted - figures.totalReleased, ZERO),
-        maxBigint(figures.budget - releasedSegment, ZERO),
-      )
-    : ZERO;
-  const availableSegment = figures
-    ? maxBigint(figures.budget - releasedSegment - grantedSegment, ZERO)
-    : ZERO;
 
   const timelineRows = useMemo(() => {
     const programmeConfig = config.data;
@@ -716,17 +689,7 @@ export const ProgrammeDetail = () => {
           </AsyncView>
         </Card>
 
-        <Card
-          title="Money flow"
-          aside={
-            figures ? (
-              <Badge tone="neutral">
-                {formatPercent(percentOf(figures.totalGranted, figures.budget))}{" "}
-                granted
-              </Badge>
-            ) : null
-          }
-        >
+        <div className="programme-section--center">
           <AsyncView
             data={figures}
             loading={moneyLoading}
@@ -735,104 +698,27 @@ export const ProgrammeDetail = () => {
             contract="program"
           >
             {(value) => (
-              <div className="money-flow">
-                <div
-                  className="money-equation"
-                  aria-label="Contributed minus fee equals budget"
-                >
-                  <div>
-                    <span>Contributed</span>
-                    <strong className="numeric">
-                      {formatXlm(value.totalContributed)}
-                    </strong>
-                  </div>
-                  <span aria-hidden="true">-</span>
-                  <div>
-                    <span>Fee</span>
-                    <strong className="numeric">{formatXlm(value.fee)}</strong>
-                  </div>
-                  <span aria-hidden="true">=</span>
-                  <div>
-                    <span>Budget</span>
-                    <strong className="numeric">
-                      {formatXlm(value.budget)}
-                    </strong>
-                  </div>
-                </div>
-
-                <div className="money-meter" aria-label="Budget usage">
-                  <span
-                    className="money-meter__released"
-                    style={{
-                      width: `${percentOf(releasedSegment, value.budget)}%`,
-                    }}
-                  />
-                  <span
-                    className="money-meter__granted"
-                    style={{
-                      width: `${percentOf(grantedSegment, value.budget)}%`,
-                    }}
-                  />
-                  <span
-                    className="money-meter__available"
-                    style={{
-                      width: `${percentOf(availableSegment, value.budget)}%`,
-                    }}
-                  />
-                </div>
-
-                <dl className="money-details">
-                  <div>
-                    <dt>Fee amount</dt>
-                    <dd className="numeric">{formatXlm(value.fee)}</dd>
-                  </div>
-                  <div>
-                    <dt>Fee percentage</dt>
-                    <dd>
-                      <AsyncView
-                        {...config}
-                        onRetry={config.refetch}
-                        contract="program"
-                      >
-                        {(programmeConfig) =>
-                          formatFeeBps(programmeConfig.fee_bps)
-                        }
-                      </AsyncView>
-                    </dd>
-                  </div>
-                  <div>
-                    <dt>Contributed less fee</dt>
-                    <dd className="numeric">{formatXlm(contributedLessFee)}</dd>
-                  </div>
-                  <div>
-                    <dt>Granted vs budget</dt>
-                    <dd>
-                      {formatPercent(
-                        percentOf(value.totalGranted, value.budget),
-                      )}
-                    </dd>
-                  </div>
-                  <div>
-                    <dt>Released vs granted</dt>
-                    <dd>
-                      {formatPercent(
-                        percentOf(value.totalReleased, value.totalGranted),
-                      )}
-                    </dd>
-                  </div>
-                  <div>
-                    <dt>Budget still ungranted</dt>
-                    <dd className="numeric">{formatXlm(grantedRemaining)}</dd>
-                  </div>
-                  <div>
-                    <dt>Granted, unreleased</dt>
-                    <dd className="numeric">{formatXlm(releasedRemaining)}</dd>
-                  </div>
-                </dl>
-              </div>
+              <WhereTheMoneyIs
+                contributed={value.totalContributed}
+                fee={value.fee}
+                granted={value.totalGranted}
+                released={value.totalReleased}
+                refundable={value.totalRefunded ?? ZERO}
+                quorum={config.data?.quorum ?? 1}
+                asset="USDC"
+              />
             )}
           </AsyncView>
-        </Card>
+
+          <ProgrammeTabs
+            programmeId={programmeId}
+            phase={phaseName}
+            mode="Direct"
+            quorum={config.data?.quorum ?? 1}
+            isSample={isDefault}
+            asset="USDC"
+          />
+        </div>
 
         <Card
           title="Timeline and phase"

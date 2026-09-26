@@ -1,0 +1,111 @@
+.awards-tab {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+  width: 100%;
+  box-sizing: border-box;
+}
+
+.awards-tab__note {
+  margin: 0;
+  font-size: var(--text-caption);
+  color: var(--text-muted);
+  line-height: var(--leading-body);
+}
+
+.awards-tab__status {
+  padding: var(--space-4);
+  font-size: var(--text-sm);
+  color: var(--text-muted);
+}
+
+.awards-tab__empty {
+  background: var(--surface-raised);
+  border-radius: var(--radius-row);
+  padding: var(--space-4-5);
+  font-size: var(--text-sm);
+  line-height: var(--leading-body);
+  color: var(--text-muted);
+}
+
+.awards-tab__empty p {
+  margin: 0;
+}
+
+.awards-tab__list {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+  width: 100%;
+}
+
+.awards-tab__row {
+  background: var(--bg);
+  border-radius: var(--radius-row);
+  padding: var(--space-3) var(--space-4);
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: var(--space-2) var(--space-4);
+  align-items: center;
+  box-sizing: border-box;
+}
+
+.awards-tab__row-info {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  min-width: 0;
+}
+
+.awards-tab__recipient {
+  font-family: var(--font-numeric);
+  font-size: var(--text-caption);
+  font-weight: var(--weight-semibold);
+  color: var(--text);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.awards-tab__subtitle {
+  font-size: var(--text-xs);
+  color: var(--text-muted);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.awards-tab__row-amount {
+  font-family: var(--font-numeric);
+  font-size: var(--text-md);
+  font-weight: var(--weight-semibold);
+  color: var(--text);
+  text-align: right;
+  white-space: nowrap;
+}
+
+.awards-tab__tranches {
+  grid-column: 1 / -1;
+  display: flex;
+  gap: var(--space-1);
+  width: 100%;
+  padding-top: 2px;
+}
+
+.awards-tab__tranche-bar {
+  flex: 1;
+  height: 8px;
+  border-radius: var(--radius-square);
+  min-width: 4px;
+}
+
+@media (max-width: 480px) {
+  .awards-tab__row {
+    padding: var(--space-3);
+    gap: var(--space-2);
+  }
+
+  .awards-tab__subtitle {
+    white-space: normal;
+  }
+}
