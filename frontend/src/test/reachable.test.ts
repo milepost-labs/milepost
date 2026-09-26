@@ -35,11 +35,7 @@ const IGNORED = [
  * module the check can no longer protect. "I will wire it up later" is not a
  * reason; that is the exact situation this test exists to catch.
  */
-const ALLOWED_UNREACHABLE = [
-  // The accessor for ThemeContext, which App.tsx provides. Nothing consumes it
-  // because the app has no theme toggle yet — see issue #101, which adds one.
-  'context/useTheme.ts',
-];
+const ALLOWED_UNREACHABLE: string[] = [];
 
 function sourceFiles(dir: string): string[] {
   return readdirSync(dir).flatMap((name) => {

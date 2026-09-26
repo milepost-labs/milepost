@@ -36,6 +36,21 @@
   --transition-normal: 300ms ease-out;
 }
 
+/* Dark base colours, from the design reference's dark palette. The tokens in
+   styles/tokens.css derive from these, so without them the dark theme put
+   dark-theme accents on a light page. */
+[data-theme='dark'] {
+  --bg-color: #16191e;
+  --surface-color: #1f242b;
+  --surface-hover: #282e37;
+  --surface-border: #2f3640;
+  --text-main: #edf0f3;
+  --text-muted: #a4aab4;
+  --glass-bg: rgba(31, 36, 43, 0.85);
+  --glass-border: rgba(255, 255, 255, 0.08);
+  color-scheme: dark;
+}
+
 
 
 /* Global Reset & Base Styles */
