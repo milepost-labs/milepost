@@ -74,8 +74,10 @@ export function useTransaction<T = unknown>(
         setPhase('error');
         setError({
           kind: 'blocked',
-          message: wallet.networkError ?? 'Your wallet is on a different network.',
-          action: 'Switch network in Freighter and try again.',
+          message:
+            wallet.networkError ??
+            `Your wallet is on ${wallet.network ?? 'an unknown network'}, but these contracts are deployed on ${wallet.expectedNetwork}.`,
+          action: 'Switch network in Freighter, then check again and try again.',
         });
         return null;
       }

@@ -26,12 +26,6 @@
 
 .programme-id {
   max-width: 100%;
-  padding: var(--space-3) var(--space-4);
-  border: 1px solid var(--border);
-  border-radius: var(--radius-md);
-  color: var(--text-muted);
-  background: var(--surface);
-  overflow-wrap: anywhere;
 }
 
 .programme-hero__hint {
@@ -86,8 +80,17 @@
 
 .programme-grid > .ui-card:first-child,
 .programme-grid > .ui-card:nth-child(2),
-.programme-grid > .ui-card:nth-child(3) {
+.programme-grid > .ui-card:nth-child(3),
+.programme-section--center {
   grid-column: span 2;
+}
+
+.programme-section--center {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-5);
+  min-width: 0;
+  width: 100%;
 }
 
 .verification-panel {

@@ -14,7 +14,7 @@ import {
   signTransaction,
 } from '@stellar/freighter-api';
 import { networks } from '@milepost/registry';
-import { WalletContext, type WalletState, type WalletStatus } from './walletStore';
+import { WalletContext, EXPECTED_NETWORK_NAME, type WalletState, type WalletStatus } from './walletStore';
 
 /**
  * Wallet connection and the signer every write depends on.
@@ -49,10 +49,11 @@ export function WalletProvider({ children }: { children: ReactNode }) {
   const readNetwork = useCallback(async () => {
     const result = unwrap(await getNetwork());
     setNetwork(result.network);
+    const actual = result.network ?? 'an unknown network';
 
     if (result.networkPassphrase !== EXPECTED_PASSPHRASE) {
       setNetworkError(
-        `Freighter is on ${result.network}, but these contracts are deployed on Testnet. Switch network in Freighter to continue.`,
+        `Freighter is on ${actual}, but these contracts are deployed on ${EXPECTED_NETWORK_NAME}. Switch network in Freighter to continue.`,
       );
       return false;
     }
@@ -108,20 +109,52 @@ export function WalletProvider({ children }: { children: ReactNode }) {
     setStatus('disconnected');
   }, []);
 
+  // Recovery after switching networks in the wallet: re-read the network and
+  // update the status, so the banner clears without a reconnect. Reads and
+  // browsing never depended on this; only writes check it.
+  const recheckNetwork = useCallback(async () => {
+    try {
+      const onExpectedNetwork = await readNetwork();
+      setStatus((previous) => {
+        if (previous === 'wrong-network' && onExpectedNetwork) return address ? 'connected' : 'disconnected';
+        if (!onExpectedNetwork && address) return 'wrong-network';
+        return previous;
+      });
+    } catch {
+      // Keep the previous state; the next connect attempt re-reads anyway.
+    }
+  }, [address, readNetwork]);
+
   const sign = useCallback(
     async (xdr: string) => {
       if (!address) throw new Error('Connect a wallet before signing.');
-      const result = unwrap(
+      const result = unwrap(await getNetwork());
+      if (result.networkPassphrase !== EXPECTED_PASSPHRASE) {
+        throw new Error(
+          `Freighter is on ${result.network ?? 'an unknown network'}, but these contracts are deployed on ${EXPECTED_NETWORK_NAME}. Switch network in Freighter to continue.`,
+        );
+      }
+      const signed = unwrap(
         await signTransaction(xdr, { networkPassphrase: EXPECTED_PASSPHRASE, address }),
       );
-      return { signedTxXdr: result.signedTxXdr, signerAddress: result.signerAddress };
+      return { signedTxXdr: signed.signedTxXdr, signerAddress: signed.signerAddress };
     },
     [address],
   );
 
   const value = useMemo<WalletState>(
-    () => ({ status, address, network, networkError, connect, disconnect, signTransaction: sign }),
-    [status, address, network, networkError, connect, disconnect, sign],
+    () => ({
+      status,
+      address,
+      network,
+      networkError,
+      expectedNetwork: EXPECTED_NETWORK_NAME,
+      connect,
+      disconnect,
+      recheckNetwork,
+      signTransaction: sign,
+    }),
+    [status, address, network, networkError, connect, disconnect, recheckNetwork, sign],
   );
 
   return <WalletContext.Provider value={value}>{children}</WalletContext.Provider>;

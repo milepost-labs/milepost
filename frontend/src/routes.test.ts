@@ -1,5 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { APP_ROUTES } from './routes';
+import { ROLES } from './pages/homeContent';
 
 describe('APP_ROUTES', () => {
   it('has no duplicate paths', () => {
@@ -11,6 +12,21 @@ describe('APP_ROUTES', () => {
     for (const route of APP_ROUTES) {
       expect(route.path.startsWith('/')).toBe(true);
       expect(route.label.trim().length).toBeGreaterThan(0);
+    }
+  });
+});
+
+describe('landing roles section', () => {
+  it('reaches every app route', () => {
+    const linked = new Set(ROLES.flatMap((role) => role.links.map((link) => link.path)));
+    const missing = APP_ROUTES.map((route) => route.path).filter((path) => !linked.has(path));
+    expect(missing).toEqual([]);
+  });
+
+  it('only links to routes the app serves', () => {
+    const served = new Set(APP_ROUTES.map((route) => route.path));
+    for (const role of ROLES) {
+      for (const link of role.links) expect(served.has(link.path)).toBe(true);
     }
   });
 });

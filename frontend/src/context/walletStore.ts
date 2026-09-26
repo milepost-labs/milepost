@@ -13,6 +13,9 @@ export type WalletStatus =
   | 'connected'
   | 'wrong-network';
 
+/** Human name of the network these contracts are deployed on. */
+export const EXPECTED_NETWORK_NAME = 'Testnet';
+
 export interface WalletState {
   status: WalletStatus;
   address: string | null;
@@ -20,8 +23,12 @@ export interface WalletState {
   network: string | null;
   /** Present only when the connected network is not the expected one. */
   networkError: string | null;
+  /** Human name of the network these contracts are deployed on. */
+  expectedNetwork: string;
   connect: () => Promise<void>;
   disconnect: () => void;
+  /** Re-read the wallet network (recovery after switching networks). */
+  recheckNetwork: () => Promise<void>;
   /**
    * Signer for the generated clients:
    * `tx.signAndSend({ signTransaction: wallet.signTransaction })`.

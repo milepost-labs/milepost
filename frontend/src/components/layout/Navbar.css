@@ -159,6 +159,95 @@
   gap: 1rem;
 }
 
+/* Signed-in account pill. Lives here (not page CSS) because the header owns it. */
+.badge-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+  padding: var(--space-1) var(--space-4);
+  border-radius: var(--radius-full);
+}
+
+.connected-badge {
+  min-height: 44px;
+}
+
+.pulse-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: var(--radius-full);
+  background-color: var(--success);
+  flex-shrink: 0;
+}
+
+/* Expected-network indicator: always visible before any write is attempted. */
+.network-indicator {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+  min-height: 44px;
+  padding: var(--space-1) var(--space-3);
+  font-size: var(--text-sm);
+  color: var(--text-muted);
+  white-space: nowrap;
+}
+
+.network-indicator__dot {
+  width: 7px;
+  height: 7px;
+  border-radius: var(--radius-full);
+  background: var(--success);
+  flex-shrink: 0;
+}
+
+.network-indicator--wrong {
+  color: var(--warning);
+  font-weight: var(--weight-semibold);
+}
+
+.network-indicator--wrong .network-indicator__dot {
+  background: var(--warning);
+}
+
+/* Wrong-network banner: refuses writes with both networks named, offers a
+   way to recover, and notes that reading still works. */
+.network-banner {
+  margin-top: var(--space-3);
+  padding: var(--space-4) var(--space-5);
+  border-radius: var(--radius-lg);
+  background: var(--warning-soft);
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+
+.network-banner__message {
+  margin: 0;
+  font-size: var(--text-sm);
+  font-weight: var(--weight-semibold);
+  color: var(--text-main);
+}
+
+.network-banner__note {
+  margin: 0;
+  font-size: var(--text-sm);
+  color: var(--text-muted);
+}
+
+.network-banner__retry {
+  align-self: flex-start;
+  min-height: 44px;
+  padding: var(--space-2) var(--space-4);
+  border-radius: var(--radius-full);
+  border: 0;
+  background: var(--text-main);
+  color: var(--bg-color);
+  font: inherit;
+  font-weight: var(--weight-semibold);
+  font-size: var(--text-sm);
+  cursor: pointer;
+}
+
 .theme-toggle-btn {
   background: transparent;
   border: none;
@@ -175,6 +264,13 @@
 .theme-toggle-btn:hover {
   background: var(--surface-hover);
   color: var(--text-main);
+}
+
+/* The connection pill already supplies a background and a status dot; the
+   chip inside it only needs its own copy control, not a second chip fill. */
+.connected-badge .address-chip {
+  background: transparent;
+  padding: 0;
 }
 
 /* The eight pills plus Menu, brand and wallet need about 1170px. Below that

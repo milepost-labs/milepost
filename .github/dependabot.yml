@@ -1,5 +1,11 @@
 # Dependabot configuration for Milepost workspace ecosystems
 #
+# One PR per ecosystem per month, minor and patch only. Major versions are
+# migrations (soroban-sdk changes the contract wasm, stellar-sdk 17 changes the
+# bindings' public API, vitest and TypeScript majors need tooling work), so they
+# are done by hand, not proposed by a bot. Security updates are separate from
+# this schedule and still open as soon as an advisory is published.
+#
 # Exception Note:
 # Cargo workspace member `milepost-policy-spend` (contracts/policy-spend/Cargo.toml)
 # depends on `smart-wallet-interface` pinned to a specific git commit revision:
@@ -13,141 +19,50 @@ updates:
   - package-ecosystem: "cargo"
     directory: "/"
     schedule:
-      interval: "weekly"
-    open-pull-requests-limit: 5
+      interval: "monthly"
+    open-pull-requests-limit: 1
     groups:
       cargo-dependencies:
         patterns:
           - "*"
+        update-types:
+          - "minor"
+          - "patch"
+    ignore:
+      - dependency-name: "*"
+        update-types: ["version-update:semver-major"]
 
-  # Generated TypeScript SDK Packages. Minor and patch only, so one major that
-  # needs work cannot hold back a batch of safe updates; majors arrive as their
-  # own PRs. This matches the policy /frontend and milepost-indexer already use.
+  # Generated TypeScript SDK packages, all five in one PR. Their dependencies
+  # only reach users when a new @milepost/* version is released.
   - package-ecosystem: "npm"
-    directory: "/packages/attest"
+    directories:
+      - "/packages/*"
     schedule:
-      interval: "weekly"
-    open-pull-requests-limit: 5
+      interval: "monthly"
+    open-pull-requests-limit: 1
     groups:
-      package-attest-dependencies:
+      packages-dependencies:
         patterns:
           - "*"
         update-types:
           - "minor"
           - "patch"
     ignore:
-      # The bindings are generated against SDK 16 and moving to 17 is a
-      # migration, not a bump: its public API returns Uint8Array where 16
-      # returned Buffer, so the bindings and both consumers change together.
-      - dependency-name: "@stellar/stellar-sdk"
-        update-types: ["version-update:semver-major"]
-      # typescript-eslint only supports TypeScript below 6.1. Remove once a
-      # typescript-eslint release accepts the next TypeScript major.
-      - dependency-name: "typescript"
+      - dependency-name: "*"
         update-types: ["version-update:semver-major"]
 
-  - package-ecosystem: "npm"
-    directory: "/packages/policy-spend"
-    schedule:
-      interval: "weekly"
-    open-pull-requests-limit: 5
-    groups:
-      package-policy-spend-dependencies:
-        patterns:
-          - "*"
-        update-types:
-          - "minor"
-          - "patch"
-    ignore:
-      # The bindings are generated against SDK 16 and moving to 17 is a
-      # migration, not a bump: its public API returns Uint8Array where 16
-      # returned Buffer, so the bindings and both consumers change together.
-      - dependency-name: "@stellar/stellar-sdk"
-        update-types: ["version-update:semver-major"]
-      # typescript-eslint only supports TypeScript below 6.1. Remove once a
-      # typescript-eslint release accepts the next TypeScript major.
-      - dependency-name: "typescript"
-        update-types: ["version-update:semver-major"]
-
-  - package-ecosystem: "npm"
-    directory: "/packages/program"
-    schedule:
-      interval: "weekly"
-    open-pull-requests-limit: 5
-    groups:
-      package-program-dependencies:
-        patterns:
-          - "*"
-        update-types:
-          - "minor"
-          - "patch"
-    ignore:
-      # The bindings are generated against SDK 16 and moving to 17 is a
-      # migration, not a bump: its public API returns Uint8Array where 16
-      # returned Buffer, so the bindings and both consumers change together.
-      - dependency-name: "@stellar/stellar-sdk"
-        update-types: ["version-update:semver-major"]
-      # typescript-eslint only supports TypeScript below 6.1. Remove once a
-      # typescript-eslint release accepts the next TypeScript major.
-      - dependency-name: "typescript"
-        update-types: ["version-update:semver-major"]
-
-  - package-ecosystem: "npm"
-    directory: "/packages/record"
-    schedule:
-      interval: "weekly"
-    open-pull-requests-limit: 5
-    groups:
-      package-record-dependencies:
-        patterns:
-          - "*"
-        update-types:
-          - "minor"
-          - "patch"
-    ignore:
-      # The bindings are generated against SDK 16 and moving to 17 is a
-      # migration, not a bump: its public API returns Uint8Array where 16
-      # returned Buffer, so the bindings and both consumers change together.
-      - dependency-name: "@stellar/stellar-sdk"
-        update-types: ["version-update:semver-major"]
-      # typescript-eslint only supports TypeScript below 6.1. Remove once a
-      # typescript-eslint release accepts the next TypeScript major.
-      - dependency-name: "typescript"
-        update-types: ["version-update:semver-major"]
-
-  - package-ecosystem: "npm"
-    directory: "/packages/registry"
-    schedule:
-      interval: "weekly"
-    open-pull-requests-limit: 5
-    groups:
-      package-registry-dependencies:
-        patterns:
-          - "*"
-        update-types:
-          - "minor"
-          - "patch"
-    ignore:
-      # The bindings are generated against SDK 16 and moving to 17 is a
-      # migration, not a bump: its public API returns Uint8Array where 16
-      # returned Buffer, so the bindings and both consumers change together.
-      - dependency-name: "@stellar/stellar-sdk"
-        update-types: ["version-update:semver-major"]
-      # typescript-eslint only supports TypeScript below 6.1. Remove once a
-      # typescript-eslint release accepts the next TypeScript major.
-      - dependency-name: "typescript"
-        update-types: ["version-update:semver-major"]
-
-  # The web app, vendored into frontend/ for the wave. Minor and patch only, so
-  # one major that needs work cannot hold back a batch of safe updates; majors
-  # arrive as their own PRs. frontend/.github/dependabot.yml keeps the same
-  # policy for when the app moves back to its own repository.
+  # The web app, vendored into frontend/ for the wave. frontend/.github/
+  # dependabot.yml holds the app's own policy for when it moves back to its own
+  # repository.
   - package-ecosystem: "npm"
     directory: "/frontend"
     schedule:
-      interval: "weekly"
-    open-pull-requests-limit: 5
+      interval: "monthly"
+    open-pull-requests-limit: 2
     groups:
+      # First, because Dependabot puts a dependency in the first group it
+      # matches. A new @milepost/* version is a contract interface change and
+      # should arrive as its own PR, not inside a batch of tooling bumps.
       milepost-bindings:
         patterns:
           - "@milepost/*"
@@ -158,19 +73,15 @@ updates:
           - "minor"
           - "patch"
     ignore:
-      # typescript-eslint only supports TypeScript below 6.1.
-      - dependency-name: "typescript"
-        update-types: ["version-update:semver-major"]
-      # The types should describe the Node version CI runs.
-      - dependency-name: "@types/node"
+      - dependency-name: "*"
         update-types: ["version-update:semver-major"]
 
   # GitHub Actions workflows (.github/workflows)
   - package-ecosystem: "github-actions"
     directory: "/"
     schedule:
-      interval: "weekly"
-    open-pull-requests-limit: 5
+      interval: "monthly"
+    open-pull-requests-limit: 1
     groups:
       actions-dependencies:
         patterns:

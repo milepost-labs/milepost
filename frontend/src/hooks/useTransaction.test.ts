@@ -18,8 +18,10 @@ function connectedWallet(overrides: Partial<WalletState> = {}): WalletState {
     address: 'GABC',
     network: 'TESTNET',
     networkError: null,
+    expectedNetwork: 'Testnet',
     connect: vi.fn(),
     disconnect: vi.fn(),
+    recheckNetwork: vi.fn().mockResolvedValue(undefined),
     signTransaction: vi.fn().mockResolvedValue({ signedTxXdr: 'signed', signerAddress: 'GABC' }),
     ...overrides,
   };
