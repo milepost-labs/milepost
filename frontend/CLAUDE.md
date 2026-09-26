@@ -174,6 +174,14 @@ Providers wrap in this order: `ThemeProvider` → `WalletProvider` →
   `useTransaction` (+ `phaseLabel`), `useProgramme`, `useIndexedList`
 - **State** (`src/components/state/AsyncStates.tsx`): loading, empty and error
   presentation
+- **Announcements** (`src/context/useAnnouncer.ts`): every async write is
+  supposed to reach a screen reader at the moment pending becomes confirmed
+  or fails, and a per-page live region is how that drifts. Call
+  `const announce = useAnnouncer();` and then `announce('Contribution
+  confirmed.')` (polite, the default) or `announce('Contribution failed.',
+  'alert')` (assertive, for failures only). `AnnouncerProvider` is already
+  mounted once in `Layout`, rendering the one shared line at the bottom of
+  the screen — do not add another `aria-live` region per screen.
 - **Libs** (`src/lib/`): `amount.ts` (stroop parsing and formatting),
   `format.ts`, `errors.ts`, `indexer.ts`, `registryVerification.ts`
 - Feature areas already built: `admin/`, `funder/`, `policy/`, `programme/`,
