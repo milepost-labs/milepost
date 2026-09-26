@@ -283,6 +283,9 @@ pub enum Error {
     SchemaNotFound = 41,
     /// The release deadline has been extended.
     ReleaseDeadlineExtended = 42,
+    /// An `Open` award named a payee other than the recipient, which would pay an
+    /// address the programme never verified.
+    OpenPayeeNotRecipient = 43,
 }
 
 /// Where a tranche is paid, in descending order of how hard the restriction is
@@ -306,6 +309,9 @@ pub enum Mode {
     /// correctly; a misconfigured wallet quietly downgrades to no restriction at
     /// all. Here there is no wallet to misconfigure — funds cannot reach anyone
     /// unverified because they never leave escrow until they do.
+    ///
+    /// The award's payee carries no destination in this mode: the escrow is the
+    /// recipient's, and every address they can reach is one the creator verified.
     Allocated,
     /// Paid into the recipient's smart wallet, where a policy signer limits
     /// onward spending to verified destinations.
@@ -318,6 +324,11 @@ pub enum Mode {
     /// which bounds a misconfiguration to one tranche rather than the award.
     Restricted,
     /// Paid to the recipient with no restriction.
+    ///
+    /// The one mode where nothing enforces the destination, which is why
+    /// `finalize` pins it: an `Open` award must name the recipient, so it cannot
+    /// be used to pay an address the programme never verified. `release` transfers
+    /// straight to the recipient and the award is spent at that point.
     Open,
 }
 
@@ -413,13 +424,15 @@ pub struct Released {
     pub award: Award,
 }
 
+/// Event emitted once per successful `release_batch`, alongside the `Released`
+/// event it emits for each tranche released.
 #[contractevent(topics = ["released_batch"])]
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct ReleasedBatch {
     #[topic]
     pub recipient: Address,
-    #[topic]
-    pub uid: BytesN<32>,
+    pub tranches: u32,
+    pub amount: i128,
 }
 
 /// Event emitted when the release deadline is extended.
@@ -907,8 +920,10 @@ impl Programme {
     /// call: the outcome is already determined by the votes, and requiring a
     /// privileged party to trigger it would let them strand an applicant.
     ///
-    /// `payee` is where tranches are paid. In [`Mode::Direct`] that is a verified
-    /// institution rather than the recipient.
+    /// `payee` is where tranches are paid, and what it has to be depends on the
+    /// mode: a verified institution in [`Mode::Direct`], and the recipient in
+    /// every other mode. That check lives here, where the mode is chosen, so a
+    /// mode cannot be introduced that pays somewhere the creator never agreed to.
     ///
     /// When the programme is oversubscribed, being permissionless means calling
     /// order decides who is funded — see "Oversubscription" in the module docs
@@ -960,10 +975,32 @@ impl Programme {
             return Err(Error::BelowMinimumAward);
         }
 
-        // A Direct award names its payee now and pays them without further
-        // consent, so the payee has to be one this programme stands behind.
-        if mode == Mode::Direct && !env.storage().persistent().has(&Key::Payee(payee.clone())) {
-            return Err(Error::PayeeNotVerified);
+        // Every mode says where a tranche goes, and each one is checked here
+        // rather than assumed later:
+        //
+        // - Direct pays the named payee without the recipient's consent, so it
+        //   has to be one this programme stands behind.
+        // - Open exists to pay the recipient, so it names the recipient. Letting
+        //   it name anyone else would be Direct without the check above — the
+        //   one way to pay an address the programme never verified.
+        // - Allocated never pays the payee: the tranche is escrowed to the
+        //   recipient, who directs it to a verified payee later, so the payee
+        //   slot carries no destination.
+        // - Restricted pays the payee, but that is the recipient's wallet rather
+        //   than the recipient, and `pay_out` checks the policy is installed
+        //   there on every release.
+        match mode {
+            Mode::Direct => {
+                if !env.storage().persistent().has(&Key::Payee(payee.clone())) {
+                    return Err(Error::PayeeNotVerified);
+                }
+            }
+            Mode::Open => {
+                if payee != applicant {
+                    return Err(Error::OpenPayeeNotRecipient);
+                }
+            }
+            Mode::Allocated | Mode::Restricted => {}
         }
 
         let granted_so_far: i128 = env.storage().instance().get(&Key::Granted).unwrap_or(0);
@@ -1317,39 +1354,7 @@ impl Programme {
             &released.checked_add(amount).ok_or(Error::Overflow)?,
         );
 
-        match award.mode {
-            // Stays in escrow for the recipient to direct via `spend`.
-            Mode::Allocated => {
-                let key = Key::Allocation(recipient.clone());
-                let allocation: i128 = env.storage().persistent().get(&key).unwrap_or(0);
-                let allocation = allocation.checked_add(amount).ok_or(Error::Overflow)?;
-                env.storage().persistent().set(&key, &allocation);
-                env.storage()
-                    .persistent()
-                    .extend_ttl(&key, BUMP_THRESHOLD, BUMP_LEDGERS);
-
-                AllocationChanged {
-                    recipient: recipient.clone(),
-                    allocation,
-                }
-                .publish(&env);
-            }
-            mode => {
-                // A `Restricted` award paid into a wallet with no policy
-                // installed is an unrestricted payment wearing the wrong label.
-                // Checking per tranche bounds a misconfiguration to one release.
-                if mode == Mode::Restricted
-                    && !PolicyClient::new(&env, &config.policy).is_installed(&award.payee)
-                {
-                    return Err(Error::PolicyNotInstalled);
-                }
-                token::Client::new(&env, &config.token).transfer(
-                    &env.current_contract_address(),
-                    &award.payee,
-                    &amount,
-                );
-            }
-        }
+        Self::pay_out(&env, &config, &award, amount)?;
 
         // Credit standing last: the attestation is the proof the milestone was
         // met, and that is what a track record should describe.
@@ -1370,6 +1375,61 @@ impl Programme {
         }
         .publish(&env);
         Ok(amount)
+    }
+
+    /// Put one released tranche where its mode says it goes.
+    ///
+    /// Every mode is handled explicitly, so a new mode has to be matched here
+    /// rather than falling through to "pay the payee" by default.
+    fn pay_out(
+        env: &Env,
+        config: &ProgrammeConfig,
+        award: &Award,
+        amount: i128,
+    ) -> Result<(), Error> {
+        match award.mode {
+            // Stays in escrow for the recipient to direct via `spend`.
+            Mode::Allocated => {
+                let key = Key::Allocation(award.recipient.clone());
+                let allocation: i128 = env.storage().persistent().get(&key).unwrap_or(0);
+                let allocation = allocation.checked_add(amount).ok_or(Error::Overflow)?;
+                env.storage().persistent().set(&key, &allocation);
+                env.storage()
+                    .persistent()
+                    .extend_ttl(&key, BUMP_THRESHOLD, BUMP_LEDGERS);
+
+                AllocationChanged {
+                    recipient: award.recipient.clone(),
+                    allocation,
+                }
+                .publish(env);
+            }
+            // Paid into the recipient's smart wallet, where a policy signer limits
+            // onward spending. A `Restricted` award paid into a wallet with no
+            // policy installed is an unrestricted payment wearing the wrong
+            // label. Checking per tranche bounds a misconfiguration to one
+            // release.
+            Mode::Restricted => {
+                if !PolicyClient::new(env, &config.policy).is_installed(&award.payee) {
+                    return Err(Error::PolicyNotInstalled);
+                }
+                Self::transfer(env, config, &award.payee, amount);
+            }
+            // Paid straight to the payee the creator verified at finalize.
+            Mode::Direct => Self::transfer(env, config, &award.payee, amount),
+            // Paid straight to the recipient, whose address finalize pinned as
+            // the payee.
+            Mode::Open => Self::transfer(env, config, &award.payee, amount),
+        }
+        Ok(())
+    }
+
+    fn transfer(env: &Env, config: &ProgrammeConfig, to: &Address, amount: i128) {
+        token::Client::new(env, &config.token).transfer(
+            &env.current_contract_address(),
+            to,
+            &amount,
+        );
     }
 
     /// Batch release multiple tranches in one transaction.
@@ -1471,33 +1531,7 @@ impl Programme {
 
             total_released += amount;
 
-            match award.mode {
-                // Stays in escrow for the recipient to direct via `spend`.
-                Mode::Allocated => {
-                    let key = Key::Allocation(recipient.clone());
-                    let allocation: i128 = env.storage().persistent().get(&key).unwrap_or(0);
-                    let allocation = allocation.checked_add(amount).ok_or(Error::Overflow)?;
-                    env.storage().persistent().set(&key, &allocation);
-                    env.storage()
-                        .persistent()
-                        .extend_ttl(&key, BUMP_THRESHOLD, BUMP_LEDGERS);
-                }
-                mode => {
-                    // A `Restricted` award paid into a wallet with no policy
-                    // installed is an unrestricted payment wearing the wrong label.
-                    // Checking per tranche bounds a misconfiguration to one release.
-                    if mode == Mode::Restricted
-                        && !PolicyClient::new(&env, &config.policy).is_installed(&award.payee)
-                    {
-                        return Err(Error::PolicyNotInstalled);
-                    }
-                    token::Client::new(&env, &config.token).transfer(
-                        &env.current_contract_address(),
-                        &award.payee,
-                        &amount,
-                    );
-                }
-            }
+            Self::pay_out(&env, &config, &award, amount)?;
 
             // Credit standing for this tranche, like the single release path does.
             StandingClient::new(&env, &config.record).credit(
@@ -1507,19 +1541,26 @@ impl Programme {
                 &amount,
                 &uid,
             );
-        }
 
-        // Emit individual Release events for each tranche
-        for uid in uids.iter() {
+            // One `Released` per tranche, carrying that tranche's own amount and
+            // the award as it stood at that tranche, exactly as the single
+            // release path does.
             Released {
                 recipient: recipient.clone(),
                 payee: award.payee.clone(),
-                amount: 0, // TODO: track per-tranche amount
+                amount,
                 attestation: uid.clone(),
                 award: award.clone(),
             }
             .publish(&env);
         }
+
+        ReleasedBatch {
+            recipient,
+            tranches: uids.len() as u32,
+            amount: total_released,
+        }
+        .publish(&env);
 
         Ok(total_released)
     }

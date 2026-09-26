@@ -124,6 +124,7 @@ If you are reading the client bindings and see `SpendError` where other contract
 | 34 | `PolicyNotInstalled` | Fault | A Restricted award was released to a wallet with no policy installed | The recipient must install the policy-spend contract policy before `release()` can send a Restricted tranche. Ask the recipient to configure their wallet |
 | 35 | `SpendWindowClosed` | Fault | Allocations can no longer be directed once the sweep window opens | Directed allocations (moving money from escrow to a payee) must happen before the sweep deadline. Finalize your allocation before the window closes |
 | 39 | `Paused` | Fault | The programme is paused and this operation cannot proceed | The creator paused the programme in an emergency. Wait for `unpause`, or read what a pause stops and does not stop in the [trust model](../README.md#emergency-pause) |
+| 43 | `OpenPayeeNotRecipient` | Fault | An `Open` award named a payee other than the recipient | `Open` pays the recipient, so the payee is the applicant's own address. Finalize the award with the applicant as the payee, or use a mode that pays a verified payee |
 
 ---
 
@@ -172,6 +173,7 @@ Alphabetical cross-reference across all contracts:
 | `NotAuthorized` | attest | (none - see `NotAttester`) | — |
 | `NotAuthorized` | policy-spend | (none - see `NotSteward`) | — |
 | `NotAuthorized` | program | 1 | Fault |
+| `OpenPayeeNotRecipient` | program | 43 | Fault |
 | `NotAuthorized` | record | 1 | Fault |
 | `NotAuthorized` | registry | 1 | Fault |
 | `NotCancellable` | program | 17 | Fault |

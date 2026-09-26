@@ -1,8 +1,9 @@
 #![cfg(test)]
 
 use super::*;
+use milepost_test_utils::assert_events;
 use milepost_test_utils::schedule::*;
-use soroban_sdk::{testutils::Address as _, testutils::Ledger as _, vec, Env};
+use soroban_sdk::{testutils::Address as _, testutils::Ledger as _, vec, Env, Event as _};
 
 // Requires the programme wasm to exist, so `cargo build --target wasm32v1-none
 // --release` must run before this crate's tests. CI builds wasm before testing
@@ -393,8 +394,14 @@ fn test_full_cross_contract_integration() {
     prog_client.review(&reviewer2, &applicant, &50_000);
 
     // 10. Finalize application into Award (Permissionless settlement at median vote)
+    // `Open` pays the recipient, so the payee it names has to be the applicant:
+    // it is not a way to name a destination the creator never agreed to. Even a
+    // payee the creator has verified is refused.
     prog_client.allow_payee(&payee);
-    let award = prog_client.finalize(&applicant, &payee, &programme::Mode::Open);
+    assert!(prog_client
+        .try_finalize(&applicant, &payee, &programme::Mode::Open)
+        .is_err());
+    let award = prog_client.finalize(&applicant, &applicant, &programme::Mode::Open);
     let granted_amount = 40_000i128; // Median of quorum 2 votes [40_000, 50_000]
     assert_eq!(award.granted, granted_amount);
     assert_eq!(award.tranches, 2);
@@ -412,7 +419,7 @@ fn test_full_cross_contract_integration() {
 
     let released1 = prog_client.release(&applicant, &attestation1_uid, &verifier);
     assert_eq!(released1, 20_000);
-    assert_eq!(token_client.balance(&payee), 20_000);
+    assert_eq!(token_client.balance(&applicant), 20_000);
 
     // Verify recipient standing credited in Record contract
     let standing1 = record_client.get(&applicant);
@@ -431,7 +438,12 @@ fn test_full_cross_contract_integration() {
     );
     let released2 = prog_client.release(&applicant, &attestation2_uid, &verifier);
     assert_eq!(released2, 20_000);
-    assert_eq!(token_client.balance(&payee), 40_000);
+    assert_eq!(token_client.balance(&applicant), 40_000);
+    assert_eq!(
+        token_client.balance(&payee),
+        0,
+        "a verified payee is not this award's destination"
+    );
 
     // Verify recipient standing updated
     let standing2 = record_client.get(&applicant);
@@ -445,14 +457,14 @@ fn test_full_cross_contract_integration() {
     let expected_fee = 10_000i128; // 10% of 100_000
     assert_eq!(token_client.balance(&treasury), expected_fee);
 
-    let payee_balance = token_client.balance(&payee);
+    let recipient_balance = token_client.balance(&applicant);
     let treasury_balance = token_client.balance(&treasury);
     let remaining_contract_balance = token_client.balance(&prog_address);
 
     // Assert: Money in equals money out plus fees plus remaining unallocated balance
     assert_eq!(
         contribution_amount,
-        payee_balance + treasury_balance + remaining_contract_balance,
+        recipient_balance + treasury_balance + remaining_contract_balance,
         "Money in equals money out plus fees and remaining unallocated balance"
     );
 }
@@ -516,4 +528,91 @@ fn upgrading_the_registry_requires_the_admin() {
     // Drop the mocked authorisations so `require_auth` is actually enforced.
     f.env.set_auths(&[]);
     f.client.upgrade(&new_wasm);
+}
+
+// ---- events ----
+//
+// `ProgrammeCreated` is the whole record of a deployment: the registry keeps
+// no list of programmes either, so an indexer's view of what exists on-chain
+// comes from here. The `ConfigChanged` event exists so a retune of the fee,
+// treasury, policy or programme wasm is visible to anyone holding a programme
+// that inherits those values.
+
+#[test]
+fn creating_a_programme_publishes_who_owns_it() {
+    let f = setup();
+    let creator = Address::generate(&f.env);
+    let name = String::from_str(&f.env, "Health worker stipend 2026");
+
+    let programme = f.client.create(
+        &creator,
+        &f.token,
+        &f.schema,
+        &APPLY_DEADLINE,
+        &REVIEW_DEADLINE,
+        &RELEASE_DEADLINE,
+        &SWEEP_DEADLINE,
+        &2u32,
+        &3u32,
+        &BytesN::from_array(&f.env, &[7u8; 32]),
+        &vec![&f.env, Address::generate(&f.env)],
+        &vec![&f.env, f.verifier.clone()],
+        &name,
+        &0i128,
+    );
+
+    assert_events(
+        &f.env,
+        &f.client.address,
+        &[ProgrammeCreated {
+            programme,
+            creator,
+            name,
+        }
+        .to_xdr(&f.env, &f.client.address)],
+    );
+}
+
+#[test]
+fn retuning_the_protocol_publishes_the_whole_config() {
+    // Every field, because a consumer reading this event has to know which
+    // treasury and which wasm future programmes will inherit — not just the
+    // field that changed.
+    let f = setup();
+    let treasury = Address::generate(&f.env);
+    // Read before the setter: any call clears the event buffer.
+    let mut expected = f.client.get_config();
+    expected.treasury = treasury.clone();
+
+    f.client.set_treasury(&treasury);
+
+    assert_events(
+        &f.env,
+        &f.client.address,
+        &[ConfigChanged { config: expected }.to_xdr(&f.env, &f.client.address)],
+    );
+}
+
+#[test]
+fn pointing_at_a_new_programme_wasm_publishes_it() {
+    let f = setup();
+    let wasm = milepost_test_utils::hash(&f.env, 3);
+    let mut expected = f.client.get_config();
+    expected.program_wasm = wasm.clone();
+
+    f.client.set_program_wasm(&wasm);
+
+    assert_events(
+        &f.env,
+        &f.client.address,
+        &[ConfigChanged { config: expected }.to_xdr(&f.env, &f.client.address)],
+    );
+}
+
+#[test]
+fn a_rejected_retune_publishes_nothing() {
+    let f = setup();
+    let result = f.client.try_set_fee(&(MAX_FEE_BPS + 1));
+    assert_eq!(result, Err(Ok(Error::FeeTooHigh)));
+    assert_events(&f.env, &f.client.address, &[]);
 }

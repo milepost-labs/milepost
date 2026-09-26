@@ -159,7 +159,12 @@ export const Errors = {
   /**
    * The release deadline has been extended.
    */
-  42: {message:"ReleaseDeadlineExtended"}
+  42: {message:"ReleaseDeadlineExtended"},
+  /**
+   * An `Open` award named a payee other than the recipient, which would pay an
+   * address the programme never verified.
+   */
+  43: {message:"OpenPayeeNotRecipient"}
 }
 
 export type Phase = {tag: "Open", values: void} | {tag: "Review", values: void} | {tag: "Settled", values: void} | {tag: "Cancelled", values: void};

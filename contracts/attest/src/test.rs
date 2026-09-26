@@ -1,8 +1,8 @@
 #![cfg(test)]
 
 use super::*;
-use milepost_test_utils::hash;
-use soroban_sdk::{testutils::Address as _, testutils::Ledger as _, Env};
+use milepost_test_utils::{assert_events, hash};
+use soroban_sdk::{testutils::Address as _, testutils::Ledger as _, Env, Event as _};
 
 struct Fixture {
     env: Env,
@@ -476,4 +476,109 @@ fn schema_survives_archival_without_keepalive() {
         .set_sequence_number(seq_before + BUMP_LEDGERS + 5);
     let s = f.client.get_schema(&uid);
     assert_eq!(s.uid, uid);
+}
+
+// ---- events ----
+//
+// The registry keeps no lists on-chain, so these events *are* the record an
+// indexer builds "every attestation for this subject" from. Asserting them
+// field by field is what stops a topic being renamed or a field silently
+// dropped in a way only an off-chain consumer would notice.
+
+#[test]
+fn registering_a_schema_publishes_it() {
+    let f = setup();
+    let definition = String::from_str(&f.env, "enrolment:v1");
+    let uid = f
+        .client
+        .register_schema(&f.authority, &definition, &true, &false, &None);
+
+    let schema = Schema {
+        uid: uid.clone(),
+        authority: f.authority.clone(),
+        definition,
+        revocable: true,
+        restricted: false,
+        predecessor: None,
+    };
+    assert_events(
+        &f.env,
+        &f.client.address,
+        &[SchemaRegistered { uid, schema }.to_xdr(&f.env, &f.client.address)],
+    );
+}
+
+#[test]
+fn attesting_publishes_the_whole_attestation() {
+    // An indexer cannot call `get` for every attestation it hears about, so the
+    // event has to carry the fields a consumer filters on: who, about whom,
+    // under which schema, and when.
+    let f = setup();
+    f.env.ledger().set_timestamp(1_000);
+    let schema = open_schema(&f);
+    let data = hash(&f.env, 7);
+
+    let uid = f
+        .client
+        .attest(&f.authority, &schema, &f.subject, &data, &Some(9_000));
+
+    let attestation = Attestation {
+        uid: uid.clone(),
+        schema,
+        attester: f.authority.clone(),
+        subject: f.subject.clone(),
+        data_hash: data,
+        created_at: 1_000,
+        expires_at: Some(9_000),
+        revoked_at: None,
+    };
+    assert_events(
+        &f.env,
+        &f.client.address,
+        &[Attested {
+            subject: f.subject.clone(),
+            uid: uid.clone(),
+            attestation,
+        }
+        .to_xdr(&f.env, &f.client.address)],
+    );
+}
+
+#[test]
+fn revoking_publishes_the_time_it_took_effect() {
+    let f = setup();
+    let schema = open_schema(&f);
+    let uid = f
+        .client
+        .attest(&f.authority, &schema, &f.subject, &hash(&f.env, 1), &None);
+    f.env.ledger().set_timestamp(4_242);
+
+    f.client.revoke(&f.authority, &uid);
+
+    assert_events(
+        &f.env,
+        &f.client.address,
+        &[Revoked {
+            uid,
+            revoked_at: 4_242,
+        }
+        .to_xdr(&f.env, &f.client.address)],
+    );
+}
+
+#[test]
+fn a_failed_call_publishes_nothing() {
+    // Otherwise an indexer replaying events would record a claim that was
+    // rolled back.
+    let f = setup();
+    open_schema(&f);
+    let repeat = f.client.try_register_schema(
+        &f.authority,
+        &String::from_str(&f.env, "enrolment:v1"),
+        &true,
+        &false,
+        &None,
+    );
+    assert_eq!(repeat, Err(Ok(Error::SchemaAlreadyExists)));
+    assert_events(&f.env, &f.client.address, &[]);
 }
