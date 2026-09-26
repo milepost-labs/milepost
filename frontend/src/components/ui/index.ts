@@ -3,6 +3,7 @@ export { AddressChip, type AddressChipProps } from './AddressChip';
 export { Button, type ButtonProps } from './Button';
 export { Card, Stat, type CardProps } from './Card';
 export { Field, type FieldProps } from './Field';
+export { AmountField, type AmountFieldProps } from './AmountField';
 export { Badge, PhaseBadge, type BadgeTone } from './Badge';
 export { Table, type Column } from './Table';
 export { Modal, type ModalProps } from './Modal';
