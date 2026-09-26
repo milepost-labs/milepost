@@ -1,8 +1,8 @@
 #![cfg(test)]
 
 use super::*;
-use milepost_test_utils::hash;
-use soroban_sdk::{testutils::Address as _, testutils::Ledger as _, Env};
+use milepost_test_utils::{assert_events, hash};
+use soroban_sdk::{testutils::Address as _, testutils::Ledger as _, Env, Event as _};
 
 // Upgrading needs a real uploaded wasm to point at. Importing this crate's own
 // artifact means `cargo build --target wasm32v1-none --release` must run first,
@@ -441,4 +441,146 @@ fn keepalive_on_attest_extends_standing_ttl() {
         .ledger()
         .set_sequence_number(seq_before + BUMP_LEDGERS + 5);
     assert_eq!(f.client.get(&f.subject).total_received, 500);
+}
+
+// ---- events ----
+//
+// `Credited` is the only place a consumer can see the whole of a release: the
+// contract stores aggregates, not history. These assertions spell out every
+// field, and recompute `history_root` from the event's own fields through the
+// same public helper an indexer would use.
+
+#[test]
+fn crediting_publishes_the_whole_standing() {
+    let f = setup();
+    f.env.ledger().set_timestamp(1_000);
+    let attestation = hash(&f.env, 3);
+
+    // Recomputed before the credit, because reading state afterwards would
+    // clear the event buffer. `next_root` is stateless, so the order does not
+    // change the answer.
+    let root = f.client.next_root(
+        &BytesN::from_array(&f.env, &GENESIS),
+        &f.programme,
+        &500,
+        &attestation,
+        1_000,
+    );
+
+    f.client
+        .credit(&f.writer, &f.subject, &f.programme, &500, &attestation);
+
+    assert_events(
+        &f.env,
+        &f.client.address,
+        &[Credited {
+            subject: f.subject.clone(),
+            programme: f.programme.clone(),
+            standing: Standing {
+                subject: f.subject.clone(),
+                programmes: 1,
+                tranches: 1,
+                total_received: 500,
+                first_seen: 1_000,
+                last_seen: 1_000,
+                history_root: root,
+            },
+        }
+        .to_xdr(&f.env, &f.client.address)],
+    );
+}
+
+#[test]
+fn a_later_credit_folds_onto_the_earlier_root() {
+    let f = setup();
+    f.env.ledger().set_timestamp(1_000);
+    let first = hash(&f.env, 1);
+    f.client
+        .credit(&f.writer, &f.subject, &f.programme, &500, &first);
+    let root_after_first = f.client.get(&f.subject).history_root;
+
+    f.env.ledger().set_timestamp(2_000);
+    let second = hash(&f.env, 2);
+    let root = f
+        .client
+        .next_root(&root_after_first, &f.programme, &300, &second, 2_000);
+    f.client
+        .credit(&f.writer, &f.subject, &f.programme, &300, &second);
+
+    assert_events(
+        &f.env,
+        &f.client.address,
+        &[Credited {
+            subject: f.subject.clone(),
+            programme: f.programme.clone(),
+            standing: Standing {
+                subject: f.subject.clone(),
+                // One programme, though two releases: the marker is per pair.
+                programmes: 1,
+                tranches: 2,
+                total_received: 800,
+                first_seen: 1_000,
+                last_seen: 2_000,
+                history_root: root,
+            },
+        }
+        .to_xdr(&f.env, &f.client.address)],
+    );
+}
+
+#[test]
+fn authorising_and_revoking_a_writer_both_publish() {
+    let f = setup();
+    let other = Address::generate(&f.env);
+
+    f.client.add_writer(&other);
+    assert_events(
+        &f.env,
+        &f.client.address,
+        &[WriterChanged {
+            writer: other.clone(),
+            authorized: true,
+        }
+        .to_xdr(&f.env, &f.client.address)],
+    );
+
+    f.client.remove_writer(&other);
+    assert_events(
+        &f.env,
+        &f.client.address,
+        &[WriterChanged {
+            writer: other,
+            authorized: false,
+        }
+        .to_xdr(&f.env, &f.client.address)],
+    );
+}
+
+#[test]
+fn handing_over_the_admin_publishes_the_new_one() {
+    // The event is the only way an indexer learns the key that governs who may
+    // write standing has changed hands.
+    let f = setup();
+    let new_admin = Address::generate(&f.env);
+
+    f.client.set_admin(&new_admin);
+
+    assert_events(
+        &f.env,
+        &f.client.address,
+        &[AdminChanged { admin: new_admin }.to_xdr(&f.env, &f.client.address)],
+    );
+}
+
+#[test]
+fn an_unauthorised_writer_credits_nothing_and_publishes_nothing() {
+    let f = setup();
+    let stranger = Address::generate(&f.env);
+
+    let result = f
+        .client
+        .try_credit(&stranger, &f.subject, &f.programme, &500, &hash(&f.env, 1));
+
+    assert_eq!(result, Err(Ok(Error::NotAuthorized)));
+    assert_events(&f.env, &f.client.address, &[]);
 }

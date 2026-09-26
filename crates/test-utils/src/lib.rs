@@ -56,3 +56,30 @@ pub fn register_token(env: &Env) -> soroban_sdk::Address {
     let issuer = soroban_sdk::Address::generate(env);
     env.register_stellar_asset_contract_v2(issuer).address()
 }
+
+/// Assert that `contract` published exactly `expected` events.
+///
+/// Two details of the SDK make this helper necessary rather than nice to have:
+///
+/// - The event buffer holds the events of the **most recent top-level call** and
+///   every call nested inside it, so a programme that transfers a token and
+///   credits standing emits those contracts' events too. Filtering by contract
+///   id is what keeps a suite asserting on the contract it is testing.
+/// - Any later call empties the buffer, **including a getter**, so a suite has to
+///   assert straight after the call under test rather than after reading the
+///   state it just wrote.
+///
+/// `expected` is compared exactly — order, count and every field — because a
+/// consumer reading these events is entitled to the fields the contract says it
+/// publishes, and an event carrying a placeholder is worse than no event.
+#[cfg(feature = "testutils")]
+pub fn assert_events(
+    env: &Env,
+    contract: &soroban_sdk::Address,
+    expected: &[soroban_sdk::xdr::ContractEvent],
+) {
+    use soroban_sdk::testutils::Events as _;
+
+    let published = env.events().all().filter_by_contract(contract);
+    assert_eq!(published, expected);
+}

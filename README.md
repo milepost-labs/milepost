@@ -163,6 +163,12 @@ difference is agency, and it is the reason to prefer `Allocated`: the recipient
 picks between two equally valid bookshops, or pays rent this week rather than
 next, without ever holding money that could go elsewhere.
 
+`Open` is the one mode with nothing enforcing the destination, so `finalize`
+pins it: an `Open` award has to name the applicant as its payee, exactly as
+`Allocated` does. That is what stops the least-restricted mode from becoming the
+way to pay an address the creator never verified — the reason `Direct` demands a
+verified payee in the first place.
+
 `Restricted` is weaker than it looks and the code says so. A policy constrains
 *one signer*, not the wallet: a recipient holding an unrestricted admin signer
 can authorise around it. Genuine enforcement requires the wallet's own
@@ -177,14 +183,20 @@ installed, which bounds a misconfiguration to a single tranche.
 - **Verifiers** unlock tranches. A programme names the attesters it trusts;
   `attest` independently confirms a proof really is theirs.
 - **Creator** verifies payees — a different question from whether an applicant
-  deserves funding, so a different role decides it.
+  deserves funding, so a different role decides it. The same key also maintains
+  the verifier set, chooses the mode at `finalize`, and can pause or cancel. It
+  cannot move the money, but those powers compose into a real path to it, so
+  [the security model](docs/security-model.md) spells out what a compromised
+  creator key can and cannot reach.
 - **Registry** is admin of `record`. A programme may write standing *because the
   registry deployed it*, never because it asked. A programme deployed any other
   way can still take contributions and make awards, but cannot touch standing.
-- **Registry admin** can also replace the code of `registry` and `record`
-  outright, through `upgrade`. That is a larger power than configuring the
-  protocol, and it is worth naming: the key that sets the fee is the key that
-  could rewrite how standing is recorded. `attest` and `policy_spend` have no
+- **Registry admin** can also replace the code of `registry` outright, through
+  `upgrade`. That is a larger power than configuring the protocol, and it is worth
+  naming: the key that sets the fee is the key that could rewrite how standing is
+  recorded, because the registry is `record`'s admin — today it exposes no call
+  that upgrades `record`, so that path runs through an upgraded registry, but
+  nothing stops such code from existing. `attest` and `policy_spend` have no
   admin and so cannot be upgraded at all, and a deployed `program` cannot be
   upgraded by anyone — its terms are fixed for the life of the programme, which
   is what lets a donor rely on them.

@@ -1,0 +1,42 @@
+[package]
+name = "milepost-integration"
+description = "Cross-contract integration tests: the money path through the whole protocol"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+# A test harness, not something to publish. Every other crate here is either a
+# contract or a library the contracts share.
+publish = false
+
+[lib]
+doctest = false
+# Gated, because `cargo build --target wasm32v1-none --release` — the build every
+# deployment starts from — walks every workspace member, and a crate built on the
+# SDK's test utilities cannot be built for a contract. Nothing here is skipped by
+# accident: `cargo test --all-features`, which is the gate in docs/testing-guide.md,
+# turns it on.
+required-features = ["testutils"]
+
+[[test]]
+name = "money_path"
+path = "tests/money_path.rs"
+required-features = ["testutils"]
+
+[features]
+testutils = ["soroban-sdk/testutils", "milepost-test-utils/testutils"]
+
+[dependencies]
+soroban-sdk = { workspace = true }
+milepost-attest = { path = "../../contracts/attest" }
+milepost-record = { path = "../../contracts/record" }
+milepost-registry = { path = "../../contracts/registry" }
+milepost-policy-spend = { path = "../../contracts/policy-spend" }
+milepost-test-utils = { path = "../test-utils" }
+milepost-types = { workspace = true }
+# Pinned to the same revision `milepost-policy-spend` uses. The integration tests
+# stand in for a smart wallet when they need one, and a wallet's signer key is
+# the wallet's own type — mirroring it here is the drift `milepost-types` exists
+# to prevent.
+smart-wallet-interface = { git = "https://github.com/stellar/passkey-kit", rev = "9a8c9ffc7dd7669ab86378167d698e53dda82174" }

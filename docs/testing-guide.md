@@ -6,7 +6,8 @@ it records what goes wrong here, drawn from real cases.
 
 ## The build ordering rule: wasm before clippy and tests
 
-`registry`'s test suite instantiates the programme from its built artifact:
+Two suites instantiate the programme from its built artifact — `registry`'s, and
+the integration crate's:
 
 ```rust
 soroban_sdk::contractimport!(file = "../../target/wasm32v1-none/release/milepost_program.wasm");
@@ -29,6 +30,27 @@ cargo test --all-features
 
 `just test` and `just lint` encode this ordering for you; use them if you do not
 want to think about it.
+
+## Which suite a test belongs in
+
+A contract's own suite tests that contract, with its neighbours replaced by
+whatever is convenient: `program`'s suite registers a `FakePolicy`, because all a
+programme asks of a policy is whether one is installed. That is the right way to
+write a unit test, and it is also why a claim about the *arrangement* has nowhere
+to live there.
+
+A claim that only becomes true when several real contracts are deployed the way a
+deployment deploys them belongs in `crates/integration`. It has no doubles: real
+`attest`, `record`, `registry` and `policy-spend`, and programmes instantiated from
+the built wasm through the registry. Money reaching a treasury, standing
+accumulating across two programmes, a programme the registry never deployed being
+unable to pay — none of those is a property of one contract.
+
+That crate is behind a `testutils` feature, because `cargo build --target
+wasm32v1-none --release` walks every workspace member and a crate built on the
+SDK's test utilities cannot be built for a contract. So it needs `--all-features`,
+which the gate above already passes: plain `cargo test` reports nothing from
+`milepost-integration` rather than failing, and that is expected.
 
 ## Regenerate bindings after any interface change
 
@@ -94,6 +116,37 @@ constructor (`__constructor`). Do not write a test that tries to assert on them
 — it will fail for reasons unrelated to your change. Test constructor behaviour
 through its effects instead: the state it set, the clients it handed back, the
 subsequent calls that succeed or fail because of it.
+
+## Asserting events
+
+Every event a contract publishes is consumed by something that cannot call the
+contract, so each one is worth an exact assertion: topics, every field, the
+amounts. `milepost_test_utils::assert_events` is the shared form of that, and it
+filters by contract id because the event buffer holds the events of the last
+top-level call *and every call nested inside it* — a programme releasing a
+tranche also transfers a token and credits standing.
+
+```rust
+let uid = proof(&f, &recipient, 1);
+f.client.release(&recipient, &uid, &f.verifier);
+assert_events(
+    &f.env,
+    &f.client.address,
+    &[Released { /* … */ }.to_xdr(&f.env, &f.client.address)],
+);
+```
+
+Two traps that cost an afternoon each if you do not know them:
+
+- **Any later call empties the buffer, including a getter.** Compute everything
+  the expected event needs *before* the call under test: the attestation uid, the
+  next `history_root`, the award. Reading state back to build the expectation
+  empties the buffer and the assertion then sees nothing.
+- **A field published with a placeholder is worse than no event at all.**
+  `release_batch` once published one `Released` per tranche with `amount: 0`
+  because the per-tranche amounts were never tracked. An indexer summing the
+  event amounts got a total of zero and no way to tell the difference between a
+  broken contract and a paused programme.
 
 ## The full gate
 

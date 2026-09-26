@@ -1,9 +1,10 @@
 #![cfg(test)]
 
 use super::*;
+use milepost_test_utils::assert_events;
 use soroban_sdk::{
     testutils::{Address as _, Ledger as _},
-    vec, IntoVal, Symbol,
+    vec, Event as _, IntoVal, Symbol,
 };
 
 const CAP: i128 = 1_000;
@@ -536,4 +537,109 @@ mod proptests {
             run_window_sequence(&ops);
         }
     }
+}
+
+// ---- events ----
+//
+// The allowlist is not readable off-chain in full — there is no "list every
+// payee for this wallet" call, by design — so these events are how a recipient
+// audits what their wallet's signer is actually allowed to do.
+
+#[test]
+fn configuring_publishes_the_rules_the_recipient_consented_to() {
+    let f = setup();
+    let other_wallet = Address::generate(&f.env);
+
+    f.client
+        .configure(&f.steward, &other_wallet, &f.token, &CAP, &PERIOD);
+
+    let policy = Policy {
+        steward: f.steward.clone(),
+        token: f.token.clone(),
+        cap: CAP,
+        period: PERIOD,
+        spent: 0,
+        window_start: f.env.ledger().timestamp(),
+    };
+    assert_events(
+        &f.env,
+        &f.client.address,
+        &[Configured {
+            wallet: other_wallet,
+            policy,
+        }
+        .to_xdr(&f.env, &f.client.address)],
+    );
+}
+
+#[test]
+fn allowing_and_denying_a_payee_both_publish() {
+    let f = setup();
+    let shop = Address::generate(&f.env);
+
+    f.client.allow_payee(&f.steward, &f.wallet, &shop);
+    assert_events(
+        &f.env,
+        &f.client.address,
+        &[PayeeChanged {
+            wallet: f.wallet.clone(),
+            payee: shop.clone(),
+            allowed: true,
+        }
+        .to_xdr(&f.env, &f.client.address)],
+    );
+
+    f.client.deny_payee(&f.steward, &f.wallet, &shop);
+    assert_events(
+        &f.env,
+        &f.client.address,
+        &[PayeeChanged {
+            wallet: f.wallet.clone(),
+            payee: shop,
+            allowed: false,
+        }
+        .to_xdr(&f.env, &f.client.address)],
+    );
+}
+
+#[test]
+fn approving_a_transfer_publishes_what_is_left_of_the_cap() {
+    // A consumer watching a grant-funded wallet needs the running total, not
+    // just the fact that one transfer was allowed.
+    let f = setup();
+    f.client.policy__(
+        &f.wallet,
+        &signer(&f),
+        &transfer_context(&f, &f.wallet, &f.school, 400),
+    );
+
+    assert_events(
+        &f.env,
+        &f.client.address,
+        &[Spent {
+            wallet: f.wallet.clone(),
+            payee: f.school.clone(),
+            amount: 400,
+            remaining: 600,
+        }
+        .to_xdr(&f.env, &f.client.address)],
+    );
+}
+
+#[test]
+fn a_rejected_transfer_publishes_nothing() {
+    // A `Spent` event for a transfer that was then rejected would overstate what
+    // the wallet actually did.
+    let f = setup();
+    let casino = Address::generate(&f.env);
+    assert_denied(
+        f.client.try_policy__(
+            &f.wallet,
+            &signer(&f),
+            &transfer_context(&f, &f.wallet, &casino, 100),
+        ),
+        SpendError::PayeeNotAllowed,
+    );
+
+    assert_events(&f.env, &f.client.address, &[]);
 }
