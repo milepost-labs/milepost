@@ -22,10 +22,13 @@ function phaseClass(phase: string): string {
  * The top of the programme detail screen: what this programme is and where it
  * is in its life, before anything below is read.
  *
- * `readStatus` says whether the phase shown came from an on-chain read this
- * session or is a stand-in, so the reader always knows which they are looking
- * at. The stepper marks the current phase filled and any passed phase with a
- * tick; a cancelled programme shows no current step and gets a banner instead.
+ * The phase is only ever the on-chain read: while it loads nothing is marked
+ * current, and a failed read says so rather than guessing. The stepper marks
+ * the current phase filled and any passed phase with a tick; a cancelled
+ * programme shows no current step and gets a banner instead.
+ *
+ * There is no mode pill: a programme has no single mode, because each award
+ * is given its own when it is finalized.
  */
 export function ProgrammeHeader({
   id,
@@ -33,35 +36,37 @@ export function ProgrammeHeader({
   creator,
   createdLedger,
   phase,
-  mode,
-  sampleTag,
-  readStatus,
-  cancelled,
+  phaseError = false,
+  verified,
 }: {
   id: string;
   name: string;
   creator: string | null;
   createdLedger: number | null;
-  phase: string;
-  mode: string;
-  sampleTag: string | null;
-  readStatus: 'live' | 'sample';
-  cancelled: boolean;
+  /** The on-chain phase, or null while it has not been read. */
+  phase: string | null;
+  phaseError?: boolean;
+  /** From `registry.is_programme`; undefined while unread. */
+  verified?: boolean;
 }) {
-  const currentIndex = PHASE_ORDER.indexOf(phase as (typeof PHASE_ORDER)[number]);
+  const cancelled = phase === 'Cancelled';
+  const currentIndex = phase ? PHASE_ORDER.indexOf(phase as (typeof PHASE_ORDER)[number]) : -1;
+  const readLine = phase
+    ? 'Phase read on-chain just now'
+    : phaseError
+      ? 'Could not read the phase on-chain'
+      : 'Reading the phase on-chain…';
 
   return (
     <header className="programme-header">
       <div className="programme-header__badges">
-        <span className={`phase-pill ${phaseClass(phase)}`}>{phase}</span>
-        <span className="programme-header__mode">{mode} mode</span>
-        {sampleTag && <span className="programme-header__sample">{sampleTag}</span>}
+        {phase && <span className={`phase-pill ${phaseClass(phase)}`}>{phase}</span>}
       </div>
 
       <h1 className="programme-header__name">{name}</h1>
 
       <div className="programme-header__meta">
-        <AddressChip address={id} copyLabel="Copy programme id" />
+        <AddressChip address={id} verified={verified} copyLabel="Copy programme id" />
         <span className="programme-header__meta-item">
           Created by <code className="numeric">{creator ?? '—'}</code>
         </span>
@@ -70,10 +75,7 @@ export function ProgrammeHeader({
         </span>
         <span className="programme-header__read">
           <span className="programme-header__read-dot" aria-hidden="true" />
-          <span className="visually-hidden">Programme phase: </span>
-          {readStatus === 'live'
-            ? 'Phase read on-chain just now'
-            : 'Phase and amounts: sample until on-chain reads are wired'}
+          {readLine}
         </span>
       </div>
 
@@ -102,8 +104,8 @@ export function ProgrammeHeader({
 
       {cancelled && (
         <div role="status" className="programme-header__cancelled">
-          <b>This programme was cancelled.</b> No awards will be made. Contributors can claim
-          their contributions back in full.
+          <b>This programme was cancelled.</b> No more money will be released. Contributors can
+          claim back their share of everything not yet paid out.
         </div>
       )}
     </header>

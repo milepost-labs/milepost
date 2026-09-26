@@ -13,12 +13,13 @@ import {
 import { AsyncView } from "../components/state/AsyncStates";
 import { PausedBanner } from "../components/programme/PausedBanner";
 import { ProgrammeHeader } from "../components/programme/ProgrammeHeader";
+import { WhereTheMoneyIs } from "../components/programme/WhereTheMoneyIs";
+import { ProgrammeTabs } from "../components/programme/ProgrammeTabs";
 import { Badge, Button, Card, Field, PhaseBadge, Stat, Table } from "../components/ui";
 import { useSoroban } from "../context/useSoroban";
 import { useContractRead, useContractResult, useIndexedList, useProgramme } from "../hooks";
-import { formatAmount, percentOf } from "../lib/amount";
 import { fetchProgrammes } from "../lib/indexer";
-import { chainFor } from "../fixtures/programmes";
+import { formatAmount } from "../lib/amount";
 import { registryVerificationCopy } from "../lib/registryVerification";
 import "./ProgrammeDetail.css";
 
@@ -552,41 +553,13 @@ export const ProgrammeDetail = () => {
 
   const phaseName = phase.data?.tag ?? "Loading";
   const activeDeadline = config.data ? nextDeadline(config.data, nowMs) : null;
-
-  // Name, creator and created ledger live in the published index; phase is read
-  // on-chain. Mode is not on the programme contract (it is chosen per award), so
-  // it — and any amount the index cannot supply — comes from the sample read and
-  // is tagged as such until the wiring lands.
+  // Name and created ledger come from the published index; the phase is read
+  // on-chain and is never taken from the index or a sample.
   const indexRead = useIndexedList(() => fetchProgrammes(), []);
   const indexEntry = useMemo(
     () => (indexRead.data ?? []).find((entry) => entry.id === programmeId) ?? null,
     [indexRead.data, programmeId],
   );
-  const chain = chainFor(programmeId);
-  const phaseTag = phase.data?.tag ?? chain.phase;
-  const readStatus = phase.data ? "live" : "sample";
-  const sampleTag = readStatus === "live" ? null : "Sample chain read";
-  const contributedLessFee = figures
-    ? maxBigint(figures.totalContributed - figures.fee, ZERO)
-    : ZERO;
-  const grantedRemaining = figures
-    ? maxBigint(figures.budget - figures.totalGranted, ZERO)
-    : ZERO;
-  const releasedRemaining = figures
-    ? maxBigint(figures.totalGranted - figures.totalReleased, ZERO)
-    : ZERO;
-  const releasedSegment = figures
-    ? minBigint(maxBigint(figures.totalReleased, ZERO), figures.budget)
-    : ZERO;
-  const grantedSegment = figures
-    ? minBigint(
-        maxBigint(figures.totalGranted - figures.totalReleased, ZERO),
-        maxBigint(figures.budget - releasedSegment, ZERO),
-      )
-    : ZERO;
-  const availableSegment = figures
-    ? maxBigint(figures.budget - releasedSegment - grantedSegment, ZERO)
-    : ZERO;
   // The contract opens refunds on cancellation or once the release deadline
   // has passed; the money panel shows refundable funds only from then.
   const refundsOpen =
@@ -621,16 +594,15 @@ export const ProgrammeDetail = () => {
         name={indexEntry?.name ?? "Programme detail"}
         creator={config.data?.creator ?? null}
         createdLedger={indexEntry?.createdLedger ?? null}
-        phase={phaseTag}
-        mode={chain.mode}
-        sampleTag={sampleTag}
-        readStatus={readStatus}
-        cancelled={phaseTag === "Cancelled"}
+        phase={phase.data?.tag ?? null}
+        phaseError={Boolean(phase.error)}
+        verified={isRegistered.data ?? undefined}
       />
       {isDefault && (
         <p className="programme-hero__hint">
           Showing the seeded demo programme. Add a contract id after{" "}
-          <span className="numeric">/programme/</span> to inspect another programme.
+          <span className="numeric">/programme/</span> to inspect another
+          programme.
         </p>
       )}
 

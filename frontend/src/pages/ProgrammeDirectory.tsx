@@ -230,7 +230,6 @@ function ProgrammeCard({ programme }: { programme: DirectoryProgramme }) {
         </div>
 
         <div className="directory-card-new__foot">
-          <span className="directory-card-new__mode">{chain.mode}</span>
           <span className="directory-card-new__sample">
             {programme.sample ? 'Sample data' : 'Sample chain read'}
           </span>

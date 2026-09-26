@@ -13,22 +13,7 @@
 
 /* Phase pill colours live in phasePill.css, shared with the directory. */
 
-.programme-header__mode {
-  font-size: var(--text-xs);
-  font-weight: var(--weight-semibold);
-  border-radius: var(--radius-full);
-  padding: var(--space-1) var(--space-3);
-  background: var(--surface);
-  color: var(--text-muted);
-}
 
-.programme-header__sample {
-  font-size: var(--text-xs);
-  border-radius: var(--radius-full);
-  padding: var(--space-1) var(--space-2);
-  border: 1px dashed var(--locked);
-  color: var(--text-muted);
-}
 
 .programme-header__name {
   margin: 0;
