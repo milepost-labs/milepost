@@ -15,8 +15,90 @@ export function Loading({ label = 'Loading', rows = 3 }: { label?: string; rows?
     <div className="state-loading" role="status" aria-live="polite">
       <span className="visually-hidden">{label}</span>
       {Array.from({ length: rows }, (_, i) => (
-        <div key={i} className="skeleton" aria-hidden="true" />
+        <div key={i} className="skeleton skeleton--row" aria-hidden="true" />
       ))}
+    </div>
+  );
+}
+
+/**
+ * Four-square pending pulse for writes.
+ *
+ * Contract reads and writes take seconds; the design replaces spinners with
+ * four 12px squares pulsing (opacity .25→1→.25, 1.2s, 0.15s stagger) so the
+ * wait matches the visual language. Decorative squares are `aria-hidden`;
+ * the `label` is announced instead.
+ */
+export function PendingPulse({ label = 'Working…' }: { label?: string }) {
+  return (
+    <span className="pending-pulse" role="status" aria-live="polite">
+      <span className="visually-hidden">{label}</span>
+      <span aria-hidden="true" className="pending-pulse__squares">
+        {[0, 1, 2, 3].map((i) => (
+          <span key={i} className="pending-pulse__square" style={{ animationDelay: `${i * 0.15}s` }} />
+        ))}
+      </span>
+    </span>
+  );
+}
+
+/**
+ * The full pending treatment for a write: pulse plus a title and an optional
+ * note. `role="status"` announces it without stealing focus.
+ */
+export function PendingState({ title, note }: { title: string; note?: string }) {
+  return (
+    <div className="state-pending" role="status" aria-live="polite">
+      <span aria-hidden="true" className="pending-pulse__squares">
+        {[0, 1, 2, 3].map((i) => (
+          <span key={i} className="pending-pulse__square" style={{ animationDelay: `${i * 0.15}s` }} />
+        ))}
+      </span>
+      <p className="state-pending__title">{title}</p>
+      {note && <p className="state-pending__note">{note}</p>}
+    </div>
+  );
+}
+
+export type SkeletonVariant = 'row' | 'card' | 'text';
+
+/**
+ * Skeletons shaped like the content they replace, so layout does not jump
+ * when the read resolves. `card` mimics a programme/content card (title,
+ * two body lines, a meta row); `text` mimics short inline lines; the
+ * default `row` (via {@link Loading}) mimics generic list rows.
+ */
+export function Skeleton({
+  variant = 'card',
+  label = 'Loading',
+}: {
+  variant?: SkeletonVariant;
+  label?: string;
+}) {
+  if (variant === 'text') {
+    return (
+      <div className="state-loading" role="status" aria-live="polite">
+        <span className="visually-hidden">{label}</span>
+        <div className="skeleton skeleton--text" aria-hidden="true" />
+        <div className="skeleton skeleton--text skeleton--text-short" aria-hidden="true" />
+      </div>
+    );
+  }
+  if (variant === 'row') {
+    return <Loading label={label} rows={3} />;
+  }
+  return (
+    <div className="state-loading" role="status" aria-live="polite">
+      <span className="visually-hidden">{label}</span>
+      <div className="skeleton-card" aria-hidden="true">
+        <div className="skeleton skeleton--card-title" />
+        <div className="skeleton skeleton--card-line" />
+        <div className="skeleton skeleton--card-line skeleton--card-line-short" />
+        <div className="skeleton-card__meta">
+          <div className="skeleton skeleton--card-meta" />
+          <div className="skeleton skeleton--card-meta" />
+        </div>
+      </div>
     </div>
   );
 }
@@ -195,15 +277,17 @@ export function Success({
 /**
  * The full outcome of a write, driven by `useTransaction`.
  *
- * Renders nothing while idle, the failure when it fails, and the confirmation
- * when it succeeds — so a screen wires one component rather than three
- * conditionals it has to keep consistent with the others.
+ * Renders the pulse while in flight, nothing while idle, the failure when it
+ * fails, and the confirmation when it succeeds — so a screen wires one
+ * component rather than conditionals it has to keep consistent.
  */
 export function TransactionOutcome({
   phase,
   error,
   successTitle,
   successDescription,
+  pendingTitle,
+  pendingNote,
   onDismiss,
   onRetry,
 }: {
@@ -211,11 +295,21 @@ export function TransactionOutcome({
   error: Explained | null;
   successTitle: string;
   successDescription?: ReactNode;
+  pendingTitle?: string;
+  pendingNote?: string;
   onDismiss?: () => void;
   /** Offer only where sending the same transaction again makes sense. */
   onRetry?: () => void;
 }) {
   if (error) return <ErrorPanel explained={error} onRetry={onRetry} />;
+  if (phase === 'building' || phase === 'signing' || phase === 'submitting') {
+    return (
+      <PendingState
+        title={pendingTitle ?? 'Waiting for the network…'}
+        note={pendingNote ?? 'Usually a few seconds.'}
+      />
+    );
+  }
   if (phase === 'success') {
     return <Success title={successTitle} description={successDescription} onDismiss={onDismiss} />;
   }

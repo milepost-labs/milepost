@@ -40,7 +40,11 @@ export function Button({
     >
       {loading ? (
         <>
-          <span className="ui-spinner" aria-hidden="true" />
+          <span className="ui-pulse" aria-hidden="true">
+            {[0, 1, 2, 3].map((i) => (
+              <span key={i} className="ui-pulse__square" style={{ animationDelay: `${i * 0.15}s` }} />
+            ))}
+          </span>
           <span>{loadingLabel ?? children}</span>
         </>
       ) : (

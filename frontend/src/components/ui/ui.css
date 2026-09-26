@@ -36,6 +36,31 @@
 }
 @keyframes ui-spin { to { transform: rotate(360deg); } }
 
+/* Pending writes use the four-square pulse, not a spinner, so the wait
+   matches the visual language. Sizes come from the shared pulse tokens. */
+.ui-pulse {
+  display: inline-flex;
+  gap: var(--pulse-gap);
+  align-items: center;
+}
+.ui-pulse__square {
+  width: var(--pulse-size);
+  height: var(--pulse-size);
+  border-radius: var(--pulse-radius);
+  background: currentColor;
+  animation: mp-pulse var(--pulse-duration) ease-in-out infinite;
+}
+@keyframes mp-pulse {
+  0%, 100% { opacity: 0.25; }
+  50% { opacity: 1; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .ui-pulse__square,
+  .ui-spinner {
+    animation: none;
+  }
+}
+
 .ui-card {
   background: var(--surface);
   border: 1px solid var(--border);

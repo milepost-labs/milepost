@@ -1,13 +1,15 @@
 import React, { useEffect, useRef } from 'react';
 import { Link } from 'react-router-dom';
 import './Home.css';
-import { ArrowRight, CheckCircle, Shield, Zap, Lock, Unlock, ArrowUpRight } from 'lucide-react';
+import { Shield, Zap, Lock, Unlock } from 'lucide-react';
 import { CopyButton } from '../components/ui/CopyButton';
+import { HeroDemo } from '../components/landing/HeroDemo';
+import { GUARANTEES, LIMITS, ROLES, type Claim } from './homeContent';
+import { LiveIndex } from '../components/home/LiveIndex';
 
 /**
- * Repository docs and README describe one repository — the public
- * milepost-labs/milepost, never this wave checkout — so every outbound link
- * here points there.
+ * Every outbound link points at the public repository, which is where the
+ * README and docs live.
  */
 const REPO_URL = 'https://github.com/milepost-labs/milepost';
 
@@ -52,6 +54,34 @@ const INDEXER = {
   description: 'Reads contract events and publishes JSON lists, because the contracts keep none.',
 };
 
+/**
+ * Both columns render through this one component so neither can drift into
+ * being visually quieter than the other: only the heading colour differs.
+ */
+function ClaimCard({
+  heading,
+  tone,
+  claims,
+}: {
+  heading: string;
+  tone: 'guaranteed' | 'limit';
+  claims: Claim[];
+}) {
+  return (
+    <div className="claim-card">
+      <h3 className={`claim-card-heading claim-card-heading--${tone}`}>{heading}</h3>
+      <dl>
+        {claims.map((claim) => (
+          <div key={claim.title} className="claim">
+            <dt>{claim.title}</dt>
+            <dd className="text-muted">{claim.detail}</dd>
+          </div>
+        ))}
+      </dl>
+    </div>
+  );
+}
+
 export const Home: React.FC = () => {
   const observerRef = useRef<IntersectionObserver | null>(null);
 
@@ -76,57 +106,28 @@ export const Home: React.FC = () => {
       <div className="bg-shape shape-top-right"></div>
       <div className="bg-shape shape-bottom-left"></div>
 
-      {/* Hero Section (Asymmetrical Split Layout) */}
-      <section className="hero-split">
-        <div className="hero-text-content">
-          <div className="badge-pill animate-fade-up" style={{ animationDelay: '100ms' }}>
-            <span className="pulse-dot"></span>
-            Stellar Grant Escrow Protocol
-          </div>
-          <h1 className="hero-title animate-fade-up" style={{ animationDelay: '200ms' }}>
-            Provable, <br/> Accountable <br/>
-            <span className="text-highlight">Educational Impact.</span>
+      {/* Hero: headline + interactive tranche demo (landing section 1). */}
+      <section className="hero" aria-labelledby="hero-heading">
+        <div className="hero__copy">
+          <span className="hero__pill">Conditional disbursement on Stellar · testnet</span>
+          <h1 id="hero-heading" className="hero__title">
+            Money moves at each milepost, and only at each milepost.
           </h1>
-          <p className="hero-subtitle animate-fade-up" style={{ animationDelay: '300ms' }}>
-            Milepost is conditional disbursement infrastructure on Stellar. Money moves at each milepost, and only at each milepost. We replace lump-sum transfers with milestone tranches and policy-restricted spending.
+          <p className="hero__mechanism">
+            A funder commits money to a programme. Recipients receive it in tranches that unlock
+            only when a trusted verifier confirms a condition was met.
           </p>
-          <div className="hero-actions animate-fade-up" style={{ animationDelay: '400ms' }}>
+          <div className="hero__actions">
             <Link to="/directory" className="btn-primary btn-large">
-              Explore Programs <ArrowRight size={20} />
+              Launch app
             </Link>
-            <a href="https://github.com/gbemi-dev/milepost" target="_blank" rel="noreferrer" className="btn-secondary btn-large">
-              Read the Docs <ArrowUpRight size={18} />
+            <a href="#how" className="btn-secondary btn-large">
+              How it works ↓
             </a>
           </div>
+          <span className="hero__note">Browsing programmes needs no sign-in.</span>
         </div>
-        
-        <div className="hero-visual-content animate-fade-up" style={{ animationDelay: '300ms' }}>
-          {/* Abstract UI Representation of a Milestone */}
-          <div className="abstract-ui glass-panel">
-            <div className="abstract-header">
-              <div className="dots"><span></span><span></span><span></span></div>
-              <div className="abstract-title">Disbursement Contract</div>
-            </div>
-            <div className="abstract-body">
-              <div className="ui-row">
-                <div className="ui-icon"><CheckCircle size={16}/></div>
-                <div className="ui-text">
-                  <div className="ui-line skeleton" style={{ width: '80%' }}></div>
-                  <div className="ui-line skeleton-sub" style={{ width: '40%' }}></div>
-                </div>
-                <div className="ui-amount">$1,500</div>
-              </div>
-              <div className="ui-row locked">
-                <div className="ui-icon"><Lock size={16}/></div>
-                <div className="ui-text">
-                  <div className="ui-line skeleton" style={{ width: '60%' }}></div>
-                  <div className="ui-line skeleton-sub" style={{ width: '50%' }}></div>
-                </div>
-                <div className="ui-amount">$1,000</div>
-              </div>
-            </div>
-          </div>
-        </div>
+        <HeroDemo />
       </section>
 
       {/* Paradigm Shift (Full Width Grid) */}
@@ -151,16 +152,16 @@ export const Home: React.FC = () => {
               <h3>The Milepost Way</h3>
             </div>
             <ul className="bento-list">
-              <li><strong>Milestone Escrow:</strong> Funds unlock only on cryptographic proof.</li>
+              <li><strong>Milestone Escrow:</strong> Funds unlock only when a verifier attests on-chain that a condition was met.</li>
               <li><strong>Policy Signers:</strong> Smart wallets restrict where funds can be spent.</li>
-              <li><strong>Zero Friction:</strong> Passkeys and sponsored transactions on Stellar.</li>
+              <li><strong>Money Comes Back:</strong> Anything never paid out returns to funders in proportion to what they put in.</li>
             </ul>
           </div>
         </div>
       </section>
 
       {/* How it Works (Alternating Split Layout) */}
-      <section className="how-it-works-section">
+      <section id="how" className="how-it-works-section">
         <div className="section-header scroll-animate">
           <h2>Protocol Mechanics</h2>
         </div>
@@ -170,7 +171,7 @@ export const Home: React.FC = () => {
             <div className="grid-content">
               <div className="step-number">01</div>
               <h3>Funders Commit</h3>
-              <p className="text-muted">Donors pool USDC into a specific program via SEP-24 ramps. Unused tranches automatically recycle for the next cohort, ensuring capital efficiency.</p>
+              <p className="text-muted">Funders contribute to a specific programme. Once the release window closes, anything never paid out can be claimed back in proportion to each contribution.</p>
             </div>
             <div className="grid-visual glass-panel">
               <div className="mini-ui funder-ui">
@@ -254,6 +255,54 @@ export const Home: React.FC = () => {
           </div>
         </div>
       </section>
+
+      {/* Roles */}
+      <section id="roles" className="roles-section scroll-animate" aria-labelledby="roles-heading">
+        <div className="section-header">
+          <span className="eyebrow">Roles</span>
+          <h2 id="roles-heading">Four people, one programme.</h2>
+        </div>
+
+        <div className="role-grid">
+          {ROLES.map((role) => (
+            <article key={role.role} className="role-card">
+              <span className="eyebrow">{role.role}</span>
+              <h3>{role.does}</h3>
+              <p className="text-muted">{role.body}</p>
+              <nav className="role-links" aria-label={`${role.role} pages`}>
+                {role.links.map((link) => (
+                  <Link key={link.path} to={link.path}>
+                    {link.label}
+                  </Link>
+                ))}
+              </nav>
+            </article>
+          ))}
+        </div>
+
+        <p className="role-note">
+          <strong>Reviewers and verifiers are different jobs.</strong> Reviewers set the amount: each
+          votes on what an applicant should get, and the award is the median of their votes.
+          Verifiers unlock the payment: they confirm a condition was met, which releases one tranche
+          of an amount already set. Both work from the verifier dashboard, in separate sections.
+        </p>
+      </section>
+
+      {/* Guarantees and limits */}
+      <section className="limits-section scroll-animate" aria-labelledby="limits-heading">
+        <div className="section-header">
+          <span className="eyebrow">Guarantees and limits</span>
+          <h2 id="limits-heading">What the contracts promise, and what they don't.</h2>
+        </div>
+
+        <div className="claims-grid">
+          <ClaimCard heading="Guaranteed" tone="guaranteed" claims={GUARANTEES} />
+          <ClaimCard heading="Limits, stated" tone="limit" claims={LIMITS} />
+        </div>
+      </section>
+
+      {/* Live on testnet */}
+      <LiveIndex />
 
       {/* For developers */}
       <section id="developers" className="developers-section scroll-animate">
