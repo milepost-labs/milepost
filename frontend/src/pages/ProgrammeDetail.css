@@ -80,8 +80,17 @@
 
 .programme-grid > .ui-card:first-child,
 .programme-grid > .ui-card:nth-child(2),
-.programme-grid > .ui-card:nth-child(3) {
+.programme-grid > .ui-card:nth-child(3),
+.programme-section--center {
   grid-column: span 2;
+}
+
+.programme-section--center {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-5);
+  min-width: 0;
+  width: 100%;
 }
 
 .verification-panel {
