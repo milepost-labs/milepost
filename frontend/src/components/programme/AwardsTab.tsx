@@ -72,7 +72,13 @@ export const AwardsTab: FC<AwardsTabProps> = ({
   }
 
   return (
-    <div className="awards-tab" role="tabpanel" id="panel-awards" aria-labelledby="tab-awards">
+    <div
+      className="awards-tab"
+      role="tabpanel"
+      id="panel-awards"
+      aria-labelledby="tab-awards"
+      tabIndex={0}
+    >
       <p className="awards-tab__note">{advisoryNote}</p>
 
       {loading && (

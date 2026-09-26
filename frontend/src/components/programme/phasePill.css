@@ -27,7 +27,7 @@
 
 .phase-pill--cancelled {
   background: var(--refund-soft);
-  color: var(--refund);
+  color: var(--refund-strong);
 }
 
 .phase-pill--unknown {

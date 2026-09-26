@@ -64,7 +64,7 @@
 }
 
 .award-complete {
-  color: var(--success);
+  color: var(--success-strong);
   font-weight: var(--weight-medium);
   margin: 0 0 var(--space-4);
 }

@@ -1,6 +1,6 @@
 import { useEffect, useState, useMemo } from 'react';
 import { Link } from 'react-router-dom';
-import { useContractRead, useContractResult, useProgramme, useTransaction, phaseLabel } from '../hooks';
+import { useContractRead, useContractResult, useProgramme, useTransaction, phaseLabel, useAnnounceTransaction } from '../hooks';
 import { AsyncView, Empty } from '../components/state/AsyncStates';
 import { PausedBanner } from '../components/programme/PausedBanner';
 import { Badge, Button, Card, Field, Modal, Stat } from '../components/ui';
@@ -119,6 +119,12 @@ export const RecipientDashboard = () => {
   const [pendingAmount, setPendingAmount] = useState<bigint | null>(null);
 
   const transaction = useTransaction<bigint>({ contract: 'program' });
+  useAnnounceTransaction({
+    phase: transaction.phase,
+    error: transaction.error,
+    pending: 'Sending the payment…',
+    success: 'Payment sent.',
+  });
 
   // Reading the clock during render is impure — two renders would disagree.
   // Ticking it as state matches ProgrammeDetail and keeps the close-out honest
@@ -376,7 +382,7 @@ export const RecipientDashboard = () => {
           </div>
         )}
         {transaction.error && (
-          <p role="alert" className="confirm-error">
+          <p className="confirm-error">
             {transaction.error.message}
             {transaction.error.action ? ` ${transaction.error.action}` : ''}
           </p>

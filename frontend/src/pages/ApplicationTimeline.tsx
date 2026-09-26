@@ -1,5 +1,11 @@
 import { useState } from 'react';
-import { useContractResult, useProgramme, useTransaction, phaseLabel } from '../hooks';
+import {
+  useContractResult,
+  useProgramme,
+  useTransaction,
+  phaseLabel,
+  useAnnounceTransaction,
+} from '../hooks';
 import { AsyncView, ErrorState } from '../components/state/AsyncStates';
 import { PausedBanner } from '../components/programme/PausedBanner';
 import { Badge, Button, Card, Field, Modal, type BadgeTone } from '../components/ui';
@@ -62,6 +68,12 @@ export const ApplicationTimeline = () => {
   );
 
   const withdrawTx = useTransaction({ contract: 'program' });
+  useAnnounceTransaction({
+    phase: withdrawTx.phase,
+    error: withdrawTx.error,
+    pending: 'Withdrawing the application…',
+    success: 'Application withdrawn.',
+  });
 
   const handleLookup = () => {
     const address = subjectInput.trim();
@@ -241,7 +253,7 @@ export const ApplicationTimeline = () => {
                         <Button
                           variant="ghost"
                           size="sm"
-                          style={{ color: 'var(--color-error)' }}
+                          style={{ color: 'var(--danger-strong)' }}
                           onClick={() => setWithdrawModalOpen(true)}
                         >
                           Withdraw application
@@ -287,7 +299,7 @@ export const ApplicationTimeline = () => {
                           Cancel
                         </Button>
                         <Button
-                          style={{ backgroundColor: 'var(--color-error)', color: '#fff' }}
+                          style={{ backgroundColor: 'var(--danger-strong)', color: '#fff' }}
                           onClick={handleWithdrawConfirm}
                           loading={withdrawTx.busy}
                           loadingLabel={phaseLabel(withdrawTx.phase) || 'Withdrawing…'}
@@ -305,7 +317,7 @@ export const ApplicationTimeline = () => {
                         Withdrawal is final and cannot be undone. You will not be able to re-apply to this programme, and reviewers will no longer be able to review or finalize this application.
                       </p>
                       {withdrawError && (
-                        <div style={{ padding: '0.5rem', backgroundColor: 'rgba(239,68,68,0.1)', color: 'var(--color-error)', borderRadius: 'var(--radius-md)' }}>
+                        <div style={{ padding: '0.5rem', backgroundColor: 'var(--danger-soft)', color: 'var(--danger-strong)', borderRadius: 'var(--radius-md)' }}>
                           {withdrawError.message} {withdrawError.action}
                         </div>
                       )}

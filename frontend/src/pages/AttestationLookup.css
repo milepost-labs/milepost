@@ -83,11 +83,11 @@
 }
 
 .attest-check__icon--pass {
-  color: var(--color-success, #22c55e);
+  color: var(--success-strong);
 }
 
 .attest-check__icon--fail {
-  color: var(--color-error, #ef4444);
+  color: var(--danger-strong);
 }
 
 .attest-check__body {

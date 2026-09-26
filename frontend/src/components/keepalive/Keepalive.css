@@ -22,6 +22,6 @@
 }
 .keepalive__success {
   font-size: var(--text-sm);
-  color: var(--success);
+  color: var(--success-strong);
   font-weight: var(--weight-medium);
 }

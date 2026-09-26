@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { Buffer } from 'buffer';
-import { useContractRead, useContractResult, useProgramme, useTransaction, phaseLabel } from '../hooks';
+import { useContractRead, useContractResult, useProgramme, useTransaction, phaseLabel, useAnnounceTransaction } from '../hooks';
 import { AsyncView } from '../components/state/AsyncStates';
 import { PausedBanner } from '../components/programme/PausedBanner';
 import { Badge, Button, Card, Field, Stat, Table, type BadgeTone, type Column } from '../components/ui';
@@ -85,6 +85,12 @@ export const AwardProgress = () => {
 
   const award = useContractResult(() => programme.get_award({ recipient: subject }), [programme, subject]);
   const releaseTx = useTransaction<bigint>({ contract: 'program' });
+  useAnnounceTransaction({
+    phase: releaseTx.phase,
+    error: releaseTx.error,
+    pending: 'Releasing the tranche…',
+    success: 'Tranche released.',
+  });
 
   const cleanUid = attestationInput.trim().replace(/^0x/i, '');
   const isValidUid = HEX_32_BYTES.test(attestationInput.trim());
@@ -323,8 +329,8 @@ export const AwardProgress = () => {
                     )}
 
                     {explainedError && (
-                      <div style={{ padding: '0.75rem', backgroundColor: 'rgba(239, 68, 68, 0.1)', border: '1px solid var(--color-error)', borderRadius: 'var(--radius-md)' }}>
-                        <p style={{ margin: 0, fontWeight: 600, color: 'var(--color-error)' }}>{explainedError.message}</p>
+                      <div style={{ padding: '0.75rem', backgroundColor: 'var(--danger-soft)', border: '1px solid var(--danger-strong)', borderRadius: 'var(--radius-md)' }}>
+                        <p style={{ margin: 0, fontWeight: 600, color: 'var(--danger-strong)' }}>{explainedError.message}</p>
                         {explainedError.action && (
                           <p style={{ margin: '0.25rem 0 0', fontSize: '0.875rem', color: 'var(--color-muted)' }}>{explainedError.action}</p>
                         )}
@@ -332,8 +338,8 @@ export const AwardProgress = () => {
                     )}
 
                     {releaseTx.result !== null && (
-                      <div style={{ padding: '0.75rem', backgroundColor: 'rgba(34, 197, 94, 0.1)', border: '1px solid var(--color-success)', borderRadius: 'var(--radius-md)' }}>
-                        <p style={{ margin: 0, fontWeight: 600, color: 'var(--color-success)' }}>
+                      <div style={{ padding: '0.75rem', backgroundColor: 'var(--success-soft)', border: '1px solid var(--success-strong)', borderRadius: 'var(--radius-md)' }}>
+                        <p style={{ margin: 0, fontWeight: 600, color: 'var(--success-strong)' }}>
                           Tranche released! {formatAmount(releaseTx.result)} XLM moved.
                         </p>
                         <p style={{ margin: '0.25rem 0 0', fontSize: '0.875rem' }}>

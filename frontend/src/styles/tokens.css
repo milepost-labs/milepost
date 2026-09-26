@@ -142,6 +142,13 @@
   --success-soft: #dcf1e6;
   --warning-soft: #fbf0d4;
 
+  /* Money is drawn as a grid of squares, never a bar. Twenty across reads as a
+     single band on a wide screen, but at 360px that leaves each square around
+     11px — too small to read as a square at all. Narrow viewports halve the
+     columns and let the same 40 squares wrap into four rows instead. */
+  --money-cols: 20;
+  --money-cols-narrow: 10;
+
   /* Pending pulse: four 12px squares, 1.2s cycle, 0.15s stagger. */
   --pulse-size: 12px;
   --pulse-radius: 3px;
@@ -168,6 +175,10 @@
   /* --warning (amber) is ~2:1 on white, unreadable as text. */
   --warning-strong: hsl(38, 92%, 26%);
   --danger-strong: hsl(348, 83%, 38%);
+  /* --refund is the money-language name for --danger, and has the same problem
+     as text. Alias it rather than making every refund-toned line remember
+     which of the two names happens to be the readable one. */
+  --refund-strong: var(--danger-strong);
   /* The developers-section code block is dark in both themes; code is read
      against a fixed console-style background, not the page surface. */
   --code: #16191e;
@@ -190,6 +201,7 @@
   --success-strong: hsl(158, 60%, 62%);
   --warning-strong: hsl(38, 92%, 65%);
   --danger-strong: hsl(348, 83%, 72%);
+  --refund-strong: var(--danger-strong);
   --code: #0f1216;
   --code-text: #d8dce2;
   --elevation-1: 0 1px 2px rgba(0, 0, 0, 0.4);

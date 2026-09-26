@@ -87,7 +87,7 @@
 
 .attest-modal__released {
   margin: 0;
-  color: var(--success);
+  color: var(--success-strong);
   font-weight: var(--weight-medium);
 }
 
@@ -141,7 +141,7 @@
 }
 
 .badge-pending {
-  background-color: var(--color-warning);
+  background-color: var(--warning-strong);
   color: #fff;
 }
 
