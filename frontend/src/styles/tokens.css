@@ -33,6 +33,10 @@
   --page-pad-bottom: var(--space-10);
   --section-pad-y: var(--space-9);
   --tap-min: 44px;
+  /* Where sticky side panels stop, just below the sticky header. */
+  --sticky-offset: 5.25rem;
+  /* A row whose action the current phase rules out. */
+  --opacity-unavailable: 0.62;
   /* Sign-in sheet and confirmation dialogs: centered, max-width 440px. */
   --modal-max-width: 27.5rem;
 
@@ -86,6 +90,11 @@
   --grid-min-card: 16rem;
   --grid-min-column: 26rem;
   --grid-min-programme-card: 21.25rem; /* 340px — directory card column */
+  --grid-min-stat: 12.5rem;            /* 200px — stat tiles */
+  --grid-min-explainer: 18.75rem;      /* 300px — signed-out explainer columns */
+  --grid-min-funding: 23.75rem;        /* 380px — contributions beside the contribute panel */
+  /* Signed-out explainer and other major panels: 22–36px with the viewport. */
+  --panel-pad-lg: clamp(1.375rem, 4vw, 2.25rem);
 
   --radius-sm: 6px;
   --radius-md: 10px;
