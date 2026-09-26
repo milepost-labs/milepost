@@ -8,9 +8,8 @@ import { GUARANTEES, LIMITS, ROLES, type Claim } from './homeContent';
 import { LiveIndex } from '../components/home/LiveIndex';
 
 /**
- * Repository docs and README describe one repository — the public
- * milepost-labs/milepost, never this wave checkout — so every outbound link
- * here points there.
+ * Every outbound link points at the public repository, which is where the
+ * README and docs live.
  */
 const REPO_URL = 'https://github.com/milepost-labs/milepost';
 
@@ -153,9 +152,9 @@ export const Home: React.FC = () => {
               <h3>The Milepost Way</h3>
             </div>
             <ul className="bento-list">
-              <li><strong>Milestone Escrow:</strong> Funds unlock only on cryptographic proof.</li>
+              <li><strong>Milestone Escrow:</strong> Funds unlock only when a verifier attests on-chain that a condition was met.</li>
               <li><strong>Policy Signers:</strong> Smart wallets restrict where funds can be spent.</li>
-              <li><strong>Zero Friction:</strong> Passkeys and sponsored transactions on Stellar.</li>
+              <li><strong>Money Comes Back:</strong> Anything never paid out returns to funders in proportion to what they put in.</li>
             </ul>
           </div>
         </div>
@@ -172,7 +171,7 @@ export const Home: React.FC = () => {
             <div className="grid-content">
               <div className="step-number">01</div>
               <h3>Funders Commit</h3>
-              <p className="text-muted">Donors pool USDC into a specific program via SEP-24 ramps. Unused tranches automatically recycle for the next cohort, ensuring capital efficiency.</p>
+              <p className="text-muted">Funders contribute to a specific programme. Once the release window closes, anything never paid out can be claimed back in proportion to each contribution.</p>
             </div>
             <div className="grid-visual glass-panel">
               <div className="mini-ui funder-ui">
