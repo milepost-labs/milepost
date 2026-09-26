@@ -1,9 +1,12 @@
-import { useEffect, useRef, useState } from 'react';
-import { ChevronDown, Menu as MenuIcon, Wallet } from 'lucide-react';
+import { useState } from 'react';
+import { ChevronDown, Menu as MenuIcon } from 'lucide-react';
 import { Link, useLocation } from 'react-router-dom';
 import { useWallet } from '../../context/useWallet';
-import { AddressChip } from '../ui';
 import { APP_ROUTES, HOME_ANCHORS } from '../../routes';
+import { AccountMenu } from './AccountMenu';
+import { SignInSheet } from './SignInSheet';
+import { ThemeToggle } from './ThemeToggle';
+import { useDetailsMenu } from './useDetailsMenu';
 import './Navbar.css';
 
 /**
@@ -18,35 +21,7 @@ import './Navbar.css';
 const HeaderMenu = () => {
   const location = useLocation();
   const isHome = location.pathname === '/';
-  const detailsRef = useRef<HTMLDetailsElement>(null);
-  const [open, setOpen] = useState(false);
-
-  useEffect(() => {
-    const details = detailsRef.current;
-    if (!details) return;
-    const onToggle = () => setOpen(details.open);
-    details.addEventListener('toggle', onToggle);
-    return () => details.removeEventListener('toggle', onToggle);
-  }, []);
-
-  useEffect(() => {
-    if (!open) return;
-    const close = () => detailsRef.current?.removeAttribute('open');
-    const onKeyDown = (event: KeyboardEvent) => {
-      if (event.key === 'Escape') close();
-    };
-    const onOutsideClick = (event: MouseEvent) => {
-      if (detailsRef.current && !detailsRef.current.contains(event.target as Node)) close();
-    };
-    document.addEventListener('keydown', onKeyDown);
-    document.addEventListener('click', onOutsideClick);
-    return () => {
-      document.removeEventListener('keydown', onKeyDown);
-      document.removeEventListener('click', onOutsideClick);
-    };
-  }, [open]);
-
-  const closeMenu = () => detailsRef.current?.removeAttribute('open');
+  const { ref: detailsRef, close: closeMenu } = useDetailsMenu();
 
   return (
     <details className="nav-menu" ref={detailsRef}>
@@ -81,9 +56,9 @@ const HeaderMenu = () => {
 };
 
 export const Navbar = () => {
+  const [signInOpen, setSignInOpen] = useState(false);
   const {
     address,
-    connect: connectWallet,
     status,
     network,
     networkError,
@@ -126,15 +101,12 @@ export const Navbar = () => {
             />
             {wrongNetwork ? `Freighter: ${network ?? 'unknown network'}` : expectedNetwork}
           </span>
+          <ThemeToggle />
           {address ? (
-            <div className="badge-pill connected-badge" style={{ backgroundColor: 'var(--surface-hover)', border: '1px solid var(--surface-border)' }}>
-              <span className="pulse-dot" style={{ backgroundColor: 'var(--color-success)' }}></span>
-              <AddressChip address={address} copyLabel="Copy wallet address" />
-            </div>
+            <AccountMenu address={address} />
           ) : (
-            <button onClick={connectWallet} className="btn-primary connect-wallet-btn">
-              <Wallet size={18} aria-hidden="true" />
-              Connect Wallet
+            <button type="button" onClick={() => setSignInOpen(true)} className="btn-primary connect-wallet-btn">
+              Sign in
             </button>
           )}
         </div>
@@ -153,6 +125,7 @@ export const Navbar = () => {
           </button>
         </div>
       )}
+      <SignInSheet open={signInOpen} onClose={() => setSignInOpen(false)} />
     </header>
   );
 };

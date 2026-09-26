@@ -25,8 +25,12 @@ import { AnnouncerContext, type AnnouncerContextType } from './announcerStore';
  * `AnnouncerProvider` (mounted once, in `Layout`) owns it, so calling this
  * from any screen reaches the same shared region rather than creating one.
  */
+const noop: AnnouncerContextType['announce'] = () => {};
+
 export function useAnnouncer(): AnnouncerContextType['announce'] {
   const context = useContext(AnnouncerContext);
-  if (!context) throw new Error('useAnnouncer must be used inside an AnnouncerProvider');
-  return context.announce;
+  // Every route renders inside Layout, which provides the region. Outside it
+  // (a component test, say) there is nowhere to announce to, and failing to
+  // render over that would be worse than staying quiet.
+  return context?.announce ?? noop;
 }

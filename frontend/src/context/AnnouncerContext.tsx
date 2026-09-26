@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState, type ReactNode } from 'react';
 import { useLocation } from 'react-router-dom';
-import { AnnouncerContext, type Announcement, type AnnouncementKind } from './announcerStore';
+import { AnnouncerContext, announcementAria, type Announcement, type AnnouncementKind } from './announcerStore';
 
 /**
  * One shared live region for every async result, mounted once by `Layout` —
@@ -10,18 +10,14 @@ import { AnnouncerContext, type Announcement, type AnnouncementKind } from './an
  * of the screen" that every write's pending/success/error passes through.
  */
 
-/** The ARIA pairing for a kind — kept as a pure mapping so it can be tested
- * without rendering anything. `alert` is inherently assertive; `status` is
- * inherently polite. Setting both `role` and `aria-live` is belt and braces
- * across screen readers that key off one or the other. */
-export function announcementAria(kind: AnnouncementKind): { role: 'status' | 'alert'; ariaLive: 'polite' | 'assertive' } {
-  return kind === 'alert' ? { role: 'alert', ariaLive: 'assertive' } : { role: 'status', ariaLive: 'polite' };
-}
-
 export function AnnouncerProvider({ children }: { children: ReactNode }) {
   const location = useLocation();
-  const [visible, setVisible] = useState<Announcement | null>(null);
+  const [latest, setLatest] = useState<Announcement | null>(null);
   const frame = useRef<number | null>(null);
+  const path = useRef(location.pathname);
+  useEffect(() => {
+    path.current = location.pathname;
+  }, [location.pathname]);
 
   const announce = useCallback((text: string, kind: AnnouncementKind = 'status') => {
     if (frame.current !== null) cancelAnimationFrame(frame.current);
@@ -29,8 +25,8 @@ export function AnnouncerProvider({ children }: { children: ReactNode }) {
     // a live region when its content actually changes — announcing the same
     // text twice in a row (two identical "Confirmed.") would otherwise be
     // silently swallowed the second time.
-    setVisible(null);
-    frame.current = requestAnimationFrame(() => setVisible({ text, kind }));
+    setLatest(null);
+    frame.current = requestAnimationFrame(() => setLatest({ text, kind, path: path.current }));
   }, []);
 
   useEffect(() => () => {
@@ -38,10 +34,9 @@ export function AnnouncerProvider({ children }: { children: ReactNode }) {
   }, []);
 
   // A stale "Contribution confirmed" should not sit on a screen it no longer
-  // describes once someone has navigated away from it.
-  useEffect(() => {
-    setVisible(null);
-  }, [location.pathname]);
+  // describes once someone has navigated away from it. Derived rather than
+  // cleared in an effect, so there is no extra render with the stale text.
+  const visible = latest && latest.path === location.pathname ? latest : null;
 
   const { role, ariaLive } = announcementAria(visible?.kind ?? 'status');
 
