@@ -1,8 +1,9 @@
 import React, { useEffect, useRef } from 'react';
 import { Link } from 'react-router-dom';
 import './Home.css';
-import { ArrowRight, CheckCircle, Shield, Zap, Lock, Unlock, ArrowUpRight } from 'lucide-react';
+import { Shield, Zap, Lock, Unlock } from 'lucide-react';
 import { CopyButton } from '../components/ui/CopyButton';
+import { HeroDemo } from '../components/landing/HeroDemo';
 
 /**
  * Repository docs and README describe one repository — the public
@@ -76,57 +77,28 @@ export const Home: React.FC = () => {
       <div className="bg-shape shape-top-right"></div>
       <div className="bg-shape shape-bottom-left"></div>
 
-      {/* Hero Section (Asymmetrical Split Layout) */}
-      <section className="hero-split">
-        <div className="hero-text-content">
-          <div className="badge-pill animate-fade-up" style={{ animationDelay: '100ms' }}>
-            <span className="pulse-dot"></span>
-            Stellar Grant Escrow Protocol
-          </div>
-          <h1 className="hero-title animate-fade-up" style={{ animationDelay: '200ms' }}>
-            Provable, <br/> Accountable <br/>
-            <span className="text-highlight">Educational Impact.</span>
+      {/* Hero: headline + interactive tranche demo (landing section 1). */}
+      <section className="hero" aria-labelledby="hero-heading">
+        <div className="hero__copy">
+          <span className="hero__pill">Conditional disbursement on Stellar · testnet</span>
+          <h1 id="hero-heading" className="hero__title">
+            Money moves at each milepost, and only at each milepost.
           </h1>
-          <p className="hero-subtitle animate-fade-up" style={{ animationDelay: '300ms' }}>
-            Milepost is conditional disbursement infrastructure on Stellar. Money moves at each milepost, and only at each milepost. We replace lump-sum transfers with milestone tranches and policy-restricted spending.
+          <p className="hero__mechanism">
+            A funder commits money to a programme. Recipients receive it in tranches that unlock
+            only when a trusted verifier confirms a condition was met.
           </p>
-          <div className="hero-actions animate-fade-up" style={{ animationDelay: '400ms' }}>
+          <div className="hero__actions">
             <Link to="/directory" className="btn-primary btn-large">
-              Explore Programs <ArrowRight size={20} />
+              Launch app
             </Link>
-            <a href="https://github.com/gbemi-dev/milepost" target="_blank" rel="noreferrer" className="btn-secondary btn-large">
-              Read the Docs <ArrowUpRight size={18} />
+            <a href="#how" className="btn-secondary btn-large">
+              How it works ↓
             </a>
           </div>
+          <span className="hero__note">Browsing programmes needs no sign-in.</span>
         </div>
-        
-        <div className="hero-visual-content animate-fade-up" style={{ animationDelay: '300ms' }}>
-          {/* Abstract UI Representation of a Milestone */}
-          <div className="abstract-ui glass-panel">
-            <div className="abstract-header">
-              <div className="dots"><span></span><span></span><span></span></div>
-              <div className="abstract-title">Disbursement Contract</div>
-            </div>
-            <div className="abstract-body">
-              <div className="ui-row">
-                <div className="ui-icon"><CheckCircle size={16}/></div>
-                <div className="ui-text">
-                  <div className="ui-line skeleton" style={{ width: '80%' }}></div>
-                  <div className="ui-line skeleton-sub" style={{ width: '40%' }}></div>
-                </div>
-                <div className="ui-amount">$1,500</div>
-              </div>
-              <div className="ui-row locked">
-                <div className="ui-icon"><Lock size={16}/></div>
-                <div className="ui-text">
-                  <div className="ui-line skeleton" style={{ width: '60%' }}></div>
-                  <div className="ui-line skeleton-sub" style={{ width: '50%' }}></div>
-                </div>
-                <div className="ui-amount">$1,000</div>
-              </div>
-            </div>
-          </div>
-        </div>
+        <HeroDemo />
       </section>
 
       {/* Paradigm Shift (Full Width Grid) */}
@@ -160,7 +132,7 @@ export const Home: React.FC = () => {
       </section>
 
       {/* How it Works (Alternating Split Layout) */}
-      <section className="how-it-works-section">
+      <section id="how" className="how-it-works-section">
         <div className="section-header scroll-animate">
           <h2>Protocol Mechanics</h2>
         </div>

@@ -81,21 +81,30 @@ const HeaderMenu = () => {
 };
 
 export const Navbar = () => {
-  const { address, connect: connectWallet } = useWallet();
+  const {
+    address,
+    connect: connectWallet,
+    status,
+    network,
+    networkError,
+    expectedNetwork,
+    recheckNetwork,
+  } = useWallet();
+  const wrongNetwork = status === 'wrong-network';
 
   return (
     <header className="navbar glass-panel">
       <div className="navbar-container">
         <div className="navbar-brand">
           <Link to="/" className="brand-logo">
-            <span className="brand-icon">M</span>
+            <span className="brand-icon" aria-hidden="true">M</span>
             Milepost
           </Link>
         </div>
 
         <HeaderMenu />
 
-        <nav className="navbar-links">
+        <nav className="navbar-links" aria-label="Primary">
           <Link to="/directory" className="nav-link">Directory</Link>
           <Link to="/programme" className="nav-link">Programme</Link>
           <Link to="/funders" className="nav-link">Funders</Link>
@@ -107,6 +116,16 @@ export const Navbar = () => {
         </nav>
 
         <div className="navbar-actions">
+          <span
+            className={`network-indicator${wrongNetwork ? ' network-indicator--wrong' : ''}`}
+            title={wrongNetwork ? (networkError ?? undefined) : `Contracts are deployed on ${expectedNetwork}`}
+          >
+            <span
+              className="network-indicator__dot"
+              aria-hidden="true"
+            />
+            {wrongNetwork ? `Freighter: ${network ?? 'unknown network'}` : expectedNetwork}
+          </span>
           {address ? (
             <div className="badge-pill connected-badge" style={{ backgroundColor: 'var(--surface-hover)', border: '1px solid var(--surface-border)' }}>
               <span className="pulse-dot" style={{ backgroundColor: 'var(--color-success)' }}></span>
@@ -114,12 +133,26 @@ export const Navbar = () => {
             </div>
           ) : (
             <button onClick={connectWallet} className="btn-primary connect-wallet-btn">
-              <Wallet size={18} />
+              <Wallet size={18} aria-hidden="true" />
               Connect Wallet
             </button>
           )}
         </div>
       </div>
+      {wrongNetwork && (
+        <div className="network-banner" role="alert">
+          <p className="network-banner__message">
+            {networkError ??
+              `Your wallet is on ${network ?? 'an unknown network'}, but these contracts are deployed on ${expectedNetwork}.`}
+          </p>
+          <p className="network-banner__note">
+            Browsing still works — only signing is paused. Switch network in Freighter, then check again.
+          </p>
+          <button type="button" className="network-banner__retry" onClick={recheckNetwork}>
+            Check again
+          </button>
+        </div>
+      )}
     </header>
   );
 };
