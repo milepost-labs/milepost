@@ -24,7 +24,7 @@ export const VerifiersTab: FC<VerifiersTabProps> = ({
         <div className="verifiers-tab__badge">Stand-in data</div>
         <p className="verifiers-tab__explanation">
           <strong>Verifier roster future source:</strong> The roster is not published by the indexer yet.
-          In a future wave, this roster will be populated directly from on-chain deployment and indexer events.
+          Until it is, the verifiers below are examples, not this programme's real roster.
         </p>
         <p className="verifiers-tab__distinction">
           <strong>Reviewers vs Verifiers:</strong> Verifiers differ from reviewers — verifiers unlock payments

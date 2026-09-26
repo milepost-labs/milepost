@@ -10,7 +10,6 @@ export type TabKey = 'awards' | 'verifiers' | 'terms';
 export interface ProgrammeTabsProps {
   programmeId: string;
   phase?: string;
-  mode?: string;
   quorum?: number;
   isSample?: boolean;
   asset?: string;
@@ -21,7 +20,6 @@ export interface ProgrammeTabsProps {
 export const ProgrammeTabs: FC<ProgrammeTabsProps> = ({
   programmeId,
   phase = 'Open',
-  mode = 'Direct',
   quorum = 1,
   isSample = false,
   asset = 'USDC',
@@ -94,7 +92,6 @@ export const ProgrammeTabs: FC<ProgrammeTabsProps> = ({
         {activeTab === 'terms' && (
           <TermsTab
             programmeId={programmeId}
-            mode={mode}
             quorum={quorum}
             asset={asset}
           />

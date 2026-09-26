@@ -8,7 +8,17 @@ export interface WhereTheMoneyIsProps {
   fee: bigint;
   granted?: bigint;
   released?: bigint;
-  refundable?: bigint;
+  /** `total_refunded`: what contributors have already claimed back. */
+  refunded?: bigint;
+  /** `total_swept`: what went to the treasury after the grace period. */
+  swept?: bigint;
+  /**
+   * Whether refunds can be claimed: the programme is cancelled, or its
+   * release deadline has passed. Before that nothing is refundable.
+   */
+  refundsOpen?: boolean;
+  /** `fee_bps` from the config, shown beside the fee when known. */
+  feeBps?: number;
   quorum: number;
   asset?: string;
 }
@@ -18,22 +28,34 @@ export const WhereTheMoneyIs: FC<WhereTheMoneyIsProps> = ({
   fee,
   granted = 0n,
   released = 0n,
-  refundable = 0n,
+  refunded = 0n,
+  swept = 0n,
+  refundsOpen = false,
+  feeBps,
   quorum,
   asset = 'USDC',
 }) => {
   // Reconcile: contributed less fee equals budget
   const budget = contributed > fee ? contributed - fee : 0n;
+  const clamp = (value: bigint) => (value > 0n ? value : 0n);
 
-  // No precision lost on BigInt arithmetic
-  const notYetAwarded =
-    budget > granted + refundable ? budget - granted - refundable : 0n;
-  const awardedLocked = granted > released ? granted - released : 0n;
+  // Mirrors the contract's refund rule: once refunds open, everything not
+  // released is refundable in proportion, including awards that were never
+  // paid out, less what has been claimed or swept. Until then, nothing is.
+  const refundable = refundsOpen ? clamp(budget - released - refunded - swept) : 0n;
+  const notYetAwarded = refundsOpen ? 0n : clamp(budget - granted);
+  const awardedLocked = refundsOpen ? 0n : clamp(granted - released);
 
   // Quorum capped at 16
   const cappedQuorum = Math.min(Math.max(0, quorum), 16);
 
-  const squares = computeMoneySquares(budget, released, granted, refundable, 40);
+  const squares = computeMoneySquares(
+    budget,
+    released,
+    refundsOpen ? released : granted,
+    refundable,
+    40,
+  );
 
   const legend = [
     {
@@ -114,6 +136,7 @@ export const WhereTheMoneyIs: FC<WhereTheMoneyIsProps> = ({
           Protocol fee{' '}
           <strong className="numeric">
             {formatAmount(fee, { asset })}
+            {feeBps !== undefined && ` (${(feeBps / 100).toFixed(2)}%)`}
           </strong>
         </span>
         <span>

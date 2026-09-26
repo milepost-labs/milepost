@@ -70,7 +70,9 @@ const timelineSteps: TimelineStep[] = [
   },
 ];
 
-const formatXlm = (amount: bigint) => formatAmount(amount, { asset: "XLM" });
+/** The unit every amount on this page is labelled with. */
+const ASSET_LABEL = "XLM";
+const formatXlm = (amount: bigint) => formatAmount(amount, { asset: ASSET_LABEL });
 const formatAddress = (address: string) =>
   `${address.slice(0, 8)}...${address.slice(-8)}`;
 
@@ -487,6 +489,11 @@ export const ProgrammeDetail = () => {
     () => programme.total_released(),
     [programme],
   );
+  const refunded = useContractRead(
+    () => programme.total_refunded(),
+    [programme],
+  );
+  const swept = useContractRead(() => programme.total_swept(), [programme]);
   const refetchPhase = phase.refetch;
 
   useEffect(() => {
@@ -503,13 +510,17 @@ export const ProgrammeDetail = () => {
     fee.data !== null &&
     contributed.data !== null &&
     granted.data !== null &&
-    released.data !== null
+    released.data !== null &&
+    refunded.data !== null &&
+    swept.data !== null
       ? {
           budget: budget.data,
           fee: fee.data,
           totalContributed: contributed.data,
           totalGranted: granted.data,
           totalReleased: released.data,
+          totalRefunded: refunded.data,
+          totalSwept: swept.data,
         }
       : null;
 
@@ -518,23 +529,35 @@ export const ProgrammeDetail = () => {
     fee.loading ||
     contributed.loading ||
     granted.loading ||
-    released.loading;
+    released.loading ||
+    refunded.loading ||
+    swept.loading;
   const moneyError =
     budget.error ||
     fee.error ||
     contributed.error ||
     granted.error ||
-    released.error;
+    released.error ||
+    refunded.error ||
+    swept.error;
   const refetchMoney = () => {
     budget.refetch();
     fee.refetch();
     contributed.refetch();
     granted.refetch();
     released.refetch();
+    refunded.refetch();
+    swept.refetch();
   };
 
   const phaseName = phase.data?.tag ?? "Loading";
   const activeDeadline = config.data ? nextDeadline(config.data, nowMs) : null;
+  // The contract opens refunds on cancellation or once the release deadline
+  // has passed; the money panel shows refundable funds only from then.
+  const refundsOpen =
+    phaseName === "Cancelled" ||
+    (config.data !== null &&
+      nowMs / 1000 >= Number(config.data.release_deadline));
 
   const timelineRows = useMemo(() => {
     const programmeConfig = config.data;
@@ -703,9 +726,12 @@ export const ProgrammeDetail = () => {
                 fee={value.fee}
                 granted={value.totalGranted}
                 released={value.totalReleased}
-                refundable={value.totalRefunded ?? ZERO}
+                refunded={value.totalRefunded ?? ZERO}
+                swept={value.totalSwept ?? ZERO}
+                refundsOpen={refundsOpen}
+                feeBps={config.data?.fee_bps}
                 quorum={config.data?.quorum ?? 1}
-                asset="USDC"
+                asset={ASSET_LABEL}
               />
             )}
           </AsyncView>
@@ -713,10 +739,9 @@ export const ProgrammeDetail = () => {
           <ProgrammeTabs
             programmeId={programmeId}
             phase={phaseName}
-            mode="Direct"
             quorum={config.data?.quorum ?? 1}
             isSample={isDefault}
-            asset="USDC"
+            asset={ASSET_LABEL}
           />
         </div>
 

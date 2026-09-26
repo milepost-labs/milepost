@@ -2,39 +2,47 @@ import type { FC } from 'react';
 import { Link } from 'react-router-dom';
 import './TermsTab.css';
 
+/** The four payment modes, as `Mode` documents them in the program contract. */
+const MODES = [
+  {
+    mode: 'Direct',
+    description:
+      'Paid straight to a verified payee chosen at award time, such as a school, clinic or supplier. The recipient never holds the money.',
+  },
+  {
+    mode: 'Allocated',
+    description:
+      'Held in escrow. The recipient chooses which verified payee receives it, and when. This depends on nothing outside the contract.',
+  },
+  {
+    mode: 'Restricted',
+    description:
+      "Paid into the recipient's smart wallet, where a policy signer limits spending to verified destinations. Only as strong as that wallet's configuration.",
+  },
+  { mode: 'Open', description: 'Paid to the recipient with no restriction.' },
+];
+
 export interface TermsTabProps {
   programmeId: string;
-  mode?: string;
   quorum?: number;
   asset?: string;
 }
 
 export const TermsTab: FC<TermsTabProps> = ({
   programmeId,
-  mode = 'Direct',
   quorum = 1,
   asset = 'USDC',
 }) => {
   const cappedQuorum = Math.min(Math.max(1, quorum), 16);
 
-  const modeDescriptions: Record<string, string> = {
-    Direct:
-      'Each award is paid straight to a verified payee chosen at award time. The recipient never holds the money.',
-    Allocated:
-      'Released money is held in escrow. The recipient chooses which verified payee receives it, and when. This depends on nothing outside the contract.',
-    Restricted:
-      "Released money goes to the recipient's own wallet, limited by a policy signer to one asset, verified payees and a cap. It is only as strong as that wallet's configuration.",
-    Open:
-      'Released money moves directly to the recipient without restrictions.',
-  };
-
-  const modeNote =
-    modeDescriptions[mode] ||
-    'Released money follows the rules configured in the programme contract.';
-
   const terms = [
     { k: 'Asset', v: asset },
-    { k: 'Mode', v: mode },
+    {
+      k: 'Payment mode',
+      v: 'Chosen per award',
+      explanation:
+        'A programme does not have one mode. Each award is given its own when it is finalized, which decides where its released money goes.',
+    },
     {
       k: 'Reviewer quorum',
       v: `${cappedQuorum} ${cappedQuorum === 1 ? 'vote' : 'votes'} (max 16)`,
@@ -46,10 +54,10 @@ export const TermsTab: FC<TermsTabProps> = ({
         'The award is the median of reviewer votes. Once quorum (capped at 16) is met, submitted amounts are sorted and the middle value is selected to protect against outlier votes.',
     },
     {
-      k: 'Unawarded budget',
+      k: 'Unpaid money',
       v: 'Refunded in proportion, then swept after a grace period',
       explanation:
-        'Unawarded budget is refunded proportionally to funders based on their initial contribution after the release window closes. Any unclaimed refund balance is swept to the treasury once the grace period expires.',
+        'Once the release window closes, or if the programme is cancelled, anything not yet released, including awards never paid out, can be claimed back by funders in proportion to what they contributed. What nobody claims is swept to the treasury after a grace period.',
     },
   ];
 
@@ -76,9 +84,16 @@ export const TermsTab: FC<TermsTabProps> = ({
         ))}
       </div>
 
-      <div className="terms-tab__mode-card">
-        <strong>{mode} mode.</strong> {modeNote}
-      </div>
+      <dl className="terms-tab__mode-card">
+        {MODES.map((item) => (
+          <div key={item.mode}>
+            <dt>
+              <strong>{item.mode}</strong>
+            </dt>
+            <dd>{item.description}</dd>
+          </div>
+        ))}
+      </dl>
 
       <Link
         to={keepaliveUrl}

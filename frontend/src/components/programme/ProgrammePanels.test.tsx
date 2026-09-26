@@ -52,8 +52,8 @@ describe('Issue #264 - WhereTheMoneyIs component', () => {
         fee={fee}
         granted={5_000n * STROOP}
         released={2_200n * STROOP}
-        refundable={800n * STROOP}
         quorum={quorum}
+        feeBps={1250}
         asset="USDC"
       />,
     );
@@ -64,7 +64,7 @@ describe('Issue #264 - WhereTheMoneyIs component', () => {
 
     // 4-line legend items
     expect(screen.getByText('Not yet awarded')).toBeDefined();
-    expect(screen.getByText('4,700.00 USDC')).toBeDefined();
+    expect(screen.getByText('5,500.00 USDC')).toBeDefined();
 
     expect(screen.getByText('Awarded, locked')).toBeDefined();
     expect(screen.getByText('2,800.00 USDC')).toBeDefined();
@@ -72,13 +72,36 @@ describe('Issue #264 - WhereTheMoneyIs component', () => {
     expect(screen.getByText('Released')).toBeDefined();
     expect(screen.getByText('2,200.00 USDC')).toBeDefined();
 
+    // Refunds are not open, so nothing is refundable yet.
     expect(screen.getByText('Refundable')).toBeDefined();
-    expect(screen.getByText('800.00 USDC')).toBeDefined();
+    expect(screen.getByText('0.00 USDC')).toBeDefined();
 
     // Footer stats with capped quorum (max 16)
     expect(screen.getByText(/16 reviewers/)).toBeDefined();
     expect(screen.getByText(/12,000\.00 USDC/)).toBeDefined(); // contributed
-    expect(screen.getByText(/1,500\.00 USDC/)).toBeDefined(); // fee
+    expect(screen.getByText(/1,500\.00 USDC \(12\.50%\)/)).toBeDefined(); // fee
+  });
+
+  it('once refunds open, shows everything unreleased as refundable, less claims and sweeps', () => {
+    const STROOP = 10_000_000n;
+    render(
+      <WhereTheMoneyIs
+        contributed={10_000n * STROOP}
+        fee={0n}
+        granted={6_000n * STROOP}
+        released={2_000n * STROOP}
+        refunded={1_000n * STROOP}
+        swept={500n * STROOP}
+        refundsOpen
+        quorum={3}
+        asset="USDC"
+      />,
+    );
+    // 10,000 budget - 2,000 released - 1,000 refunded - 500 swept
+    expect(screen.getByText('6,500.00 USDC')).toBeDefined();
+    // Nothing is still waiting to be awarded or locked for release.
+    expect(screen.getByText('Not yet awarded').nextElementSibling?.textContent).toBe('0.00 USDC');
+    expect(screen.getByText('Awarded, locked').nextElementSibling?.textContent).toBe('0.00 USDC');
   });
 
   it('preserves precision on large amounts exceeding safe number range', () => {
@@ -172,7 +195,6 @@ describe('Issue #267 - TermsTab component', () => {
       <MemoryRouter>
         <TermsTab
           programmeId="prog-xyz"
-          mode="Direct"
           quorum={5}
           asset="USDC"
         />
@@ -190,14 +212,14 @@ describe('Issue #267 - TermsTab component', () => {
       screen.getByText('Refunded in proportion, then swept after a grace period'),
     ).toBeDefined();
     expect(
-      screen.getByText(/Unawarded budget is refunded proportionally to funders/),
+      screen.getByText(/including awards never paid out/),
     ).toBeDefined();
 
-    // Mode description
-    expect(screen.getByText(/Direct mode\./)).toBeDefined();
-    expect(
-      screen.getByText(/Each award is paid straight to a verified payee/),
-    ).toBeDefined();
+    // Mode is per award, so every mode is described
+    expect(screen.getByText('Chosen per award')).toBeDefined();
+    for (const mode of ['Direct', 'Allocated', 'Restricted', 'Open']) {
+      expect(screen.getByText(mode)).toBeDefined();
+    }
 
     // Keepalive link
     const keepaliveLink = screen.getByRole('link', {
@@ -229,7 +251,6 @@ describe('ProgrammeTabs wrapper component', () => {
         <ProgrammeTabs
           programmeId="test-prog"
           phase="Settled"
-          mode="Allocated"
           quorum={3}
           asset="USDC"
         />
@@ -250,6 +271,6 @@ describe('ProgrammeTabs wrapper component', () => {
     const termsBtn = screen.getByRole('tab', { name: 'Terms' });
     fireEvent.click(termsBtn);
     expect(termsBtn.getAttribute('aria-selected')).toBe('true');
-    expect(screen.getByText(/Allocated mode\./)).toBeDefined();
+    expect(screen.getByText('Chosen per award')).toBeDefined();
   });
 });
