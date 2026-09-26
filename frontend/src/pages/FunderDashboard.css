@@ -261,7 +261,7 @@
 }
 
 .badge-active {
-  background-color: var(--color-success);
+  background-color: var(--success-strong);
   color: white;
 }
 

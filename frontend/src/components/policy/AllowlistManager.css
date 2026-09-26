@@ -49,7 +49,7 @@
 }
 
 .text-success {
-  color: var(--color-success, #16a34a);
+  color: var(--success-strong);
   font-weight: 600;
 }
 

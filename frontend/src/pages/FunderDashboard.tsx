@@ -14,6 +14,7 @@ import {
   useProgramme,
   useTransaction,
   phaseLabel,
+  useAnnounceTransaction,
 } from "../hooks";
 import { useWallet } from "../context/useWallet";
 import { AsyncView } from "../components/state/AsyncStates";
@@ -74,6 +75,18 @@ export const FunderDashboard = () => {
 
   const paused = useContractRead(() => programme.is_paused(), [programme]);
   const pauseTx = useTransaction({ contract: "program" });
+
+  useAnnounceTransaction({
+    phase: cancelTx.phase,
+    error: cancelTx.error,
+    pending: "Cancelling the programme…",
+    success: "Programme cancelled.",
+  });
+  useAnnounceTransaction({
+    phase: pauseTx.phase,
+    error: pauseTx.error,
+    success: paused.data ? "Programme unpaused." : "Programme paused.",
+  });
 
   const isCreator = Boolean(
     walletAddress && config.data && walletAddress === config.data.creator,
@@ -220,8 +233,8 @@ export const FunderDashboard = () => {
               <Button
                 variant="secondary"
                 style={{
-                  color: "var(--color-warning)",
-                  borderColor: "var(--color-warning)",
+                  color: "var(--warning-strong)",
+                  borderColor: "var(--warning-strong)",
                 }}
                 onClick={handleTogglePause}
                 loading={pauseTx.busy}
@@ -233,8 +246,8 @@ export const FunderDashboard = () => {
               <Button
                 variant="secondary"
                 style={{
-                  color: "var(--color-error)",
-                  borderColor: "var(--color-error)",
+                  color: "var(--danger-strong)",
+                  borderColor: "var(--danger-strong)",
                 }}
                 onClick={() => setCancelModalOpen(true)}
               >
@@ -246,7 +259,6 @@ export const FunderDashboard = () => {
         {pauseErrorExplained && (
           <p
             className="ui-field__message ui-field__message--error"
-            role="alert"
             style={{ marginTop: "0.75rem" }}
           >
             {pauseErrorExplained.message}
@@ -260,9 +272,9 @@ export const FunderDashboard = () => {
           <div
             style={{ display: "flex", alignItems: "center", gap: "0.75rem" }}
           >
-            <AlertTriangle style={{ color: "var(--color-error)" }} size={24} />
+            <AlertTriangle style={{ color: "var(--danger-strong)" }} size={24} />
             <div>
-              <h3 style={{ margin: 0, color: "var(--color-error)" }}>
+              <h3 style={{ margin: 0, color: "var(--danger-strong)" }}>
                 Programme Cancelled
               </h3>
               <p style={{ margin: "0.25rem 0 0", fontSize: "0.875rem" }}>
@@ -598,7 +610,7 @@ export const FunderDashboard = () => {
               Back
             </Button>
             <Button
-              style={{ backgroundColor: "var(--color-error)", color: "#fff" }}
+              style={{ backgroundColor: "var(--danger-strong)", color: "#fff" }}
               onClick={handleCancelConfirm}
               loading={cancelTx.busy}
               loadingLabel={phaseLabel(cancelTx.phase) || "Cancelling…"}
@@ -612,7 +624,7 @@ export const FunderDashboard = () => {
           style={{ display: "flex", flexDirection: "column", gap: "0.75rem" }}
         >
           <p
-            style={{ margin: 0, fontWeight: 600, color: "var(--color-error)" }}
+            style={{ margin: 0, fontWeight: 600, color: "var(--danger-strong)" }}
           >
             Are you sure you want to cancel this programme?
           </p>
@@ -628,7 +640,7 @@ export const FunderDashboard = () => {
               style={{
                 padding: "0.75rem",
                 backgroundColor: "rgba(239, 68, 68, 0.1)",
-                border: "1px solid var(--color-error)",
+                border: "1px solid var(--danger-strong)",
                 borderRadius: "var(--radius-md)",
               }}
             >
@@ -636,7 +648,7 @@ export const FunderDashboard = () => {
                 style={{
                   margin: 0,
                   fontWeight: 600,
-                  color: "var(--color-error)",
+                  color: "var(--danger-strong)",
                 }}
               >
                 {cancelErrorExplained.message}

@@ -125,7 +125,7 @@ export function useTransaction<T = unknown>(
 }
 
 /** What to show while a transaction is in flight. */
-export function phaseLabel(phase: TransactionPhase): string {
+export function phaseLabel(phase: string): string {
   switch (phase) {
     case 'building':
       return 'Preparing…';

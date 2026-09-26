@@ -2,6 +2,7 @@ import { useWallet } from '../../context/useWallet';
 import { useProgramme } from '../../hooks/useProgramme';
 import { useContractRead } from '../../hooks/useContractRead';
 import { useTransaction, phaseLabel } from '../../hooks/useTransaction';
+import { useAnnounceTransaction } from '../../hooks/useAnnounceTransaction';
 import { AsyncView } from '../state/AsyncStates';
 import { Button } from '../ui/Button';
 import { Card, Stat } from '../ui/Card';
@@ -30,6 +31,28 @@ export function RefundsAndSweepsSection() {
   const refundTx = useTransaction({ contract: 'program' });
   const sweepFeeTx = useTransaction({ contract: 'program' });
   const sweepUnclaimedTx = useTransaction({ contract: 'program' });
+
+  // These three render their outcome inline rather than through
+  // `TransactionOutcome`, so without this their failures and confirmations
+  // would only ever be visible.
+  useAnnounceTransaction({
+    phase: refundTx.phase,
+    error: refundTx.error,
+    pending: 'Claiming your refund…',
+    success: 'Refund claimed.',
+  });
+  useAnnounceTransaction({
+    phase: sweepFeeTx.phase,
+    error: sweepFeeTx.error,
+    pending: 'Sweeping protocol fees…',
+    success: 'Protocol fees swept to the treasury.',
+  });
+  useAnnounceTransaction({
+    phase: sweepUnclaimedTx.phase,
+    error: sweepUnclaimedTx.error,
+    pending: 'Sweeping unclaimed funds…',
+    success: 'Unclaimed funds swept back to donors.',
+  });
 
   return (
     <div className="refunds-sweeps-section" style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>
@@ -91,7 +114,7 @@ export function RefundsAndSweepsSection() {
                                     </Button>
                                     {refundTx.busy && <span style={{ fontSize: '0.75rem', color: 'var(--color-muted)' }}>{phaseLabel(refundTx.phase)}</span>}
                                     {refundError && (
-                                      <span style={{ fontSize: '0.875rem', color: 'var(--color-error)' }}>
+                                      <span style={{ fontSize: '0.875rem', color: 'var(--danger-strong)' }}>
                                         {refundError.message}
                                       </span>
                                     )}
@@ -138,7 +161,7 @@ export function RefundsAndSweepsSection() {
                     </Button>
                     {sweepFeeTx.busy && <span style={{ fontSize: '0.75rem', color: 'var(--color-muted)' }}>{phaseLabel(sweepFeeTx.phase)}</span>}
                     {sweepFeeTx.error && (
-                      <span style={{ fontSize: '0.875rem', color: 'var(--color-error)' }}>{explain(sweepFeeTx.error, 'program').message}</span>
+                      <span style={{ fontSize: '0.875rem', color: 'var(--danger-strong)' }}>{explain(sweepFeeTx.error, 'program').message}</span>
                     )}
                   </div>
 
@@ -154,7 +177,7 @@ export function RefundsAndSweepsSection() {
                     </Button>
                     {sweepUnclaimedTx.busy && <span style={{ fontSize: '0.75rem', color: 'var(--color-muted)' }}>{phaseLabel(sweepUnclaimedTx.phase)}</span>}
                     {sweepUnclaimedTx.error && (
-                      <span style={{ fontSize: '0.875rem', color: 'var(--color-error)' }}>{explain(sweepUnclaimedTx.error, 'program').message}</span>
+                      <span style={{ fontSize: '0.875rem', color: 'var(--danger-strong)' }}>{explain(sweepUnclaimedTx.error, 'program').message}</span>
                     )}
                   </div>
                 </div>

@@ -168,8 +168,8 @@
 /* Used across this page's markup but never defined, so every muted line was
    rendering in the main text colour. */
 .text-muted { color: var(--text-muted); }
-.text-error { color: var(--color-error); }
-.text-success { color: var(--color-success); }
+.text-error { color: var(--danger-strong); }
+.text-success { color: var(--success-strong); }
 
 .bento-list {
   list-style: none;
@@ -348,12 +348,12 @@
   align-items: center;
   gap: 0.5rem;
   padding: 0.5rem 1rem;
-  background: rgba(16, 185, 129, 0.1);
-  color: var(--color-success);
+  background: var(--success-soft);
+  color: var(--success-strong);
   border-radius: 9999px;
   font-weight: 600;
   font-size: 0.85rem;
-  border: 1px solid rgba(16, 185, 129, 0.2);
+  border: 1px solid color-mix(in srgb, var(--success) 20%, transparent);
 }
 
 /* Tranche UI */
@@ -385,7 +385,7 @@
 }
 
 .tranche-icon.success {
-  background: var(--color-success);
+  background: var(--success-strong);
   color: white;
 }
 
@@ -405,7 +405,7 @@
 }
 
 .tranche-amount.text-success {
-  color: var(--color-success);
+  color: var(--success-strong);
 }
 
 .tranche-line {
@@ -570,7 +570,7 @@ code {
   font-weight: var(--weight-bold);
 }
 .claim-card-heading--guaranteed { color: var(--success-strong); }
-.claim-card-heading--limit { color: var(--danger); }
+.claim-card-heading--limit { color: var(--danger-strong); }
 
 .claim-card dl {
   display: flex;

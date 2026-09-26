@@ -3,6 +3,7 @@ import { Buffer } from 'buffer';
 import { Clock, ShieldCheck } from 'lucide-react';
 import { useSoroban } from '../../context/useSoroban';
 import { useTransaction, phaseLabel } from '../../hooks/useTransaction';
+import { useAnnounceTransaction } from '../../hooks/useAnnounceTransaction';
 import { Badge, Button, Card } from '../ui';
 import './Keepalive.css';
 
@@ -45,6 +46,12 @@ function archivalExplainer() {
 export function AttestationKeepalive({ uid, createdAt }: { uid: Buffer; createdAt: bigint }) {
   const { attest } = useSoroban();
   const tx = useTransaction({ contract: 'attest' });
+  useAnnounceTransaction({
+    phase: tx.phase,
+    error: tx.error,
+    pending: 'Extending the attestation…',
+    success: "Attestation extended — its expiry is now about 90 days out.",
+  });
 
   const now = useNowSeconds();
   const ageDays = Math.floor((now - Number(createdAt)) / DAY_SECONDS);
@@ -93,13 +100,13 @@ export function AttestationKeepalive({ uid, createdAt }: { uid: Buffer; createdA
             Extend expiry (keepalive)
           </Button>
           {tx.phase === 'success' && (
-            <span className="keepalive__success" role="status">
+            <span className="keepalive__success">
               Extended — this attestation&apos;s expiry is now ~90 days out.
             </span>
           )}
         </div>
         {tx.error && (
-          <div className={`state-error state-error--${tx.error.kind}`} role="alert">
+          <div className={`state-error state-error--${tx.error.kind}`}>
             <p className="state-error__message">{tx.error.message}</p>
             {tx.error.action && <p className="state-error__action">{tx.error.action}</p>}
           </div>
@@ -115,6 +122,12 @@ export function AttestationKeepalive({ uid, createdAt }: { uid: Buffer; createdA
 export function StandingKeepalive({ subject, lastSeen }: { subject: string; lastSeen: bigint }) {
   const { record } = useSoroban();
   const tx = useTransaction({ contract: 'record' });
+  useAnnounceTransaction({
+    phase: tx.phase,
+    error: tx.error,
+    pending: 'Extending the standing record…',
+    success: 'Standing extended — its expiry is now about 90 days out.',
+  });
 
   const now = useNowSeconds();
   const ageDays = Math.floor((now - Number(lastSeen)) / DAY_SECONDS);
@@ -174,13 +187,13 @@ export function StandingKeepalive({ subject, lastSeen }: { subject: string; last
             Extend expiry (keepalive)
           </Button>
           {tx.phase === 'success' && (
-            <span className="keepalive__success" role="status">
+            <span className="keepalive__success">
               Extended — this standing&apos;s expiry is now ~90 days out.
             </span>
           )}
         </div>
         {tx.error && (
-          <div className={`state-error state-error--${tx.error.kind}`} role="alert">
+          <div className={`state-error state-error--${tx.error.kind}`}>
             <p className="state-error__message">{tx.error.message}</p>
             {tx.error.action && <p className="state-error__action">{tx.error.action}</p>}
           </div>

@@ -4,6 +4,7 @@ import { ShieldCheck, Copy, Check } from 'lucide-react';
 import { useSoroban } from '../context/useSoroban';
 import { useWallet } from '../context/useWallet';
 import { useTransaction, phaseLabel } from '../hooks/useTransaction';
+import { useAnnounceTransaction } from '../hooks/useAnnounceTransaction';
 import { explain } from '../lib/errors';
 import { Card, Button, TextArea } from '../components/ui';
 import { CopyButton } from '../components/ui/CopyButton';
@@ -19,6 +20,12 @@ export const RegisterSchema = () => {
   const [definitionError, setDefinitionError] = useState<string | null>(null);
 
   const tx = useTransaction<Buffer>({ contract: 'attest' });
+  useAnnounceTransaction({
+    phase: tx.phase,
+    error: tx.error,
+    pending: 'Registering the schema…',
+    success: 'Schema registered. Its UID is ready to copy.',
+  });
 
   const handleRegister = async () => {
     const trimmed = definition.trim();
@@ -137,7 +144,7 @@ export const RegisterSchema = () => {
           </div>
 
           {tx.error && (
-            <div className={`state-error state-error--${tx.error.kind}`} role="alert">
+            <div className={`state-error state-error--${tx.error.kind}`}>
               <p className="state-error__message">{tx.error.message}</p>
               {tx.error.action && <p className="state-error__action">{tx.error.action}</p>}
               {isConflict && (
@@ -159,7 +166,7 @@ export const RegisterSchema = () => {
           )}
 
           {tx.phase === 'success' && successUidHex && (
-            <div className="schema-success" role="status" aria-live="polite">
+            <div className="schema-success">
               <div className="schema-success__header">
                 <Check size={18} aria-hidden="true" />
                 <strong>Schema registered</strong>

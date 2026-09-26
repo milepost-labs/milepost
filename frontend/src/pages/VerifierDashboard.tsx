@@ -4,7 +4,7 @@ import './VerifierDashboard.css';
 import { ShieldCheck, Clock, FileSignature } from 'lucide-react';
 import type { Application } from '@milepost/program';
 import type { Client as AttestClient } from '@milepost/attest';
-import { useContractRead, useContractResult, useIndexedList, useProgramme, useTransaction, phaseLabel } from '../hooks';
+import { useContractRead, useContractResult, useIndexedList, useProgramme, useTransaction, phaseLabel, useAnnounceTransaction } from '../hooks';
 import { useWallet } from '../context/useWallet';
 import { useSoroban } from '../context/useSoroban';
 import { DEMO_PROGRAMME_ID } from '../context/sorobanStore';
@@ -167,6 +167,20 @@ function AttestationModal({
 
   const attestTx = useTransaction<Buffer>({ contract: 'attest' });
   const releaseTx = useTransaction<bigint>({ contract: 'program' });
+  useAnnounceTransaction({
+    phase: attestTx.phase,
+    error: attestTx.error,
+    pending: 'Signing the attestation…',
+    success: 'Attestation signed.',
+  });
+  useAnnounceTransaction({
+    phase: releaseTx.phase,
+    error: releaseTx.error,
+    pending: 'Releasing the tranche…',
+    success: releaseTx.result !== null
+      ? `Tranche released — ${formatXlm(releaseTx.result)} moved.`
+      : 'Tranche released.',
+  });
 
   const cleanSchema = schemaInput.trim().replace(/^0x/i, '');
   const cleanHash = hashInput.trim().replace(/^0x/i, '');
@@ -351,14 +365,14 @@ function AttestationModal({
 
             {formError && <p className="ui-field__message ui-field__message--error" role="alert">{formError}</p>}
             {attestError && (
-              <p className="ui-field__message ui-field__message--error" role="alert">
+              <p className="ui-field__message ui-field__message--error">
                 {attestError.message}
                 {attestError.action ? ` ${attestError.action}` : ''}
               </p>
             )}
 
             {attestTx.result !== null && !attestedUid && (
-              <p role="status" className="attest-modal__pending">Signed — preparing…</p>
+              <p className="attest-modal__pending">Signed — preparing…</p>
             )}
           </>
         ) : (
@@ -376,12 +390,12 @@ function AttestationModal({
               Release is permissionless — anyone may submit it. Trigger it now so the recipient doesn’t keep waiting, or close and leave it for later.
             </p>
             {releaseTx.result !== null && (
-              <p role="status" className="attest-modal__released">
+              <p className="attest-modal__released">
                 Tranche released — {formatXlm(releaseTx.result)} moved.
               </p>
             )}
             {releaseError && (
-              <p className="ui-field__message ui-field__message--error" role="alert">
+              <p className="ui-field__message ui-field__message--error">
                 {releaseError.message}
                 {releaseError.action ? ` ${releaseError.action}` : ''}
               </p>
@@ -424,6 +438,12 @@ function RevokeModal({
   onRevoked: () => void;
 }) {
   const revokeTx = useTransaction<void>({ contract: 'attest' });
+  useAnnounceTransaction({
+    phase: revokeTx.phase,
+    error: revokeTx.error,
+    pending: 'Revoking the attestation…',
+    success: 'Attestation revoked. It can no longer release a tranche.',
+  });
 
   const handleClose = () => {
     if (revokeTx.busy) return;
@@ -486,7 +506,7 @@ function RevokeModal({
           </p>
         </div>
         {revokeError && (
-          <p className="ui-field__message ui-field__message--error" role="alert">
+          <p className="ui-field__message ui-field__message--error">
             {revokeError.message}
             {revokeError.action ? ` ${revokeError.action}` : ''}
           </p>
@@ -860,6 +880,12 @@ export const VerifierDashboard = () => {
     { enabled: Boolean(address) },
   );
   const review = useTransaction({ onSuccess: () => application.refetch() });
+  useAnnounceTransaction({
+    phase: review.phase,
+    error: review.error,
+    pending: 'Submitting your vote…',
+    success: 'Vote recorded.',
+  });
 
   const submitReview = async (event: FormEvent) => {
     event.preventDefault();
@@ -970,7 +996,7 @@ export const VerifierDashboard = () => {
                     <div className="queue-item-header">
                       <h3>Application review</h3>
                       {isWithdrawn ? (
-                        <span className="badge badge-pending" style={{ backgroundColor: 'var(--color-error)' }}>
+                        <span className="badge badge-pending" style={{ backgroundColor: 'var(--danger-strong)' }}>
                           Withdrawn
                         </span>
                       ) : (
@@ -983,7 +1009,7 @@ export const VerifierDashboard = () => {
                       Requested: <strong>{formatAmount(currentApplication.requested)} XLM</strong>
                     </p>
                     {isWithdrawn ? (
-                      <p className="text-warning" style={{ color: 'var(--color-error)' }}>
+                      <p className="text-warning" style={{ color: 'var(--danger-strong)' }}>
                         This application has been withdrawn by the applicant and cannot be reviewed or finalized.
                       </p>
                     ) : (
@@ -1028,7 +1054,7 @@ export const VerifierDashboard = () => {
                             <Button loading={review.busy} type="submit">
                               {isAmending ? 'Update your vote' : 'Submit review'}
                             </Button>
-                            {review.error && <p className="ui-field__message ui-field__message--error" role="alert">{review.error.message}</p>}
+                            {review.error && <p className="ui-field__message ui-field__message--error">{review.error.message}</p>}
                           </form>
                         )}
                       </>

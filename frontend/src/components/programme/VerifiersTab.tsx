@@ -15,6 +15,7 @@ export const VerifiersTab: FC<VerifiersTabProps> = ({
       role="tabpanel"
       id="panel-verifiers"
       aria-labelledby="tab-verifiers"
+      tabIndex={0}
     >
       <p className="verifiers-tab__intro">
         Verifiers whose attestations this programme accepts. Each attestation unlocks one tranche.

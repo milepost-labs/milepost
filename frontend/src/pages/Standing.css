@@ -108,9 +108,9 @@
 }
 
 .history-verifier__verdict--ok {
-  background: rgba(34, 197, 94, 0.08);
-  border-color: var(--color-success, #22c55e);
-  color: var(--color-success, #22c55e);
+  background: var(--success-soft);
+  border-color: var(--success-strong);
+  color: var(--success-strong);
 }
 
 .history-verifier__verdict--ok p {
@@ -118,9 +118,9 @@
 }
 
 .history-verifier__verdict--fail {
-  background: rgba(239, 68, 68, 0.08);
-  border-color: var(--color-error, #ef4444);
-  color: var(--color-error, #ef4444);
+  background: var(--danger-soft);
+  border-color: var(--danger-strong);
+  color: var(--danger-strong);
 }
 
 .history-verifier__verdict--fail p {
