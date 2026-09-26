@@ -200,6 +200,80 @@
   border-top: 1px solid color-mix(in srgb, var(--text-muted) 18%, transparent);
 }
 
+/* Queue beside the signed list: two columns on wide screens, one below 360px
+   and up without ever scrolling sideways. */
+.verifier-layout {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, var(--grid-min-column)), 1fr));
+  gap: var(--space-5);
+  align-items: start;
+}
+
+.verifier-layout__queue,
+.verifier-layout__signed {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+  min-width: 0;
+}
+
+.verifier-layout__title {
+  margin: 0;
+  font-size: var(--text-lg);
+  font-weight: var(--weight-extrabold);
+}
+
+/* "Signed by you" sample entries: uid plus whether each released a tranche. */
+.signed-samples {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+
+.signed-samples__title {
+  margin: var(--space-2) 0 0;
+  font-size: var(--text-base);
+  font-weight: var(--weight-bold);
+}
+
+.signed-samples__list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+
+.signed-samples__item {
+  background: var(--surface);
+  border-radius: var(--radius-row);
+  padding: var(--space-4);
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  align-items: flex-start;
+  min-width: 0;
+}
+
+.signed-samples__uid {
+  font-size: var(--text-sm);
+  font-weight: var(--weight-semibold);
+  word-break: break-all;
+}
+
+.signed-samples__meta {
+  font-size: var(--text-sm);
+  line-height: var(--leading-body);
+  color: var(--text-muted);
+}
+
+.signed-samples__note {
+  margin: 0;
+  font-size: var(--text-xs);
+  color: var(--text-muted);
+}
+
 .revoke-modal {
   display: flex;
   flex-direction: column;

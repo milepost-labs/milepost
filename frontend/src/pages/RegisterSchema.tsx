@@ -1,41 +1,88 @@
 import { useState } from 'react';
 import { Buffer } from 'buffer';
-import { ShieldCheck, Copy, Check } from 'lucide-react';
+import { ShieldCheck } from 'lucide-react';
 import { useSoroban } from '../context/useSoroban';
 import { useWallet } from '../context/useWallet';
+import { useAnnouncer } from '../context/useAnnouncer';
 import { useTransaction, phaseLabel } from '../hooks/useTransaction';
 import { explain } from '../lib/errors';
-import { Card, Button, TextArea } from '../components/ui';
+import { Card, Button, Field, TextArea, Badge } from '../components/ui';
 import { CopyButton } from '../components/ui/CopyButton';
+import {
+  FIXTURE_SCHEMAS,
+  SCHEMA_NAME_ERROR,
+  buildSchemaDefinition,
+  isValidSchemaName,
+  type FixtureSchema,
+} from '../fixtures/schemaFixtures';
 import './RegisterSchema.css';
 
+const HEX_32_BYTES = /^(0x)?[0-9a-fA-F]{64}$/;
+
+/**
+ * Register an attestation schema (Screen 10, Schemas).
+ *
+ * The form collects a name (`lowercase-words/vN`, a UI convention validated
+ * before signing), a fields description, and whether attestations under the
+ * schema may later be revoked. Both are composed into the opaque `definition`
+ * string the contract stores — the registry never parses it, so being precise
+ * here is what lets a verifier years later agree on what a claim meant.
+ *
+ * Registered schemas are listed with their UID because the UID is what a
+ * programme is configured with at deploy time. The list is `FIXTURE_SCHEMAS`
+ * plus anything registered this session: the contract keeps no "all schemas"
+ * list, so a real list would come from an indexer handler that does not exist
+ * yet.
+ */
 export const RegisterSchema = () => {
   const { address } = useWallet();
   const { attest } = useSoroban();
+  const announce = useAnnouncer();
 
-  const [definition, setDefinition] = useState('');
-  const [revocable, setRevocable] = useState(true);
-  const [restricted, setRestricted] = useState(false);
-  const [definitionError, setDefinitionError] = useState<string | null>(null);
+  const [name, setName] = useState('');
+  const [fields, setFields] = useState('');
+  const [revocable, setRevocable] = useState(false);
+  const [predecessor, setPredecessor] = useState('');
+  const [sessionSchemas, setSessionSchemas] = useState<FixtureSchema[]>([]);
 
   const tx = useTransaction<Buffer>({ contract: 'attest' });
 
-  const handleRegister = async () => {
-    const trimmed = definition.trim();
-    if (!trimmed) {
-      setDefinitionError('Definition cannot be empty.');
-      return;
-    }
-    if (!address) return;
-    setDefinitionError(null);
+  const trimmedName = name.trim();
+  const nameError =
+    name !== '' && !isValidSchemaName(name) ? SCHEMA_NAME_ERROR : null;
+  const fieldsError =
+    fields !== '' && fields.trim() === '' ? 'Describe the fields this schema covers.' : null;
+  const predecessorError =
+    predecessor.trim() !== '' && !HEX_32_BYTES.test(predecessor.trim())
+      ? 'Enter a 32-byte hex UID (64 hex characters), or leave this empty.'
+      : null;
 
-    await tx.send(async () => {
+  const valid =
+    trimmedName !== '' &&
+    nameError === null &&
+    fields.trim() !== '' &&
+    predecessorError === null &&
+    address !== null &&
+    address !== undefined;
+
+  const handleRegister = async () => {
+    if (!address || !valid) return;
+    const definition = buildSchemaDefinition(trimmedName, fields);
+    const predecessorBuf =
+      predecessor.trim() === ''
+        ? undefined
+        : Buffer.from(predecessor.trim().replace(/^0x/i, ''), 'hex');
+
+    const result = await tx.send(async () => {
       const built = await attest.register_schema({
         authority: address,
-        definition: trimmed,
+        definition,
         revocable,
-        restricted,
-        predecessor: undefined,
+        // Unrestricted: any verifier may attest under schemas registered here.
+        // A restricted schema (authority-only) is a contract option this form
+        // deliberately does not expose — programmes need open verifier sets.
+        restricted: false,
+        predecessor: predecessorBuf,
       });
       return {
         signAndSend: async (options: Parameters<typeof built.signAndSend>[0]) => {
@@ -44,150 +91,177 @@ export const RegisterSchema = () => {
         },
       };
     });
+
+    if (result !== null) {
+      setSessionSchemas((prev) => [
+        {
+          uid: result.toString('hex'),
+          name: trimmedName,
+          fields: fields.trim(),
+          revocable,
+        },
+        ...prev,
+      ]);
+      announce('Schema registered.');
+    } else if (tx.error) {
+      announce('Schema registration failed.', 'alert');
+    }
   };
 
-  const isConflict = tx.error?.code === 2;
+  const explained = tx.error ? explain(tx.error, 'attest') : null;
+  const isCycle = tx.error?.code === 9;
   const successUidHex = tx.result ? (tx.result as Buffer).toString('hex') : null;
+  const schemas = [...sessionSchemas, ...FIXTURE_SCHEMAS];
 
   return (
     <div className="register-schema">
       <header className="register-schema__header">
-        <h1>Register attestation schema</h1>
+        <h1>Register a schema</h1>
         <p className="typo-text text-muted">
-          Every programme needs a schema before any verifier can attest under it. The schema defines what a claim means;
-          the UID it returns is what you configure the programme with.
+          A programme cannot be deployed without a schema, so registering one comes first.
+          Schemas describe what a verifier signs. They carry no protocol vocabulary.
         </p>
       </header>
 
-      <Card title="New schema">
-        <div className="register-schema__form">
-          <TextArea
-            label="Definition"
-            placeholder="e.g. Delivery of 50kg maize to co-op, verified by field officer"
-            value={definition}
-            onChange={(e) => {
-              setDefinition(e.target.value);
-              setDefinitionError(null);
-            }}
-            rows={4}
-            error={definitionError ?? undefined}
-            hint="Human-readable description of what the claim means and how data_hash should be interpreted. The registry never parses it — be precise for humans who will verify later."
-          />
+      <div className="register-schema__grid">
+        <Card title="New schema">
+          <div className="register-schema__form">
+            <Field
+              label="Schema name"
+              placeholder="shifts-confirmed/v1"
+              value={name}
+              onChange={(e) => setName(e.target.value)}
+              error={nameError ?? undefined}
+              hint="Lowercase words and a version. Validated before signing."
+            />
 
-          <fieldset className="schema-flags">
-            <legend className="schema-flags__legend">Permissions</legend>
-            <p className="schema-flags__intro typo-text text-muted">
-              Both flags are irreversible — they cannot be changed after registration. Choose based on what you want to prevent later.
-            </p>
+            <TextArea
+              label="Fields"
+              placeholder="programme: address, tranche: u32"
+              value={fields}
+              onChange={(e) => setFields(e.target.value)}
+              rows={3}
+              error={fieldsError ?? undefined}
+              hint="What the claim carries. Kept as text — the registry never parses it."
+            />
 
-            <label className={`schema-flag ${revocable ? 'schema-flag--on' : ''}`}>
+            <label className="schema-check">
               <input
                 type="checkbox"
                 checked={revocable}
                 onChange={(e) => setRevocable(e.target.checked)}
               />
-              <span className="schema-flag__text">
-                <span className="schema-flag__label">Allow revocation</span>
-                <span className="schema-flag__desc">
-                  {revocable
-                    ? 'Attestations under this schema can later be revoked by the original attester. Useful if a claim may need to be withdrawn when circumstances change. This choice is permanent — a revocable schema can never be made irrevocable later.'
-                    : 'Attestations under this schema can never be revoked — even you cannot withdraw a mistaken claim. Only choose this if the claim must be permanent by design. This cannot be changed later.'}
+              <span className="schema-check__text">
+                <span className="schema-check__label">Attesters can revoke attestations under this schema</span>
+                <span className="schema-check__desc">
+                  Revocation stops a claim being used again, but never claws back a tranche
+                  that already released. This choice is permanent.
                 </span>
               </span>
             </label>
 
-            <label className={`schema-flag ${restricted ? 'schema-flag--on' : ''}`}>
-              <input
-                type="checkbox"
-                checked={restricted}
-                onChange={(e) => setRestricted(e.target.checked)}
-              />
-              <span className="schema-flag__text">
-                <span className="schema-flag__label">Restrict to authority only</span>
-                <span className="schema-flag__desc">
-                  {restricted
-                    ? 'Only you (the authority that registers the schema) may attest under it — no one else can sign claims even if they know the UID. This is an irreversible choice at registration.'
-                    : 'Any attester may attest under this schema. If you enable restriction, only you may attest and that restriction can never be removed afterwards.'}
-                </span>
-              </span>
-            </label>
-          </fieldset>
+            <Field
+              label="Supersedes (optional)"
+              placeholder="Predecessor schema UID, 32-byte hex"
+              value={predecessor}
+              onChange={(e) => setPredecessor(e.target.value)}
+              error={predecessorError ?? undefined}
+              hint="Only the schema authority may declare a predecessor. A cycle in the predecessor chain is rejected with CycleDetected (error 9)."
+            />
 
-          {!address && (
-            <p className="ui-field__message ui-field__message--error" role="alert">
-              Connect a wallet — the connected address becomes the schema authority.
+            <p className="register-schema__opaque">
+              The <span className="numeric">definition</span> the registry stores is opaque to it:
+              name and fields are joined into one string the contract never interprets. Write
+              them for the humans who will verify later, because no check will catch vagueness.
             </p>
-          )}
 
-          <div className="register-schema__actions">
-            <Button
-              onClick={() => void handleRegister()}
-              loading={tx.busy}
-              loadingLabel={phaseLabel(tx.phase) || 'Registering…'}
-              disabled={!definition.trim() || !address || tx.busy}
-              icon={<ShieldCheck size={16} />}
-            >
-              Register schema
-            </Button>
-            {tx.result && (
-              <Button variant="ghost" onClick={() => tx.reset()}>
-                Register another
+            {!address && (
+              <p className="ui-field__message ui-field__message--error" role="alert">
+                Sign in — the connected address becomes the schema authority.
+              </p>
+            )}
+
+            <div className="register-schema__actions">
+              <Button
+                onClick={() => void handleRegister()}
+                loading={tx.busy}
+                loadingLabel={phaseLabel(tx.phase) || 'Registering…'}
+                disabled={!valid || tx.busy}
+                icon={<ShieldCheck size={16} aria-hidden="true" />}
+              >
+                Register schema
               </Button>
+              {tx.result && (
+                <Button
+                  variant="secondary"
+                  onClick={() => {
+                    tx.reset();
+                    setName('');
+                    setFields('');
+                    setRevocable(false);
+                    setPredecessor('');
+                  }}
+                >
+                  Register another
+                </Button>
+              )}
+            </div>
+
+            {tx.error && explained && (
+              <div className={`state-error state-error--${explained.kind}`} role="alert">
+                <p className="state-error__message">{explained.message}</p>
+                {isCycle ? (
+                  <p className="state-error__action">
+                    A schema cannot supersede itself, directly or through its predecessors.
+                    Pick a different predecessor or leave it empty. Nothing was registered.
+                  </p>
+                ) : (
+                  explained.action && <p className="state-error__action">{explained.action}</p>
+                )}
+                <p className="state-error__action">Nothing was transferred · attest error {tx.error.code}</p>
+              </div>
+            )}
+
+            {tx.phase === 'success' && successUidHex && (
+              <div className="schema-success" role="status">
+                <strong className="schema-success__title">Schema registered</strong>
+                <p className="typo-text text-muted">
+                  Copy this UID — it is what a programme is configured with at deploy time.
+                </p>
+                <div className="schema-success__uid">
+                  <code className="numeric schema-success__value">{successUidHex}</code>
+                  <CopyButton value={successUidHex} label="Copy schema UID" />
+                </div>
+              </div>
             )}
           </div>
+        </Card>
 
-          {tx.error && (
-            <div className={`state-error state-error--${tx.error.kind}`} role="alert">
-              <p className="state-error__message">{tx.error.message}</p>
-              {tx.error.action && <p className="state-error__action">{tx.error.action}</p>}
-              {isConflict && (
-                <div className="schema-conflict">
-                  <p className="typo-text" style={{ margin: 0 }}>
-                    A schema with this definition and authority already exists — the registry derives the UID from
-                    those two fields, so registering the same pair twice is a conflict rather than a new entry. No new
-                    UID was created. If you need the existing UID, look it up by the deterministic pairing (authority + definition)
-                    or check your recent transactions for the original <code>SchemaRegistered</code> event.
-                  </p>
-                </div>
-              )}
-              {!isConflict && tx.error.message && (
-                <p className="typo-text text-muted" style={{ margin: '0.5rem 0 0', fontSize: 'var(--text-sm)' }}>
-                  {explain(tx.error, 'attest').message}
-                </p>
-              )}
-            </div>
+        <section className="register-schema__list" aria-label="Registered schemas">
+          <h2 className="register-schema__list-title">Registered schemas</h2>
+          {schemas.length === 0 ? (
+            <p className="typo-text text-muted">No schemas registered yet.</p>
+          ) : (
+            <ul className="schema-list">
+              {schemas.map((schema) => (
+                <li key={schema.uid} className="schema-list__item">
+                  <div className="schema-list__row">
+                    <span className="numeric schema-list__name">{schema.name}</span>
+                    <Badge tone={schema.revocable ? 'warning' : 'neutral'}>
+                      {schema.revocable ? 'Revocable' : 'Not revocable'}
+                    </Badge>
+                  </div>
+                  <span className="numeric schema-list__fields">{schema.fields}</span>
+                  <span className="numeric schema-list__uid" title={schema.uid}>
+                    uid {schema.uid}
+                  </span>
+                </li>
+              ))}
+            </ul>
           )}
-
-          {tx.phase === 'success' && successUidHex && (
-            <div className="schema-success" role="status" aria-live="polite">
-              <div className="schema-success__header">
-                <Check size={18} aria-hidden="true" />
-                <strong>Schema registered</strong>
-              </div>
-              <p className="typo-text text-muted" style={{ margin: 0 }}>
-                Copy this UID — it is what a programme is configured with. You will need it when deploying the programme.
-              </p>
-              <div className="schema-success__uid">
-                <code className="numeric schema-success__value">{successUidHex}</code>
-                <CopyButton value={successUidHex} label="Copy schema UID" />
-              </div>
-              <div className="schema-success__meta">
-                <span className="schema-success__meta-item">
-                  <Copy size={12} aria-hidden="true" /> Click the copy button to copy the full 32-byte hex.
-                </span>
-              </div>
-            </div>
-          )}
-        </div>
-      </Card>
-
-      <Card title="How this is used">
-        <ul className="typo-text text-muted" style={{ margin: 0, paddingLeft: '1.2rem', display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
-          <li>The UID is deterministic from authority + definition — the same inputs always produce the same UID.</li>
-          <li>A restricted schema guarantees only the authority can attest; an unrestricted schema lets any verifier attest.</li>
-          <li>A revocable schema lets the attester withdraw a claim later; an irrevocable schema makes every attestation permanent.</li>
-        </ul>
-      </Card>
+          <p className="register-schema__sample-note">Sample schemas for the design phase.</p>
+        </section>
+      </div>
     </div>
   );
 };

@@ -13,6 +13,7 @@
      The half steps fill the gaps the redesign uses (20, 28, 40px); its odd
      2px gaps (6, 10, 14, 18) round to the nearest step here. */
   --space-1: 0.25rem;   /* 4 */
+  --space-1-5: 0.375rem; /* 6 */
   --space-2: 0.5rem;    /* 8 */
   --space-3: 0.75rem;   /* 12 */
   --space-4: 1rem;      /* 16 */
@@ -86,6 +87,10 @@
   --grid-min-card: 16rem;
   --grid-min-column: 26rem;
   --grid-min-programme-card: 21.25rem; /* 340px — directory card column */
+  --grid-min-split: 24rem; /* two-column form + list (schema, keepalive) */
+  --grid-min-row: 10rem; /* compact finalize row column */
+  /* Narrow single-column pages (keepalive). */
+  --page-measure-narrow: 51.25rem; /* 820px */
 
   --radius-sm: 6px;
   --radius-md: 10px;

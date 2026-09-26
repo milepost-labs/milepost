@@ -91,6 +91,7 @@ const ATTEST: Table = {
   6: { kind: 'conflict', message: 'This attestation has already been revoked.' },
   7: { kind: 'invalid', message: 'The expiry date is in the past.' },
   8: { kind: 'denied', message: 'This schema is restricted — only its authority can attest under it.' },
+  9: { kind: 'conflict', message: 'A cycle was detected in the schema predecessor chain.', action: 'A schema cannot supersede itself, directly or through its predecessors.' },
 };
 
 const RECORD: Table = {

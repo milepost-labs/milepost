@@ -8,6 +8,12 @@ import { useContractRead, useContractResult, useIndexedList, useProgramme, useTr
 import { useWallet } from '../context/useWallet';
 import { useSoroban } from '../context/useSoroban';
 import { DEMO_PROGRAMME_ID } from '../context/sorobanStore';
+import {
+  FIXTURE_MY_ATTESTATIONS,
+  loadAttestations,
+  saveAttestations,
+  type AttestRecord,
+} from '../fixtures/verifierFixtures';
 import { formatAmount, formatExact, tryParseAmount } from '../lib/amount';
 import { truncateAddress } from '../lib/format';
 import { explain } from '../lib/errors';
@@ -18,7 +24,6 @@ import { Badge, Button, DateField, Field, Modal, Table, type Column } from '../c
 
 const DEMO_APPLICANT = 'GAH3D4RM45ETE4W7VDRCWZBPRPT63CJXAGXFYVBC2FGANBZTS4OTKXCA';
 
-const STELLAR_ADDRESS = /^G[A-Z2-7]{55}$/;
 const HEX_32_BYTES = /^(0x)?[0-9a-fA-F]{64}$/;
 
 interface Milestone {
@@ -29,45 +34,8 @@ interface Milestone {
   tranchesReleased: number;
 }
 
-/**
- * An attestation this verifier created through the app, kept locally because
- * — like awards — there is no on-chain "attestations by attester" list until an
- * indexer lands. `uid` is stored hex. Revocation status is read back on-chain
- * rather than trusted from local memory.
- */
-interface AttestRecord {
-  uid: string;
-  subject: string;
-  schemaUid: string;
-}
-
 const formatXlm = (amount: bigint) => formatAmount(amount, { asset: 'XLM' });
 const shorten = (address: string) => truncateAddress(address, 4, 4);
-
-const attestationStorageKey = (attester: string) => `milepost:verifier-attestations:${attester}`;
-
-function loadAttestations(attester: string): AttestRecord[] {
-  try {
-    const stored = window.localStorage.getItem(attestationStorageKey(attester));
-    if (stored) {
-      const parsed = JSON.parse(stored) as AttestRecord[];
-      return Array.isArray(parsed)
-        ? parsed.filter((r) => HEX_32_BYTES.test(r.uid) && STELLAR_ADDRESS.test(r.subject))
-        : [];
-    }
-  } catch {
-    // Corrupt or inaccessible storage — treat as empty.
-  }
-  return [];
-}
-
-function saveAttestations(attester: string, records: AttestRecord[]) {
-  try {
-    window.localStorage.setItem(attestationStorageKey(attester), JSON.stringify(records));
-  } catch {
-    // Best-effort only — the record is still usable for this session.
-  }
-}
 
 /**
  * The reviewer's own last-submitted vote on an applicant, kept locally
@@ -146,6 +114,7 @@ function AttestationModal({
   onClose,
   onReleased,
   onAttended,
+  onUsed,
 }: {
   open: boolean;
   recipient: string | null;
@@ -157,6 +126,7 @@ function AttestationModal({
   onClose: () => void;
   onReleased: () => void;
   onAttended: (record: AttestRecord) => void;
+  onUsed: (uid: string) => void;
 }) {
   const [schemaInput, setSchemaInput] = useState('');
   const [hashInput, setHashInput] = useState('');
@@ -229,7 +199,7 @@ function AttestationModal({
 
     if (result !== null) {
       setAttestedUid(result);
-      onAttended({ uid: result.toString('hex'), subject: recipient, schemaUid: cleanSchema });
+      onAttended({ uid: result.toString('hex'), subject: recipient, schemaUid: cleanSchema, used: false });
     }
   };
 
@@ -249,6 +219,7 @@ function AttestationModal({
       };
     });
     if (result !== null) {
+      onUsed(attestedUid.toString('hex'));
       onReleased();
       resetLocal();
       onClose();
@@ -498,9 +469,14 @@ function RevokeModal({
 
 /**
  * The verifier's own attestations, as known to this app (the ones they created
- * here) with their current on-chain status. Revoked attestations stay visible,
- * marked as revoked, so the history the contract keeps is reflected rather than
+ * here) with their current on-chain status, beside whether each one has
+ * actually released a tranche yet. Revoked attestations stay visible, marked
+ * as revoked, so the history the contract keeps is reflected rather than
  * hidden.
+ *
+ * Sample entries from `FIXTURE_MY_ATTESTATIONS` illustrate the used/unused
+ * distinction until the indexer handler that would list real attestations
+ * exists.
  */
 function MyAttestations({
   attest,
@@ -543,19 +519,11 @@ function MyAttestations({
     };
   }, [attest, records, tick]);
 
-  if (records.length === 0) {
-    return (
-      <Empty
-        title="No attestations yet"
-        description="Attestations you sign here appear here so you can revoke one if a milestone was attested in error or circumstances change."
-      />
-    );
-  }
-
   const columns: Column<AttestRecord>[] = [
     { key: 'subject', header: 'Recipient', render: (row) => <span className="numeric" title={row.subject}>{shorten(row.subject)}</span> },
     { key: 'uid', header: 'Attestation', render: (row) => <span className="numeric" title={row.uid}>{truncateAddress(row.uid, 6, 6)}</span> },
     { key: 'status', header: 'Status', render: (row) => <AttestationBadge state={status[row.uid]} /> },
+    { key: 'used', header: 'Release', render: (row) => <UsedBadge used={row.used} /> },
     {
       key: 'action',
       header: '',
@@ -564,7 +532,7 @@ function MyAttestations({
         return state?.kind === 'revoked' ? (
           <Badge tone="neutral">Revoked</Badge>
         ) : (
-          <Button variant="secondary" size="sm" onClick={() => setSelected(row)}>
+          <Button variant="secondary" onClick={() => setSelected(row)}>
             Revoke
           </Button>
         );
@@ -574,12 +542,34 @@ function MyAttestations({
 
   return (
     <>
-      <Table
-        caption={`Attestations signed by ${attester}`}
-        columns={columns}
-        rows={records}
-        keyOf={(row) => row.uid}
-      />
+      {records.length === 0 ? (
+        <Empty
+          title="No attestations yet"
+          description="Attestations you sign here appear here so you can revoke one if a milestone was attested in error or circumstances change."
+        />
+      ) : (
+        <Table
+          caption={`Attestations signed by ${attester}`}
+          columns={columns}
+          rows={records}
+          keyOf={(row) => row.uid}
+        />
+      )}
+      <div className="signed-samples">
+        <h3 className="signed-samples__title">Signed by you</h3>
+        <ul className="signed-samples__list">
+          {FIXTURE_MY_ATTESTATIONS.map((entry) => (
+            <li key={entry.uid} className="signed-samples__item">
+              <span className="numeric signed-samples__uid">{entry.uid}</span>
+              <UsedBadge used={entry.used} />
+              <span className="signed-samples__meta">
+                {entry.programme} · {entry.subject} · {entry.schema} · ledger {entry.ledger.toLocaleString()}
+              </span>
+            </li>
+          ))}
+        </ul>
+        <p className="signed-samples__note">Sample attestations for the design phase.</p>
+      </div>
       <RevokeModal
         open={selected !== null}
         record={selected}
@@ -589,6 +579,14 @@ function MyAttestations({
         onRevoked={() => setTick((t) => t + 1)}
       />
     </>
+  );
+}
+
+function UsedBadge({ used }: { used: boolean }) {
+  return (
+    <Badge tone={used ? 'success' : 'neutral'}>
+      {used ? 'Used to release a tranche' : 'Not used yet'}
+    </Badge>
   );
 }
 
@@ -606,12 +604,14 @@ function ProgrammeQueue({
   verifier,
   attest,
   onAttended,
+  onUsed,
 }: {
   client: ReturnType<typeof useProgramme>['client'];
   programmeId: string;
   verifier: string | null;
   attest: AttestClient;
   onAttended: (record: AttestRecord) => void;
+  onUsed: (uid: string) => void;
 }) {
   const [tick, setTick] = useState(0);
 
@@ -711,7 +711,7 @@ function ProgrammeQueue({
         title="The awards list is unavailable"
         description="The published index could not be reached, so nobody can be listed here. Signing an attestation still works, and the list returns when the index does."
         action={
-          <Button variant="secondary" size="sm" onClick={indexed.refetch}>
+          <Button variant="secondary" onClick={indexed.refetch}>
             Try again
           </Button>
         }
@@ -757,7 +757,7 @@ function ProgrammeQueue({
       key: 'action',
       header: '',
       render: (row) => (
-        <Button variant="secondary" size="sm" onClick={() => setSelected(row)} disabled={!verifier}>
+        <Button variant="secondary" onClick={() => setSelected(row)} disabled={!verifier}>
           Sign attestation
         </Button>
       ),
@@ -783,6 +783,7 @@ function ProgrammeQueue({
         onClose={() => setSelected(null)}
         onReleased={() => setTick((t) => t + 1)}
         onAttended={onAttended}
+        onUsed={onUsed}
       />
     </>
   );
@@ -819,8 +820,9 @@ export const VerifierDashboard = () => {
     setApproved(myVote !== null ? formatExact(myVote) : '');
   }
 
-  // The verifier's own attestations are derived from localStorage (there is no
-  // on-chain "attestations by attester" list), keyed by the connected address.
+  // The verifier's own attestations are derived from the browser-storage
+  // stand-in isolated in `../fixtures/verifierFixtures` (there is no on-chain
+  // "attestations by attester" list), keyed by the connected address.
   // Deriving rather than syncing in an effect keeps an address change to a
   // single render. sessionAdds covers the rare case where persisting failed,
   // so an attestation signed this session still shows up for revocation.
@@ -847,6 +849,25 @@ export const VerifierDashboard = () => {
       ...prev,
       [address]: (prev[address] ?? []).filter((existing) => existing.uid !== record.uid).concat(record),
     }));
+  };
+
+  // A signed attestation starts "Not used yet"; releasing the tranche through
+  // the modal flips it to "Used to release a tranche".
+  const handleUsed = (uid: string) => {
+    if (!address) return;
+    const merged = [...(sessionAttestations[address] ?? []), ...loadAttestations(address)];
+    const deduped = merged.filter(
+      (record, index, all) => all.findIndex((other) => other.uid === record.uid) === index,
+    );
+    const marked = deduped.map((record) =>
+      record.uid === uid ? { ...record, used: true } : record,
+    );
+    try {
+      saveAttestations(address, marked);
+    } catch {
+      // Best-effort only — the session copy below still carries it.
+    }
+    setSessionAttestations((prev) => ({ ...prev, [address]: marked }));
   };
 
   const application = useContractResult<Application>(
@@ -902,34 +923,40 @@ export const VerifierDashboard = () => {
           <Badge tone={address ? 'neutral' : 'warning'}>{address ? truncateAddress(address) : 'No wallet connected'}</Badge>
         </div>
         <div className="attestation-section__intro">
-          <ShieldCheck size={18} />
+          <ShieldCheck size={18} aria-hidden="true" />
           <p className="typo-text text-muted">
             No tranche is released until a trusted verifier signs it. These recipients&rsquo; next milestone is sitting
             on you.
           </p>
         </div>
-        <ProgrammeQueue client={programmeAt(DEMO_PROGRAMME_ID)} programmeId={DEMO_PROGRAMME_ID} verifier={address ?? null} attest={attest} onAttended={handleAttended} />
-
-        {address && (
-          <div className="attestation-section__panel">
-            <div className="attestation-section__header">
-              <h2>Your attestations</h2>
-              <Badge tone="neutral">{truncateAddress(address)}</Badge>
-            </div>
-            <div className="attestation-section__intro">
-              <ShieldCheck size={18} />
-              <p className="typo-text text-muted">
-                Revoke one of your own attestations if it was made in error — revocation marks it invalid for future
-                tranches without undoing any that already released.
-              </p>
-            </div>
-            <MyAttestations
-              attest={attest}
-              attester={address}
-              records={myAttestations}
-            />
+        <div className="verifier-layout">
+          <div className="verifier-layout__queue">
+            <h3 className="verifier-layout__title">Waiting for your confirmation</h3>
+            <ProgrammeQueue client={programmeAt(DEMO_PROGRAMME_ID)} programmeId={DEMO_PROGRAMME_ID} verifier={address ?? null} attest={attest} onAttended={handleAttended} onUsed={handleUsed} />
           </div>
-        )}
+
+          {address && (
+            <div className="verifier-layout__signed">
+              <div className="attestation-section__header">
+                <h3 className="verifier-layout__title">Your attestations</h3>
+                <Badge tone="neutral">{truncateAddress(address)}</Badge>
+              </div>
+              <div className="attestation-section__intro">
+                <ShieldCheck size={18} aria-hidden="true" />
+                <p className="typo-text text-muted">
+                  What you have already signed, and whether it unlocked a tranche yet.
+                  Revoke one of your own attestations if it was made in error — revocation marks it invalid for future
+                  tranches without undoing any that already released.
+                </p>
+              </div>
+              <MyAttestations
+                attest={attest}
+                attester={address}
+                records={myAttestations}
+              />
+            </div>
+          )}
+        </div>
       </section>
 
       <section className="stats-grid animate-fade-up" style={{ animationDelay: '200ms' }}>
