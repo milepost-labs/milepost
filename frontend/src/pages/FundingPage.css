@@ -1,0 +1,125 @@
+.funding {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-5);
+  min-width: 0;
+}
+
+.funding__intro {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+
+.funding__title {
+  margin: 0;
+  font-size: var(--text-h1);
+  font-weight: var(--weight-extrabold);
+  letter-spacing: var(--tracking-heading);
+}
+
+.funding__lede {
+  margin: 0;
+  max-width: 62ch;
+  font-size: var(--text-base);
+  line-height: var(--leading-body);
+  color: var(--text-muted);
+}
+
+/* Signed out */
+.funding-signin {
+  background: var(--surface);
+  border-radius: var(--radius-hero-lg);
+  padding: var(--panel-pad-lg);
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, var(--grid-min-explainer)), 1fr));
+  gap: var(--space-5-5) var(--space-6-5);
+  align-items: center;
+}
+
+.funding-signin__copy {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+}
+
+.funding-signin__title {
+  margin: 0;
+  font-size: var(--text-xl);
+  font-weight: var(--weight-extrabold);
+  letter-spacing: var(--tracking-title);
+}
+
+.funding-signin__text {
+  margin: 0;
+  font-size: var(--text-md);
+  line-height: var(--leading-relaxed);
+  color: var(--text-muted);
+}
+
+.funding-signin__list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+
+.funding-signin__item {
+  background: var(--bg);
+  border-radius: var(--radius-row);
+  padding: var(--space-3) var(--space-4);
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+}
+
+.funding-signin__item-title {
+  font-size: var(--text-md);
+  font-weight: var(--weight-bold);
+}
+
+.funding-signin__item-note {
+  font-size: var(--text-caption);
+  color: var(--text-muted);
+}
+
+/* Signed in */
+.funding-stats {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, var(--grid-min-stat)), 1fr));
+  gap: var(--space-3);
+}
+
+.funding-stat {
+  background: var(--surface);
+  border-radius: var(--radius-card);
+  padding: var(--space-4-5);
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  min-width: 0;
+}
+
+.funding-stat__label {
+  font-size: var(--text-caption);
+  color: var(--text-muted);
+}
+
+.funding-stat__value {
+  font-size: var(--text-xl);
+  font-weight: var(--weight-semibold);
+  overflow-wrap: anywhere;
+}
+
+.funding-stat__value--refund {
+  color: var(--refund);
+}
+
+.funding-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, var(--grid-min-funding)), 1fr));
+  gap: var(--space-4-5);
+  align-items: start;
+}

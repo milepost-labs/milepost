@@ -15,6 +15,7 @@ import { PausedBanner } from "../components/programme/PausedBanner";
 import { ProgrammeHeader } from "../components/programme/ProgrammeHeader";
 import { WhereTheMoneyIs } from "../components/programme/WhereTheMoneyIs";
 import { ProgrammeTabs } from "../components/programme/ProgrammeTabs";
+import { ProgrammeActions } from "../components/programme/ProgrammeActions";
 import { Badge, Button, Card, Field, PhaseBadge, Stat, Table } from "../components/ui";
 import { useSoroban } from "../context/useSoroban";
 import { useContractRead, useContractResult, useIndexedList, useProgramme } from "../hooks";
@@ -566,6 +567,15 @@ export const ProgrammeDetail = () => {
     phaseName === "Cancelled" ||
     (config.data !== null &&
       nowMs / 1000 >= Number(config.data.release_deadline));
+  // Same rule as the money panel: once refunds open, whatever has not been
+  // released, refunded or swept is refundable.
+  const refundable =
+    refundsOpen && figures
+      ? figures.budget -
+        figures.totalReleased -
+        (figures.totalRefunded ?? ZERO) -
+        (figures.totalSwept ?? ZERO)
+      : ZERO;
 
   const timelineRows = useMemo(() => {
     const programmeConfig = config.data;
@@ -686,36 +696,45 @@ export const ProgrammeDetail = () => {
           </AsyncView>
         </Card>
 
-        <div className="programme-section--center">
-          <AsyncView
-            data={figures}
-            loading={moneyLoading}
-            error={moneyError}
-            onRetry={refetchMoney}
-            contract="program"
-          >
-            {(value) => (
-              <WhereTheMoneyIs
-                contributed={value.totalContributed}
-                fee={value.fee}
-                granted={value.totalGranted}
-                released={value.totalReleased}
-                refunded={value.totalRefunded ?? ZERO}
-                swept={value.totalSwept ?? ZERO}
-                refundsOpen={refundsOpen}
-                feeBps={config.data?.fee_bps}
-                quorum={config.data?.quorum ?? 1}
-                asset={ASSET_LABEL}
-              />
-            )}
-          </AsyncView>
+        <div className="programme-main">
+          <div className="programme-section--center">
+            <AsyncView
+              data={figures}
+              loading={moneyLoading}
+              error={moneyError}
+              onRetry={refetchMoney}
+              contract="program"
+            >
+              {(value) => (
+                <WhereTheMoneyIs
+                  contributed={value.totalContributed}
+                  fee={value.fee}
+                  granted={value.totalGranted}
+                  released={value.totalReleased}
+                  refunded={value.totalRefunded ?? ZERO}
+                  swept={value.totalSwept ?? ZERO}
+                  refundsOpen={refundsOpen}
+                  feeBps={config.data?.fee_bps}
+                  quorum={config.data?.quorum ?? 1}
+                  asset={ASSET_LABEL}
+                />
+              )}
+            </AsyncView>
 
-          <ProgrammeTabs
+            <ProgrammeTabs
+              programmeId={programmeId}
+              phase={phaseName}
+              quorum={config.data?.quorum ?? 1}
+              isSample={isDefault}
+              asset={ASSET_LABEL}
+            />
+          </div>
+
+          <ProgrammeActions
             programmeId={programmeId}
-            phase={phaseName}
-            quorum={config.data?.quorum ?? 1}
-            isSample={isDefault}
-            asset={ASSET_LABEL}
+            phase={phase.data?.tag ?? null}
+            refundsOpen={refundsOpen}
+            refundable={refundable > ZERO ? formatXlm(refundable) : null}
           />
         </div>
 

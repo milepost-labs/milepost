@@ -24,7 +24,7 @@ export type TransactionPhase =
   | 'error';
 
 /** A transaction the generated clients produced but have not yet sent. */
-interface Sendable<T> {
+export interface Sendable<T> {
   signAndSend: (options: {
     signTransaction: (xdr: string) => Promise<{ signedTxXdr: string; signerAddress: string }>;
   }) => Promise<{ result: T }>;
