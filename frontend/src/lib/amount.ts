@@ -129,6 +129,26 @@ export function tryParseAmount(input: string): { ok: true; value: bigint } | { o
 }
 
 /**
+ * Validate an amount the way `AmountField` does, so the screen that submits
+ * it refuses the same inputs the field marks invalid. Parsing is
+ * `parseAmount`'s: at most seven decimal places, nothing zero or negative.
+ */
+export function validateAmount(
+  input: string,
+  options: { balance?: bigint; asset?: string } = {},
+): { ok: true; value: bigint } | { ok: false; error: string } {
+  const parsed = tryParseAmount(input);
+  if (!parsed.ok) return parsed;
+  if (options.balance !== undefined && parsed.value > options.balance) {
+    return {
+      ok: false,
+      error: `More than your balance of ${formatAmount(options.balance, { asset: options.asset })}`,
+    };
+  }
+  return parsed;
+}
+
+/**
  * What a screen reader should say. "1,000.00" read aloud is ambiguous; the
  * asset and the word "point" are not.
  */

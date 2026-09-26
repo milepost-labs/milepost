@@ -1,5 +1,5 @@
 import type { ReactNode } from 'react';
-import { explain, isFailure, type ContractName } from '../../lib/errors';
+import { explain, isFailure, type ContractName, type Explained } from '../../lib/errors';
 import './AsyncStates.css';
 
 /**
@@ -22,23 +22,79 @@ export function Loading({ label = 'Loading', rows = 3 }: { label?: string; rows?
 }
 
 /**
- * `title` should say what would appear here, and `action` the one thing that
- * makes it appear. "No data" tells someone nothing they did not already know.
+ * `title` should say what would appear here, and `description` why it is
+ * empty rather than merely that it is. "No data" tells someone nothing they
+ * did not already know. When a filter caused the emptiness, pass
+ * `onClearFilters` and the way out is offered.
  */
 export function Empty({
   title,
   description,
+  icon,
   action,
+  onClearFilters,
 }: {
   title: string;
   description?: string;
+  /** Decorative; hidden from assistive technology. */
+  icon?: ReactNode;
   action?: ReactNode;
+  onClearFilters?: () => void;
 }) {
   return (
     <div className="state-empty">
+      {icon && (
+        <span className="state-empty__icon" aria-hidden="true">
+          {icon}
+        </span>
+      )}
       <p className="state-empty__title">{title}</p>
       {description && <p className="state-empty__description">{description}</p>}
-      {action}
+      {(action || onClearFilters) && (
+        <div className="state-empty__actions">
+          {onClearFilters && (
+            <button type="button" className="state-empty__clear" onClick={onClearFilters}>
+              Clear filters
+            </button>
+          )}
+          {action}
+        </div>
+      )}
+    </div>
+  );
+}
+
+/**
+ * The one way a failure is shown: the human message from `explain()`, what to
+ * do about it, a quiet technical line, and a retry where retrying is sensible.
+ *
+ * "Nothing was transferred" is only claimed when the contract itself returned
+ * the error. A contract error reverts the whole invocation, so that is always
+ * true; a network failure mid-submit is not something we can vouch for, so no
+ * technical line is shown for it.
+ */
+export function ErrorPanel({
+  explained,
+  onRetry,
+}: {
+  explained: Explained;
+  onRetry?: () => void;
+}) {
+  const technical =
+    explained.code !== undefined && explained.contract
+      ? `Nothing was transferred · ${explained.contract} error ${explained.code}`
+      : null;
+
+  return (
+    <div className={`state-error state-error--${explained.kind}`} role="alert">
+      <p className="state-error__message">{explained.message}</p>
+      {explained.action && <p className="state-error__action">{explained.action}</p>}
+      {technical && <p className="state-error__technical numeric">{technical}</p>}
+      {onRetry && (
+        <button type="button" className="state-error__retry" onClick={onRetry}>
+          Try again
+        </button>
+      )}
     </div>
   );
 }
@@ -65,17 +121,7 @@ export function ErrorState({
     return <Empty title={explained.message} description={explained.action} />;
   }
 
-  return (
-    <div className={`state-error state-error--${explained.kind}`} role="alert">
-      <p className="state-error__message">{explained.message}</p>
-      {explained.action && <p className="state-error__action">{explained.action}</p>}
-      {onRetry && (
-        <button type="button" className="state-error__retry" onClick={onRetry}>
-          Try again
-        </button>
-      )}
-    </div>
-  );
+  return <ErrorPanel explained={explained} onRetry={onRetry} />;
 }
 
 export interface AsyncViewProps<T> {
@@ -159,21 +205,17 @@ export function TransactionOutcome({
   successTitle,
   successDescription,
   onDismiss,
+  onRetry,
 }: {
   phase: string;
-  error: { message: string; action?: string; kind: string } | null;
+  error: Explained | null;
   successTitle: string;
   successDescription?: ReactNode;
   onDismiss?: () => void;
+  /** Offer only where sending the same transaction again makes sense. */
+  onRetry?: () => void;
 }) {
-  if (error) {
-    return (
-      <div className={`state-error state-error--${error.kind}`} role="alert">
-        <p className="state-error__message">{error.message}</p>
-        {error.action && <p className="state-error__action">{error.action}</p>}
-      </div>
-    );
-  }
+  if (error) return <ErrorPanel explained={error} onRetry={onRetry} />;
   if (phase === 'success') {
     return <Success title={successTitle} description={successDescription} onDismiss={onDismiss} />;
   }
