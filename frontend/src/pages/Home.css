@@ -590,6 +590,148 @@ code {
   line-height: 1.6;
 }
 
+/* Live on testnet */
+.live-header {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: var(--space-4);
+  margin-bottom: var(--space-5);
+}
+
+.live-header .section-header {
+  max-width: 72ch;
+  margin-bottom: 0;
+}
+
+.live-header .section-header p {
+  margin: var(--space-3) 0 0;
+  line-height: 1.6;
+}
+
+.live-panel {
+  margin: 0;
+  padding: var(--space-5);
+  background: var(--surface-color);
+  border-radius: var(--radius-lg);
+}
+
+.live-panel--error {
+  background: var(--danger-soft);
+}
+
+.live-panel--error p {
+  margin: 0;
+}
+
+.live-error-title {
+  margin-bottom: var(--space-1) !important;
+  color: var(--danger-strong);
+  font-weight: var(--weight-bold);
+}
+
+.live-figures {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+}
+
+.live-stale {
+  margin: 0;
+  padding: var(--space-3) var(--space-4);
+  background: var(--warning-soft);
+  color: var(--warning-strong);
+  border-radius: var(--radius-md);
+  font-size: var(--text-sm);
+  font-weight: var(--weight-semibold);
+}
+
+.live-tiles {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, var(--grid-min-card)), 1fr));
+  gap: var(--space-3);
+  margin: 0;
+}
+
+/* Label first in the markup so it is read before the figure; figure first on screen. */
+.live-tile {
+  display: flex;
+  flex-direction: column-reverse;
+  justify-content: flex-end;
+  gap: var(--space-1);
+  padding: var(--space-5);
+  background: var(--surface-color);
+  border-radius: var(--radius-lg);
+}
+
+.live-tile dt {
+  font-size: var(--text-sm);
+}
+
+.live-tile dd {
+  margin: 0;
+  font-size: var(--text-2xl);
+  font-weight: var(--weight-semibold);
+  line-height: 1.2;
+}
+
+.live-programmes {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.live-programme {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-3);
+  min-height: 44px;
+  padding: var(--space-3) var(--space-4);
+  background: var(--surface-color);
+  border-radius: var(--radius-md);
+  color: var(--text-main) !important;
+}
+.live-programme:hover {
+  background: var(--accent-soft);
+}
+
+.live-programme-text {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+  min-width: 0;
+}
+
+.live-programme-name {
+  font-weight: var(--weight-bold);
+}
+
+.live-programme-id {
+  color: var(--text-muted);
+  font-size: var(--text-xs);
+}
+
+.live-programme-phase {
+  padding: var(--space-1) var(--space-3);
+  background: var(--surface-hover);
+  color: var(--text-muted);
+  border-radius: var(--radius-full);
+  font-size: var(--text-xs);
+  font-weight: var(--weight-semibold);
+}
+
+.live-source {
+  margin: var(--space-3) 0 0;
+  color: var(--text-muted);
+  font-size: var(--text-xs);
+}
+
 /* For developers */
 .eyebrow {
   display: block;

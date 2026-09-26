@@ -5,6 +5,7 @@ import { Shield, Zap, Lock, Unlock } from 'lucide-react';
 import { CopyButton } from '../components/ui/CopyButton';
 import { HeroDemo } from '../components/landing/HeroDemo';
 import { GUARANTEES, LIMITS, ROLES, type Claim } from './homeContent';
+import { LiveIndex } from '../components/home/LiveIndex';
 import { ROLES } from './homeContent';
 
 /**
@@ -301,6 +302,9 @@ export const Home: React.FC = () => {
           <ClaimCard heading="Limits, stated" tone="limit" claims={LIMITS} />
         </div>
       </section>
+
+      {/* Live on testnet */}
+      <LiveIndex />
 
       {/* For developers */}
       <section id="developers" className="developers-section scroll-animate">
