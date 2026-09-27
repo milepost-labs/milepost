@@ -26,8 +26,8 @@ const ENTRY_POINTS = ['main.tsx'];
 const IGNORED = [
   /\.test\.tsx?$/,
   /\.d\.ts$/,
-  /^test\//, // this file and its setup
-  /^assets\//,
+  /^test[\\/]/, // this file and its setup
+  /^assets[\\/]/,
 ];
 
 /**
