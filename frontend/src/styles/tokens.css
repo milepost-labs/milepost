@@ -302,6 +302,11 @@
   font-variant-numeric: tabular-nums;
 }
 
+/* Programmatic focus on page heading does not show an outline */
+h1[tabindex="-1"]:focus {
+  outline: none;
+}
+
 /* Money squares and legend in forced-colors mode:
    Distinguish the four states by pattern or border, not colour, and keep the legend matching. */
 @media (forced-colors: active) {
