@@ -188,3 +188,26 @@ export function explain(error: unknown, contract: ContractName = 'program'): Exp
 export function isFailure(explained: Explained): boolean {
   return explained.kind !== 'none';
 }
+
+/**
+ * Plain-text form of an error, for a "Copy details" control on the panel
+ * that shows it.
+ *
+ * Built only from `Explained` — the curated message, contract and code —
+ * plus the route and time the caller supplies. Never the raw thrown value,
+ * so a signed payload or a secret embedded in some future error object has
+ * no path into this text.
+ */
+export function formatErrorDetails(
+  explained: Explained,
+  context: { route: string; time: Date },
+): string {
+  const lines = [`Message: ${explained.message}`];
+  if (explained.contract && explained.code !== undefined) {
+    lines.push(`Contract: ${explained.contract}`);
+    lines.push(`Error code: ${explained.code}`);
+  }
+  lines.push(`Route: ${context.route}`);
+  lines.push(`Time: ${context.time.toISOString()}`);
+  return lines.join('\n');
+}
