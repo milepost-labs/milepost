@@ -157,6 +157,21 @@
   --success-soft: #dcf1e6;
   --warning-soft: #fbf0d4;
 
+  /* Money square forced-colors mode tokens.
+     Windows high contrast replaces background colours, rendering all squares
+     identical. In forced-colors mode, we distinguish the four states by border
+     style and system colour keywords, matching the legend dots. */
+  --money-fc-unawarded-border: 1.5px dotted CanvasText;
+  --money-fc-unawarded-bg: Canvas;
+  --money-fc-locked-border: 1.5px dashed CanvasText;
+  --money-fc-locked-bg: Canvas;
+  --money-fc-released-border: 2px solid Highlight;
+  --money-fc-released-bg: Highlight;
+  --money-fc-refund-border: 3px double CanvasText;
+  --money-fc-refund-bg: Canvas;
+  --money-fc-empty-border: 1px solid GrayText;
+  --money-fc-empty-bg: Canvas;
+
   /* Money is drawn as a grid of squares, never a bar. Twenty across reads as a
      single band on a wide screen, but at 360px that leaves each square around
      11px — too small to read as a square at all. Narrow viewports halve the
@@ -285,4 +300,37 @@
 .amount {
   font-family: var(--font-numeric);
   font-variant-numeric: tabular-nums;
+}
+
+/* Money squares and legend in forced-colors mode:
+   Distinguish the four states by pattern or border, not colour, and keep the legend matching. */
+@media (forced-colors: active) {
+  [data-money-state] {
+    box-sizing: border-box !important;
+  }
+
+  [data-money-state="unawarded"] {
+    border: var(--money-fc-unawarded-border) !important;
+    background-color: var(--money-fc-unawarded-bg) !important;
+  }
+
+  [data-money-state="locked"] {
+    border: var(--money-fc-locked-border) !important;
+    background-color: var(--money-fc-locked-bg) !important;
+  }
+
+  [data-money-state="released"] {
+    border: var(--money-fc-released-border) !important;
+    background-color: var(--money-fc-released-bg) !important;
+  }
+
+  [data-money-state="refund"] {
+    border: var(--money-fc-refund-border) !important;
+    background-color: var(--money-fc-refund-bg) !important;
+  }
+
+  [data-money-state="empty"] {
+    border: var(--money-fc-empty-border) !important;
+    background-color: var(--money-fc-empty-bg) !important;
+  }
 }

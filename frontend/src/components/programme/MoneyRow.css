@@ -16,6 +16,7 @@
   aspect-ratio: 1;
   border-radius: var(--radius-square);
   min-width: 0;
+  box-sizing: border-box;
 }
 
 @media (max-width: 480px) {

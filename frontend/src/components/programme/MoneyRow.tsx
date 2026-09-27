@@ -1,4 +1,5 @@
 import { moneySquares } from '../../lib/programmeView';
+import { getMoneyState } from '../../lib/moneySquares';
 import type { FixtureChainRead } from '../../fixtures/programmes';
 import './MoneyRow.css';
 
@@ -22,7 +23,12 @@ export function MoneyRow({
   return (
     <div className={`money-row money-row--${variant}`} aria-hidden="true">
       {squares.map((background, i) => (
-        <span key={i} className="money-row__square" style={{ background }} />
+        <span
+          key={i}
+          className="money-row__square"
+          data-money-state={getMoneyState(background)}
+          style={{ background }}
+        />
       ))}
     </div>
   );

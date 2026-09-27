@@ -1,6 +1,6 @@
 import type { FC } from 'react';
 import { formatAmount } from '../../lib/amount';
-import { computeMoneySquares } from '../../lib/moneySquares';
+import { computeMoneySquares, getMoneyState } from '../../lib/moneySquares';
 import './WhereTheMoneyIs.css';
 
 export interface WhereTheMoneyIsProps {
@@ -103,6 +103,7 @@ export const WhereTheMoneyIs: FC<WhereTheMoneyIsProps> = ({
           <span
             key={i}
             className="where-the-money-is__square"
+            data-money-state={getMoneyState(q)}
             style={{ backgroundColor: q }}
             aria-hidden="true"
           />
@@ -114,6 +115,7 @@ export const WhereTheMoneyIs: FC<WhereTheMoneyIsProps> = ({
           <li key={item.label} className="where-the-money-is__legend-item">
             <span
               className="where-the-money-is__legend-dot"
+              data-money-state={getMoneyState(item.bg)}
               style={{ backgroundColor: item.bg }}
               aria-hidden="true"
             />

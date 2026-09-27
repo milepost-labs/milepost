@@ -145,18 +145,21 @@ export const AwardsTab: FC<AwardsTabProps> = ({
                     role="img"
                     aria-label={trancheLabel}
                   >
-                    {Array.from({ length: tranches }, (_, i) => (
-                      <span
-                        key={i}
-                        className="awards-tab__tranche-bar"
-                        style={{
-                          backgroundColor:
-                            i < tranchesReleased
+                    {Array.from({ length: tranches }, (_, i) => {
+                      const released = i < tranchesReleased;
+                      return (
+                        <span
+                          key={i}
+                          className="awards-tab__tranche-bar"
+                          data-money-state={released ? 'released' : 'locked'}
+                          style={{
+                            backgroundColor: released
                               ? 'var(--accent)'
                               : 'var(--locked)',
-                        }}
-                      />
-                    ))}
+                          }}
+                        />
+                      );
+                    })}
                   </div>
                 )}
               </div>

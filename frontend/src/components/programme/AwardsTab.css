@@ -97,6 +97,7 @@
   height: 8px;
   border-radius: var(--radius-square);
   min-width: 4px;
+  box-sizing: border-box;
 }
 
 @media (max-width: 480px) {
