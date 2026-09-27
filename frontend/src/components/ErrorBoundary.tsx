@@ -1,5 +1,6 @@
 import React from 'react';
 import { Link } from 'react-router-dom';
+import { ChunkLoadError } from '../lib/lazyWithRetry';
 
 type Props = { children: React.ReactNode };
 type State = { hasError: boolean; error: Error | null };
@@ -19,9 +20,38 @@ export class ErrorBoundary extends React.Component<Props, State> {
     this.setState({ hasError: false, error: null });
   };
 
+  handleReload = () => {
+    window.location.reload();
+  };
+
   render() {
     if (this.state.hasError) {
       const { error } = this.state;
+
+      // A chunk that 404'd after a deploy already got one automatic reload
+      // (see `lazyWithRetry`) and still failed — a real outage, not a stale
+      // tab. This is not a crash in the app's own code, so it gets a milder,
+      // specific message instead of the full "something went wrong" panel.
+      if (error instanceof ChunkLoadError) {
+        return (
+          <div className="error-boundary" role="alert" style={{ padding: 'var(--space-6)', maxWidth: 720, margin: '0 auto' }}>
+            <h1 style={{ margin: '0 0 var(--space-2)' }}>A newer version is available</h1>
+            <p className="typo-text text-muted" style={{ margin: '0 0 var(--space-4)' }}>
+              This tab was open when the app was updated, and one of its files no longer exists on the
+              server. Reloading will fetch the current version.
+            </p>
+            <div style={{ display: 'flex', gap: 'var(--space-3)', flexWrap: 'wrap' }}>
+              <button type="button" className="ui-button ui-button--primary" onClick={this.handleReload}>
+                Reload
+              </button>
+              <Link to="/" className="ui-button ui-button--secondary" onClick={this.handleReset}>
+                Go to home
+              </Link>
+            </div>
+          </div>
+        );
+      }
+
       return (
         <div className="error-boundary" role="alert" style={{ padding: 'var(--space-6)', maxWidth: 720, margin: '0 auto' }}>
           <h1 style={{ margin: '0 0 var(--space-2)' }}>Something went wrong</h1>
