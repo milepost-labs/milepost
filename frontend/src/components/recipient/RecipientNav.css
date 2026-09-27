@@ -1,0 +1,41 @@
+.recipient-nav {
+  display: flex;
+  gap: var(--space-2);
+  flex-wrap: wrap;
+  margin-bottom: var(--space-4);
+}
+
+.recipient-nav__pill {
+  border-radius: var(--radius-full);
+  padding: 10px 18px;
+  font-size: var(--text-sm);
+  font-weight: var(--weight-bold);
+  text-decoration: none;
+  min-height: var(--tap-min);
+  box-sizing: border-box;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--surface);
+  color: var(--text);
+  transition: background 0.2s ease, color 0.2s ease;
+}
+
+.recipient-nav__pill:hover {
+  background: var(--surface-raised);
+}
+
+.recipient-nav__pill:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: var(--focus-offset);
+}
+
+.recipient-nav__pill--active {
+  background: var(--text);
+  color: var(--bg);
+}
+
+.recipient-nav__pill--active:hover {
+  background: var(--text);
+  color: var(--bg);
+}
