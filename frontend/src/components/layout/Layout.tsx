@@ -3,6 +3,7 @@ import { Navbar } from './Navbar';
 import { Outlet, useLocation } from 'react-router-dom';
 import { AnnouncerProvider } from '../../context/AnnouncerContext';
 import { useAnnouncer } from '../../context/useAnnouncer';
+import { OfflineBanner } from './OfflineBanner';
 import './Layout.css';
 
 /**
@@ -61,6 +62,7 @@ export const Layout: React.FC = () => {
           Skip to main content
         </a>
         <Navbar />
+        <OfflineBanner />
         <main id="main-content" className="page-wrapper container animate-fade-up" tabIndex={-1}>
           <Outlet />
         </main>
