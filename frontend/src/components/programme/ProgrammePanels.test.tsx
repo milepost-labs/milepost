@@ -227,7 +227,7 @@ describe('Issue #267 - TermsTab component', () => {
     });
     expect(keepaliveLink).toBeDefined();
     expect(keepaliveLink.getAttribute('href')).toBe(
-      '/admin/standing?programme=prog-xyz',
+      '/keepalive?programme=prog-xyz',
     );
   });
 

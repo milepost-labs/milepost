@@ -1,5 +1,24 @@
 import type { BadgeTone } from "../components/ui";
 
+export interface RegistryProgrammeVerifier {
+  is_programme: (args: { addr: string }) => Promise<{ result: boolean }>;
+}
+
+const PROGRAMME_CONTRACT_ID_PATTERN = /^C[A-Z2-7]{55}$/;
+
+export function isProgrammeContractId(value: string): boolean {
+  return PROGRAMME_CONTRACT_ID_PATTERN.test(value);
+}
+
+export async function verifyRegistryProgramme(
+  registry: RegistryProgrammeVerifier,
+  programmeId: string,
+): Promise<boolean> {
+  if (!isProgrammeContractId(programmeId)) return false;
+  const response = await registry.is_programme({ addr: programmeId });
+  return response.result;
+}
+
 export interface RegistryVerificationCopy {
   tone: BadgeTone;
   label: string;

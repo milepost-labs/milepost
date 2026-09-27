@@ -17,6 +17,7 @@ import { useContractRead, useContractResult, useProgramme, useTransaction } from
 import { useWallet } from '../context/useWallet';
 import { AsyncView, Loading } from '../components/state/AsyncStates';
 import { PausedBanner } from '../components/programme/PausedBanner';
+import { ProgrammeParamNotice } from '../components/programme/ProgrammeParamNotice';
 import { Badge, Button, Card, Field, PhaseBadge } from '../components/ui';
 import { formatAmount } from '../lib/amount';
 import './FinalizeAwards.css';
@@ -66,13 +67,13 @@ const MODE_OPTIONS: ModeOption[] = [
 const truncate = (addr: string) => `${addr.slice(0, 5)}…${addr.slice(-4)}`;
 
 export const FinalizeAwards = () => {
-  const { client: programme } = useProgramme();
+  const { client: programme, linkedProgramme, readsEnabled } = useProgramme();
   const wallet = useWallet();
 
   // Overview reads — always enabled, so `loading` covers the initial fetch.
-  const budget = useContractResult(() => programme.budget(), [programme]);
-  const config = useContractResult(() => programme.get_config(), [programme]);
-  const phase = useContractResult(() => programme.get_phase(), [programme]);
+  const budget = useContractResult(() => programme.budget(), [programme], { enabled: readsEnabled });
+  const config = useContractResult(() => programme.get_config(), [programme], { enabled: readsEnabled });
+  const phase = useContractResult(() => programme.get_phase(), [programme], { enabled: readsEnabled });
 
   // Application and its award, keyed on the address the user submitted. Both
   // start disabled, so their first load is driven by `applicant` becoming
@@ -82,12 +83,12 @@ export const FinalizeAwards = () => {
   const application = useContractResult(
     () => programme.get_application({ applicant }),
     [programme, applicant],
-    { enabled: applicant !== '' },
+    { enabled: readsEnabled && applicant !== '' },
   );
   const award = useContractResult(
     () => programme.get_award({ recipient: applicant }),
     [programme, applicant],
-    { enabled: applicant !== '' && application.data?.finalized === true },
+    { enabled: readsEnabled && applicant !== '' && application.data?.finalized === true },
   );
 
   const [modeTag, setModeTag] = useState<Mode['tag'] | null>(null);
@@ -98,7 +99,7 @@ export const FinalizeAwards = () => {
   const payeeCheck = useContractRead(
     () => programme.is_payee({ payee: payeeToVerify }),
     [programme, payeeToVerify],
-    { enabled: payeeToVerify !== '' },
+    { enabled: readsEnabled && payeeToVerify !== '' },
   );
 
   const [settledAward, setSettledAward] = useState<Award | null>(null);
@@ -150,6 +151,14 @@ export const FinalizeAwards = () => {
     if (!selectedMode || !application.data || !payeeReady) return;
     void finalizeTx.send(() => programme.finalize({ applicant, payee, mode: selectedMode }));
   };
+
+  if (linkedProgramme.blocksProgramme) {
+    return (
+      <div className="dashboard-container finalize-page">
+        <ProgrammeParamNotice state={linkedProgramme} />
+      </div>
+    );
+  }
 
   return (
     <div className="dashboard-container finalize-page">

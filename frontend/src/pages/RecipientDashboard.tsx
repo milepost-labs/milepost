@@ -3,6 +3,7 @@ import { Link } from 'react-router-dom';
 import { useContractRead, useContractResult, useProgramme, useTransaction, phaseLabel } from '../hooks';
 import { AsyncView, Empty } from '../components/state/AsyncStates';
 import { PausedBanner } from '../components/programme/PausedBanner';
+import { ProgrammeParamNotice } from '../components/programme/ProgrammeParamNotice';
 import { Badge, Button, Card, Field, Modal, Stat } from '../components/ui';
 import { useWallet } from '../context/useWallet';
 import { DEMO_PROGRAMME_ID } from '../context/sorobanStore';
@@ -42,13 +43,17 @@ function loadCandidates(programmeId: string): string[] {
 
 export const RecipientDashboard = () => {
   const { address: walletAddress } = useWallet();
-  const { client: programme, id: programmeId } = useProgramme();
+  const { client: programme, id: programmeId, linkedProgramme, readsEnabled } = useProgramme();
   const isDemo = !walletAddress;
   const recipient = walletAddress || DEMO_RECIPIENT;
 
-  const award = useContractResult(() => programme.get_award({ recipient }), [programme, recipient]);
-  const allocation = useContractRead(() => programme.allocation_of({ recipient }), [programme, recipient]);
-  const config = useContractResult(() => programme.get_config(), [programme]);
+  const award = useContractResult(() => programme.get_award({ recipient }), [programme, recipient], {
+    enabled: readsEnabled,
+  });
+  const allocation = useContractRead(() => programme.allocation_of({ recipient }), [programme, recipient], {
+    enabled: readsEnabled,
+  });
+  const config = useContractResult(() => programme.get_config(), [programme], { enabled: readsEnabled });
 
   // Candidate payees to check, persisted per programme so a recipient does
   // not re-enter the same address every visit.
@@ -65,6 +70,7 @@ export const RecipientDashboard = () => {
 
   const [payeeStatus, setPayeeStatus] = useState<Record<string, PayeeStatus>>({});
   useEffect(() => {
+    if (!readsEnabled) return;
     let cancelled = false;
     (async () => {
       const entries = await Promise.all(
@@ -83,7 +89,7 @@ export const RecipientDashboard = () => {
     return () => {
       cancelled = true;
     };
-  }, [programme, candidates]);
+  }, [programme, candidates, readsEnabled]);
 
   const addCandidate = (address: string) => {
     if (candidates.includes(address)) return;
@@ -180,6 +186,14 @@ export const RecipientDashboard = () => {
       allocation.refetch();
     }
   };
+
+  if (linkedProgramme.blocksProgramme) {
+    return (
+      <div className="dashboard-container">
+        <ProgrammeParamNotice state={linkedProgramme} />
+      </div>
+    );
+  }
 
   return (
     <div className="dashboard-container">

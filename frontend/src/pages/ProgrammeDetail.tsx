@@ -585,6 +585,46 @@ export const ProgrammeDetail = () => {
       : [];
   }, [config.data, nowMs]);
 
+  const programmeParam = encodeURIComponent(programmeId);
+  const programmeActions = [
+    {
+      key: "contribute",
+      label: "Contribute",
+      who: "Funders",
+      button: "Contribute",
+      to: `/funders?programme=${programmeParam}`,
+      available: phaseName === "Open",
+      phase: "Open",
+    },
+    {
+      key: "apply",
+      label: "Apply for an award",
+      who: "Recipients",
+      button: "Apply",
+      to: `/recipients?programme=${programmeParam}`,
+      available: phaseName === "Open",
+      phase: "Open",
+    },
+    {
+      key: "finalize",
+      label: "Finalize awards",
+      who: "Anyone",
+      button: "Finalize",
+      to: `/finalize?programme=${programmeParam}`,
+      available: phaseName === "Review",
+      phase: "Review",
+    },
+    {
+      key: "keepalive",
+      label: "Keep entries alive",
+      who: "Anyone",
+      button: "Keepalive",
+      to: `/keepalive?programme=${programmeParam}`,
+      available: true,
+      phase: "Any phase",
+    },
+  ];
+
   return (
     <div className="programme-detail">
       <PausedBanner client={programme} />
@@ -605,6 +645,35 @@ export const ProgrammeDetail = () => {
           programme.
         </p>
       )}
+
+      <Card title="Actions">
+        <div className="programme-actions">
+          {programmeActions.map((action) => (
+            <article
+              key={action.key}
+              className={`programme-action${
+                action.available ? "" : " programme-action--quiet"
+              }`}
+            >
+              <div className="programme-action__header">
+                <h2>{action.label}</h2>
+                <Badge tone={action.available ? "accent" : "neutral"}>
+                  {action.available ? "Available" : action.phase}
+                </Badge>
+              </div>
+              <p className="programme-action__who">{action.who}</p>
+              <p className="programme-action__reason typo-text text-muted">
+                {action.available
+                  ? "Opens with this programme preselected."
+                  : `Best during ${action.phase}. This programme is ${phaseName}.`}
+              </p>
+              <Link to={action.to} className="programme-action__link">
+                {action.button}
+              </Link>
+            </article>
+          ))}
+        </div>
+      </Card>
 
       <section
         className="programme-stats animate-fade-up"
@@ -871,7 +940,10 @@ export const ProgrammeDetail = () => {
                       Attestations, standing, policy, and treasury addresses are
                       read from <span className="numeric">get_config</span>.
                     </p>
-                    <Link to="/funders" className="programme-link">
+                    <Link
+                      to={`/funders?programme=${programmeParam}`}
+                      className="programme-link"
+                    >
                       Back to funder dashboard
                     </Link>
                   </div>

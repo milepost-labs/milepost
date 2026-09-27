@@ -61,7 +61,7 @@ export const TermsTab: FC<TermsTabProps> = ({
     },
   ];
 
-  const keepaliveUrl = `/admin/standing?programme=${encodeURIComponent(programmeId)}`;
+  const keepaliveUrl = `/keepalive?programme=${encodeURIComponent(programmeId)}`;
 
   return (
     <div

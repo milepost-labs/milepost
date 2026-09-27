@@ -3,19 +3,44 @@ import { useParams } from 'react-router-dom';
 import { useSoroban } from '../context/useSoroban';
 import { DEMO_PROGRAMME_ID } from '../context/sorobanStore';
 import { useContractRead } from './useContractRead';
+import { useProgrammeParam } from './useProgrammeParam';
 
 export function useProgramme() {
   const { programmeId } = useParams<{ programmeId?: string }>();
+  const linkedProgramme = useProgrammeParam();
   const { programmeAt } = useSoroban();
 
-  const id = programmeId ?? DEMO_PROGRAMME_ID;
+  const linkedProgrammeId =
+    !programmeId && linkedProgramme.status === 'valid' ? linkedProgramme.programmeId : null;
+  const id = programmeId ?? linkedProgrammeId ?? DEMO_PROGRAMME_ID;
   const client = useMemo(() => programmeAt(id), [id, programmeAt]);
+  const readsEnabled = !linkedProgramme.blocksProgramme || Boolean(programmeId);
 
-  const { data: totalContributed } = useContractRead(() => client.total_contributed(), [client]);
-  const { data: totalGranted } = useContractRead(() => client.total_granted(), [client]);
-  const { data: totalReleased } = useContractRead(() => client.total_released(), [client]);
-  const { data: totalRefunded } = useContractRead(() => client.total_refunded(), [client]);
-  const { data: totalSwept } = useContractRead(() => client.total_swept(), [client]);
+  const { data: totalContributed } = useContractRead(
+    () => client.total_contributed(),
+    [client],
+    { enabled: readsEnabled },
+  );
+  const { data: totalGranted } = useContractRead(
+    () => client.total_granted(),
+    [client],
+    { enabled: readsEnabled },
+  );
+  const { data: totalReleased } = useContractRead(
+    () => client.total_released(),
+    [client],
+    { enabled: readsEnabled },
+  );
+  const { data: totalRefunded } = useContractRead(
+    () => client.total_refunded(),
+    [client],
+    { enabled: readsEnabled },
+  );
+  const { data: totalSwept } = useContractRead(
+    () => client.total_swept(),
+    [client],
+    { enabled: readsEnabled },
+  );
 
   return useMemo(() => {
     const contributed = totalContributed ?? 0n;
@@ -26,7 +51,9 @@ export function useProgramme() {
     return {
       id,
       client,
-      isDefault: !programmeId,
+      isDefault: !programmeId && linkedProgrammeId === null,
+      linkedProgramme,
+      readsEnabled,
       breakdown: {
         contributed,
         granted,
@@ -36,5 +63,17 @@ export function useProgramme() {
         held: contributed - released - refunded - swept,
       },
     };
-  }, [id, client, programmeId, totalContributed, totalGranted, totalReleased, totalRefunded, totalSwept]);
+  }, [
+    id,
+    client,
+    programmeId,
+    linkedProgrammeId,
+    linkedProgramme,
+    readsEnabled,
+    totalContributed,
+    totalGranted,
+    totalReleased,
+    totalRefunded,
+    totalSwept,
+  ]);
 }

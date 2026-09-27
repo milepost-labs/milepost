@@ -23,6 +23,7 @@ import { explain } from "../lib/errors";
 import { RefundsAndSweepsSection } from "../components/funder/RefundsAndSweepsSection";
 import { DonorContributionReceipt } from "../components/funder/DonorContributionReceipt";
 import { PausedBanner } from "../components/programme/PausedBanner";
+import { ProgrammeParamNotice } from "../components/programme/ProgrammeParamNotice";
 
 interface BudgetBreakdown {
   budget: bigint;
@@ -45,34 +46,38 @@ const formatPercent = (value: number) => `${value.toFixed(2)}%`;
 
 export const FunderDashboard = () => {
   const { address: walletAddress } = useWallet();
-  const { client: programme } = useProgramme();
+  const { client: programme, linkedProgramme, readsEnabled } = useProgramme();
 
-  const config = useContractResult(() => programme.get_config(), [programme]);
-  const budget = useContractResult(() => programme.budget(), [programme]);
-  const fee = useContractResult(() => programme.fee(), [programme]);
+  const config = useContractResult(() => programme.get_config(), [programme], { enabled: readsEnabled });
+  const budget = useContractResult(() => programme.budget(), [programme], { enabled: readsEnabled });
+  const fee = useContractResult(() => programme.fee(), [programme], { enabled: readsEnabled });
   const contributed = useContractRead(
     () => programme.total_contributed(),
     [programme],
+    { enabled: readsEnabled },
   );
-  const granted = useContractRead(() => programme.total_granted(), [programme]);
+  const granted = useContractRead(() => programme.total_granted(), [programme], { enabled: readsEnabled });
   const released = useContractRead(
     () => programme.total_released(),
     [programme],
+    { enabled: readsEnabled },
   );
   const refunded = useContractRead(
     () => programme.total_refunded(),
     [programme],
+    { enabled: readsEnabled },
   );
   const swept = useContractRead(
     () => programme.total_swept(),
     [programme],
+    { enabled: readsEnabled },
   );
-  const phase = useContractResult(() => programme.get_phase(), [programme]);
+  const phase = useContractResult(() => programme.get_phase(), [programme], { enabled: readsEnabled });
 
   const cancelTx = useTransaction({ contract: "program" });
   const [cancelModalOpen, setCancelModalOpen] = useState(false);
 
-  const paused = useContractRead(() => programme.is_paused(), [programme]);
+  const paused = useContractRead(() => programme.is_paused(), [programme], { enabled: readsEnabled });
   const pauseTx = useTransaction({ contract: "program" });
 
   const isCreator = Boolean(
@@ -196,6 +201,14 @@ export const FunderDashboard = () => {
   };
 
   const pauseErrorExplained = pauseTx.error ? explain(pauseTx.error, "program") : null;
+
+  if (linkedProgramme.blocksProgramme) {
+    return (
+      <div className="dashboard-container">
+        <ProgrammeParamNotice state={linkedProgramme} />
+      </div>
+    );
+  }
 
   return (
     <div className="dashboard-container">
