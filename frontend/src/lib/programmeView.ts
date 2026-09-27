@@ -23,6 +23,16 @@ export type DirectoryPhase = 'All' | FixturePhase;
 /** Filter pills, in display order. */
 export const DIRECTORY_PHASES: DirectoryPhase[] = ['All', 'Open', 'Review', 'Settled', 'Cancelled'];
 
+export const DIRECTORY_SORTS = [
+  { value: 'newest', label: 'Newest' },
+  { value: 'closing-soonest', label: 'Closing soonest' },
+  { value: 'largest-budget', label: 'Largest budget' },
+] as const;
+
+export type DirectorySort = (typeof DIRECTORY_SORTS)[number]['value'];
+
+export const DEFAULT_DIRECTORY_SORT: DirectorySort = 'newest';
+
 export interface DirectoryProgramme {
   id: string;
   name: string;
@@ -88,6 +98,45 @@ export function filterProgrammes(
   );
 }
 
+function budgetOf(programme: DirectoryProgramme): bigint {
+  return BigInt(programme.chain.contributed || '0') - BigInt(programme.chain.fee || '0');
+}
+
+function compareBigIntDesc(left: bigint, right: bigint): number {
+  if (left === right) return 0;
+  return left > right ? -1 : 1;
+}
+
+function compareNewest(left: DirectoryProgramme, right: DirectoryProgramme): number {
+  return (right.createdLedger ?? -1) - (left.createdLedger ?? -1);
+}
+
+function compareClosingSoonest(left: DirectoryProgramme, right: DirectoryProgramme): number {
+  const leftDays = left.chain.closesInDays ?? Number.POSITIVE_INFINITY;
+  const rightDays = right.chain.closesInDays ?? Number.POSITIVE_INFINITY;
+  if (leftDays !== rightDays) return leftDays - rightDays;
+  return compareNewest(left, right);
+}
+
+/** Sort choices for the directory. Amounts stay as BigInt stroops. */
+export function sortProgrammes(
+  programmes: DirectoryProgramme[],
+  sort: DirectorySort = DEFAULT_DIRECTORY_SORT,
+): DirectoryProgramme[] {
+  return [...programmes].sort((left, right) => {
+    switch (sort) {
+      case 'closing-soonest':
+        return compareClosingSoonest(left, right);
+      case 'largest-budget': {
+        const budgetOrder = compareBigIntDesc(budgetOf(left), budgetOf(right));
+        return budgetOrder === 0 ? compareNewest(left, right) : budgetOrder;
+      }
+      case 'newest':
+        return compareNewest(left, right);
+    }
+  });
+}
+
 /** Counts per pill, over programmes matching the current search text. */
 export function phaseCounts(all: DirectoryProgramme[], query: string): Record<DirectoryPhase, number> {
   const matching = all.filter((programme) => matchesQuery(programme, query));
@@ -151,11 +200,20 @@ export function formatUsdc(stroops: string | bigint): string {
  * then refundable (from the right), with the remainder shown as unawarded.
  */
 export function moneySquares(chain: FixtureChainRead, n: number): string[] {
-  const budget = Number(chain.contributed) - Number(chain.fee);
-  if (budget <= 0) return Array.from({ length: n }, () => 'var(--surface-raised)');
-  const released = Math.round((Number(chain.released) / budget) * n);
-  const awarded = Math.round((Number(chain.awarded) / budget) * n);
-  const refundable = Math.round((Number(chain.refundable) / budget) * n);
+  const budget = BigInt(chain.contributed || '0') - BigInt(chain.fee || '0');
+  if (budget <= 0n) return Array.from({ length: n }, () => 'var(--surface-raised)');
+
+  const share = (stroops: string): number => {
+    const value = BigInt(stroops || '0');
+    const scaled = (value * BigInt(n) + budget / 2n) / budget;
+    if (scaled <= 0n) return 0;
+    if (scaled >= BigInt(n)) return n;
+    return Number(scaled);
+  };
+
+  const released = share(chain.released);
+  const awarded = share(chain.awarded);
+  const refundable = share(chain.refundable);
 
   return Array.from({ length: n }, (_, i) => {
     if (i < released) return 'var(--accent)';

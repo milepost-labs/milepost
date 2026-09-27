@@ -43,6 +43,7 @@
   border-radius: var(--radius-square);
   display: block;
   min-width: 0;
+  box-sizing: border-box;
 }
 
 .where-the-money-is__legend {
@@ -67,14 +68,13 @@
   height: 12px;
   border-radius: var(--radius-square);
   flex: none;
+  box-sizing: border-box;
 }
 
 .where-the-money-is__legend-label {
   flex: 1;
   color: var(--text-muted);
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
+  overflow-wrap: break-word;
 }
 
 .where-the-money-is__legend-value {

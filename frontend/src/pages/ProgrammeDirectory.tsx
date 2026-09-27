@@ -3,11 +3,15 @@ import { Link, useSearchParams } from 'react-router-dom';
 import { MoneyRow } from '../components/programme/MoneyRow';
 import '../components/programme/phasePill.css';
 import { Skeleton, Empty } from '../components/state/AsyncStates';
+import { describeAmount } from '../lib/amount';
 import { useIndexedList } from '../hooks';
 import { fetchMeta, fetchProgrammes, isStale } from '../lib/indexer';
 import {
+  DEFAULT_DIRECTORY_SORT,
   DIRECTORY_PHASES,
+  DIRECTORY_SORTS,
   filterProgrammes,
+  sortProgrammes,
   formatAgo,
   formatUsdc,
   mergeProgrammes,
@@ -16,6 +20,7 @@ import {
   programmeStatus,
   shortId,
   type DirectoryPhase,
+  type DirectorySort,
   type DirectoryProgramme,
 } from '../lib/programmeView';
 import './ProgrammeDirectory.css';
@@ -23,18 +28,24 @@ import './ProgrammeDirectory.css';
 const asPhase = (value: string | null): DirectoryPhase =>
   DIRECTORY_PHASES.includes(value as DirectoryPhase) ? (value as DirectoryPhase) : 'All';
 
+const asSort = (value: string | null): DirectorySort =>
+  DIRECTORY_SORTS.some((option) => option.value === value)
+    ? (value as DirectorySort)
+    : DEFAULT_DIRECTORY_SORT;
+
 /**
  * `/directory` — every programme, narrowed by a search box and phase pills.
  *
  * The list comes from the public index and is advisory; the chain values shown
  * on each card are stand-ins (`FIXTURE_CHAIN`) until the per-programme reads
- * are wired, and every card says so. Filter state lives in the URL so a
- * filtered view can be linked and survives a reload.
+ * are wired, and every card says so. Filter and sort state live in the URL so a
+ * narrowed view can be linked and survives a reload.
  */
 export const ProgrammeDirectory = () => {
   const [params, setParams] = useSearchParams();
   const query = params.get('q') ?? '';
   const phase = asPhase(params.get('phase'));
+  const sort = asSort(params.get('sort'));
 
   const metaRead = useIndexedList(async () => ({ meta: await fetchMeta(), readAt: Date.now() }), []);
   const listRead = useIndexedList(() => fetchProgrammes(), []);
@@ -59,6 +70,16 @@ export const ProgrammeDirectory = () => {
     [params, setParams],
   );
 
+  const setSort = useCallback(
+    (value: DirectorySort) => {
+      const next = new URLSearchParams(params);
+      if (value === DEFAULT_DIRECTORY_SORT) next.delete('sort');
+      else next.set('sort', value);
+      setParams(next, { replace: true });
+    },
+    [params, setParams],
+  );
+
   const clearFilters = useCallback(() => {
     const next = new URLSearchParams(params);
     next.delete('q');
@@ -69,11 +90,8 @@ export const ProgrammeDirectory = () => {
   const all = useMemo(() => mergeProgrammes(listRead.data), [listRead.data]);
   const counts = useMemo(() => phaseCounts(all, query), [all, query]);
   const shown = useMemo(
-    () =>
-      filterProgrammes(all, query, phase).sort(
-        (a, b) => (b.createdLedger ?? 0) - (a.createdLedger ?? 0),
-      ),
-    [all, query, phase],
+    () => sortProgrammes(filterProgrammes(all, query, phase), sort),
+    [all, query, phase, sort],
   );
 
   const loading = listRead.loading || metaRead.loading;
@@ -135,6 +153,19 @@ export const ProgrammeDirectory = () => {
               );
             })}
           </div>
+          <label className="directory-sort">
+            <span className="directory-sort__label">Sort</span>
+            <select
+              value={sort}
+              onChange={(event) => setSort(asSort(event.target.value))}
+            >
+              {DIRECTORY_SORTS.map((option) => (
+                <option key={option.value} value={option.value}>
+                  {option.label}
+                </option>
+              ))}
+            </select>
+          </label>
           <span className="directory-indexline">{indexLine}</span>
         </div>
 
@@ -224,9 +255,9 @@ function ProgrammeCard({ programme }: { programme: DirectoryProgramme }) {
         <MoneyRow chain={chain} count={20} variant="card" />
 
         <div className="directory-card-new__figures">
-          <Figure label="Budget" value={formatUsdc(budget)} />
-          <Figure label="Awarded" value={formatUsdc(chain.awarded)} />
-          <Figure label="Released" value={formatUsdc(chain.released)} />
+          <Figure label="Budget" value={formatUsdc(budget)} amount={budget} />
+          <Figure label="Awarded" value={formatUsdc(chain.awarded)} amount={chain.awarded} />
+          <Figure label="Released" value={formatUsdc(chain.released)} amount={chain.released} />
         </div>
 
         <div className="directory-card-new__foot">
@@ -240,11 +271,16 @@ function ProgrammeCard({ programme }: { programme: DirectoryProgramme }) {
   );
 }
 
-function Figure({ label, value }: { label: string; value: string }) {
+function Figure({ label, value, amount }: { label: string; value: string; amount?: bigint | string }) {
   return (
     <span className="directory-figure">
       <span className="directory-figure__label">{label}</span>
-      <span className="directory-figure__value numeric">{value}</span>
+      <span
+        className="directory-figure__value numeric"
+        aria-label={amount !== undefined ? `${label}: ${describeAmount(amount, 'USDC')}` : undefined}
+      >
+        {value}
+      </span>
     </span>
   );
 }

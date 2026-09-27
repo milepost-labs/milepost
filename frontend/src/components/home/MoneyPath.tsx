@@ -1,6 +1,7 @@
 import React, { useRef, useState, type KeyboardEvent } from 'react';
 import './MoneyPath.css';
 import { FIXTURE_PATH_BUDGET } from '../../fixtures/homeFixtures';
+import { getMoneyState } from '../../lib/moneySquares';
 
 type StepData = {
   name: string;
@@ -161,17 +162,32 @@ export const MoneyPath: React.FC = () => {
         </div>
         
         <div className="panel-visual">
-          <div aria-hidden="true" className="grid-container">
+          <div
+            role="img"
+            aria-label={`20-square budget distribution: ${legend.map((l) => `${l.amt} ${l.label}`).join(', ')}`}
+            className="grid-container"
+          >
             {squares.map((q, i) => (
-              <span key={i} className="grid-square" style={{ background: q.bg, boxShadow: q.ring }}></span>
+              <span
+                key={i}
+                className="grid-square"
+                data-money-state={getMoneyState(q.bg)}
+                style={{ background: q.bg, boxShadow: q.ring }}
+                aria-hidden="true"
+              />
             ))}
           </div>
           <ul className="legend-list">
             {legend.map((l, i) => (
               <li key={i} className="legend-item" style={{ opacity: l.op }}>
-                <span aria-hidden="true" className="legend-color" style={{ background: l.bg }}></span>
+                <span
+                  aria-hidden="true"
+                  className="legend-color"
+                  data-money-state={getMoneyState(l.bg)}
+                  style={{ background: l.bg }}
+                />
                 <span className="legend-label">{l.label}</span>
-                <span className="legend-amt">{l.amt}</span>
+                <span className="legend-amt" aria-label={`${l.amt}`}>{l.amt}</span>
               </li>
             ))}
           </ul>

@@ -44,6 +44,36 @@ const minBigint = (value: bigint, maximum: bigint) =>
 const formatXlm = (amount: bigint) => formatAmount(amount, { asset: "XLM" });
 const formatPercent = (value: number) => `${value.toFixed(2)}%`;
 
+import { useMemo, useState } from 'react';
+import { Link, useSearchParams } from 'react-router-dom';
+import { ContributeFlow } from '../components/funder/ContributeFlow';
+import { ContributionList } from '../components/funder/ContributionList';
+import { SeededProgrammeTools } from '../components/funder/SeededProgrammeTools';
+import { SignInSheet } from '../components/layout/SignInSheet';
+import { useWallet } from '../context/useWallet';
+import { FIXTURE_BALANCE, FIXTURE_CONTRIBUTIONS } from '../fixtures/funding';
+import { useIndexedList } from '../hooks';
+import { contributionCard, fundingTotals } from '../lib/funding';
+import { fetchProgrammes } from '../lib/indexer';
+import { formatUsdc, mergeProgrammes } from '../lib/programmeView';
+import { describeAmount } from '../lib/amount';
+import './FundingPage.css';
+
+const SIGNED_OUT_PREVIEW = [
+  { title: 'Every programme you’ve funded', note: 'How much you put in, and where it sits now' },
+  { title: 'Refunds you can claim', note: 'Your share of anything that wasn’t awarded' },
+  { title: 'A way to contribute', note: 'To any programme that is Open' },
+];
+
+/**
+ * `/funders` — what a funder has put in, what can come back, and a way to
+ * contribute. Signed out, it explains what signing in would show instead of
+ * rendering empty panels.
+ *
+ * Contributions and the balance are stand-ins (`fixtures/funding.ts`) until
+ * the per-address reads are wired; the programme list is the public index
+ * merged with the sample programmes, as on the directory.
+ */
 export const FunderDashboard = () => {
   const { address: walletAddress } = useWallet();
   const { client: programme, linkedProgramme, readsEnabled } = useProgramme();
@@ -253,7 +283,12 @@ export const FunderDashboard = () => {
           <section className="funding-stats" aria-label="Your funding">
             <div className="funding-stat">
               <span className="funding-stat__label">You’ve contributed</span>
-              <span className="funding-stat__value numeric">{formatUsdc(totals.contributed)}</span>
+              <span
+                className="funding-stat__value numeric"
+                aria-label={describeAmount(totals.contributed, 'USDC')}
+              >
+                {formatUsdc(totals.contributed)}
+              </span>
             </div>
             <div className="funding-stat">
               <span className="funding-stat__label">Programmes</span>
@@ -261,7 +296,10 @@ export const FunderDashboard = () => {
             </div>
             <div className="funding-stat">
               <span className="funding-stat__label">Refundable now</span>
-              <span className="funding-stat__value funding-stat__value--refund numeric">
+              <span
+                className="funding-stat__value funding-stat__value--refund numeric"
+                aria-label={describeAmount(totals.refundableNow, 'USDC')}
+              >
                 {formatUsdc(totals.refundableNow)}
               </span>
             </div>

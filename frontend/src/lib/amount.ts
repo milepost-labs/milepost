@@ -152,8 +152,9 @@ export function validateAmount(
  * What a screen reader should say. "1,000.00" read aloud is ambiguous; the
  * asset and the word "point" are not.
  */
-export function describeAmount(stroops: bigint, asset = 'XLM'): string {
-  return `${formatExact(stroops)} ${asset}`;
+export function describeAmount(stroops: bigint | string | number, asset = 'XLM'): string {
+  const value = typeof stroops === 'bigint' ? stroops : BigInt(stroops);
+  return `${formatExact(value)} ${asset}`;
 }
 
 /** Percentage of `total` that `part` represents, for progress bars. Never divides by zero. */

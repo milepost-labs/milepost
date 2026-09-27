@@ -37,3 +37,17 @@ export function computeMoneySquares(
   }
   return out;
 }
+
+export type MoneyState = 'released' | 'locked' | 'unawarded' | 'refund' | 'empty';
+
+export const MONEY_STATE_MAP: Record<string, MoneyState> = {
+  'var(--accent)': 'released',
+  'var(--locked)': 'locked',
+  'var(--refund)': 'refund',
+  'var(--accent-soft)': 'unawarded',
+  'var(--surface-raised)': 'empty',
+};
+
+export function getMoneyState(colorToken: string): MoneyState {
+  return MONEY_STATE_MAP[colorToken] ?? 'unawarded';
+}

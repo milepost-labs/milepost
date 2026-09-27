@@ -9,6 +9,7 @@ import { useSoroban } from '../context/useSoroban';
 import { useWallet } from '../context/useWallet';
 import { FIXTURE_STANDING, type StandingFixture } from '../fixtures/standing';
 import { KEEPALIVE_DAYS, isTtlLow, standingStats } from '../lib/standing';
+import { describeAmount } from '../lib/amount';
 import { isFailure } from '../lib/errors';
 import './Standing.css';
 
@@ -88,7 +89,12 @@ export function StandingStats({ standing }: { standing: StandingFixture }) {
     <div className="standing-stats">
       {standingStats(standing).map((stat) => (
         <div key={stat.label} className="standing-stat">
-          <span className="standing-stat__figure numeric">{stat.value}</span>
+          <span
+            className="standing-stat__figure numeric"
+            aria-label={stat.label === 'Total received' ? describeAmount(standing.totalReceived, 'XLM') : undefined}
+          >
+            {stat.value}
+          </span>
           <span className="standing-stat__label">{stat.label}</span>
         </div>
       ))}

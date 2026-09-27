@@ -175,6 +175,7 @@
   aspect-ratio: 1;
   border-radius: var(--radius-square);
   transition: background 0.35s, box-shadow 0.35s;
+  box-sizing: border-box;
 }
 .legend-list {
   list-style: none;
@@ -194,6 +195,7 @@
   width: 14px;
   height: 14px;
   border-radius: var(--radius-square);
+  box-sizing: border-box;
 }
 .legend-label {
   flex: 1;
