@@ -108,8 +108,10 @@ function FinalizeBoard() {
   const chain = chainFor(selected.id);
   const quorum = chain.quorum;
   const isReview = chain.phase === 'Review';
-  const apps =
-    selected.id === REVIEW_PROGRAMME_ID && isReview ? FIXTURE_REVIEW_APPLICATIONS : [];
+  const apps = useMemo(
+    () => (selected.id === REVIEW_PROGRAMME_ID && isReview ? FIXTURE_REVIEW_APPLICATIONS : []),
+    [selected.id, isReview],
+  );
 
   const medians = useMemo(() => {
     const map = new Map<string, bigint | null>();
