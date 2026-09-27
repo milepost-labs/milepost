@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { fireEvent, render, screen, waitFor } from '@testing-library/react';
-import { MemoryRouter } from 'react-router-dom';
+import { MemoryRouter, useLocation } from 'react-router-dom';
 
 import { FIXTURE_PROGRAMMES } from '../fixtures/programmes';
 import { ProgrammeDirectory } from './ProgrammeDirectory';
@@ -38,10 +38,16 @@ function mockIndex(options: {
   );
 }
 
+function LocationProbe() {
+  const location = useLocation();
+  return <output aria-label="current location">{location.pathname + location.search}</output>;
+}
+
 function renderDirectory(path = '/directory') {
   return render(
     <MemoryRouter initialEntries={[path]}>
       <ProgrammeDirectory />
+      <LocationProbe />
     </MemoryRouter>,
   );
 }
@@ -96,6 +102,27 @@ describe('ProgrammeDirectory', () => {
 
     expect(screen.getByRole('button', { name: /Review/ }).getAttribute('aria-pressed')).toBe('true');
     expect(screen.getAllByRole('link')).toHaveLength(1);
+  });
+
+  it('restores sort from the URL', async () => {
+    renderDirectory('/directory?sort=largest-budget');
+    const links = await screen.findAllByRole('link');
+
+    expect((screen.getByLabelText(/sort/i) as HTMLSelectElement).value).toBe('largest-budget');
+    expect(links[0].textContent).toContain('SME supplier microgrants Q2');
+  });
+
+  it('updates the URL while preserving search and phase filters', async () => {
+    renderDirectory('/directory?phase=Open&q=school');
+    await screen.findAllByRole('link');
+
+    fireEvent.change(screen.getByLabelText(/sort/i), { target: { value: 'largest-budget' } });
+
+    await waitFor(() => {
+      expect(screen.getByLabelText(/current location/i).textContent).toBe(
+        '/directory?phase=Open&q=school&sort=largest-budget',
+      );
+    });
   });
 
   it('shows a stale warning when the index is older than the threshold', async () => {
