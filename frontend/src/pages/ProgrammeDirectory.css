@@ -245,6 +245,7 @@
 .directory-figure__value {
   font-size: var(--text-sm);
   font-weight: var(--weight-semibold);
+  overflow-wrap: anywhere;
 }
 
 .directory-card-new__foot {

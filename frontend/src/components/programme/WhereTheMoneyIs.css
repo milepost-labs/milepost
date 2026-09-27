@@ -74,9 +74,7 @@
 .where-the-money-is__legend-label {
   flex: 1;
   color: var(--text-muted);
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
+  overflow-wrap: break-word;
 }
 
 .where-the-money-is__legend-value {
