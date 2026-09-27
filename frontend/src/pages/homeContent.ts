@@ -65,6 +65,7 @@ export const ROLES: Role[] = [
       { label: 'Register schema', path: '/schemas/register' },
       { label: 'Standing lookup', path: '/admin/standing' },
       { label: 'Keepalive', path: '/keepalive' },
+      { label: 'Payee management', path: '/admin/payees' },
     ],
   },
 ];

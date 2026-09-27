@@ -5,6 +5,7 @@ import { describe, expect, it, vi } from 'vitest';
 import { DEMO_PROGRAMME_ID, SorobanContext, type SorobanState } from '../context/sorobanStore';
 import { useProgramme } from './useProgramme';
 import { useProgrammeParam } from './useProgrammeParam';
+import { FIXTURE_PROGRAMMES } from '../fixtures/programmes';
 
 const VALID_PROGRAMME_ID = `C${'A'.repeat(55)}`;
 
@@ -37,6 +38,7 @@ function setup(path: string, registryResult: boolean | Error = true) {
     registry: registry as unknown as SorobanState['registry'],
     attest: {} as SorobanState['attest'],
     record: {} as SorobanState['record'],
+    policy: {} as SorobanState['policy'],
     programmeAt,
     demoProgramme: programmeAt(DEMO_PROGRAMME_ID),
     rpcUrl: 'https://example.invalid/rpc',
@@ -59,6 +61,17 @@ describe('useProgrammeParam', () => {
     expect(result.current.status).toBe('malformed');
     expect(result.current.blocksProgramme).toBe(true);
     expect(result.current.message).toMatch(/not a valid Milepost programme address/i);
+    expect(registry.is_programme).not.toHaveBeenCalled();
+  });
+
+  it('accepts a sample programme id without asking the registry', () => {
+    const sample = FIXTURE_PROGRAMMES[0].id;
+    const { wrapper, registry } = setup(`/keepalive?programme=${sample}`);
+
+    const { result } = renderHook(() => useProgrammeParam(), { wrapper });
+
+    expect(result.current.status).toBe('valid');
+    expect(result.current.programmeId).toBe(sample);
     expect(registry.is_programme).not.toHaveBeenCalled();
   });
 

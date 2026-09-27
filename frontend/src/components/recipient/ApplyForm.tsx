@@ -1,5 +1,5 @@
 import { useState, useId } from 'react';
-import { Link, useSearchParams } from 'react-router-dom';
+import { Link } from 'react-router-dom';
 import { FIXTURE_PROGRAMMES, FIXTURE_CHAIN } from '../../fixtures/programmes';
 import { explain } from '../../lib/errors';
 import { formatAmount } from '../../lib/amount';
@@ -13,7 +13,6 @@ interface ApplyFormProps {
 }
 
 export function ApplyForm({ preselectedProgrammeId, onSubmitted }: ApplyFormProps) {
-  const [searchParams] = useSearchParams();
   const announce = useAnnouncer();
   const amountFieldId = useId();
   const helpId = useId();
@@ -23,7 +22,7 @@ export function ApplyForm({ preselectedProgrammeId, onSubmitted }: ApplyFormProp
     (p) => FIXTURE_CHAIN[p.id]?.phase === 'Open'
   );
 
-  const queryProgId = preselectedProgrammeId || searchParams.get('programme') || '';
+  const queryProgId = preselectedProgrammeId || '';
   const initialProgId =
     openProgrammes.some((p) => p.id === queryProgId)
       ? queryProgId

@@ -1,163 +1,165 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
-import { Clock, ShieldCheck } from 'lucide-react';
-import { useSearchParams } from 'react-router-dom';
+import { useState } from 'react';
+import { Link } from 'react-router-dom';
+import { useAnnouncer } from '../context/useAnnouncer';
+import { useProgrammeParam } from '../hooks';
 import { ProgrammeParamNotice } from '../components/programme/ProgrammeParamNotice';
-import { Badge, Button, Card, Select } from '../components/ui';
-import { DEMO_PROGRAMME_ID } from '../context/sorobanStore';
-import { FIXTURE_TTL } from '../fixtures/keepalive';
-import { useProgramme } from '../hooks';
+import { Button, Select } from '../components/ui';
+import { FIXTURE_PROGRAMMES } from '../fixtures/programmes';
+import {
+  FIXTURE_TTL,
+  TTL_EXTENDED_DAYS,
+  TTL_WARNING_DAYS,
+} from '../fixtures/keepaliveFixtures';
 import './Keepalive.css';
 
-type ExtensionStatus = 'pending' | 'done';
+type EntryState = 'idle' | 'pending' | 'done';
 
-const LOW_TTL_DAYS = 30;
-const EXTENDED_TTL_DAYS = 90;
+/**
+ * Keepalive (Screen 10, Keepalive).
+ *
+ * Soroban entries that are not bumped become unreadable when their TTL
+ * expires, and an archived programme reads as absent rather than as an error.
+ * This screen makes expiry visible before it bites: one row per entry group
+ * with days left, a warning fill under 30 days, and a bulk extend for
+ * everything close to expiry.
+ *
+ * The rows below are `FIXTURE_TTL` — per-entry TTL reads are unwired, so these
+ * stand in for them. Extending a single attestation for real already works
+ * from its lookup page (`/attestations`), which renders the existing
+ * `keepalive/` component around the live entry.
+ */
+export const Keepalive = () => {
+  const announce = useAnnouncer();
+  const programmeParam = useProgrammeParam();
+  const [programmeId, setProgrammeId] = useState<string>(() =>
+    programmeParam.status === 'valid' && programmeParam.programmeId
+      ? programmeParam.programmeId
+      : (FIXTURE_PROGRAMMES[0]?.id ?? ''),
+  );
+  const [state, setState] = useState<Record<string, EntryState>>({});
 
-function labelForProgramme(programmeId: string): string {
-  return programmeId === DEMO_PROGRAMME_ID ? 'Seeded testnet programme' : programmeId;
-}
-
-export function Keepalive() {
-  const [searchParams, setSearchParams] = useSearchParams();
-  const { id: programmeId, linkedProgramme } = useProgramme();
-  const [extensions, setExtensions] = useState<Record<string, ExtensionStatus>>({});
-  const [announce, setAnnounce] = useState('');
-  const timers = useRef<number[]>([]);
-
-  useEffect(() => () => timers.current.forEach((timer) => window.clearTimeout(timer)), []);
-
-  const options = useMemo(() => {
-    const entries = [{ value: programmeId, label: labelForProgramme(programmeId) }];
-    if (programmeId !== DEMO_PROGRAMME_ID) {
-      entries.push({ value: DEMO_PROGRAMME_ID, label: labelForProgramme(DEMO_PROGRAMME_ID) });
-    }
-    return entries;
-  }, [programmeId]);
-
-  const rows = useMemo(() => {
-    return FIXTURE_TTL.map((entry) => {
-      const stateKey = `${programmeId}:${entry.key}`;
-      const status = extensions[stateKey];
-      const days = status === 'done' ? EXTENDED_TTL_DAYS : entry.liveForDays;
-      return {
-        ...entry,
-        stateKey,
-        status,
-        days,
-        low: days < LOW_TTL_DAYS,
-        width: `${Math.min(100, (Math.max(0, days) / EXTENDED_TTL_DAYS) * 100).toFixed(0)}%`,
-      };
-    });
-  }, [extensions, programmeId]);
+  const selected = FIXTURE_PROGRAMMES.find((p) => p.id === programmeId) ?? FIXTURE_PROGRAMMES[0];
 
   const extend = (keys: string[]) => {
-    setExtensions((current) => {
-      const next = { ...current };
-      keys.forEach((key) => {
-        next[`${programmeId}:${key}`] = 'pending';
-      });
+    if (keys.length === 0) return;
+    setState((prev) => {
+      const next = { ...prev };
+      for (const key of keys) {
+        if (next[`${programmeId}:${key}`] !== 'done') next[`${programmeId}:${key}`] = 'pending';
+      }
       return next;
     });
-    setAnnounce('');
-
-    const timer = window.setTimeout(() => {
-      setExtensions((current) => {
-        const next = { ...current };
-        keys.forEach((key) => {
-          next[`${programmeId}:${key}`] = 'done';
-        });
+    window.setTimeout(() => {
+      setState((prev) => {
+        const next = { ...prev };
+        for (const key of keys) next[`${programmeId}:${key}`] = 'done';
         return next;
       });
-      setAnnounce(`Extended ${keys.length} ${keys.length === 1 ? 'entry' : 'entries'} for about 90 days.`);
-    }, 800);
-    timers.current.push(timer);
+      announce(
+        `Extended ${keys.length} ${keys.length === 1 ? 'entry' : 'entries'} for about ${TTL_EXTENDED_DAYS} days.`,
+      );
+    }, 1300);
   };
 
-  const updateProgramme = (nextProgrammeId: string) => {
-    const next = new URLSearchParams(searchParams);
-    next.set('programme', nextProgrammeId);
-    setSearchParams(next);
-  };
+  const daysFor = (liveForDays: number, key: string) =>
+    state[`${programmeId}:${key}`] === 'done' ? TTL_EXTENDED_DAYS : liveForDays;
 
-  if (linkedProgramme.blocksProgramme) {
-    return (
-      <div className="dashboard-container keepalive-page">
-        <ProgrammeParamNotice state={linkedProgramme} />
-      </div>
-    );
-  }
-
-  const lowRows = rows.filter((row) => !row.status && row.low);
+  const lowKeys = FIXTURE_TTL.filter(
+    (entry) =>
+      daysFor(entry.liveForDays, entry.key) < TTL_WARNING_DAYS &&
+      state[`${programmeId}:${entry.key}`] !== 'done' &&
+      state[`${programmeId}:${entry.key}`] !== 'pending',
+  ).map((entry) => entry.key);
 
   return (
-    <div className="dashboard-container keepalive-page">
-      <header className="dashboard-header">
+    <div className="keepalive-page">
+      <header className="keepalive-page__header">
         <h1>Keepalive</h1>
         <p className="typo-text text-muted">
-          The network archives stored entries that nobody extends. Anyone can keep programme entries alive before
-          release, refund, or proof reads need them.
+          Entry lifetimes for one programme. Anything close to expiry can be extended before the
+          network archives it.
         </p>
       </header>
 
-      <div className="keepalive-page__intro">
-        <Clock size={20} aria-hidden="true" />
-        <p>
-          An archived award or contribution can still be restored, but restoration adds cost and delay at the moment
-          someone is trying to act on it.
-        </p>
-      </div>
+      <ProgrammeParamNotice state={programmeParam} />
 
-      <div className="keepalive-page__programme">
-        <Select
-          label="Programme"
-          value={programmeId}
-          options={options}
-          onChange={(event) => updateProgramme(event.target.value)}
-        />
-      </div>
+      <p className="keepalive-page__note">
+        The network archives stored entries that nobody extends. Anyone can extend them, and
+        network fees are covered. An archived award or contribution can&rsquo;t be released or
+        refunded until it&rsquo;s restored.
+      </p>
 
-      <Card title="Entries" aside={<Badge tone="neutral">Sample lifetimes</Badge>}>
-        <div className="keepalive-page__rows">
-          {rows.map((row) => (
-            <div key={row.key} className="keepalive-page__row">
-              <div className="keepalive-page__row-main">
-                <h2>{row.label}</h2>
-                <p className="typo-text text-muted">
-                  {row.note} - ~{row.days} days left
-                </p>
-              </div>
-              <div className="keepalive-page__row-actions">
-                <Badge tone={row.low ? 'warning' : 'neutral'}>{row.low ? 'Under 30 days' : 'Healthy'}</Badge>
-                <Button
-                  variant="secondary"
-                  onClick={() => extend([row.key])}
-                  disabled={row.status === 'pending' || row.status === 'done'}
-                  loading={row.status === 'pending'}
-                  loadingLabel="Extending..."
-                >
-                  {row.status === 'done' ? 'Extended' : 'Extend'}
-                </Button>
-              </div>
-              <div className="keepalive-page__meter" aria-hidden="true">
+      <Select
+        label="Programme"
+        value={selected?.id ?? ''}
+        onChange={(event) => setProgrammeId(event.target.value)}
+        options={FIXTURE_PROGRAMMES.map((p) => ({ value: p.id, label: p.name ?? p.id }))}
+      />
+
+      <ul className="ttl-rows">
+        {FIXTURE_TTL.map((entry) => {
+          const entryState = state[`${programmeId}:${entry.key}`] ?? 'idle';
+          const days = daysFor(entry.liveForDays, entry.key);
+          const low = days < TTL_WARNING_DAYS;
+          return (
+            <li
+              key={entry.key}
+              className={`ttl-row${low ? ' ttl-row--low' : ''}`}
+            >
+              <span className="ttl-row__text">
+                <span className="ttl-row__label">{entry.label}</span>
+                <span className="ttl-row__note">
+                  {entry.note} · ~{days} days left
+                </span>
+              </span>
+              <Button
+                variant="secondary"
+                disabled={entryState !== 'idle'}
+                loading={entryState === 'pending'}
+                loadingLabel="Extending…"
+                onClick={() => extend([entry.key])}
+              >
+                {entryState === 'done' ? 'Extended' : 'Extend'}
+              </Button>
+              <div className="ttl-row__bar" aria-hidden="true">
                 <span
-                  className="keepalive-page__meter-fill"
-                  style={{
-                    width: row.width,
-                    background: row.low ? 'var(--warning)' : 'var(--accent)',
-                  }}
+                  className={`ttl-row__fill${low ? ' ttl-row__fill--low' : ''}`}
+                  style={{ width: `${Math.min(100, Math.round((days / TTL_EXTENDED_DAYS) * 100))}%` }}
                 />
               </div>
-            </div>
-          ))}
-        </div>
-      </Card>
+              {low && entryState === 'idle' && (
+                <span className="ttl-row__warning" role="status">
+                  Under {TTL_WARNING_DAYS} days — extend soon.
+                </span>
+              )}
+              {entryState === 'done' && (
+                <span className="ttl-row__warning ttl-row__warning--done" role="status">
+                  Extended — about {TTL_EXTENDED_DAYS} days left.
+                </span>
+              )}
+            </li>
+          );
+        })}
+      </ul>
 
-      {lowRows.length > 0 && (
-        <Button icon={<ShieldCheck size={18} />} onClick={() => extend(lowRows.map((row) => row.key))}>
-          Extend the {lowRows.length} under 30 days
-        </Button>
+      {lowKeys.length > 0 && (
+        <div className="keepalive-page__bulk">
+          <Button onClick={() => extend(lowKeys)}>
+            Extend the {lowKeys.length} under {TTL_WARNING_DAYS} days
+          </Button>
+          <p className="typo-text text-muted keepalive-page__bulk-list">
+            {FIXTURE_TTL.filter((entry) => lowKeys.includes(entry.key))
+              .map((entry) => entry.label)
+              .join(' · ')}
+          </p>
+        </div>
       )}
-      <p className="typo-text text-muted" aria-live="polite">{announce}</p>
+
+      <p className="keepalive-page__sample">Sample lifetimes for the design phase.</p>
+
+      <p className="typo-text text-muted">
+        Extending a single attestation works from its <Link to="/attestations">lookup page</Link>.
+      </p>
     </div>
   );
-}
+};

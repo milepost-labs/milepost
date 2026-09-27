@@ -13,13 +13,20 @@ import {
   Wallet,
 } from 'lucide-react';
 import { contract, type Award, type Mode } from '@milepost/program';
-import { useContractRead, useContractResult, useProgramme, useTransaction, useAnnounceTransaction } from '../hooks';
+import {
+  useAnnounceTransaction,
+  useContractRead,
+  useContractResult,
+  useProgramme,
+  useProgrammeParam,
+  useTransaction,
+} from '../hooks';
+import { ProgrammeParamNotice } from '../components/programme/ProgrammeParamNotice';
 import { useWallet } from '../context/useWallet';
 import { useAnnouncer } from '../context/useAnnouncer';
 import { AsyncView, Loading } from '../components/state/AsyncStates';
 import { PausedBanner } from '../components/programme/PausedBanner';
-import { ProgrammeParamNotice } from '../components/programme/ProgrammeParamNotice';
-import { Badge, Button, Card, Field, PhaseBadge } from '../components/ui';
+import { Badge, Button, Card, Field, PhaseBadge, Select } from '../components/ui';
 import { formatAmount } from '../lib/amount';
 import { explainCode } from '../lib/errors';
 import { FIXTURE_PROGRAMMES, chainFor } from '../fixtures/programmes';
@@ -102,7 +109,10 @@ function FinalizeBoard() {
       }),
     [],
   );
-  const [finPid, setFinPid] = useState<string>(REVIEW_PROGRAMME_ID);
+  const programmeParam = useProgrammeParam();
+  const [finPid, setFinPid] = useState<string>(() =>
+    programmeParam.status === 'valid' && programmeParam.programmeId ? programmeParam.programmeId : REVIEW_PROGRAMME_ID,
+  );
   const [finState, setFinState] = useState<Record<string, 'pending' | 'done' | 'error'>>({});
 
   const selected = ordered.find((p) => p.id === finPid) ?? ordered[0];
@@ -153,6 +163,7 @@ function FinalizeBoard() {
 
   return (
     <section className="finalize-board" aria-label="Finalize awards">
+      <ProgrammeParamNotice state={programmeParam} />
       <p className="finalize-board__note">
         Anyone can finalize, so no one can strand an applicant by not pressing a button. You
         don&rsquo;t need an admin account.
@@ -285,13 +296,13 @@ function FinalizeBoard() {
 }
 
 export const FinalizeAwards = () => {
-  const { client: programme, linkedProgramme, readsEnabled } = useProgramme();
+  const { client: programme } = useProgramme();
   const wallet = useWallet();
 
   // Overview reads — always enabled, so `loading` covers the initial fetch.
-  const budget = useContractResult(() => programme.budget(), [programme], { enabled: readsEnabled });
-  const config = useContractResult(() => programme.get_config(), [programme], { enabled: readsEnabled });
-  const phase = useContractResult(() => programme.get_phase(), [programme], { enabled: readsEnabled });
+  const budget = useContractResult(() => programme.budget(), [programme]);
+  const config = useContractResult(() => programme.get_config(), [programme]);
+  const phase = useContractResult(() => programme.get_phase(), [programme]);
 
   // Application and its award, keyed on the address the user submitted. Both
   // start disabled, so their first load is driven by `applicant` becoming
@@ -301,12 +312,12 @@ export const FinalizeAwards = () => {
   const application = useContractResult(
     () => programme.get_application({ applicant }),
     [programme, applicant],
-    { enabled: readsEnabled && applicant !== '' },
+    { enabled: applicant !== '' },
   );
   const award = useContractResult(
     () => programme.get_award({ recipient: applicant }),
     [programme, applicant],
-    { enabled: readsEnabled && applicant !== '' && application.data?.finalized === true },
+    { enabled: applicant !== '' && application.data?.finalized === true },
   );
 
   const [modeTag, setModeTag] = useState<Mode['tag'] | null>(null);
@@ -317,7 +328,7 @@ export const FinalizeAwards = () => {
   const payeeCheck = useContractRead(
     () => programme.is_payee({ payee: payeeToVerify }),
     [programme, payeeToVerify],
-    { enabled: readsEnabled && payeeToVerify !== '' },
+    { enabled: payeeToVerify !== '' },
   );
 
   const [settledAward, setSettledAward] = useState<Award | null>(null);
@@ -377,14 +388,6 @@ export const FinalizeAwards = () => {
     if (!selectedMode || !application.data || !payeeReady) return;
     void finalizeTx.send(() => programme.finalize({ applicant, payee, mode: selectedMode }));
   };
-
-  if (linkedProgramme.blocksProgramme) {
-    return (
-      <div className="dashboard-container finalize-page">
-        <ProgrammeParamNotice state={linkedProgramme} />
-      </div>
-    );
-  }
 
   return (
     <div className="dashboard-container finalize-page">

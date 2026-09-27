@@ -9,19 +9,7 @@
 
 import { phaseRequirement, type Phase } from './phaseGate';
 
-export type ActionKey =
-  | 'contribute'
-  | 'apply'
-  | 'finalize'
-  | 'release'
-  | 'refund'
-  | 'sweep'
-  | 'pause'
-  | 'resume'
-  | 'cancel'
-  | 'extend_release'
-  | 'add_verifier'
-  | 'remove_verifier';
+export type ActionKey = 'contribute' | 'apply' | 'finalize' | 'release' | 'refund';
 
 export interface ProgrammeAction {
   key: ActionKey;
@@ -46,10 +34,6 @@ export interface ActionInput {
   refundsOpen: boolean;
   /** Unawarded budget available to refund, formatted for display. Null when unknown or zero. */
   refundable: string | null;
-  /** Whether the viewer is the programme admin. */
-  isAdmin?: boolean;
-  /** Whether the programme is currently paused. */
-  isPaused?: boolean;
 }
 
 interface Rule {
@@ -68,45 +52,18 @@ const RULES: Rule[] = [
   {
     key: 'release',
     label: 'Release a tranche',
-    who: 'Recipients, with a verifier's attestation',
+    who: 'Recipients, with a verifier’s attestation',
     button: 'Release',
     needs: 'Settled',
     route: '/recipients/award-progress',
   },
   { key: 'refund', label: 'Claim a refund', who: 'Funders', button: 'Refund', needs: 'Settled', route: '/funders' },
-  // Admin actions (#335–#338)
-  { key: 'sweep', label: 'Sweep protocol fee & unclaimed refunds', who: 'Admin', button: 'Sweep', needs: 'Settled', route: '/admin' },
-  { key: 'pause', label: 'Pause programme', who: 'Admin', button: 'Pause', needs: 'Open', route: '/admin' },
-  { key: 'resume', label: 'Resume programme', who: 'Admin', button: 'Resume', needs: 'Open', route: '/admin' },
-  { key: 'cancel', label: 'Cancel programme', who: 'Admin', button: 'Cancel', needs: 'Open', route: '/admin' },
-  { key: 'extend_release', label: 'Extend release window', who: 'Admin', button: 'Extend', needs: 'Settled', route: '/admin' },
-  { key: 'add_verifier', label: 'Add verifier', who: 'Admin', button: 'Add', needs: 'Open', route: '/admin' },
-  { key: 'remove_verifier', label: 'Remove verifier', who: 'Admin', button: 'Remove', needs: 'Open', route: '/admin' },
 ];
 
 function phaseAllows(rule: Rule, input: ActionInput): boolean {
   const { phase } = input;
   if (rule.key === 'refund') {
     return phase === 'Cancelled' || (phase === 'Settled' && input.refundsOpen && input.refundable !== null);
-  }
-  // Admin actions (#335–#338) have special phase rules
-  if (rule.key === 'sweep') {
-    return phase === 'Settled' || phase === 'Cancelled';
-  }
-  if (rule.key === 'pause') {
-    return phase === 'Open' && !input.isPaused;
-  }
-  if (rule.key === 'resume') {
-    return phase === 'Open' && input.isPaused === true;
-  }
-  if (rule.key === 'cancel') {
-    return phase === 'Open';
-  }
-  if (rule.key === 'extend_release') {
-    return phase === 'Settled';
-  }
-  if (rule.key === 'add_verifier' || rule.key === 'remove_verifier') {
-    return phase === 'Open';
   }
   return phase === rule.needs;
 }
@@ -128,37 +85,14 @@ function enabledReason(rule: Rule, input: ActionInput): string {
         : 'Your share is worked out from what you put in.';
     case 'finalize':
       return 'Needs quorum votes on the application. In an oversubscribed round, whoever finalizes first decides the order.';
-    case 'sweep':
-      return 'Collects the protocol fee and distributes unclaimed refunds proportionally to contributors.';
-    case 'pause':
-      return 'Halts all forward money-path actions. Deadlines continue to tick.';
-    case 'resume':
-      return 'Re-enable contributions, applications, and reviews.';
-    case 'cancel':
-      return 'Cancels the programme and opens refunds immediately.';
-    case 'extend_release':
-      return 'Extends the window for recipients to claim their tranches.';
-    case 'add_verifier':
-      return 'Add a verifier whose attestations this programme accepts.';
-    case 'remove_verifier':
-      return 'Remove a verifier from this programme.';
     default:
       return 'Re-checked on-chain when you continue.';
   }
 }
 
 export function programmeActions(input: ActionInput): ProgrammeAction[] {
-  const adminKeys = new Set<ActionKey>([
-    'sweep', 'pause', 'resume', 'cancel', 'extend_release', 'add_verifier', 'remove_verifier',
-  ]);
-
   return RULES.map((rule) => {
     const base = { key: rule.key, label: rule.label, who: rule.who, button: rule.button };
-
-    // Filter admin actions for non-admins
-    if (adminKeys.has(rule.key) && !input.isAdmin) {
-      return { ...base, phaseAllows: false, enabled: false, href: null, reason: 'Admin only.' };
-    }
 
     if (input.phase === null) {
       return { ...base, phaseAllows: false, enabled: false, href: null, reason: 'Reading the phase on-chain…' };

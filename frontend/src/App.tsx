@@ -46,9 +46,6 @@ const SpendPolicy = lazy(() =>
 const RegistryAdmin = lazy(() =>
   import("./pages/RegistryAdmin").then((m) => ({ default: m.RegistryAdmin })),
 );
-const Keepalive = lazy(() =>
-  import("./pages/Keepalive").then((m) => ({ default: m.Keepalive })),
-);
 const AdminDashboard = lazy(() =>
   import("./pages/AdminDashboard").then((m) => ({ default: m.AdminDashboard })),
 );
@@ -81,7 +78,6 @@ const ROUTE_ELEMENTS: Record<string, ReactElement> = {
   "/policy": <SpendPolicy />,
   "/admin": <RegistryAdmin />,
   "/admin/standing": <AdminDashboard />,
-  "/keepalive": <Keepalive />,
   "/attestations": <AttestationLookup />,
   "/schemas/register": <RegisterSchema />,
   "/keepalive": <Keepalive />,
