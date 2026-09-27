@@ -3,6 +3,7 @@ import { Link, useSearchParams } from 'react-router-dom';
 import { MoneyRow } from '../components/programme/MoneyRow';
 import '../components/programme/phasePill.css';
 import { Skeleton, Empty } from '../components/state/AsyncStates';
+import { describeAmount } from '../lib/amount';
 import { useIndexedList } from '../hooks';
 import { fetchMeta, fetchProgrammes, isStale } from '../lib/indexer';
 import {
@@ -224,9 +225,9 @@ function ProgrammeCard({ programme }: { programme: DirectoryProgramme }) {
         <MoneyRow chain={chain} count={20} variant="card" />
 
         <div className="directory-card-new__figures">
-          <Figure label="Budget" value={formatUsdc(budget)} />
-          <Figure label="Awarded" value={formatUsdc(chain.awarded)} />
-          <Figure label="Released" value={formatUsdc(chain.released)} />
+          <Figure label="Budget" value={formatUsdc(budget)} amount={budget} />
+          <Figure label="Awarded" value={formatUsdc(chain.awarded)} amount={chain.awarded} />
+          <Figure label="Released" value={formatUsdc(chain.released)} amount={chain.released} />
         </div>
 
         <div className="directory-card-new__foot">
@@ -240,11 +241,16 @@ function ProgrammeCard({ programme }: { programme: DirectoryProgramme }) {
   );
 }
 
-function Figure({ label, value }: { label: string; value: string }) {
+function Figure({ label, value, amount }: { label: string; value: string; amount?: bigint | string }) {
   return (
     <span className="directory-figure">
       <span className="directory-figure__label">{label}</span>
-      <span className="directory-figure__value numeric">{value}</span>
+      <span
+        className="directory-figure__value numeric"
+        aria-label={amount !== undefined ? `${label}: ${describeAmount(amount, 'USDC')}` : undefined}
+      >
+        {value}
+      </span>
     </span>
   );
 }

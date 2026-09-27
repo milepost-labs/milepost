@@ -2,7 +2,7 @@ import { useState } from 'react';
 import { Link } from 'react-router-dom';
 import type { RecipientAwardFixture, VerifiedPayeeFixture } from '../../fixtures/recipientFixtures';
 import { FIXTURE_PAYEES } from '../../fixtures/recipientFixtures';
-import { formatAmount } from '../../lib/amount';
+import { formatAmount, describeAmount } from '../../lib/amount';
 import { explain } from '../../lib/errors';
 import { useAnnouncer } from '../../context/useAnnouncer';
 import { PendingPulse } from '../state/AsyncStates';
@@ -67,6 +67,7 @@ export function AwardCard({
 
     return {
       index: i + 1,
+      amount,
       amountFormatted: formatAmount(amount, { asset: 'USDC' }),
       statusLabel,
       statusClass,
@@ -148,7 +149,12 @@ export function AwardCard({
         {tranchesList.map((t) => (
           <li key={t.index} className={`tranche-tile ${t.statusClass}`}>
             <span className="tranche-tile__num">Tranche {t.index}</span>
-            <span className="tranche-tile__amount">{t.amountFormatted}</span>
+            <span
+              className="tranche-tile__amount"
+              aria-label={describeAmount(t.amount, 'USDC')}
+            >
+              {t.amountFormatted}
+            </span>
             <span className="tranche-tile__status">{t.statusLabel}</span>
           </li>
         ))}

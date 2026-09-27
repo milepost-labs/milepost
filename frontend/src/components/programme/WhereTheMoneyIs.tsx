@@ -1,5 +1,5 @@
 import type { FC } from 'react';
-import { formatAmount } from '../../lib/amount';
+import { formatAmount, describeAmount } from '../../lib/amount';
 import { computeMoneySquares, getMoneyState } from '../../lib/moneySquares';
 import './WhereTheMoneyIs.css';
 
@@ -62,23 +62,29 @@ export const WhereTheMoneyIs: FC<WhereTheMoneyIsProps> = ({
       bg: 'var(--accent-soft)',
       label: 'Not yet awarded',
       v: formatAmount(notYetAwarded, { asset }),
+      raw: notYetAwarded,
     },
     {
       bg: 'var(--locked)',
       label: 'Awarded, locked',
       v: formatAmount(awardedLocked, { asset }),
+      raw: awardedLocked,
     },
     {
       bg: 'var(--accent)',
       label: 'Released',
       v: formatAmount(released, { asset }),
+      raw: released,
     },
     {
       bg: 'var(--refund)',
       label: 'Refundable',
       v: formatAmount(refundable, { asset }),
+      raw: refundable,
     },
   ];
+
+  const gridSummary = `40-square budget distribution: ${describeAmount(released, asset)} released, ${describeAmount(awardedLocked, asset)} awarded and locked, ${describeAmount(notYetAwarded, asset)} not yet awarded${refundable > 0n ? `, ${describeAmount(refundable, asset)} refundable` : ''}`;
 
   return (
     <section
@@ -89,7 +95,10 @@ export const WhereTheMoneyIs: FC<WhereTheMoneyIsProps> = ({
         <h2 id="where-the-money-is-title" className="where-the-money-is__title">
           Where the money is
         </h2>
-        <span className="where-the-money-is__budget numeric">
+        <span
+          className="where-the-money-is__budget numeric"
+          aria-label={`Budget: ${describeAmount(budget, asset)}`}
+        >
           Budget {formatAmount(budget, { asset })}
         </span>
       </div>
@@ -97,7 +106,7 @@ export const WhereTheMoneyIs: FC<WhereTheMoneyIsProps> = ({
       <div
         className="where-the-money-is__grid"
         role="img"
-        aria-label="40-square distribution grid showing budget allocation"
+        aria-label={gridSummary}
       >
         {squares.map((q, i) => (
           <span
@@ -120,7 +129,10 @@ export const WhereTheMoneyIs: FC<WhereTheMoneyIsProps> = ({
               aria-hidden="true"
             />
             <span className="where-the-money-is__legend-label">{item.label}</span>
-            <span className="where-the-money-is__legend-value numeric">
+            <span
+              className="where-the-money-is__legend-value numeric"
+              aria-label={describeAmount(item.raw, asset)}
+            >
               {item.v}
             </span>
           </li>
@@ -130,13 +142,19 @@ export const WhereTheMoneyIs: FC<WhereTheMoneyIsProps> = ({
       <div className="where-the-money-is__footer">
         <span>
           Contributed{' '}
-          <strong className="numeric">
+          <strong
+            className="numeric"
+            aria-label={describeAmount(contributed, asset)}
+          >
             {formatAmount(contributed, { asset })}
           </strong>
         </span>
         <span>
           Protocol fee{' '}
-          <strong className="numeric">
+          <strong
+            className="numeric"
+            aria-label={describeAmount(fee, asset)}
+          >
             {formatAmount(fee, { asset })}
             {feeBps !== undefined && ` (${(feeBps / 100).toFixed(2)}%)`}
           </strong>

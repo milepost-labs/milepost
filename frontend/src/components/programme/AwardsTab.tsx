@@ -2,7 +2,7 @@ import type { FC } from 'react';
 import type { IndexedAward } from '../../lib/indexer';
 import { fetchAwards } from '../../lib/indexer';
 import { useIndexedList } from '../../hooks/useIndexedList';
-import { formatAmount, parseAmount } from '../../lib/amount';
+import { formatAmount, parseAmount, describeAmount } from '../../lib/amount';
 import { FIXTURE_AWARDS } from '../../fixtures/programmeFixtures';
 import './AwardsTab.css';
 
@@ -135,7 +135,10 @@ export const AwardsTab: FC<AwardsTabProps> = ({
                   </span>
                 </div>
 
-                <div className="awards-tab__row-amount numeric">
+                <div
+                  className="awards-tab__row-amount numeric"
+                  aria-label={describeAmount(granted, asset)}
+                >
                   {formatAmount(granted, { asset })}
                 </div>
 

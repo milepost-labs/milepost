@@ -10,6 +10,7 @@ import { useIndexedList } from '../hooks';
 import { contributionCard, fundingTotals } from '../lib/funding';
 import { fetchProgrammes } from '../lib/indexer';
 import { formatUsdc, mergeProgrammes } from '../lib/programmeView';
+import { describeAmount } from '../lib/amount';
 import './FundingPage.css';
 
 const SIGNED_OUT_PREVIEW = [
@@ -91,7 +92,12 @@ export const FunderDashboard = () => {
           <section className="funding-stats" aria-label="Your funding">
             <div className="funding-stat">
               <span className="funding-stat__label">You’ve contributed</span>
-              <span className="funding-stat__value numeric">{formatUsdc(totals.contributed)}</span>
+              <span
+                className="funding-stat__value numeric"
+                aria-label={describeAmount(totals.contributed, 'USDC')}
+              >
+                {formatUsdc(totals.contributed)}
+              </span>
             </div>
             <div className="funding-stat">
               <span className="funding-stat__label">Programmes</span>
@@ -99,7 +105,10 @@ export const FunderDashboard = () => {
             </div>
             <div className="funding-stat">
               <span className="funding-stat__label">Refundable now</span>
-              <span className="funding-stat__value funding-stat__value--refund numeric">
+              <span
+                className="funding-stat__value funding-stat__value--refund numeric"
+                aria-label={describeAmount(totals.refundableNow, 'USDC')}
+              >
                 {formatUsdc(totals.refundableNow)}
               </span>
             </div>

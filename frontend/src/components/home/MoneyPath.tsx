@@ -162,13 +162,18 @@ export const MoneyPath: React.FC = () => {
         </div>
         
         <div className="panel-visual">
-          <div aria-hidden="true" className="grid-container">
+          <div
+            role="img"
+            aria-label={`20-square budget distribution: ${legend.map((l) => `${l.amt} ${l.label}`).join(', ')}`}
+            className="grid-container"
+          >
             {squares.map((q, i) => (
               <span
                 key={i}
                 className="grid-square"
                 data-money-state={getMoneyState(q.bg)}
                 style={{ background: q.bg, boxShadow: q.ring }}
+                aria-hidden="true"
               />
             ))}
           </div>
@@ -182,7 +187,7 @@ export const MoneyPath: React.FC = () => {
                   style={{ background: l.bg }}
                 />
                 <span className="legend-label">{l.label}</span>
-                <span className="legend-amt">{l.amt}</span>
+                <span className="legend-amt" aria-label={`${l.amt}`}>{l.amt}</span>
               </li>
             ))}
           </ul>
