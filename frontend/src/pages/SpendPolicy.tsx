@@ -57,12 +57,12 @@ export const SpendPolicy = () => {
 
   const capLabel =
     configured && policyRead.data
-      ? `Spending cap of ${formatAmount(policyRead.data.cap, { asset: 'USDC' })}`
+      ? `Spending cap of ${formatAmount(policyRead.data.cap)}`
       : 'A spending cap';
 
   const checks: { label: string; ok: boolean }[] = [
     { label: 'Policy signer installed on your wallet', ok: installed },
-    { label: 'Only USDC can be sent', ok: configured },
+    { label: "Only the grant's token can be sent", ok: configured },
     { label: 'Only verified payees can receive', ok: configured },
     { label: capLabel, ok: configured },
   ];
@@ -78,7 +78,7 @@ export const SpendPolicy = () => {
         <h1>Spend policy</h1>
         <p className="typo-text text-muted">
           In Restricted mode, grant money lands in your own wallet. A policy signer keeps it to
-          USDC, verified payees, and a cap. This page checks that it&rsquo;s set up.
+          the grant&rsquo;s token, verified payees, and a cap. This page checks that it&rsquo;s set up.
         </p>
       </header>
 
@@ -158,11 +158,11 @@ export const SpendPolicy = () => {
                 </div>
                 <div className="spend-policy__cap-row">
                   <span>
-                    Spent <b className="numeric">{formatAmount(policyRead.data.spent, { asset: 'USDC' })}</b>
+                    Spent <b className="numeric">{formatAmount(policyRead.data.spent)}</b>
                   </span>
                   <span className="spend-policy__cap-row-muted">
-                    Left <b className="numeric">{formatAmount(remaining, { asset: 'USDC' })}</b> of{' '}
-                    {formatAmount(policyRead.data.cap, { asset: 'USDC' })}
+                    Left <b className="numeric">{formatAmount(remaining)}</b> of{' '}
+                    {formatAmount(policyRead.data.cap)}
                   </span>
                 </div>
                 <h3>Allowed payees</h3>
