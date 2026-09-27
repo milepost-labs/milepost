@@ -159,6 +159,8 @@ React 19 + TypeScript + Vite. `react-router-dom` 7, `lucide-react` for icons,
 /admin/standing                AdminDashboard
 /attestations                  AttestationLookup
 /schemas/register              RegisterSchema
+/admin/payees                  PayeeManagement
+/keepalive                     Keepalive
 *                              NotFound
 ```
 
@@ -184,8 +186,7 @@ Providers wrap in this order: `ThemeProvider` → `WalletProvider` →
   the screen — do not add another `aria-live` region per screen.
 - **Libs** (`src/lib/`): `amount.ts` (stroop parsing and formatting),
   `format.ts`, `errors.ts`, `indexer.ts`, `registryVerification.ts`
-- Feature areas already built: `admin/`, `funder/`, `policy/`, `programme/`,
-  `keepalive/`
+- Feature areas already built: `admin/`, `funder/`, `programme/`
 
 ### Design tokens (`src/styles/tokens.css`)
 

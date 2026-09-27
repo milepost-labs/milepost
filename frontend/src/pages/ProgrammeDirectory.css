@@ -136,7 +136,7 @@
 
 .directory-banner__title {
   font-weight: var(--weight-bold);
-  color: var(--refund);
+  color: var(--refund-strong);
 }
 
 .directory-banner__body {
@@ -280,5 +280,18 @@
   .directory-indexline {
     margin-left: 0;
     width: 100%;
+  }
+}
+
+/* Three figures side by side leave about 90px each at 360px, which is not
+   enough for an amount. Two columns with the third spanning keeps every figure
+   on one line. */
+@media (max-width: 480px) {
+  .directory-card-new__figures {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .directory-card-new__figures > :last-child {
+    grid-column: 1 / -1;
   }
 }

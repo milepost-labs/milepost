@@ -1187,6 +1187,20 @@ dependencies = [
 ]
 
 [[package]]
+name = "milepost-integration"
+version = "0.1.0"
+dependencies = [
+ "milepost-attest",
+ "milepost-policy-spend",
+ "milepost-record",
+ "milepost-registry",
+ "milepost-test-utils",
+ "milepost-types",
+ "smart-wallet-interface",
+ "soroban-sdk",
+]
+
+[[package]]
 name = "milepost-policy-spend"
 version = "0.1.0"
 dependencies = [

@@ -1,0 +1,46 @@
+.why-stellar-section {
+  padding: var(--space-9) 0;
+  scroll-margin-top: var(--space-8);
+}
+.why-stellar-header {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+  margin-bottom: var(--space-5-5);
+  max-width: 720px;
+}
+.why-stellar-header h2 {
+  margin: 0;
+  font-size: var(--text-h2-section);
+  line-height: var(--leading-heading);
+  letter-spacing: var(--tracking-heading);
+  font-weight: var(--weight-extrabold);
+}
+.stellar-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 250px), 1fr));
+  gap: var(--space-3);
+}
+.stellar-card {
+  background: var(--surface);
+  border-radius: var(--radius-card);
+  padding: var(--space-5);
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.stellar-title {
+  font-size: var(--text-lg);
+  font-weight: var(--weight-extrabold);
+  letter-spacing: -0.015em;
+}
+.stellar-desc {
+  font-size: var(--text-md);
+  line-height: var(--leading-relaxed);
+  color: var(--text-muted);
+}
+.stellar-tech {
+  font-family: var(--font-numeric);
+  font-size: var(--text-xs);
+  color: var(--accent-strong);
+}

@@ -1,11 +1,15 @@
 import React, { useEffect, useRef } from 'react';
 import { Link } from 'react-router-dom';
 import './Home.css';
-import { Shield, Zap, Lock, Unlock } from 'lucide-react';
+import { Lock, Unlock } from 'lucide-react';
 import { CopyButton } from '../components/ui/CopyButton';
 import { HeroDemo } from '../components/landing/HeroDemo';
 import { RoleEntryCards } from '../components/landing/RoleEntryCards';
 import { ProblemSection } from '../components/landing/ProblemSection';
+import { MoneyPath } from '../components/home/MoneyPath';
+import { WhyStellar } from '../components/home/WhyStellar';
+import { ModesCompared } from '../components/home/ModesCompared';
+import { Verticals } from '../components/home/Verticals';
 import { GUARANTEES, LIMITS, ROLES, type Claim } from './homeContent';
 import { LiveIndex } from '../components/home/LiveIndex';
 
@@ -168,101 +172,15 @@ export const Home: React.FC = () => {
         </div>
       </section>
 
-      {/* How it Works (Alternating Split Layout) */}
-      <section id="how" className="how-it-works-section">
-        <div className="section-header scroll-animate">
-          <h2>Protocol Mechanics</h2>
-        </div>
-        
-        <div className="alternating-grid">
-          <div className="grid-row scroll-animate">
-            <div className="grid-content">
-              <div className="step-number">01</div>
-              <h3>Funders Commit</h3>
-              <p className="text-muted">Funders contribute to a specific programme. Once the release window closes, anything never paid out can be claimed back in proportion to each contribution.</p>
-            </div>
-            <div className="grid-visual glass-panel">
-              <div className="mini-ui funder-ui">
-                <div className="mini-header">Program Vault</div>
-                <div className="mini-body">
-                  <div className="mini-stat">
-                    <span>USDC Locked</span>
-                    <strong>$250,000</strong>
-                  </div>
-                  <div className="mini-progress-bar">
-                    <div className="mini-progress-fill" style={{ width: '75%' }}></div>
-                  </div>
-                </div>
-              </div>
-            </div>
-          </div>
+      {/* How it works (landing section 4): The seven-step money path */}
+      <MoneyPath />
 
-          <div className="grid-row reverse scroll-animate">
-            <div className="grid-content">
-              <div className="step-number">02</div>
-              <h3>Verifiers Attest</h3>
-              <p className="text-muted">Instead of committee votes, trusted Institutions (like Universities or Clinics) cryptographically sign on-chain attestations when real-world conditions are met.</p>
-            </div>
-            <div className="grid-visual glass-panel">
-              <div className="mini-ui verifier-ui">
-                <div className="doc-lines">
-                  <div className="doc-line title"></div>
-                  <div className="doc-line"></div>
-                  <div className="doc-line short"></div>
-                </div>
-                <div className="doc-seal">
-                  <Shield size={20} className="seal-icon" />
-                  <span>Attested</span>
-                </div>
-              </div>
-            </div>
-          </div>
+      {/* Why Stellar (landing section 5) */}
+      <WhyStellar />
 
-          <div className="grid-row scroll-animate">
-            <div className="grid-content">
-              <div className="step-number">03</div>
-              <h3>Tranches Unlock</h3>
-              <p className="text-muted">Attestations trigger a release. Tuition tranches are policy-restricted to only pay the University, while stipends land directly in the recipient's wallet.</p>
-            </div>
-            <div className="grid-visual glass-panel">
-              <div className="mini-ui tranche-ui">
-                <div className="tranche-item">
-                  <div className="tranche-icon success"><Unlock size={16} /></div>
-                  <div className="tranche-details">
-                    <div className="tranche-name">Tuition</div>
-                    <div className="tranche-amount text-success">$1,500 Disbursed</div>
-                  </div>
-                </div>
-                <div className="tranche-line"></div>
-                <div className="tranche-item locked">
-                  <div className="tranche-icon"><Lock size={16} /></div>
-                  <div className="tranche-details">
-                    <div className="tranche-name">Stipend</div>
-                    <div className="tranche-amount">$1,000 Locked</div>
-                  </div>
-                </div>
-              </div>
-            </div>
-          </div>
-        </div>
-      </section>
+      <ModesCompared />
 
-      {/* Infrastructure CTA (Full Bleed) */}
-      <section className="infrastructure-section full-bleed scroll-animate">
-        <div className="infra-container">
-          <div className="infra-text">
-            <h2>Built for the Ecosystem</h2>
-            <p>
-              Milepost is built on Soroban. The core modules—<code>attest</code>, <code>record</code>, and <code>policy_spend</code>—are deliberately decoupled as open-source public goods available for any Stellar developer.
-            </p>
-          </div>
-          <div className="infra-action">
-             <Link to="/funders" className="btn-primary btn-large btn-inverted">
-              View Dashboard <Zap size={18} />
-            </Link>
-          </div>
-        </div>
-      </section>
+      <Verticals />
 
       {/* Roles */}
       <section id="roles" className="roles-section scroll-animate" aria-labelledby="roles-heading">

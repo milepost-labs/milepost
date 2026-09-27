@@ -184,7 +184,7 @@
 }
 
 .network-indicator--wrong {
-  color: var(--warning);
+  color: var(--warning-strong);
   font-weight: var(--weight-semibold);
 }
 

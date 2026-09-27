@@ -6,12 +6,14 @@ import { PausedBanner } from '../components/programme/PausedBanner';
 import { ProgrammeParamNotice } from '../components/programme/ProgrammeParamNotice';
 import { Badge, Button, Card, Field, Modal, Stat } from '../components/ui';
 import { useWallet } from '../context/useWallet';
-import { DEMO_PROGRAMME_ID } from '../context/sorobanStore';
-import { formatAmount, formatExact, tryParseAmount } from '../lib/amount';
+import { RecipientNav } from '../components/recipient/RecipientNav';
+import { RecipientAwards } from '../components/recipient/RecipientAwards';
+import { ApplyForm } from '../components/recipient/ApplyForm';
 import './RecipientDashboard.css';
 
-/** Seeded testnet recipient (Ada), shown only when no wallet is connected. */
-const DEMO_RECIPIENT = 'GAH3D4RM45ETE4W7VDRCWZBPRPT63CJXAGXFYVBC2FGANBZTS4OTKXCA';
+export function RecipientDashboard() {
+  const { address, connect } = useWallet();
+  const [searchParams] = useSearchParams();
 
 /**
  * There is no contract call that lists a programme's verified payees: the
@@ -196,206 +198,58 @@ export const RecipientDashboard = () => {
   }
 
   return (
-    <div className="dashboard-container">
-      <PausedBanner client={programme} />
-
-      <header className="dashboard-header">
-        <h1>Recipient Dashboard</h1>
-        {isDemo && (
-          <Badge tone="neutral">Viewing Ada&rsquo;s testnet award — connect a wallet to use your own</Badge>
-        )}
-        <p className="typo-text text-muted">Track your award and direct your allocation to a verified payee.</p>
-      </header>
-
-      <Card title="Recipient views">
-        <p className="typo-text text-muted recipient-views__intro">
-          Look up standing, award progress, and application status for this programme.
+    <section className="recipient-page" aria-labelledby="h-recipient-funding">
+      <div className="recipient-page__header">
+        <h1 id="h-recipient-funding" className="recipient-page__title">
+          Your funding
+        </h1>
+        <p className="recipient-page__desc">
+          Apply for what you need, see what's been released, and carry your record to the next programme.
         </p>
-        <div className="recipient-views__links">
-          <Link to="/recipients/standing" className="btn-secondary">
-            Standing
-          </Link>
-          <Link to="/recipients/award-progress" className="btn-secondary">
-            Award progress
-          </Link>
-          <Link to="/recipients/application-timeline" className="btn-secondary">
-            Application timeline
-          </Link>
-        </div>
-      </Card>
+      </div>
 
-      <AsyncView
-        {...award}
-        onRetry={award.refetch}
-        empty={{
-          title: 'No application yet',
-          description:
-            'Your granted amount, released tranches, and allocation will appear here once you apply and this programme finalizes an award for your application.',
-          action: (
-            <Link to="/recipients/application-timeline" className="btn-secondary">
-              Check your application
-            </Link>
-          ),
-        }}
-      >
-        {(data) => (
-          <>
-            <section className="stats-grid">
-              <Card>
-                <Stat label="Granted" value={formatXlm(data.granted)} numeric />
-              </Card>
-              <Card>
-                <Stat label="Released" value={formatXlm(data.released)} numeric />
-              </Card>
-              <Card>
-                <Stat label="Tranches released" value={`${data.tranches_released} / ${data.tranches}`} />
-              </Card>
-            </section>
-
-            {data.mode.tag === 'Allocated' ? (
-              <Card title="Direct your allocation" className="allocation-card">
-                <Stat
-                  label="Available to direct"
-                  numeric
-                  value={
-                    <AsyncView {...allocation} onRetry={allocation.refetch}>
-                      {(value) => formatXlm(value)}
-                    </AsyncView>
-                  }
-                />
-
-                {spendClosed ? (
-                  <Empty
-                    title="Spending closed"
-                    description={
-                      sweepDeadline !== null
-                        ? `The sweep window opened on ${new Date(Number(sweepDeadline) * 1000).toLocaleString()} — this allocation can no longer be directed and will be swept.`
-                        : 'The sweep window has opened — this allocation can no longer be directed.'
-                    }
-                  />
-                ) : (
-                  <>
-                    <div className="payee-picker">
-                      <h3>Verified payees</h3>
-                      {candidates.length === 0 && (
-                        <p className="typo-text text-muted">
-                          No payees checked yet on this device — add one below.
-                        </p>
-                      )}
-                      <div className="payee-list" role="radiogroup" aria-label="Verified payees">
-                        {candidates.map((address) => {
-                          const status = payeeStatus[address] ?? 'checking';
-                          const verified = status === 'verified';
-                          return (
-                            <label
-                              key={address}
-                              className={`payee-option${verified ? '' : ' payee-option--disabled'}`}
-                            >
-                              <input
-                                type="radio"
-                                name="payee"
-                                value={address}
-                                checked={selectedPayee === address}
-                                disabled={!verified}
-                                onChange={() => setSelectedPayee(address)}
-                              />
-                              <span className="payee-option__address numeric" title={address}>
-                                {shorten(address)}
-                              </span>
-                              <Badge tone={verified ? 'success' : status === 'checking' ? 'neutral' : 'danger'}>
-                                {status === 'checking' ? 'Checking…' : verified ? 'Verified' : 'Not verified'}
-                              </Badge>
-                            </label>
-                          );
-                        })}
-                      </div>
-
-                      <div className="payee-add">
-                        <Field
-                          label="Add a payee to check"
-                          placeholder="G..."
-                          value={candidateInput}
-                          onChange={(event) => {
-                            setCandidateInput(event.target.value);
-                            setCandidateError(null);
-                          }}
-                          error={candidateError}
-                          hint="Only the programme creator can verify a payee — this checks whether one already is."
-                        />
-                        <Button variant="secondary" size="sm" onClick={handleAddCandidate}>
-                          Check payee
-                        </Button>
-                      </div>
-                    </div>
-
-                    <Field
-                      label="Amount"
-                      placeholder="0.00"
-                      value={amountInput}
-                      onChange={(event) => {
-                        setAmountInput(event.target.value);
-                        setAmountError(null);
-                      }}
-                      error={amountError}
-                      suffix="XLM"
-                    />
-
-                    <Button onClick={openConfirm} disabled={config.loading || allocation.loading} fullWidth>
-                      Direct funds
-                    </Button>
-                  </>
-                )}
-              </Card>
-            ) : (
-              <Card title="Payment mode">
-                <p className="typo-text text-muted">
-                  {data.mode.tag === 'Direct' &&
-                    'This award pays straight to a fixed, verified payee. There is nothing for you to direct here.'}
-                  {data.mode.tag === 'Restricted' &&
-                    "This award is paid into your smart wallet, where a spend policy limits onward payments to verified destinations."}
-                  {data.mode.tag === 'Open' && 'This award is paid to you directly, with no restriction.'}
-                </p>
-              </Card>
-            )}
-          </>
-        )}
-      </AsyncView>
-
-      <Modal
-        open={confirmOpen}
-        onClose={closeConfirm}
-        title="Confirm allocation"
-        busy={transaction.busy}
-        footer={
-          <>
-            <Button variant="secondary" onClick={closeConfirm} disabled={transaction.busy}>
-              Cancel
-            </Button>
-            <Button
-              onClick={handleConfirm}
-              loading={transaction.busy}
-              loadingLabel={phaseLabel(transaction.phase) || 'Confirm'}
-            >
-              Confirm
-            </Button>
-          </>
-        }
-      >
-        {selectedPayee && pendingAmount !== null && (
-          <div className="confirm-summary">
-            <p>
-              Send <strong className="numeric">{formatExact(pendingAmount)} XLM</strong> to
+      {!address ? (
+        <div className="recipient-signed-out">
+          <div className="recipient-signed-out__callout">
+            <h2 className="recipient-signed-out__title">Sign in to see your awards</h2>
+            <p className="recipient-signed-out__text">
+              Use a passkey (Face ID or fingerprint) or the Freighter extension. No seed phrase, and you won't need XLM for fees.
             </p>
-            <p className="numeric confirm-summary__address">{selectedPayee}</p>
+            <div className="recipient-signed-out__actions">
+              <button
+                type="button"
+                className="recipient-signed-out__btn"
+                onClick={connect}
+              >
+                Sign in
+              </button>
+              <Link to="/directory" className="recipient-signed-out__link">
+                Find a programme
+              </Link>
+            </div>
           </div>
-        )}
-        {transaction.error && (
-          <p role="alert" className="confirm-error">
-            {transaction.error.message}
-            {transaction.error.action ? ` ${transaction.error.action}` : ''}
-          </p>
-        )}
-      </Modal>
-    </div>
+
+          <ul className="recipient-signed-out__list">
+            <li className="recipient-signed-out__item">
+              <span className="recipient-signed-out__item-title">Each award and its tranches</span>
+              <span className="recipient-signed-out__item-desc">What's released, what's waiting on a verifier</span>
+            </li>
+            <li className="recipient-signed-out__item">
+              <span className="recipient-signed-out__item-title">Where your applications are</span>
+              <span className="recipient-signed-out__item-desc">Review votes and how the award is set</span>
+            </li>
+            <li className="recipient-signed-out__item">
+              <span className="recipient-signed-out__item-title">Your standing</span>
+              <span className="recipient-signed-out__item-desc">A record the next funder can rely on</span>
+            </li>
+          </ul>
+        </div>
+      ) : (
+        <>
+          <RecipientNav currentSection={isApply ? 'apply' : 'awards'} />
+          {isApply ? <ApplyForm /> : <RecipientAwards />}
+        </>
+      )}
+    </section>
   );
-};
+}

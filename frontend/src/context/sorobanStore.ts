@@ -3,6 +3,7 @@ import type { Client as Registry } from '@milepost/registry';
 import type { Client as Programme } from '@milepost/program';
 import type { Client as Attest } from '@milepost/attest';
 import type { Client as Record } from '@milepost/record';
+import type { Client as PolicySpend } from '@milepost/policy-spend';
 
 /** Context object and types, kept apart from the provider for Fast Refresh. */
 
@@ -14,6 +15,7 @@ export interface SorobanState {
   registry: Registry;
   attest: Attest;
   record: Record;
+  policy: PolicySpend;
   programmeAt: (contractId: string) => Programme;
   /** The seeded programme, so pages have something real to render. */
   demoProgramme: Programme;

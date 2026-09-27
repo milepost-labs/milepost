@@ -62,9 +62,11 @@ describe('ProgrammeDirectory', () => {
 
   it('renders a card for every programme once the index resolves', async () => {
     renderDirectory();
+    // The index fetch and the directory's merge can take over a second under a
+    // full parallel run, past waitFor's default.
     await waitFor(async () => {
       expect(await cardCount()).toBe(FIXTURE_PROGRAMMES.length);
-    });
+    }, { timeout: 5000 });
   });
 
   it('filters cards by search text', async () => {
@@ -110,9 +112,11 @@ describe('ProgrammeDirectory', () => {
     renderDirectory();
 
     expect(await screen.findByRole('alert')).toBeTruthy();
+    // The index fetch and the directory's merge can take over a second under a
+    // full parallel run, past waitFor's default.
     await waitFor(async () => {
       expect(await cardCount()).toBe(FIXTURE_PROGRAMMES.length);
-    });
+    }, { timeout: 5000 });
   });
 
   it('shows an empty state with a way out when nothing matches', async () => {

@@ -25,7 +25,9 @@
 .ui-button--secondary:hover:not(:disabled) { background: var(--surface-hover); }
 .ui-button--ghost { background: transparent; color: var(--text-main); }
 .ui-button--ghost:hover:not(:disabled) { background: var(--surface-hover); }
-.ui-button--danger { background: var(--danger); color: hsl(0 0% 100%); }
+/* The strong step, not --danger: white on the base red is about 3.9:1, which is
+   under AA for a button label. */
+.ui-button--danger { background: var(--danger-strong); color: var(--accent-contrast); }
 
 .ui-spinner {
   width: 1em; height: 1em;
@@ -105,7 +107,7 @@
 .ui-field__control:focus-within { outline: 2px solid var(--accent); outline-offset: 2px; }
 .ui-field__suffix { padding-right: var(--space-4); color: var(--text-muted); font-size: var(--text-sm); }
 .ui-field__message { font-size: var(--text-sm); color: var(--text-muted); }
-.ui-field__message--error { color: var(--danger); }
+.ui-field__message--error { color: var(--danger-strong); }
 
 /* Amount input: large mono figure with a trailing unit. Invalid is an inset
    ring rather than a border colour, so the field does not change size. */
@@ -146,9 +148,12 @@
 }
 .ui-badge--neutral { background: var(--surface-hover); color: var(--text-muted); border-color: var(--border); }
 .ui-badge--accent  { background: color-mix(in srgb, var(--accent) 12%, transparent); color: var(--accent); }
-.ui-badge--success { background: color-mix(in srgb, var(--success) 14%, transparent); color: var(--success); }
-.ui-badge--warning { background: color-mix(in srgb, var(--warning) 18%, transparent); color: hsl(32 90% 32%); }
-.ui-badge--danger  { background: color-mix(in srgb, var(--danger) 12%, transparent); color: var(--danger); }
+/* Status text uses the -strong step. --success is 3.96:1 on white and
+   --warning is about 2:1, so both fail AA for text no matter how they are
+   tinted; the strong step is the same hue carried to a readable lightness. */
+.ui-badge--success { background: color-mix(in srgb, var(--success) 14%, transparent); color: var(--success-strong); }
+.ui-badge--warning { background: color-mix(in srgb, var(--warning) 18%, transparent); color: var(--warning-strong); }
+.ui-badge--danger  { background: color-mix(in srgb, var(--danger) 12%, transparent); color: var(--danger-strong); }
 
 .ui-table__scroll { width: 100%; border-radius: var(--radius-md); }
 .ui-table__scroll:focus { outline: none; }
@@ -323,7 +328,7 @@
   border-color: var(--border);
 }
 .copy-button--copied {
-  color: var(--success);
+  color: var(--success-strong);
   border-color: color-mix(in srgb, var(--success) 35%, transparent);
   background: color-mix(in srgb, var(--success) 8%, transparent);
 }
@@ -360,5 +365,5 @@
   align-items: center;
   flex-shrink: 0;
 }
-.address-chip__verified--success { color: var(--success); }
-.address-chip__verified--warning { color: var(--warning); }
+.address-chip__verified--success { color: var(--success-strong); }
+.address-chip__verified--warning { color: var(--warning-strong); }

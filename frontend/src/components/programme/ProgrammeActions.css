@@ -1,0 +1,118 @@
+.programme-actions {
+  background: var(--surface);
+  border-radius: var(--radius-card-lg);
+  padding: var(--space-5);
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+  position: sticky;
+  top: var(--sticky-offset);
+  min-width: 0;
+}
+
+.programme-actions__heading {
+  margin: 0;
+  font-size: var(--text-lg);
+  font-weight: var(--weight-extrabold);
+}
+
+.programme-actions__signin {
+  background: var(--accent-soft);
+  border-radius: var(--radius-row);
+  padding: var(--space-3) var(--space-4);
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+  font-size: var(--text-sm);
+  line-height: var(--leading-body);
+}
+
+.programme-actions__signin p {
+  margin: 0;
+}
+
+.programme-actions__signin .programme-actions__button {
+  align-self: flex-start;
+}
+
+.programme-actions__list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+}
+
+.programme-action {
+  background: var(--bg);
+  border-radius: var(--radius-row);
+  padding: var(--space-3) var(--space-4);
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+
+.programme-action--unavailable {
+  opacity: var(--opacity-unavailable);
+}
+
+.programme-action__row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: var(--space-3);
+}
+
+.programme-action__text {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+  min-width: 0;
+}
+
+.programme-action__label {
+  font-size: var(--text-md);
+  font-weight: var(--weight-bold);
+}
+
+.programme-action__who {
+  font-size: var(--text-xs);
+  color: var(--text-muted);
+}
+
+.programme-action__reason {
+  font-size: var(--text-caption);
+  line-height: var(--leading-body);
+  color: var(--text-muted);
+}
+
+.programme-actions__button {
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: var(--tap-min);
+  box-sizing: border-box;
+  padding: var(--space-2) var(--space-4);
+  border: 0;
+  border-radius: var(--radius-full);
+  background: var(--accent);
+  color: var(--accent-contrast);
+  font: inherit;
+  font-size: var(--text-caption);
+  font-weight: var(--weight-bold);
+  white-space: nowrap;
+  text-decoration: none;
+  cursor: pointer;
+}
+
+.programme-actions__button:hover {
+  text-decoration: none;
+}
+
+.programme-actions__button--off {
+  background: var(--surface-raised);
+  color: var(--text-muted);
+  cursor: not-allowed;
+}

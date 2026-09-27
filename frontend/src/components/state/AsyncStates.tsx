@@ -1,6 +1,6 @@
-import { useEffect, type ReactNode } from 'react';
+import { type ReactNode } from 'react';
 import { explain, isFailure, type ContractName, type Explained } from '../../lib/errors';
-import { useAnnouncer } from '../../context/useAnnouncer';
+import { useAnnounceTransaction } from '../../hooks/useAnnounceTransaction';
 import './AsyncStates.css';
 
 /**
@@ -307,17 +307,12 @@ export function TransactionOutcome({
   /** Offer only where sending the same transaction again makes sense. */
   onRetry?: () => void;
 }) {
-  const announce = useAnnouncer();
   const pending = phase === 'building' || phase === 'signing' || phase === 'submitting';
   const pendingText = pendingTitle ?? 'Waiting for the network…';
 
   // Announced once per transition through the one shared region, so the
   // inline states below stay visual and nothing is read out twice.
-  useEffect(() => {
-    if (error) announce(error.message, isFailure(error) ? 'alert' : 'status');
-    else if (pending) announce(pendingText);
-    else if (phase === 'success') announce(successTitle);
-  }, [announce, error, pending, pendingText, phase, successTitle]);
+  useAnnounceTransaction({ phase, error, pending: pendingText, success: successTitle });
 
   if (error) return <ErrorPanel explained={error} onRetry={onRetry} live={false} />;
   if (pending) {

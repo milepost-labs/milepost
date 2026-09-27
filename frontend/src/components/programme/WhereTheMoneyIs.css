@@ -32,7 +32,7 @@
 
 .where-the-money-is__grid {
   display: grid;
-  grid-template-columns: repeat(20, minmax(0, 1fr));
+  grid-template-columns: repeat(var(--money-cols), minmax(0, 1fr));
   gap: var(--space-1);
   width: 100%;
   box-sizing: border-box;
@@ -106,7 +106,7 @@
   }
 
   .where-the-money-is__grid {
-    gap: 3px;
+    --money-cols: var(--money-cols-narrow);
   }
 
   .where-the-money-is__footer {

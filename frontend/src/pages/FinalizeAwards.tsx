@@ -1,4 +1,4 @@
-import { useState, type FormEvent } from 'react';
+import { useMemo, useState, type FormEvent } from 'react';
 import {
   AlertTriangle,
   ArrowRight,
@@ -13,13 +13,17 @@ import {
   Wallet,
 } from 'lucide-react';
 import { contract, type Award, type Mode } from '@milepost/program';
-import { useContractRead, useContractResult, useProgramme, useTransaction } from '../hooks';
+import { useContractRead, useContractResult, useProgramme, useTransaction, useAnnounceTransaction } from '../hooks';
 import { useWallet } from '../context/useWallet';
+import { useAnnouncer } from '../context/useAnnouncer';
 import { AsyncView, Loading } from '../components/state/AsyncStates';
 import { PausedBanner } from '../components/programme/PausedBanner';
 import { ProgrammeParamNotice } from '../components/programme/ProgrammeParamNotice';
 import { Badge, Button, Card, Field, PhaseBadge } from '../components/ui';
 import { formatAmount } from '../lib/amount';
+import { explainCode } from '../lib/errors';
+import { FIXTURE_PROGRAMMES, chainFor } from '../fixtures/programmes';
+import { FIXTURE_REVIEW_APPLICATIONS, medianForQuorum } from '../fixtures/finalizeFixtures';
 import './FinalizeAwards.css';
 
 interface ModeOption {
@@ -66,6 +70,220 @@ const MODE_OPTIONS: ModeOption[] = [
 
 const truncate = (addr: string) => `${addr.slice(0, 5)}…${addr.slice(-4)}`;
 
+/** Programme whose review applications stand in for the unwired list. */
+const REVIEW_PROGRAMME_ID = 'CDV7VOCATIONALCOHORT3PL5QZ2WM8RT4HX6KJ9A3FC';
+
+/**
+ * Finalize board (Screen 10, Finalize).
+ *
+ * Finalisation is permissionless on purpose: anyone may call it once quorum is
+ * reached, so no privileged party can strand an applicant. When a programme is
+ * oversubscribed the order finalisations arrive in decides who is funded — the
+ * contract guarantees the budget is never exceeded (`InsufficientBudget`, 14)
+ * but not fairness of ordering. Both facts belong on this screen, before acting.
+ *
+ * The application rows below are `FIXTURE_REVIEW_APPLICATIONS` — the contracts
+ * keep no "all applications" list, so a real list would come from an indexer
+ * handler that does not exist yet. The median shown per row uses the same
+ * lookup the contract performs at `finalize` (sorted votes at `(quorum-1)/2`,
+ * the lower middle for an even count). The single-applicant flow further down
+ * this page performs the real on-chain finalization with mode and payee choice.
+ */
+function FinalizeBoard() {
+  const { address } = useWallet();
+  const announce = useAnnouncer();
+
+  // Review-phase programmes first: only they can be finalized.
+  const ordered = useMemo(
+    () =>
+      [...FIXTURE_PROGRAMMES].sort((a, b) => {
+        const rank = (id: string) => (chainFor(id).phase === 'Review' ? 0 : 1);
+        return rank(a.id) - rank(b.id);
+      }),
+    [],
+  );
+  const [finPid, setFinPid] = useState<string>(REVIEW_PROGRAMME_ID);
+  const [finState, setFinState] = useState<Record<string, 'pending' | 'done' | 'error'>>({});
+
+  const selected = ordered.find((p) => p.id === finPid) ?? ordered[0];
+  const chain = chainFor(selected.id);
+  const quorum = chain.quorum;
+  const isReview = chain.phase === 'Review';
+  const apps = useMemo(
+    () => (selected.id === REVIEW_PROGRAMME_ID && isReview ? FIXTURE_REVIEW_APPLICATIONS : []),
+    [selected.id, isReview],
+  );
+
+  const medians = useMemo(() => {
+    const map = new Map<string, bigint | null>();
+    for (const app of apps) {
+      map.set(app.applicant, medianForQuorum(app.votes.map((v) => BigInt(v)), quorum));
+    }
+    return map;
+  }, [apps, quorum]);
+
+  const budget = BigInt(chain.contributed) - BigInt(chain.fee);
+  const finalizedSum = apps.reduce(
+    (sum, app) =>
+      sum + (finState[app.applicant] === 'done' ? (medians.get(app.applicant) ?? 0n) : 0n),
+    0n,
+  );
+  const awarded = BigInt(chain.awarded) + finalizedSum;
+  const remaining = budget - awarded;
+  const wanted = apps.reduce((sum, app) => {
+    const median = medians.get(app.applicant) ?? null;
+    return sum + (median !== null && finState[app.applicant] !== 'done' ? median : 0n);
+  }, 0n);
+  const oversubscribed = wanted > remaining;
+
+  const finalizeRow = (applicant: string, median: bigint) => {
+    if (!address || finState[applicant] === 'pending' || finState[applicant] === 'done') return;
+    if (median > remaining) {
+      setFinState((prev) => ({ ...prev, [applicant]: 'error' }));
+      const explained = explainCode('program', 14);
+      announce(`Finalize failed. ${explained.message}`, 'alert');
+      return;
+    }
+    setFinState((prev) => ({ ...prev, [applicant]: 'pending' }));
+    window.setTimeout(() => {
+      setFinState((prev) => ({ ...prev, [applicant]: 'done' }));
+      announce(`Award finalized at ${formatAmount(median, { asset: 'XLM' })}.`);
+    }, 1300);
+  };
+
+  return (
+    <section className="finalize-board" aria-label="Finalize awards">
+      <p className="finalize-board__note">
+        Anyone can finalize, so no one can strand an applicant by not pressing a button. You
+        don&rsquo;t need an admin account.
+      </p>
+
+      <Select
+        label="Programme"
+        value={selected.id}
+        onChange={(event) => setFinPid(event.target.value)}
+        options={ordered.map((p) => ({
+          value: p.id,
+          label: `${p.name ?? p.id} · ${chainFor(p.id).phase}`,
+        }))}
+      />
+
+      {!isReview ? (
+        <p className="finalize-board__phase" role="status">
+          Finalizing is available only during Review. This programme is {chain.phase}.
+        </p>
+      ) : (
+        <>
+          <div className="finalize-budget">
+            <div className="finalize-budget__line">
+              <span>
+                <strong>Budget</strong>{' '}
+                <span className="numeric">{formatAmount(budget, { asset: 'XLM' })}</span>
+              </span>
+              <span className="finalize-budget__split">
+                Awarded <span className="numeric">{formatAmount(awarded, { asset: 'XLM' })}</span>
+                {' · '}Left <span className="numeric">{formatAmount(remaining, { asset: 'XLM' })}</span>
+              </span>
+            </div>
+            <div className="finalize-budget__bar" aria-hidden="true">
+              <span
+                className="finalize-budget__awarded"
+                style={{ width: `${budget > 0n ? Number((awarded * 100n) / budget) : 0}%` }}
+              />
+              <span
+                className="finalize-budget__left"
+                style={{
+                  width: `${budget > 0n && remaining > 0n ? Number((remaining * 100n) / budget) : 0}%`,
+                }}
+              />
+            </div>
+            {oversubscribed && (
+              <p className="finalize-board__oversub" role="status">
+                <AlertTriangle size={16} aria-hidden="true" />
+                Awards ready to finalize total {formatAmount(wanted, { asset: 'XLM' })}, but only{' '}
+                {formatAmount(remaining, { asset: 'XLM' })} is left. Whoever finalizes first is
+                funded first. The budget is protected; the order is not.
+              </p>
+            )}
+          </div>
+
+          {apps.length === 0 ? (
+            <p className="finalize-board__phase" role="status">
+              No applications to finalize.
+            </p>
+          ) : (
+            <ul className="finalize-rows">
+              {apps.map((app) => {
+                const votes = app.votes.map((v) => BigInt(v));
+                const median = medians.get(app.applicant) ?? null;
+                const ready = median !== null;
+                const state = finState[app.applicant];
+                const needs = quorum - votes.length;
+                const gated = !ready || state === 'pending' || state === 'done' || !address;
+                const reason = state === 'done'
+                  ? 'Finalized. The award is fixed.'
+                  : state === 'error'
+                    ? explainCode('program', 14).message
+                    : median === null
+                      ? `Needs ${needs} more vote${needs === 1 ? '' : 's'} before anyone can finalize.`
+                      : !address
+                        ? 'Sign in to finalize. Anyone can.'
+                        : `Award will be ${formatAmount(median, { asset: 'XLM' })}, the median of reviewer votes.`;
+                return (
+                  <li key={app.applicant} className="finalize-row">
+                    <span className="finalize-row__who">
+                      <span className="numeric finalize-row__applicant" title={app.applicant}>
+                        {truncate(app.applicant)}
+                      </span>
+                      <span className="finalize-row__asked">
+                        Asked {formatAmount(BigInt(app.requested), { asset: 'XLM' })}
+                      </span>
+                    </span>
+                    <span className="finalize-row__votes">
+                      <span className="finalize-row__votes-count">
+                        {votes.length} of {quorum} votes
+                      </span>
+                      <span className="numeric finalize-row__votes-list">
+                        {votes.map((v) => formatAmount(v, { asset: 'XLM' }).replace(' XLM', '')).join(' · ')}
+                      </span>
+                    </span>
+                    <span className="finalize-row__median">
+                      <span className="detail-label">Median</span>
+                      <span className="numeric finalize-row__median-value">
+                        {median !== null ? formatAmount(median, { asset: 'XLM' }) : '—'}
+                      </span>
+                    </span>
+                    <Button
+                      disabled={gated}
+                      loading={state === 'pending'}
+                      loadingLabel="Finalizing…"
+                      onClick={() => {
+                        if (median !== null) finalizeRow(app.applicant, median);
+                      }}
+                    >
+                      {state === 'done' ? 'Finalized' : 'Finalize'}
+                    </Button>
+                    <span
+                      className={`finalize-row__reason${state === 'error' ? ' finalize-row__reason--error' : ''}`}
+                      role={state === 'error' ? 'alert' : undefined}
+                    >
+                      {reason}
+                      {state === 'error' && (
+                        <> Nothing was transferred · program error 14.</>
+                      )}
+                    </span>
+                  </li>
+                );
+              })}
+            </ul>
+          )}
+          <p className="finalize-board__sample">Sample applications for the design phase.</p>
+        </>
+      )}
+    </section>
+  );
+}
+
 export const FinalizeAwards = () => {
   const { client: programme, linkedProgramme, readsEnabled } = useProgramme();
   const wallet = useWallet();
@@ -110,6 +328,14 @@ export const FinalizeAwards = () => {
       setSettledAward(result.unwrap());
       application.refetch();
     },
+  });
+  useAnnounceTransaction({
+    phase: finalizeTx.phase,
+    error: finalizeTx.error,
+    pending: 'Finalizing the award…',
+    success: settledAward
+      ? `Award finalized at ${formatAmount(settledAward.granted, { asset: 'XLM' })}.`
+      : 'Award finalized.',
   });
 
   const quorum = config.data?.quorum ?? 0;
@@ -170,6 +396,8 @@ export const FinalizeAwards = () => {
           Settle quorum-reached applications into awards. The mode you pick decides whether the money can reach anyone unverified.
         </p>
       </header>
+
+      <FinalizeBoard />
 
       <section className="stats-grid animate-fade-up" style={{ animationDelay: '100ms' }}>
         <div className="stat-card glass-panel">
@@ -475,7 +703,6 @@ export const FinalizeAwards = () => {
                         return (
                           <div
                             className={`notice ${err.kind === 'none' ? '' : 'notice--blocked'}`}
-                            role="alert"
                           >
                             <p style={{ margin: 0, fontWeight: 600 }}>
                               {err.message}

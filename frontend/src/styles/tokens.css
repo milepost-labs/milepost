@@ -13,6 +13,7 @@
      The half steps fill the gaps the redesign uses (20, 28, 40px); its odd
      2px gaps (6, 10, 14, 18) round to the nearest step here. */
   --space-1: 0.25rem;   /* 4 */
+  --space-1-5: 0.375rem; /* 6 */
   --space-2: 0.5rem;    /* 8 */
   --space-3: 0.75rem;   /* 12 */
   --space-4: 1rem;      /* 16 */
@@ -33,6 +34,10 @@
   --page-pad-bottom: var(--space-10);
   --section-pad-y: var(--space-9);
   --tap-min: 44px;
+  /* Where sticky side panels stop, just below the sticky header. */
+  --sticky-offset: 5.25rem;
+  /* A row whose action the current phase rules out. */
+  --opacity-unavailable: 0.62;
   /* Sign-in sheet and confirmation dialogs: centered, max-width 440px. */
   --modal-max-width: 27.5rem;
 
@@ -78,6 +83,7 @@
   --tracking-heading: -0.03em;
   --tracking-title: -0.02em;
   --tracking-tight: -0.01em;
+  --tracking-label: 0.04em; /* uppercase field labels */
 
   /* Radius ladder, smallest surface to largest. The existing sm/md/lg stay
      for pages that already use them. */
@@ -86,6 +92,15 @@
   --grid-min-card: 16rem;
   --grid-min-column: 26rem;
   --grid-min-programme-card: 21.25rem; /* 340px — directory card column */
+  --grid-min-split: 24rem; /* two-column form + list (schema, keepalive) */
+  --grid-min-row: 10rem; /* compact finalize row column */
+  /* Narrow single-column pages (keepalive). */
+  --page-measure-narrow: 51.25rem; /* 820px */
+  --grid-min-stat: 12.5rem;            /* 200px — stat tiles */
+  --grid-min-explainer: 18.75rem;      /* 300px — signed-out explainer columns */
+  --grid-min-funding: 23.75rem;        /* 380px — contributions beside the contribute panel */
+  /* Signed-out explainer and other major panels: 22–36px with the viewport. */
+  --panel-pad-lg: clamp(1.375rem, 4vw, 2.25rem);
 
   --radius-sm: 6px;
   --radius-md: 10px;
@@ -142,6 +157,13 @@
   --success-soft: #dcf1e6;
   --warning-soft: #fbf0d4;
 
+  /* Money is drawn as a grid of squares, never a bar. Twenty across reads as a
+     single band on a wide screen, but at 360px that leaves each square around
+     11px — too small to read as a square at all. Narrow viewports halve the
+     columns and let the same 40 squares wrap into four rows instead. */
+  --money-cols: 20;
+  --money-cols-narrow: 10;
+
   /* Pending pulse: four 12px squares, 1.2s cycle, 0.15s stagger. */
   --pulse-size: 12px;
   --pulse-radius: 3px;
@@ -168,6 +190,10 @@
   /* --warning (amber) is ~2:1 on white, unreadable as text. */
   --warning-strong: hsl(38, 92%, 26%);
   --danger-strong: hsl(348, 83%, 38%);
+  /* --refund is the money-language name for --danger, and has the same problem
+     as text. Alias it rather than making every refund-toned line remember
+     which of the two names happens to be the readable one. */
+  --refund-strong: var(--danger-strong);
   /* The developers-section code block is dark in both themes; code is read
      against a fixed console-style background, not the page surface. */
   --code: #16191e;
@@ -190,6 +216,7 @@
   --success-strong: hsl(158, 60%, 62%);
   --warning-strong: hsl(38, 92%, 65%);
   --danger-strong: hsl(348, 83%, 72%);
+  --refund-strong: var(--danger-strong);
   --code: #0f1216;
   --code-text: #d8dce2;
   --elevation-1: 0 1px 2px rgba(0, 0, 0, 0.4);
