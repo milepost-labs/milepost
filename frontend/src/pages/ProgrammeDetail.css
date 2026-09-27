@@ -81,8 +81,18 @@
 .programme-grid > .ui-card:first-child,
 .programme-grid > .ui-card:nth-child(2),
 .programme-grid > .ui-card:nth-child(3),
-.programme-section--center {
+.programme-main {
   grid-column: span 2;
+}
+
+/* Money and tabs on the left, the sticky actions panel on the right. The
+   panel drops under the money column once the two no longer fit side by side. */
+.programme-main {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, var(--grid-min-column)), 1fr));
+  gap: var(--space-5);
+  align-items: start;
+  min-width: 0;
 }
 
 .programme-section--center {
@@ -262,6 +272,7 @@
   .programme-grid > .ui-card:first-child,
   .programme-grid > .ui-card:nth-child(2),
   .programme-grid > .ui-card:nth-child(3),
+  .programme-main,
   .membership-card--wide {
     grid-column: auto;
   }
