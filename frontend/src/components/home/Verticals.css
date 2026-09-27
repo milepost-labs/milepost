@@ -1,0 +1,99 @@
+.verticals-section {
+  padding: var(--space-9) 0;
+  scroll-margin-top: var(--space-8);
+}
+.verticals-header {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+  margin-bottom: var(--space-5-5);
+  max-width: 720px;
+}
+.verticals-eyebrow {
+  color: var(--accent-strong);
+}
+.verticals-header h2 {
+  margin: 0;
+  font-size: var(--text-h2-section);
+  line-height: var(--leading-heading);
+  letter-spacing: var(--tracking-heading);
+  font-weight: var(--weight-extrabold);
+}
+.verticals-header p {
+  margin: 0;
+  color: var(--text-muted);
+  line-height: var(--leading-relaxed);
+}
+.verticals-table {
+  width: 100%;
+  border-collapse: separate;
+  border-spacing: 0 var(--space-2);
+  font-size: var(--text-md);
+}
+.verticals-table thead th {
+  text-align: left;
+  font-size: var(--text-xs);
+  font-weight: var(--weight-bold);
+  color: var(--text-muted);
+  text-transform: uppercase;
+  letter-spacing: var(--tracking-label);
+  padding: 0 var(--space-4);
+}
+.verticals-table tbody th,
+.verticals-table td {
+  background: var(--surface);
+  text-align: left;
+  vertical-align: top;
+  padding: var(--space-4);
+  line-height: var(--leading-snug);
+}
+.verticals-table tbody th {
+  font-weight: var(--weight-bold);
+  border-radius: var(--radius-row) 0 0 var(--radius-row);
+}
+.verticals-table td:last-child {
+  border-radius: 0 var(--radius-row) var(--radius-row) 0;
+}
+
+/* On a phone each row stacks into a card rather than scrolling sideways. */
+@media (max-width: 640px) {
+  .verticals-table thead {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    overflow: hidden;
+    clip: rect(0 0 0 0);
+  }
+  .verticals-table,
+  .verticals-table tbody,
+  .verticals-table tr,
+  .verticals-table tbody th,
+  .verticals-table td {
+    display: block;
+  }
+  .verticals-table tr {
+    background: var(--surface);
+    border-radius: var(--radius-row);
+    padding: var(--space-4);
+    margin-bottom: var(--space-2);
+  }
+  .verticals-table tbody th,
+  .verticals-table td {
+    background: none;
+    border-radius: 0;
+    padding: 0;
+  }
+  .verticals-table tbody th {
+    margin-bottom: var(--space-2);
+  }
+  .verticals-table td {
+    margin-top: var(--space-2);
+  }
+  .verticals-table td::before {
+    content: attr(data-label);
+    display: block;
+    font-size: var(--text-xs);
+    font-weight: var(--weight-bold);
+    color: var(--text-muted);
+  }
+}

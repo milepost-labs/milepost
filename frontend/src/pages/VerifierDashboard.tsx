@@ -1,411 +1,111 @@
-import { useEffect, useMemo, useState, type FormEvent } from 'react';
+import { useMemo, useState } from 'react';
+import { Link } from 'react-router-dom';
 import { Buffer } from 'buffer';
 import './VerifierDashboard.css';
-import { ShieldCheck, Clock, FileSignature } from 'lucide-react';
-import type { Application } from '@milepost/program';
-import type { Client as AttestClient } from '@milepost/attest';
-import { useContractRead, useContractResult, useIndexedList, useProgramme, useTransaction, phaseLabel } from '../hooks';
-import { useWallet } from '../context/useWallet';
 import { useSoroban } from '../context/useSoroban';
-import { DEMO_PROGRAMME_ID } from '../context/sorobanStore';
-import {
-  FIXTURE_MY_ATTESTATIONS,
-  loadAttestations,
-  saveAttestations,
-  type AttestRecord,
-} from '../fixtures/verifierFixtures';
-import { formatAmount, formatExact, tryParseAmount } from '../lib/amount';
+import { useWallet } from '../context/useWallet';
+import { useAnnouncer } from '../context/useAnnouncer';
+import { useTransaction } from '../hooks/useTransaction';
 import { truncateAddress } from '../lib/format';
 import { explain } from '../lib/errors';
-import { fetchAwards } from '../lib/indexer';
-import { AsyncView, Empty, ErrorState, Loading, Success } from '../components/state/AsyncStates';
-import { PausedBanner } from '../components/programme/PausedBanner';
-import { Badge, Button, DateField, Field, Modal, Table, type Column } from '../components/ui';
+import { Badge, Button, Field } from '../components/ui';
+import { ErrorPanel, PendingState } from '../components/state/AsyncStates';
+import {
+  FIXTURE_MY_ATTESTATIONS,
+  FIXTURE_VERIFIER_QUEUE,
+  type VerifierAttestation,
+  type VerifierQueueItem,
+} from '../fixtures/verifierFixtures';
 
-const DEMO_APPLICANT = 'GAH3D4RM45ETE4W7VDRCWZBPRPT63CJXAGXFYVBC2FGANBZTS4OTKXCA';
-
-const HEX_32_BYTES = /^(0x)?[0-9a-fA-F]{64}$/;
-
-interface Milestone {
-  recipient: string;
-  granted: bigint;
-  released: bigint;
-  tranches: number;
-  tranchesReleased: number;
-}
-
-const formatXlm = (amount: bigint) => formatAmount(amount, { asset: 'XLM' });
-const shorten = (address: string) => truncateAddress(address, 4, 4);
+type ItemStatus = 'idle' | 'pending' | 'error' | 'done' | 'declined';
 
 /**
- * The reviewer's own last-submitted vote on an applicant, kept locally
- * because — like attestations above — there is no on-chain "votes by
- * reviewer" list. The contract stores votes as a bare sorted amount vector
- * with no reviewer attached, so this is the only way this app can show a
- * reviewer which of the sorted amounts is theirs to amend.
- */
-const reviewerVoteStorageKey = (programmeId: string, applicant: string, reviewer: string) =>
-  `milepost:reviewer-vote:${programmeId}:${applicant}:${reviewer}`;
-
-function loadReviewerVote(programmeId: string, applicant: string, reviewer: string): bigint | null {
-  try {
-    const stored = window.localStorage.getItem(reviewerVoteStorageKey(programmeId, applicant, reviewer));
-    if (stored) return BigInt(stored);
-  } catch {
-    // Corrupt or inaccessible storage — treat as unknown.
-  }
-  return null;
-}
-
-function saveReviewerVote(programmeId: string, applicant: string, reviewer: string, approved: bigint) {
-  try {
-    window.localStorage.setItem(reviewerVoteStorageKey(programmeId, applicant, reviewer), approved.toString());
-  } catch {
-    // Best-effort only — the vote is still usable for this session.
-  }
-}
-
-/** Same median rule the contract applies at `finalize`: the lower of the two middles. */
-function medianAt(votes: bigint[], quorum: number): bigint | null {
-  if (quorum <= 0) return null;
-  const medianIndex = Math.floor((quorum - 1) / 2);
-  return votes.length > medianIndex ? votes[medianIndex] : null;
-}
-
-/**
- * What the vote list would look like after replacing `oldVote` (if any) with
- * `newVote`, mirroring the sorted-removal-then-sorted-insert the contract
- * does in `review()` — so the projected median shown here matches what
- * finalisation would actually settle on.
- */
-function simulateAmendment(votes: bigint[], oldVote: bigint | null, newVote: bigint): bigint[] {
-  const next = [...votes];
-  if (oldVote !== null) {
-    const at = next.findIndex((vote) => vote === oldVote);
-    if (at !== -1) next.splice(at, 1);
-  }
-  let at = next.length;
-  for (let i = 0; i < next.length; i += 1) {
-    if (newVote < next[i]) {
-      at = i;
-      break;
-    }
-  }
-  next.splice(at, 0, newVote);
-  return next;
-}
-
-/**
- * Sign an attestation that releases a recipient's next tranche.
+ * Verifier queue — the verifier's home screen.
  *
- * This is the highest-consequence write in the system — a signature here lets
- * money move — so the flow confirms what and who before any signing, and after
- * attesting offers to run the (permissionless) release the same account could
- * otherwise leave the recipient waiting on.
+ * Signing an attestation releases someone's money and cannot be undone, so the
+ * card slows the decision down: expanding shows exactly what is being signed
+ * (schema, recipient, ledger), an optional reference note, and a required
+ * checkbox that gates the sign button. "Can't confirm" dismisses with no
+ * transaction at all.
+ *
+ * The queue is a stand-in; the indexer does not publish it yet. Every entry is
+ * tagged as sample data.
  */
-function AttestationModal({
-  open,
-  recipient,
-  nextTranche,
-  trancheCount,
-  programme,
-  attest,
-  verifier,
-  onClose,
-  onReleased,
-  onAttended,
-  onUsed,
-}: {
-  open: boolean;
-  recipient: string | null;
-  nextTranche: number;
-  trancheCount: number;
-  programme: ReturnType<typeof useProgramme>['client'];
-  attest: AttestClient;
-  verifier: string | null;
-  onClose: () => void;
-  onReleased: () => void;
-  onAttended: (record: AttestRecord) => void;
-  onUsed: (uid: string) => void;
-}) {
-  const [schemaInput, setSchemaInput] = useState('');
-  const [hashInput, setHashInput] = useState('');
-  const [noExpiry, setNoExpiry] = useState(true);
-  const [expiry, setExpiry] = useState<bigint | undefined>(undefined);
-  const [formError, setFormError] = useState<string | null>(null);
-  const [attestedUid, setAttestedUid] = useState<Buffer | null>(null);
+export const VerifierDashboard = () => {
+  const { address, connect } = useWallet();
+  const { attest } = useSoroban();
+  const announce = useAnnouncer();
 
-  const attestTx = useTransaction<Buffer>({ contract: 'attest' });
-  const releaseTx = useTransaction<bigint>({ contract: 'program' });
+  const [statusById, setStatusById] = useState<Record<string, ItemStatus>>({});
+  const [openId, setOpenId] = useState<string | null>(null);
+  const [checked, setChecked] = useState(false);
+  const [reference, setReference] = useState('');
+  const [newlySigned, setNewlySigned] = useState<VerifierAttestation[]>([]);
+  const [signingId, setSigningId] = useState<string | null>(null);
+  const [connecting, setConnecting] = useState(false);
 
-  const cleanSchema = schemaInput.trim().replace(/^0x/i, '');
-  const cleanHash = hashInput.trim().replace(/^0x/i, '');
-  const validSchema = HEX_32_BYTES.test(schemaInput.trim());
-  const validHash = HEX_32_BYTES.test(hashInput.trim());
+  const signTx = useTransaction<Buffer>({ contract: 'attest' });
 
-  const resetLocal = () => {
-    setSchemaInput('');
-    setHashInput('');
-    setNoExpiry(true);
-    setExpiry(undefined);
-    setFormError(null);
-    setAttestedUid(null);
-    attestTx.reset();
-    releaseTx.reset();
-  };
-
-  const closeDisabled = attestTx.busy || releaseTx.busy;
-
-  const handleClose = () => {
-    if (closeDisabled) return;
-    resetLocal();
-    onClose();
-  };
-
-  const handleAttest = async () => {
-    if (!recipient || !verifier) return;
-    if (!HEX_32_BYTES.test(schemaInput.trim())) {
-      setFormError('Enter the schema UID as a 32-byte hex string (64 characters).');
-      return;
-    }
-    if (!HEX_32_BYTES.test(hashInput.trim())) {
-      setFormError('Enter the evidence hash as a 32-byte hex string (64 characters).');
-      return;
-    }
-    if (!noExpiry && expiry !== undefined) {
-      const nowSeconds = BigInt(Math.floor(Date.now() / 1000));
-      if (expiry <= nowSeconds) {
-        setFormError('The expiry must be in the future — a past expiry is rejected on-chain.');
-        return;
-      }
-    }
-    setFormError(null);
-
-    const result = await attestTx.send(async () => {
-      const tx = await attest.attest({
-        attester: verifier,
-        schema_uid: Buffer.from(cleanSchema, 'hex'),
-        subject: recipient,
-        data_hash: Buffer.from(cleanHash, 'hex'),
-        expires_at: noExpiry ? undefined : expiry,
-      });
-      return {
-        signAndSend: async (options: Parameters<typeof tx.signAndSend>[0]) => {
-          const sent = await tx.signAndSend(options);
-          return { result: sent.result.unwrap() };
-        },
-      };
-    });
-
-    if (result !== null) {
-      setAttestedUid(result);
-      onAttended({ uid: result.toString('hex'), subject: recipient, schemaUid: cleanSchema, used: false });
-    }
-  };
-
-  const handleRelease = async () => {
-    if (!recipient || !verifier || !attestedUid) return;
-    const result = await releaseTx.send(async () => {
-      const tx = await programme.release({
-        recipient,
-        attestation: attestedUid,
-        attester: verifier,
-      });
-      return {
-        signAndSend: async (options: Parameters<typeof tx.signAndSend>[0]) => {
-          const sent = await tx.signAndSend(options);
-          return { result: sent.result.unwrap() };
-        },
-      };
-    });
-    if (result !== null) {
-      onUsed(attestedUid.toString('hex'));
-      onReleased();
-      resetLocal();
-      onClose();
-    }
-  };
-
-  const attestError = attestTx.error ? explain(attestTx.error, 'attest') : null;
-  const releaseError = releaseTx.error ? explain(releaseTx.error, 'program') : null;
-
-  return (
-    <Modal
-      open={open}
-      onClose={handleClose}
-      title={recipient ? `Sign attestation for ${shorten(recipient)}` : 'Sign attestation'}
-      busy={closeDisabled}
-      footer={
-        <>
-          <Button variant="secondary" onClick={handleClose} disabled={closeDisabled}>
-            {attestedUid ? 'Close' : 'Cancel'}
-          </Button>
-          {!attestedUid ? (
-            <Button
-              onClick={handleAttest}
-              loading={attestTx.busy}
-              disabled={!validSchema || !validHash || (noExpiry ? false : expiry === undefined) || attestTx.busy}
-              loadingLabel={phaseLabel(attestTx.phase) || 'Signing…'}
-            >
-              Sign attestation
-            </Button>
-          ) : (
-            <Button
-              onClick={handleRelease}
-              loading={releaseTx.busy}
-              disabled={releaseTx.busy}
-              loadingLabel={phaseLabel(releaseTx.phase) || 'Releasing…'}
-            >
-              Release the tranche now
-            </Button>
-          )}
-        </>
-      }
-    >
-      <div className="attest-modal">
-        {!attestedUid ? (
-          <>
-            <div className="attest-modal__notice" role="note">
-              <ShieldCheck size={18} />
-              <p className="typo-text">
-                This signs an attestation about <strong className="numeric">{recipient ? shorten(recipient) : ''}</strong>,
-                unlocking tranche {nextTranche} of {trancheCount} — <strong>it releases funds</strong> once a release is
-                submitted.
-              </p>
-            </div>
-
-            <Field
-              label="Schema UID"
-              placeholder="32-byte hex (64 characters)"
-              value={schemaInput}
-              onChange={(event) => {
-                setSchemaInput(event.target.value);
-                setFormError(null);
-              }}
-              error={schemaInput && !validSchema ? 'Enter a 32-byte hex schema UID.' : undefined}
-              hint="The claim template this attestation is made under."
-            />
-
-            <Field
-              label="Evidence hash"
-              placeholder="32-byte hex (64 characters)"
-              value={hashInput}
-              onChange={(event) => {
-                setHashInput(event.target.value);
-                setFormError(null);
-              }}
-              error={hashInput && !validHash ? 'Enter a 32-byte hex hash.' : undefined}
-              hint="Hash of the evidence attesting to this recipient’s milestone. The contract records the hash, not the evidence itself."
-            />
-
-            <div className="attest-modal__expiry">
-              <label className="attest-modal__check">
-                <input
-                  type="checkbox"
-                  checked={noExpiry}
-                  onChange={(event) => setNoExpiry(event.target.checked)}
-                />
-                No expiry
-              </label>
-              {!noExpiry && (
-                <DateField
-                  label="Expiry"
-                  value={expiry === undefined ? null : Number(expiry)}
-                  onChange={(value) => {
-                    setExpiry(value === null ? undefined : BigInt(value));
-                    setFormError(null);
-                  }}
-                  hint="After this time the attestation no longer counts as valid. A past expiry is rejected."
-                />
-              )}
-            </div>
-
-            {formError && <p className="ui-field__message ui-field__message--error" role="alert">{formError}</p>}
-            {attestError && (
-              <p className="ui-field__message ui-field__message--error" role="alert">
-                {attestError.message}
-                {attestError.action ? ` ${attestError.action}` : ''}
-              </p>
-            )}
-
-            {attestTx.result !== null && !attestedUid && (
-              <p role="status" className="attest-modal__pending">Signed — preparing…</p>
-            )}
-          </>
-        ) : (
-          <>
-            <Success
-              title="Attestation signed"
-              description={
-                <>
-                  <p className="typo-text">Attestation UID:</p>
-                  <p className="numeric attest-modal__uid">{attestedUid.toString('hex')}</p>
-                </>
-              }
-            />
-            <p className="typo-text text-muted">
-              Release is permissionless — anyone may submit it. Trigger it now so the recipient doesn’t keep waiting, or close and leave it for later.
-            </p>
-            {releaseTx.result !== null && (
-              <p role="status" className="attest-modal__released">
-                Tranche released — {formatXlm(releaseTx.result)} moved.
-              </p>
-            )}
-            {releaseError && (
-              <p className="ui-field__message ui-field__message--error" role="alert">
-                {releaseError.message}
-                {releaseError.action ? ` ${releaseError.action}` : ''}
-              </p>
-            )}
-          </>
-        )}
-      </div>
-    </Modal>
+  const queue = useMemo(
+    () => FIXTURE_VERIFIER_QUEUE.filter((item) => (statusById[item.id] ?? 'idle') !== 'declined' && (statusById[item.id] ?? 'idle') !== 'done'),
+    [statusById],
   );
-}
+  const mine = useMemo(() => [...newlySigned, ...FIXTURE_MY_ATTESTATIONS], [newlySigned]);
 
-/** A row's on-chain state, resolved from `get` rather than trusted locally. */
-type AttestationStatus =
-  | { kind: 'revoked' }
-  | { kind: 'expired' }
-  | { kind: 'valid' }
-  | { kind: 'unknown' };
+  const programmes = useMemo(() => {
+    const ids = new Set<string>();
+    for (const item of queue) ids.add(item.programmeId);
+    for (const item of mine) ids.add(item.programmeId);
+    return ids;
+  }, [queue, mine]);
 
-/**
- * Revoke one of the verifier's own attestations.
- *
- * The confirmation is explicit about what revocation does and does not undo:
- * it stops the attestation being used again, but it does not recover funds a
- * tranche already released. Overstating the effect here would be worse than
- * not offering the action at all.
- */
-function RevokeModal({
-  open,
-  record,
-  attest,
-  attester,
-  onClose,
-  onRevoked,
-}: {
-  open: boolean;
-  record: AttestRecord | null;
-  attest: AttestClient;
-  attester: string;
-  onClose: () => void;
-  onRevoked: () => void;
-}) {
-  const revokeTx = useTransaction<void>({ contract: 'attest' });
+  const stats = [
+    { k: 'Waiting for you', v: String(queue.length) },
+    { k: 'Signed', v: String(mine.length) },
+    { k: 'Programmes', v: String(programmes.size) },
+  ];
 
-  const handleClose = () => {
-    if (revokeTx.busy) return;
-    revokeTx.reset();
-    onClose();
+  const openItem = openId ? (queue.find((item) => item.id === openId) ?? null) : null;
+
+  const openClaim = (item: VerifierQueueItem) => {
+    setOpenId(item.id);
+    setChecked(false);
+    setReference('');
+    signTx.reset();
   };
 
-  const handleRevoke = async () => {
-    if (!record) return;
-    const result = await revokeTx.send(async () => {
-      const tx = await attest.revoke({ attester, uid: Buffer.from(record.uid, 'hex') });
+  const closeClaim = () => {
+    setOpenId(null);
+    setChecked(false);
+    setReference('');
+    signTx.reset();
+  };
+
+  /** Dismiss with no transaction at all — the tranche stays locked. */
+  const declineClaim = (item: VerifierQueueItem) => {
+    setStatusById((prev) => ({ ...prev, [item.id]: 'declined' }));
+    if (openId === item.id) closeClaim();
+    announce('Marked as not confirmed. Nothing was sent; the tranche stays locked.');
+  };
+
+  const signClaim = async (item: VerifierQueueItem) => {
+    if (!address || !checked || signTx.busy) return;
+    setSigningId(item.id);
+    setStatusById((prev) => ({ ...prev, [item.id]: 'pending' }));
+    announce('Signing attestation.');
+
+    // Stand-in queue rows carry human schema names, not on-chain UIDs, so the
+    // sign attempt below carries a placeholder hash: the contract rejects it
+    // with SchemaNotFound and the error panel explains it. Swapping in the real
+    // queue (with real schema UIDs) is a change of source, not of flow.
+    const result = await signTx.send(async () => {
+      const tx = await attest.attest({
+        attester: address,
+        schema_uid: Buffer.alloc(32),
+        subject: item.subject,
+        data_hash: Buffer.alloc(32),
+        expires_at: undefined,
+      });
       return {
         signAndSend: async (options: Parameters<typeof tx.signAndSend>[0]) => {
           const sent = await tx.signAndSend(options);
@@ -413,660 +113,263 @@ function RevokeModal({
         },
       };
     });
+
     if (result !== null) {
-      onRevoked();
-      revokeTx.reset();
-      onClose();
+      const uid = `att_${result.toString('hex').slice(0, 12)}…${result.toString('hex').slice(-4)}`;
+      setNewlySigned((prev) => [
+        {
+          uid,
+          programmeId: item.programmeId,
+          programme: item.programme,
+          subject: item.subject,
+          schema: item.schema,
+          ledger: item.requestedLedger + 1,
+          used: false,
+        },
+        ...prev,
+      ]);
+      setStatusById((prev) => ({ ...prev, [item.id]: 'done' }));
+      setOpenId(null);
+      setChecked(false);
+      setReference('');
+      announce(`Attestation signed. ${item.subject} can now release tranche ${item.tranche}.`);
+    } else {
+      setStatusById((prev) => ({ ...prev, [item.id]: 'error' }));
+      const explained = signTx.error ? explain(signTx.error, 'attest') : null;
+      announce(explained ? `Attestation not signed. ${explained.message}` : 'Attestation not signed.', 'alert');
+    }
+    setSigningId(null);
+  };
+
+  const signIn = async () => {
+    setConnecting(true);
+    try {
+      await connect();
+    } finally {
+      setConnecting(false);
     }
   };
 
-  const revokeError = revokeTx.error ? explain(revokeTx.error, 'attest') : null;
+  const signError = signTx.error ? explain(signTx.error, 'attest') : null;
 
   return (
-    <Modal
-      open={open}
-      onClose={handleClose}
-      title="Revoke attestation"
-      busy={revokeTx.busy}
-      footer={
-        <>
-          <Button variant="secondary" onClick={handleClose} disabled={revokeTx.busy}>
-            Cancel
-          </Button>
-          <Button
-            variant="danger"
-            onClick={handleRevoke}
-            loading={revokeTx.busy}
-            loadingLabel={phaseLabel(revokeTx.phase) || 'Revoking…'}
-          >
-            Revoke
-          </Button>
-        </>
-      }
-    >
-      <div className="revoke-modal">
-        <p className="typo-text">
-          Revoke the attestation about <strong className="numeric">{record ? shorten(record.subject) : ''}</strong>
-          <span className="numeric revoke-modal__uid">{record ? record.uid : ''}</span>
-        </p>
-        <div className="revoke-modal__notice" role="note">
-          <ShieldCheck size={18} />
-          <p>
-            This marks the attestation revoked so it can no longer be used to release a tranche.{" "}
-            <strong>Funds that already released are not recovered</strong> — revocation does not claw anything back.
+    <div className="dashboard-container verifier-page">
+      <header className="verifier-page__head">
+        <div className="verifier-page__titles">
+          <h1 id="h-ver">Verify conditions</h1>
+          <p className="typo-text text-muted">
+            When you confirm a condition, you sign an attestation. Each one unlocks exactly one
+            tranche for one recipient, and can&apos;t be used twice.
           </p>
         </div>
-        {revokeError && (
-          <p className="ui-field__message ui-field__message--error" role="alert">
-            {revokeError.message}
-            {revokeError.action ? ` ${revokeError.action}` : ''}
-          </p>
-        )}
-      </div>
-    </Modal>
-  );
-}
-
-/**
- * The verifier's own attestations, as known to this app (the ones they created
- * here) with their current on-chain status, beside whether each one has
- * actually released a tranche yet. Revoked attestations stay visible, marked
- * as revoked, so the history the contract keeps is reflected rather than
- * hidden.
- *
- * Sample entries from `FIXTURE_MY_ATTESTATIONS` illustrate the used/unused
- * distinction until the indexer handler that would list real attestations
- * exists.
- */
-function MyAttestations({
-  attest,
-  attester,
-  records,
-}: {
-  attest: AttestClient;
-  attester: string;
-  records: AttestRecord[];
-}) {
-  const [status, setStatus] = useState<Record<string, AttestationStatus>>({});
-  const [selected, setSelected] = useState<AttestRecord | null>(null);
-  const [tick, setTick] = useState(0);
-
-  useEffect(() => {
-    if (records.length === 0) return;
-    let cancelled = false;
-    (async () => {
-      const next: Record<string, AttestationStatus> = {};
-      await Promise.all(
-        records.map(async (record): Promise<void> => {
-          const uidBuf = Buffer.from(record.uid, 'hex');
-          try {
-            const { result } = await attest.get({ uid: uidBuf });
-            const a = result.unwrap();
-            const nowSeconds = BigInt(Math.floor(Date.now() / 1000));
-            const revoked = a.revoked_at !== undefined && a.revoked_at !== null;
-            const expired = !revoked && a.expires_at !== undefined && a.expires_at !== null && a.expires_at <= nowSeconds;
-            next[record.uid] = revoked ? { kind: 'revoked' } : expired ? { kind: 'expired' } : { kind: 'valid' };
-          } catch {
-            next[record.uid] = { kind: 'unknown' };
-          }
-        }),
-      );
-      if (cancelled) return;
-      setStatus(next);
-    })();
-    return () => {
-      cancelled = true;
-    };
-  }, [attest, records, tick]);
-
-  const columns: Column<AttestRecord>[] = [
-    { key: 'subject', header: 'Recipient', render: (row) => <span className="numeric" title={row.subject}>{shorten(row.subject)}</span> },
-    { key: 'uid', header: 'Attestation', render: (row) => <span className="numeric" title={row.uid}>{truncateAddress(row.uid, 6, 6)}</span> },
-    { key: 'status', header: 'Status', render: (row) => <AttestationBadge state={status[row.uid]} /> },
-    { key: 'used', header: 'Release', render: (row) => <UsedBadge used={row.used} /> },
-    {
-      key: 'action',
-      header: '',
-      render: (row) => {
-        const state = status[row.uid];
-        return state?.kind === 'revoked' ? (
-          <Badge tone="neutral">Revoked</Badge>
-        ) : (
-          <Button variant="secondary" onClick={() => setSelected(row)}>
-            Revoke
-          </Button>
-        );
-      },
-    },
-  ];
-
-  return (
-    <>
-      {records.length === 0 ? (
-        <Empty
-          title="No attestations yet"
-          description="Attestations you sign here appear here so you can revoke one if a milestone was attested in error or circumstances change."
-        />
-      ) : (
-        <Table
-          caption={`Attestations signed by ${attester}`}
-          columns={columns}
-          rows={records}
-          keyOf={(row) => row.uid}
-        />
-      )}
-      <div className="signed-samples">
-        <h3 className="signed-samples__title">Signed by you</h3>
-        <ul className="signed-samples__list">
-          {FIXTURE_MY_ATTESTATIONS.map((entry) => (
-            <li key={entry.uid} className="signed-samples__item">
-              <span className="numeric signed-samples__uid">{entry.uid}</span>
-              <UsedBadge used={entry.used} />
-              <span className="signed-samples__meta">
-                {entry.programme} · {entry.subject} · {entry.schema} · ledger {entry.ledger.toLocaleString()}
-              </span>
-            </li>
-          ))}
-        </ul>
-        <p className="signed-samples__note">Sample attestations for the design phase.</p>
-      </div>
-      <RevokeModal
-        open={selected !== null}
-        record={selected}
-        attest={attest}
-        attester={attester}
-        onClose={() => setSelected(null)}
-        onRevoked={() => setTick((t) => t + 1)}
-      />
-    </>
-  );
-}
-
-function UsedBadge({ used }: { used: boolean }) {
-  return (
-    <Badge tone={used ? 'success' : 'neutral'}>
-      {used ? 'Used to release a tranche' : 'Not used yet'}
-    </Badge>
-  );
-}
-
-function AttestationBadge({ state }: { state: AttestationStatus | undefined }) {
-  return (
-    <Badge tone={state?.kind === 'revoked' ? 'danger' : state?.kind === 'expired' ? 'neutral' : state?.kind === 'valid' ? 'success' : 'neutral'}>
-      {state?.kind === 'revoked' ? 'Revoked' : state?.kind === 'expired' ? 'Expired' : state?.kind === 'valid' ? 'Valid' : '…'}
-    </Badge>
-  );
-}
-
-function ProgrammeQueue({
-  client,
-  programmeId,
-  verifier,
-  attest,
-  onAttended,
-  onUsed,
-}: {
-  client: ReturnType<typeof useProgramme>['client'];
-  programmeId: string;
-  verifier: string | null;
-  attest: AttestClient;
-  onAttended: (record: AttestRecord) => void;
-  onUsed: (uid: string) => void;
-}) {
-  const [tick, setTick] = useState(0);
-
-  const isVerifier = useContractRead(
-    () => client.is_verifier({ addr: verifier ?? '' }),
-    [client, verifier],
-    { enabled: Boolean(verifier) },
-  );
-
-  // Who might be waiting comes from the published index, because the contract
-  // keeps no list of awards. Fetched only once the account is a verifier, so a
-  // visitor's screen makes no request it cannot use. Every entry is read back
-  // from the contract below, so a stale or wrong list costs an extra read and
-  // can never put a false award on screen.
-  const indexed = useIndexedList(() => fetchAwards(programmeId), [programmeId], {
-    enabled: isVerifier.data === true,
-  });
-  const recipients = useMemo(
-    () => (indexed.data ?? []).map((award) => award.recipient),
-    [indexed.data],
-  );
-
-  // Fetched only for the account that is verified, in one pass so the whole
-  // list can be sorted by how long each recipient has been waiting.
-  const [milestones, setMilestones] = useState<Milestone[] | null>(null);
-  useEffect(() => {
-    if (isVerifier.data !== true || recipients.length === 0) return;
-    let cancelled = false;
-    (async () => {
-      setMilestones(null);
-      const entries = await Promise.all(
-        recipients.map(
-          async (recipient): Promise<Milestone | null> => {
-            try {
-              const { result } = await client.get_award({ recipient });
-              const award = result.unwrap();
-              return award.tranches_released < award.tranches
-                ? { recipient, granted: award.granted, released: award.released, tranches: award.tranches, tranchesReleased: award.tranches_released }
-                : null;
-            } catch {
-              // No award, or the award is fully released — both are normal
-              // answers, not failures. The award-raising row simply does not
-              // appear in the queue.
-              return null;
-            }
-          },
-        ),
-      );
-      if (cancelled) return;
-      // Fewest attested tranches first: a recipient still waiting on their
-      // first milestone has been waiting longest. Where there is no
-      // per-tranche timestamp on-chain, this is the best proxy for the number
-      // that matters to the person waiting.
-      const awaiting = entries.filter((entry): entry is Milestone => entry !== null);
-      awaiting.sort((a, b) => a.tranchesReleased - b.tranchesReleased || a.recipient.localeCompare(b.recipient));
-      setMilestones(awaiting);
-    })();
-    return () => {
-      cancelled = true;
-    };
-    // `recipients` is memoised from the indexed list, so this re-reads the
-    // awards when the index changes rather than on every render. `tick` is
-    // here to force that re-read after an attestation releases a tranche.
-  }, [client, isVerifier.data, recipients, tick]);
-
-  const [selected, setSelected] = useState<Milestone | null>(null);
-
-  if (!verifier) {
-    return (
-      <Empty
-        title="Connect a wallet"
-        description="Verification is per account — connect the wallet you verify with to see who is waiting on you."
-      />
-    );
-  }
-
-  if (isVerifier.loading) return <Loading label="Checking verifier status" rows={2} />;
-  if (isVerifier.error) {
-    return <ErrorState error={isVerifier.error} contract="program" onRetry={isVerifier.refetch} />;
-  }
-  if (isVerifier.data !== true) {
-    return (
-      <Empty
-        title="You are not a verifier on this programme"
-        description="Only accounts the programme trusts as verifiers can sign the attestations that release tranches. Verifier onboarding is handled off-chain by the programme."
-      />
-    );
-  }
-
-  if (indexed.loading) return <Loading label="Loading the awards list" rows={2} />;
-
-  // A missing list is not a failed contract call, so it is shown as an empty
-  // state rather than an error: everything else on this screen still works.
-  if (indexed.error) {
-    return (
-      <Empty
-        title="The awards list is unavailable"
-        description="The published index could not be reached, so nobody can be listed here. Signing an attestation still works, and the list returns when the index does."
-        action={
-          <Button variant="secondary" onClick={indexed.refetch}>
-            Try again
-          </Button>
-        }
-      />
-    );
-  }
-
-  if (recipients.length === 0) {
-    return (
-      <Empty
-        title="No awards in this programme yet"
-        description="This queue lists recipients who hold an award. It fills once applications are settled and the published index catches up, which can take a few hours."
-      />
-    );
-  }
-
-  if (milestones === null) return <Loading label="Checking recipients" rows={2} />;
-
-  if (milestones.length === 0) {
-    return (
-      <Empty
-        title="Nothing waiting on you"
-        description="Every known award has had all its tranches released. New awards or recipients will appear here once there is a milestone to attest."
-      />
-    );
-  }
-
-  const columns: Column<Milestone>[] = [
-    { key: 'recipient', header: 'Recipient', render: (row) => <span className="numeric" title={row.recipient}>{shorten(row.recipient)}</span> },
-    { key: 'progress', header: 'Tranches', render: (row) => `${row.tranchesReleased} / ${row.tranches}` },
-    { key: 'released', header: 'Released', render: (row) => formatXlm(row.released), numeric: true },
-    { key: 'remaining', header: 'Remaining', render: (row) => formatXlm(row.granted - row.released), numeric: true },
-    {
-      key: 'status',
-      header: 'Waiting on',
-      render: (row) => (
-        <Badge tone={row.tranchesReleased === 0 ? 'warning' : 'accent'}>
-          {row.tranchesReleased === 0 ? 'First tranche' : `Tranche ${row.tranchesReleased + 1}`}
-        </Badge>
-      ),
-    },
-    {
-      key: 'action',
-      header: '',
-      render: (row) => (
-        <Button variant="secondary" onClick={() => setSelected(row)} disabled={!verifier}>
-          Sign attestation
-        </Button>
-      ),
-    },
-  ];
-
-  return (
-    <>
-      <Table
-        caption={`Recipients awaiting attestation on ${programmeId}`}
-        columns={columns}
-        rows={milestones}
-        keyOf={(row) => row.recipient}
-      />
-      <AttestationModal
-        open={selected !== null}
-        recipient={selected?.recipient ?? null}
-        nextTranche={selected ? selected.tranchesReleased + 1 : 0}
-        trancheCount={selected?.tranches ?? 0}
-        programme={client}
-        attest={attest}
-        verifier={verifier}
-        onClose={() => setSelected(null)}
-        onReleased={() => setTick((t) => t + 1)}
-        onAttended={onAttended}
-        onUsed={onUsed}
-      />
-    </>
-  );
-}
-
-export const VerifierDashboard = () => {
-  const { address } = useWallet();
-  const { client: programme, id: programmeId } = useProgramme();
-  const { programmeAt, attest } = useSoroban();
-  const [approved, setApproved] = useState('');
-  const [amountError, setAmountError] = useState<string | null>(null);
-
-  // The reviewer's own last-submitted vote, so the form can show it and let
-  // them replace it rather than treating every review as a first vote.
-  // Derived rather than synced in an effect: storage is the source of truth,
-  // and `voteVersion` re-reads it after a successful amend writes through.
-  const [voteVersion, setVoteVersion] = useState(0);
-  const myVote = useMemo(
-    () => (address ? loadReviewerVote(programmeId, DEMO_APPLICANT, address) : null),
-    // voteVersion looks unused to the linter because the read happens through
-    // localStorage rather than through a value it can see. Removing it would
-    // stop the form updating after an amend.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-    [address, programmeId, voteVersion],
-  );
-
-  // Pre-fill the form with the reviewer's known vote so they see what they
-  // already cast and are editing it, not starting a blank second vote. The
-  // field is editable, so it cannot simply be derived — instead the seed is
-  // tracked, and the field reset only when the underlying vote changes.
-  const [seededFrom, setSeededFrom] = useState<bigint | null | undefined>(undefined);
-  if (seededFrom !== myVote) {
-    setSeededFrom(myVote);
-    setApproved(myVote !== null ? formatExact(myVote) : '');
-  }
-
-  // The verifier's own attestations are derived from the browser-storage
-  // stand-in isolated in `../fixtures/verifierFixtures` (there is no on-chain
-  // "attestations by attester" list), keyed by the connected address.
-  // Deriving rather than syncing in an effect keeps an address change to a
-  // single render. sessionAdds covers the rare case where persisting failed,
-  // so an attestation signed this session still shows up for revocation.
-  const [sessionAttestations, setSessionAttestations] = useState<Record<string, AttestRecord[]>>({});
-  const myAttestations = useMemo(() => {
-    if (!address) return [];
-    const stored = loadAttestations(address);
-    const extra = (sessionAttestations[address] ?? []).filter(
-      (record) => !stored.some((existing) => existing.uid === record.uid),
-    );
-    return [...extra, ...stored];
-  }, [address, sessionAttestations]);
-
-  const handleAttended = (record: AttestRecord) => {
-    if (!address) return;
-    try {
-      const next = loadAttestations(address).filter((existing) => existing.uid !== record.uid);
-      next.unshift(record);
-      saveAttestations(address, next);
-    } catch {
-      // Persist failed — sessionAdds below still carries it for this session.
-    }
-    setSessionAttestations((prev) => ({
-      ...prev,
-      [address]: (prev[address] ?? []).filter((existing) => existing.uid !== record.uid).concat(record),
-    }));
-  };
-
-  // A signed attestation starts "Not used yet"; releasing the tranche through
-  // the modal flips it to "Used to release a tranche".
-  const handleUsed = (uid: string) => {
-    if (!address) return;
-    const merged = [...(sessionAttestations[address] ?? []), ...loadAttestations(address)];
-    const deduped = merged.filter(
-      (record, index, all) => all.findIndex((other) => other.uid === record.uid) === index,
-    );
-    const marked = deduped.map((record) =>
-      record.uid === uid ? { ...record, used: true } : record,
-    );
-    try {
-      saveAttestations(address, marked);
-    } catch {
-      // Best-effort only — the session copy below still carries it.
-    }
-    setSessionAttestations((prev) => ({ ...prev, [address]: marked }));
-  };
-
-  const application = useContractResult<Application>(
-    () => programme.get_application({ applicant: DEMO_APPLICANT }),
-    [programme],
-  );
-  const config = useContractResult(() => programme.config(), [programme]);
-  const reviewer = useContractRead(
-    () => programme.is_reviewer({ addr: address as string }),
-    [programme, address],
-    { enabled: Boolean(address) },
-  );
-  const review = useTransaction({ onSuccess: () => application.refetch() });
-
-  const submitReview = async (event: FormEvent) => {
-    event.preventDefault();
-    if (!address || !application.data) return;
-
-    const parsed = tryParseAmount(approved);
-    if (!parsed.ok) {
-      setAmountError(parsed.error);
-      return;
-    }
-    if (parsed.value > application.data.requested) {
-      setAmountError(`Approval cannot exceed ${formatAmount(application.data.requested)} XLM`);
-      return;
-    }
-
-    setAmountError(null);
-    const result = await review.send(() =>
-      programme.review({ reviewer: address, applicant: DEMO_APPLICANT, approved: parsed.value }),
-    );
-    if (result !== null) {
-      // review() replaces rather than adds — this is the same vote, updated,
-      // so the form keeps showing it as "your vote" rather than clearing.
-      saveReviewerVote(programmeId, DEMO_APPLICANT, address, parsed.value);
-      setVoteVersion((v) => v + 1);
-    }
-  };
-
-  return (
-    <div className="dashboard-container">
-      <PausedBanner client={programme} />
-
-      <header className="dashboard-header animate-fade-up">
-        <h1>Verifier Dashboard</h1>
-        <p className="typo-text text-muted">See who is waiting on your attestation to unlock their next tranche.</p>
+        <Link className="verifier-page__lookup" to="/attestations">
+          Look up an attestation →
+        </Link>
       </header>
 
-      <section className="attestation-section animate-fade-up" style={{ animationDelay: '100ms' }}>
-        <div className="attestation-section__header">
-          <h2>Recipients awaiting attestation</h2>
-          <Badge tone={address ? 'neutral' : 'warning'}>{address ? truncateAddress(address) : 'No wallet connected'}</Badge>
-        </div>
-        <div className="attestation-section__intro">
-          <ShieldCheck size={18} aria-hidden="true" />
-          <p className="typo-text text-muted">
-            No tranche is released until a trusted verifier signs it. These recipients&rsquo; next milestone is sitting
-            on you.
-          </p>
-        </div>
-        <div className="verifier-layout">
-          <div className="verifier-layout__queue">
-            <h3 className="verifier-layout__title">Waiting for your confirmation</h3>
-            <ProgrammeQueue client={programmeAt(DEMO_PROGRAMME_ID)} programmeId={DEMO_PROGRAMME_ID} verifier={address ?? null} attest={attest} onAttended={handleAttended} onUsed={handleUsed} />
+      {!address ? (
+        <section className="verifier-page__signin" aria-labelledby="verifier-signin">
+          <div className="verifier-page__signin-copy">
+            <h2 id="verifier-signin">Sign in with your verifier account</h2>
+            <p className="typo-text text-muted">
+              Use the account the programme registered as its verifier, in Freighter.
+            </p>
+            <Button onClick={signIn} loading={connecting} loadingLabel="Signing in…">
+              Sign in
+            </Button>
+          </div>
+          <ul className="verifier-page__signin-list">
+            <li>
+              <span className="verifier-page__signin-name">Claims waiting for you</span>
+              <span className="verifier-page__signin-hint">
+                Recipients whose next tranche needs your confirmation
+              </span>
+            </li>
+            <li>
+              <span className="verifier-page__signin-name">Attestations you&apos;ve signed</span>
+              <span className="verifier-page__signin-hint">
+                And whether each has released a tranche yet
+              </span>
+            </li>
+            <li>
+              <span className="verifier-page__signin-name">Programmes you verify for</span>
+              <span className="verifier-page__signin-hint">
+                With the condition each one asks you to check
+              </span>
+            </li>
+          </ul>
+        </section>
+      ) : (
+        <>
+          <div className="verifier-page__stats" role="list" aria-label="Verification summary">
+            {stats.map((s) => (
+              <div key={s.k} className="verifier-page__stat" role="listitem">
+                <span className="verifier-page__stat-label">{s.k}</span>
+                <span className="verifier-page__stat-value numeric">{s.v}</span>
+              </div>
+            ))}
           </div>
 
-          {address && (
-            <div className="verifier-layout__signed">
-              <div className="attestation-section__header">
-                <h3 className="verifier-layout__title">Your attestations</h3>
-                <Badge tone="neutral">{truncateAddress(address)}</Badge>
-              </div>
-              <div className="attestation-section__intro">
-                <ShieldCheck size={18} aria-hidden="true" />
-                <p className="typo-text text-muted">
-                  What you have already signed, and whether it unlocked a tranche yet.
-                  Revoke one of your own attestations if it was made in error — revocation marks it invalid for future
-                  tranches without undoing any that already released.
-                </p>
-              </div>
-              <MyAttestations
-                attest={attest}
-                attester={address}
-                records={myAttestations}
-              />
-            </div>
-          )}
-        </div>
-      </section>
-
-      <section className="stats-grid animate-fade-up" style={{ animationDelay: '200ms' }}>
-        <div className="stat-card glass-panel">
-          <div className="stat-icon"><Clock size={24} /></div>
-          <div className="stat-content">
-            <span className="stat-label">Attestations needed</span>
-            <span className="stat-value">1 per awaiting tranche</span>
-          </div>
-        </div>
-      </section>
-
-      <section className="queue-section animate-fade-up" style={{ animationDelay: '300ms' }}>
-        <h2>Application review</h2>
-        <div className="queue-list">
-          <AsyncView {...application} onRetry={application.refetch} contract="program">
-            {(currentApplication) => {
-              const quorum = config.data?.quorum ?? 0;
-              const medianIndex = quorum > 0 ? (quorum - 1) / 2 : 0;
-              const median = currentApplication.votes.length > medianIndex
-                ? currentApplication.votes[medianIndex]
-                : null;
-              const isWithdrawn = currentApplication.withdrawn;
-              const canReview = reviewer.data === true && !currentApplication.finalized && !isWithdrawn;
-
-              const pendingParsed = tryParseAmount(approved);
-              const pendingValue = pendingParsed.ok ? pendingParsed.value : null;
-              const isAmending = myVote !== null;
-              const projectedMedian =
-                pendingValue !== null
-                  ? medianAt(simulateAmendment(currentApplication.votes, myVote, pendingValue), quorum)
-                  : null;
-
-              return (
-                <div className="queue-item glass-panel reviewer-console">
-                  <div className="queue-item-icon"><FileSignature size={24} /></div>
-                  <div className="queue-item-content">
-                    <div className="queue-item-header">
-                      <h3>Application review</h3>
-                      {isWithdrawn ? (
-                        <span className="badge badge-pending" style={{ backgroundColor: 'var(--color-error)' }}>
-                          Withdrawn
-                        </span>
-                      ) : (
-                        <span className="badge badge-pending">
-                          {currentApplication.votes.length} / {quorum} votes
-                        </span>
-                      )}
-                    </div>
-                    <p className="typo-text text-muted">
-                      Requested: <strong>{formatAmount(currentApplication.requested)} XLM</strong>
-                    </p>
-                    {isWithdrawn ? (
-                      <p className="text-warning" style={{ color: 'var(--color-error)' }}>
-                        This application has been withdrawn by the applicant and cannot be reviewed or finalized.
-                      </p>
-                    ) : (
-                      <>
-                        <div className="vote-spread" aria-label="Sorted reviewer approvals">
-                          {currentApplication.votes.map((vote, index) => (
-                            <span key={`${vote}-${index}`} className={`badge${index === medianIndex ? ' vote-median' : ''}`}>
-                              {formatAmount(vote)} XLM{index === medianIndex ? ' · median' : ''}
-                            </span>
-                          ))}
-                        </div>
-                        {median !== null && <p className="median-result">Settling award: <strong>{formatAmount(median)} XLM</strong></p>}
-                        {!address && <p className="text-warning">Connect a wallet to review.</p>}
-                        {address && reviewer.data === false && <p className="text-warning">This wallet is not a registered reviewer.</p>}
-                        {canReview && (
-                          <form className="review-form" onSubmit={submitReview}>
-                            {myVote !== null && (
-                              <p className="typo-text text-muted">
-                                Your current vote: <strong>{formatAmount(myVote)} XLM</strong>. Submitting again
-                                replaces it — it does not add a second vote.
-                              </p>
-                            )}
-                            <Field
-                              label={isAmending ? 'Update your approval' : 'Your approval'}
-                              value={approved}
-                              onChange={(event) => setApproved(event.target.value)}
-                              onBlur={() => approved && setAmountError(tryParseAmount(approved).ok ? null : 'Enter a valid amount')}
-                              placeholder="300"
-                              inputMode="decimal"
-                              suffix="XLM"
-                              error={amountError}
-                              hint={`Up to ${formatAmount(currentApplication.requested)} XLM`}
-                            />
-                            {pendingValue !== null && (
-                              <p className="typo-text text-muted" role="status">
-                                Median {isAmending ? 'if amended' : 'if submitted'}:{' '}
-                                <strong>{median !== null ? `${formatAmount(median)} XLM` : '—'}</strong>
-                                {' → '}
-                                <strong>{projectedMedian !== null ? `${formatAmount(projectedMedian)} XLM` : '—'}</strong>
-                              </p>
-                            )}
-                            <Button loading={review.busy} type="submit">
-                              {isAmending ? 'Update your vote' : 'Submit review'}
-                            </Button>
-                            {review.error && <p className="ui-field__message ui-field__message--error" role="alert">{review.error.message}</p>}
-                          </form>
-                        )}
-                      </>
-                    )}
-                  </div>
+          <div className="verifier-page__grid">
+            <section aria-labelledby="verifier-queue">
+              <h2 id="verifier-queue" className="verifier-page__section-title">
+                Waiting for your confirmation
+              </h2>
+              {queue.length === 0 ? (
+                <div className="verifier-page__empty">
+                  <p className="typo-text">
+                    <strong>All done.</strong> Nothing waiting — new claims appear here when a
+                    recipient&apos;s next tranche needs you.
+                  </p>
                 </div>
-              );
-            }}
-          </AsyncView>
-        </div>
-      </section>
+              ) : (
+                <ul className="verifier-page__queue">
+                  {queue.map((item) => {
+                    const isOpen = openId === item.id;
+                    const status = statusById[item.id] ?? 'idle';
+                    const pending = status === 'pending' && signingId === item.id;
+                    return (
+                      <li key={item.id}>
+                        <article
+                          className={`verifier-card${isOpen ? ' verifier-card--open' : ''}`}
+                          aria-label={`${item.condition}, ${item.programme}`}
+                        >
+                          <div className="verifier-card__top">
+                            <span className="verifier-card__titles">
+                              <span className="verifier-card__condition">{item.condition}</span>
+                              <span className="verifier-card__meta">
+                                {item.programme} · Tranche {item.tranche} of {item.tranches}
+                              </span>
+                            </span>
+                            <span className="verifier-card__subject numeric" title={item.subject}>
+                              {truncateAddress(item.subject, 6, 4)}
+                            </span>
+                          </div>
+
+                          {!isOpen ? (
+                            <div className="verifier-card__actions">
+                              <Button size="sm" onClick={() => openClaim(item)}>
+                                Review claim
+                              </Button>
+                              <Button variant="secondary" size="sm" onClick={() => declineClaim(item)}>
+                                Can&apos;t confirm
+                              </Button>
+                            </div>
+                          ) : (
+                            <div className="verifier-card__review">
+                              <dl className="verifier-card__facts">
+                                <div>
+                                  <dt>Schema</dt>
+                                  <dd className="numeric">{item.schema}</dd>
+                                </div>
+                                <div>
+                                  <dt>Recipient</dt>
+                                  <dd className="numeric" title={item.subject}>
+                                    {item.subject}
+                                  </dd>
+                                </div>
+                                <div>
+                                  <dt>Requested at ledger</dt>
+                                  <dd className="numeric">
+                                    {item.requestedLedger.toLocaleString()}
+                                  </dd>
+                                </div>
+                              </dl>
+
+                              <Field
+                                label="Reference (optional)"
+                                placeholder="e.g. register page, invoice number"
+                                value={reference}
+                                onChange={(event) => setReference(event.target.value)}
+                              />
+
+                              <label className="verifier-card__gate">
+                                <input
+                                  type="checkbox"
+                                  checked={checked}
+                                  onChange={(event) => setChecked(event.target.checked)}
+                                />
+                                <span className="verifier-card__box" aria-hidden="true">
+                                  {checked ? '✓' : ''}
+                                </span>
+                                <span>
+                                  I checked this myself and the condition is met. Signing releases
+                                  money and can&apos;t be undone.
+                                </span>
+                              </label>
+
+                              {status === 'error' && signError && openItem?.id === item.id && (
+                                <ErrorPanel explained={signError} live />
+                              )}
+                              {pending && (
+                                <PendingState title="Signing…" note="Check your wallet to approve." />
+                              )}
+
+                              <div className="verifier-card__actions">
+                                <Button variant="secondary" size="sm" onClick={closeClaim}>
+                                  Cancel
+                                </Button>
+                                <Button
+                                  size="sm"
+                                  disabled={!checked || pending}
+                                  loading={pending}
+                                  loadingLabel="Signing…"
+                                  onClick={() => signClaim(item)}
+                                >
+                                  Confirm and sign
+                                </Button>
+                              </div>
+                            </div>
+                          )}
+                        </article>
+                      </li>
+                    );
+                  })}
+                </ul>
+              )}
+              <p className="verifier-page__sample-note">
+                <Badge tone="neutral">Sample data</Badge> Sample queue for the design phase.
+              </p>
+            </section>
+
+            <section aria-labelledby="verifier-signed">
+              <h2 id="verifier-signed" className="verifier-page__section-title">
+                Signed by you
+              </h2>
+              {mine.length === 0 ? (
+                <div className="verifier-page__empty">
+                  <p className="typo-text text-muted">
+                    No attestations yet. Claims you confirm appear here.
+                  </p>
+                </div>
+              ) : (
+                <ul className="verifier-page__signed">
+                  {mine.map((m) => (
+                    <li key={m.uid} className="verifier-signed">
+                      <div className="verifier-signed__row">
+                        <span className="verifier-signed__uid numeric" title={m.uid}>
+                          {truncateAddress(m.uid, 8, 6)}
+                        </span>
+                        <Badge tone={m.used ? 'accent' : 'neutral'}>
+                          {m.used ? 'Used to release a tranche' : 'Not used yet'}
+                        </Badge>
+                      </div>
+                      <span className="verifier-signed__meta">
+                        {m.programme} · {truncateAddress(m.subject, 6, 4)} · {m.schema} · ledger{' '}
+                        {m.ledger.toLocaleString()}
+                      </span>
+                    </li>
+                  ))}
+                </ul>
+              )}
+              <p className="verifier-page__sample-note">
+                <Badge tone="neutral">Sample data</Badge> Sample queue and attestations for the
+                design phase.
+              </p>
+            </section>
+          </div>
+        </>
+      )}
     </div>
   );
 };

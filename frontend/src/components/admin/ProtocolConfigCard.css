@@ -1,0 +1,58 @@
+.protocol-config {
+  background: var(--surface);
+  border-radius: var(--radius-hero-lg);
+  padding: var(--space-5);
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+  min-width: 0;
+}
+
+.protocol-config__head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-3);
+  flex-wrap: wrap;
+  margin-bottom: var(--space-2);
+}
+
+.protocol-config__head h2 {
+  margin: 0;
+  font-size: var(--text-lg);
+  font-weight: var(--weight-extrabold);
+}
+
+.protocol-config__rows {
+  margin: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+.protocol-config__row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: var(--space-3);
+  padding: var(--space-2) 0;
+  font-size: var(--text-sm);
+  flex-wrap: wrap;
+}
+
+.protocol-config__row dt {
+  color: var(--text-muted);
+}
+
+.protocol-config__row dd {
+  margin: 0;
+  font-family: var(--font-numeric);
+  overflow-wrap: anywhere;
+  text-align: right;
+}
+
+.protocol-config__foot {
+  margin: var(--space-1) 0 0;
+  font-size: var(--text-xs);
+  color: var(--text-muted);
+  line-height: var(--leading-body);
+}

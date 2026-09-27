@@ -83,6 +83,7 @@
   --tracking-heading: -0.03em;
   --tracking-title: -0.02em;
   --tracking-tight: -0.01em;
+  --tracking-label: 0.04em; /* uppercase field labels */
 
   /* Radius ladder, smallest surface to largest. The existing sm/md/lg stay
      for pages that already use them. */

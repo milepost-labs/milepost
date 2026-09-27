@@ -1,0 +1,93 @@
+.payee-mgmt {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-6);
+}
+
+.payee-mgmt__header {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+
+.payee-mgmt__header h1 {
+  margin: 0;
+}
+
+.payee-mgmt__programme {
+  display: flex;
+  gap: var(--space-3);
+  align-items: flex-start;
+  flex-wrap: wrap;
+}
+
+.payee-mgmt__programme .ui-field {
+  flex: 1;
+  min-width: 260px;
+}
+
+.payee-mgmt__creator {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  margin: var(--space-3) 0 0;
+  font-size: var(--text-sm);
+  color: var(--text-muted);
+}
+
+.payee-mgmt__consequence {
+  margin: 0 0 var(--space-4);
+  font-size: var(--text-sm);
+  line-height: var(--leading-body);
+  color: var(--text-muted);
+}
+
+.payee-mgmt__readonly {
+  margin: 0 0 var(--space-4);
+  font-size: var(--text-sm);
+  color: var(--warning);
+}
+
+.payee-mgmt__form {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+  max-width: 32rem;
+}
+
+.payee-mgmt__list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+}
+
+.payee-mgmt__row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-3);
+  flex-wrap: wrap;
+  padding: var(--space-3) var(--space-4);
+  border-radius: var(--radius-md);
+  background: var(--surface-hover);
+}
+
+.payee-mgmt__row-info {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+}
+
+.payee-mgmt__row-label {
+  font-size: var(--text-sm);
+  font-weight: var(--weight-semibold);
+}
+
+.payee-mgmt__row-actions {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+}

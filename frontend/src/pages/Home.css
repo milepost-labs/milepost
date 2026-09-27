@@ -147,6 +147,12 @@
   gap: 2rem;
 }
 
+@media (max-width: 768px) {
+  .compare-bento {
+    grid-template-columns: 1fr;
+  }
+}
+
 .bento-card {
   padding: 2rem;
   display: flex;
@@ -185,65 +191,6 @@
 .bento-list li strong {
   color: var(--text-main);
   font-weight: 600;
-}
-
-/* Alternating Grid (How It Works) */
-.how-it-works-section {
-  scroll-margin-top: var(--space-8);
-}
-
-.alternating-grid {
-  display: flex;
-  flex-direction: column;
-  gap: 4rem;
-}
-
-.grid-row {
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 4rem;
-  align-items: center;
-}
-
-.grid-row.reverse .grid-content {
-  order: 2;
-}
-
-.grid-row.reverse .grid-visual {
-  order: 1;
-}
-
-.grid-content {
-  display: flex;
-  flex-direction: column;
-  gap: 1rem;
-}
-
-.step-number {
-  font-size: 0.875rem;
-  font-weight: 700;
-  color: var(--color-primary-light);
-  letter-spacing: 0.1em;
-}
-
-[data-theme='dark'] .step-number {
-  color: var(--color-primary-dark);
-}
-
-.grid-content h3 {
-  font-size: 1.75rem;
-  margin: 0;
-}
-
-.grid-visual {
-  aspect-ratio: 4/3;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  background: var(--surface-hover);
-  border-radius: 12px;
-  overflow: hidden;
-  padding: 2rem;
 }
 
 /* Abstract Hand-Coded UI Blocks */
@@ -415,69 +362,6 @@
   margin-left: 15px;
   margin-top: 0.5rem;
   margin-bottom: 0.5rem;
-}
-
-/* Full Bleed Infrastructure CTA */
-.full-bleed {
-  width: 100vw;
-  position: relative;
-  left: 50%;
-  right: 50%;
-  margin-left: -50vw;
-  margin-right: -50vw;
-  background-color: var(--text-main);
-  color: var(--bg-color);
-  padding: 6rem 0;
-}
-
-.infra-container {
-  max-width: 1280px;
-  margin: 0 auto;
-  padding: 0 2rem;
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  gap: 4rem;
-}
-
-.infra-text {
-  flex: 2;
-}
-
-.infra-text h2 {
-  color: var(--bg-color);
-  margin-bottom: 1rem;
-}
-
-.infra-text p {
-  color: rgba(255, 255, 255, 0.7);
-  font-size: 1.125rem;
-}
-
-[data-theme='dark'] .infra-text p {
-  color: rgba(0, 0, 0, 0.6);
-}
-
-.infra-action {
-  flex: 1;
-  display: flex;
-  justify-content: flex-end;
-}
-
-.btn-inverted {
-  background-color: var(--bg-color);
-  color: var(--text-main);
-}
-
-[data-theme='dark'] .btn-inverted {
-  background-color: var(--bg-color);
-  color: var(--text-main);
-}
-
-.btn-inverted:hover {
-  background-color: var(--surface-hover);
-  color: var(--text-main);
-  filter: none;
 }
 
 code {
