@@ -1,0 +1,14 @@
+/**
+ * The shared announcement line (`AnnouncerProvider`, mounted once here).
+ * Deliberately quiet — small, muted-accent text, present whether or not it
+ * currently has anything to say, so it never causes layout shift the moment
+ * the first async result actually arrives.
+ */
+.announcer {
+  max-width: var(--page-max-width);
+  margin: 0 auto;
+  padding: 0 var(--page-gutter) var(--space-5);
+  min-height: var(--space-4-5);
+  font-size: var(--text-caption);
+  color: var(--accent-strong);
+}

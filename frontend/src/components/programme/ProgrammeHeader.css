@@ -1,0 +1,109 @@
+.programme-header {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+}
+
+.programme-header__badges {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  flex-wrap: wrap;
+}
+
+/* Phase pill colours live in phasePill.css, shared with the directory. */
+
+
+
+.programme-header__name {
+  margin: 0;
+  font-size: var(--text-h1);
+  line-height: var(--leading-heading);
+  letter-spacing: var(--tracking-heading);
+  font-weight: var(--weight-extrabold);
+  text-wrap: balance;
+}
+
+.programme-header__meta {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2) var(--space-4-5);
+  flex-wrap: wrap;
+  font-size: var(--text-caption);
+  color: var(--text-muted);
+}
+
+.programme-header__meta code {
+  color: var(--text);
+}
+
+.programme-header__read {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+}
+
+.programme-header__read-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: var(--radius-full);
+  background: var(--warning);
+  flex: none;
+}
+
+.phase-stepper {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: var(--space-2);
+}
+
+.phase-stepper__step {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+  border-radius: var(--radius-row);
+  padding: var(--space-4);
+  background: var(--surface);
+  color: var(--text-muted);
+}
+
+.phase-stepper__step--done {
+  color: var(--text);
+}
+
+/* The current step is filled with --text, the design's "current" treatment. */
+.phase-stepper__step--current {
+  background: var(--text);
+  color: var(--bg);
+}
+
+.phase-stepper__label {
+  font-size: var(--text-md);
+  font-weight: var(--weight-bold);
+}
+
+.phase-stepper__note {
+  font-size: var(--text-xs);
+  opacity: 0.8;
+}
+
+.programme-header__cancelled {
+  background: var(--refund-soft);
+  border-radius: var(--radius-row);
+  padding: var(--space-4) var(--space-4-5);
+  font-size: var(--text-sm);
+  line-height: var(--leading-body);
+}
+
+.programme-header__cancelled b {
+  color: var(--refund);
+}
+
+@media (max-width: 560px) {
+  .phase-stepper {
+    grid-template-columns: 1fr;
+  }
+}

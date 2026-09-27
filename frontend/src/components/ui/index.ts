@@ -6,6 +6,7 @@ export { Field, type FieldProps } from './Field';
 export { AmountField, type AmountFieldProps } from './AmountField';
 export { Badge, PhaseBadge, type BadgeTone } from './Badge';
 export { Table, type Column } from './Table';
+export { List, ListRow, type ListProps, type ListRowProps } from './ListRow';
 export { Modal, type ModalProps } from './Modal';
 export {
   Select,

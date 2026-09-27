@@ -1,0 +1,325 @@
+.award-card {
+  background: var(--surface);
+  border-radius: var(--radius-hero);
+  padding: clamp(18px, 3vw, 28px);
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4-5);
+  transition: background 0.2s ease;
+}
+
+.award-card__header {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: var(--space-3);
+  flex-wrap: wrap;
+}
+
+.award-card__title-group {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+}
+
+.award-card__title {
+  font-size: var(--text-panel);
+  font-weight: var(--weight-extrabold);
+  letter-spacing: var(--tracking-tight);
+  color: var(--text);
+  text-decoration: none;
+  line-height: var(--leading-snug);
+}
+
+.award-card__title:hover {
+  color: var(--accent-strong);
+}
+
+.award-card__title:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: var(--focus-offset);
+  border-radius: var(--radius-sm);
+}
+
+.award-card__meta {
+  font-size: var(--text-sm);
+  color: var(--text-muted);
+}
+
+.award-card__mode-badge {
+  font-size: var(--text-xs);
+  font-weight: var(--weight-bold);
+  border-radius: var(--radius-full);
+  padding: 5px 12px;
+  background: var(--surface-raised);
+  color: var(--text-muted);
+  white-space: nowrap;
+}
+
+/* Tranche tiles (C03) */
+.award-card__tranches {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 150px), 1fr));
+  gap: var(--space-2);
+}
+
+.tranche-tile {
+  border-radius: var(--radius-row);
+  padding: var(--space-3-5, 14px);
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+  transition: background 0.3s ease, color 0.3s ease;
+  min-height: 84px;
+  box-sizing: border-box;
+}
+
+.tranche-tile--released {
+  background: var(--accent);
+  color: var(--accent-contrast);
+}
+
+.tranche-tile--proof-ready {
+  background: var(--accent-soft);
+  color: var(--text);
+  box-shadow: inset 0 0 0 1px var(--accent);
+}
+
+.tranche-tile--waiting {
+  background: var(--surface-raised);
+  color: var(--text);
+  border-left: 3px solid var(--warning);
+}
+
+.tranche-tile--locked {
+  background: var(--surface-raised);
+  color: var(--text-muted);
+}
+
+.tranche-tile__num {
+  font-size: var(--text-xs);
+  font-weight: var(--weight-semibold);
+  opacity: 0.85;
+}
+
+.tranche-tile__amount {
+  font-family: var(--font-numeric);
+  font-size: 1.0625rem;
+  font-weight: var(--weight-semibold);
+}
+
+.tranche-tile__status {
+  font-size: var(--text-xs);
+  font-weight: var(--weight-bold);
+  margin-top: auto;
+}
+
+/* Release banners and error state */
+.award-card__banner {
+  border-radius: var(--radius-row);
+  padding: var(--space-3-5, 14px) var(--space-4);
+  font-size: var(--text-sm);
+  line-height: var(--leading-body);
+  display: flex;
+  align-items: center;
+  gap: var(--space-3) var(--space-4);
+  flex-wrap: wrap;
+}
+
+.award-card__banner--ready {
+  background: var(--accent-soft);
+  color: var(--text);
+}
+
+.award-card__banner--waiting {
+  background: var(--surface-raised);
+  color: var(--text);
+}
+
+.award-card__banner--releasing {
+  background: var(--accent-soft);
+  color: var(--text);
+  font-weight: var(--weight-semibold);
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+}
+
+.award-card__banner-text {
+  flex: 1;
+  min-width: 200px;
+}
+
+.award-card__release-btn {
+  cursor: pointer;
+  border: 0;
+  border-radius: var(--radius-full);
+  padding: 11px 20px;
+  font-size: var(--text-sm);
+  font-weight: var(--weight-bold);
+  background: var(--accent);
+  color: var(--accent-contrast);
+  min-height: var(--tap-min);
+  box-sizing: border-box;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  transition: opacity 0.2s ease, transform 0.1s ease;
+}
+
+.award-card__release-btn:hover {
+  opacity: 0.92;
+}
+
+.award-card__release-btn:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: var(--focus-offset);
+}
+
+.award-card__error-panel {
+  background: var(--refund-soft);
+  border-radius: var(--radius-row);
+  padding: var(--space-3-5, 14px) var(--space-4);
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+  font-size: var(--text-sm);
+  line-height: var(--leading-body);
+}
+
+.award-card__error-title {
+  color: var(--refund);
+  font-weight: var(--weight-bold);
+}
+
+.award-card__error-technical {
+  font-size: var(--text-xs);
+  color: var(--text-muted);
+  font-family: var(--font-numeric);
+}
+
+/* Mode-specific spending section */
+.award-card__mode-spending {
+  border-top: 1px solid var(--surface-raised);
+  padding-top: var(--space-4);
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+}
+
+.award-card__spending-header {
+  display: flex;
+  justify-content: space-between;
+  gap: var(--space-3);
+  flex-wrap: wrap;
+}
+
+.award-card__spending-title {
+  font-size: var(--text-md);
+  font-weight: var(--weight-bold);
+  color: var(--text);
+}
+
+.award-card__escrow-amount {
+  font-family: var(--font-numeric);
+  font-size: var(--text-md);
+  font-weight: var(--weight-semibold);
+  color: var(--text);
+}
+
+.award-card__spending-note {
+  font-size: var(--text-caption);
+  color: var(--text-muted);
+  line-height: var(--leading-body);
+}
+
+.award-card__spending-note a {
+  color: var(--accent-strong);
+  font-weight: var(--weight-bold);
+  text-decoration: underline;
+}
+
+.award-card__spending-note a:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: var(--focus-offset);
+  border-radius: var(--radius-sm);
+}
+
+.award-card__payees-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 220px), 1fr));
+  gap: var(--space-2);
+}
+
+.payee-option {
+  cursor: pointer;
+  border: 0;
+  text-align: left;
+  border-radius: var(--radius-input);
+  padding: 12px 14px;
+  background: var(--surface-raised);
+  color: var(--text);
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+  min-height: var(--tap-min);
+  box-sizing: border-box;
+  transition: box-shadow 0.2s ease, background 0.2s ease;
+}
+
+.payee-option:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: var(--focus-offset);
+}
+
+.payee-option--selected {
+  background: var(--accent-soft);
+  box-shadow: var(--shadow-selected);
+}
+
+.payee-option__label {
+  font-size: var(--text-sm);
+  font-weight: var(--weight-bold);
+}
+
+.payee-option__address {
+  font-family: var(--font-numeric);
+  font-size: var(--text-xs);
+  color: var(--text-muted);
+}
+
+.award-card__send-btn {
+  align-self: flex-start;
+  cursor: pointer;
+  border: 0;
+  border-radius: var(--radius-full);
+  padding: 11px 20px;
+  font-size: var(--text-sm);
+  font-weight: var(--weight-bold);
+  background: var(--text);
+  color: var(--bg);
+  min-height: var(--tap-min);
+  box-sizing: border-box;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  transition: opacity 0.2s ease;
+}
+
+.award-card__send-btn:hover {
+  opacity: 0.9;
+}
+
+.award-card__send-btn:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: var(--focus-offset);
+}
+
+.award-card__success-msg {
+  font-size: var(--text-sm);
+  color: var(--success);
+  font-weight: var(--weight-bold);
+}

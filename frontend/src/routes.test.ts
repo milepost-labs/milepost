@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { APP_ROUTES } from './routes';
-import { ROLES } from './pages/homeContent';
+import { ROLES, ROLE_ENTRIES } from './pages/homeContent';
 
 describe('APP_ROUTES', () => {
   it('has no duplicate paths', () => {
@@ -28,5 +28,21 @@ describe('landing roles section', () => {
     for (const role of ROLES) {
       for (const link of role.links) expect(served.has(link.path)).toBe(true);
     }
+  });
+});
+
+describe('landing role entry cards', () => {
+  it('sends each role to the route the app serves', () => {
+    const served = new Set(APP_ROUTES.map((route) => route.path));
+    for (const entry of ROLE_ENTRIES) expect(served.has(entry.path)).toBe(true);
+  });
+
+  it('offers the four entry points in the design order', () => {
+    expect(ROLE_ENTRIES.map((entry) => entry.path)).toEqual([
+      '/funders',
+      '/recipients',
+      '/verifiers',
+      '/admin',
+    ]);
   });
 });

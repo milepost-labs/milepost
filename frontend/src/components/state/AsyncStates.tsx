@@ -1,5 +1,6 @@
-import type { ReactNode } from 'react';
+import { useEffect, type ReactNode } from 'react';
 import { explain, isFailure, type ContractName, type Explained } from '../../lib/errors';
+import { useAnnouncer } from '../../context/useAnnouncer';
 import './AsyncStates.css';
 
 /**
@@ -46,9 +47,9 @@ export function PendingPulse({ label = 'Working…' }: { label?: string }) {
  * The full pending treatment for a write: pulse plus a title and an optional
  * note. `role="status"` announces it without stealing focus.
  */
-export function PendingState({ title, note }: { title: string; note?: string }) {
+export function PendingState({ title, note, live = true }: { title: string; note?: string; live?: boolean }) {
   return (
-    <div className="state-pending" role="status" aria-live="polite">
+    <div className="state-pending" role={live ? 'status' : undefined} aria-live={live ? 'polite' : undefined}>
       <span aria-hidden="true" className="pending-pulse__squares">
         {[0, 1, 2, 3].map((i) => (
           <span key={i} className="pending-pulse__square" style={{ animationDelay: `${i * 0.15}s` }} />
@@ -158,9 +159,12 @@ export function Empty({
 export function ErrorPanel({
   explained,
   onRetry,
+  live = true,
 }: {
   explained: Explained;
   onRetry?: () => void;
+  /** False when the shared announcer already speaks this, so it is not read twice. */
+  live?: boolean;
 }) {
   const technical =
     explained.code !== undefined && explained.contract
@@ -168,7 +172,7 @@ export function ErrorPanel({
       : null;
 
   return (
-    <div className={`state-error state-error--${explained.kind}`} role="alert">
+    <div className={`state-error state-error--${explained.kind}`} role={live ? 'alert' : undefined}>
       <p className="state-error__message">{explained.message}</p>
       {explained.action && <p className="state-error__action">{explained.action}</p>}
       {technical && <p className="state-error__technical numeric">{technical}</p>}
@@ -252,14 +256,16 @@ export function Success({
   description,
   action,
   onDismiss,
+  live = true,
 }: {
   title: string;
   description?: ReactNode;
   action?: ReactNode;
   onDismiss?: () => void;
+  live?: boolean;
 }) {
   return (
-    <div className="state-success" role="status" aria-live="polite">
+    <div className="state-success" role={live ? 'status' : undefined} aria-live={live ? 'polite' : undefined}>
       <div className="state-success__text">
         <p className="state-success__title">{title}</p>
         {description && <p className="state-success__description">{description}</p>}
@@ -301,17 +307,24 @@ export function TransactionOutcome({
   /** Offer only where sending the same transaction again makes sense. */
   onRetry?: () => void;
 }) {
-  if (error) return <ErrorPanel explained={error} onRetry={onRetry} />;
-  if (phase === 'building' || phase === 'signing' || phase === 'submitting') {
-    return (
-      <PendingState
-        title={pendingTitle ?? 'Waiting for the network…'}
-        note={pendingNote ?? 'Usually a few seconds.'}
-      />
-    );
+  const announce = useAnnouncer();
+  const pending = phase === 'building' || phase === 'signing' || phase === 'submitting';
+  const pendingText = pendingTitle ?? 'Waiting for the network…';
+
+  // Announced once per transition through the one shared region, so the
+  // inline states below stay visual and nothing is read out twice.
+  useEffect(() => {
+    if (error) announce(error.message, isFailure(error) ? 'alert' : 'status');
+    else if (pending) announce(pendingText);
+    else if (phase === 'success') announce(successTitle);
+  }, [announce, error, pending, pendingText, phase, successTitle]);
+
+  if (error) return <ErrorPanel explained={error} onRetry={onRetry} live={false} />;
+  if (pending) {
+    return <PendingState title={pendingText} note={pendingNote ?? 'Usually a few seconds.'} live={false} />;
   }
   if (phase === 'success') {
-    return <Success title={successTitle} description={successDescription} onDismiss={onDismiss} />;
+    return <Success title={successTitle} description={successDescription} onDismiss={onDismiss} live={false} />;
   }
   return null;
 }

@@ -1,0 +1,19 @@
+.recipient-awards {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+}
+
+.recipient-awards__empty {
+  background: var(--surface);
+  border-radius: var(--radius-card-lg);
+  padding: var(--space-5-5);
+  font-size: var(--text-md);
+  color: var(--text-muted);
+}
+
+.recipient-awards__note {
+  font-size: var(--text-xs);
+  color: var(--text-muted);
+  margin-top: var(--space-2);
+}

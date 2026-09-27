@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, type ReactNode } from 'react';
+import { useCallback, useEffect, useId, useRef, type ReactNode } from 'react';
 import './ui.css';
 
 export interface ModalProps {
@@ -27,6 +27,7 @@ export function Modal({ open, onClose, title, children, footer, busy = false }: 
   const returnFocusTo = useRef<HTMLElement | null>(null);
   const busyRef = useRef(busy);
   const onCloseRef = useRef(onClose);
+  const titleId = useId();
 
   useEffect(() => {
     busyRef.current = busy;
@@ -128,12 +129,14 @@ export function Modal({ open, onClose, title, children, footer, busy = false }: 
         className="ui-modal"
         role="dialog"
         aria-modal="true"
-        aria-label={title}
+        aria-labelledby={titleId}
         tabIndex={-1}
         onClick={(event) => event.stopPropagation()}
       >
         <header className="ui-modal__header">
-          <h2 className="ui-modal__title">{title}</h2>
+          <h2 className="ui-modal__title" id={titleId}>
+            {title}
+          </h2>
           <button
             type="button"
             className="ui-modal__close"
