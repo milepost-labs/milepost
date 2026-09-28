@@ -63,6 +63,28 @@ the bundle baseline only once growth is confirmed to be intentional, and record
 an advisory exception only with a stated reason, in
 `.github/npm-audit-exceptions.json`.
 
+### Test coverage
+
+CI runs the suite with coverage and writes the totals and the ten
+lowest-covered files to the job summary, whether the run passes or fails.
+Every file under `src/` is counted, including ones no test imports, so an
+untested screen shows up at 0% instead of being left out. Tests, `src/test/`,
+`src/fixtures/` and `src/main.tsx` are excluded.
+
+The build fails if statement, branch, function or line coverage falls below
+the floors in `coverage.thresholds` in `vite.config.ts`. Each floor sits just
+under the figure measured when it was set. If your change raises coverage,
+raise the floors to match; do not lower them to get a PR through.
+
+To run it locally:
+
+```sh
+npm run test:coverage                # prints a summary; fails below a floor
+node scripts/coverage-summary.mjs    # the Markdown tables CI shows
+```
+
+`npm run test:coverage` writes its report to `coverage/`, which git ignores.
+
 The [testing guide](docs/testing-guide.md) covers mocking a contract client,
 the no-network rule, and what the reachability check means when it fires.
 

@@ -12,7 +12,11 @@ From the repository root:
 npm test        # vitest run
 npm run lint    # eslint, including React Compiler rules
 npm run build   # tsc -b && vite build
+npm run test:coverage   # the suite with coverage, as CI runs it
 ```
+
+CI fails if coverage falls below the floors in `vite.config.ts`; see
+[Test coverage](../CONTRIBUTING.md#test-coverage) in CONTRIBUTING.md.
 
 Vitest runs in **jsdom** with the setup in `src/test/setup.ts` and
 `restoreMocks: true` (see `vite.config.ts`), so every mock is reset between
