@@ -1,9 +1,13 @@
 import type { FC } from 'react';
+import { useCallback, useState } from 'react';
+import { Download } from 'lucide-react';
 import type { IndexedAward } from '../../lib/indexer';
 import { fetchAwards } from '../../lib/indexer';
 import { useIndexedList } from '../../hooks/useIndexedList';
 import { formatAmount, parseAmount, describeAmount } from '../../lib/amount';
+import { awardsToCsv, downloadFile } from '../../lib/csv';
 import { FIXTURE_AWARDS } from '../../fixtures/programmeFixtures';
+import { Button } from '../ui';
 import './AwardsTab.css';
 
 export interface AwardsTabProps {
@@ -62,6 +66,12 @@ export const AwardsTab: FC<AwardsTabProps> = ({
     ? 'Awards are the median of reviewer votes. Listed from the public index, advisory.'
     : 'From the public index (awards.json), advisory. Each award is re-read on-chain before it is acted on.';
 
+  const handleDownloadCsv = useCallback(() => {
+    const csv = awardsToCsv(awards, new Date().toISOString());
+    const filename = `awards-${programmeId.slice(0, 12)}-${Date.now()}.csv`;
+    downloadFile(csv, filename, 'text/csv;charset=utf-8;');
+  }, [awards, programmeId]);
+
   let emptyMsg = 'The index has no awards for this programme yet.';
   if (phase === 'Open') {
     emptyMsg = 'No awards yet. Applications are still open.';
@@ -80,6 +90,19 @@ export const AwardsTab: FC<AwardsTabProps> = ({
       tabIndex={0}
     >
       <p className="awards-tab__note">{advisoryNote}</p>
+
+      {!loading && !error && awards.length > 0 && (
+        <div className="awards-tab__actions">
+          <Button
+            variant="secondary"
+            size="sm"
+            icon={<Download size={14} aria-hidden="true" />}
+            onClick={handleDownloadCsv}
+          >
+            Download CSV
+          </Button>
+        </div>
+      )}
 
       {loading && (
         <div className="awards-tab__status" role="status" aria-live="polite">

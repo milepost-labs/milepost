@@ -13,6 +13,11 @@
   line-height: var(--leading-body);
 }
 
+.awards-tab__actions {
+  display: flex;
+  justify-content: flex-end;
+}
+
 .awards-tab__status {
   padding: var(--space-4);
   font-size: var(--text-sm);
