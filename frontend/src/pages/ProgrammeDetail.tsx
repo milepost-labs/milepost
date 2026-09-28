@@ -16,7 +16,7 @@ import { ProgrammeHeader } from "../components/programme/ProgrammeHeader";
 import { WhereTheMoneyIs } from "../components/programme/WhereTheMoneyIs";
 import { ProgrammeTabs } from "../components/programme/ProgrammeTabs";
 import { ProgrammeActions } from "../components/programme/ProgrammeActions";
-import { Badge, Button, Card, Field, PhaseBadge, Stat, Table } from "../components/ui";
+import { Badge, Button, Card, Deadline, Field, PhaseBadge, Stat, Table } from "../components/ui";
 import { useSoroban } from "../context/useSoroban";
 import { useContractRead, useContractResult, useIndexedList, useProgramme } from "../hooks";
 import { fetchProgrammes } from "../lib/indexer";
@@ -773,15 +773,8 @@ export const ProgrammeDetail = () => {
                       key: "date",
                       header: "Date",
                       render: (row) => (
-                        <span className="numeric">
-                          {formatDateTime(row.deadline)}
-                        </span>
+                        <Deadline unixSeconds={row.deadline} />
                       ),
-                    },
-                    {
-                      key: "time",
-                      header: "Time",
-                      render: (row) => row.relative,
                     },
                     {
                       key: "status",
