@@ -1,5 +1,5 @@
 import { render, screen, waitFor } from '@testing-library/react';
-import { describe, expect, it, vi, beforeEach, afterEach } from 'vitest';
+import { describe, expect, it, vi, afterEach } from 'vitest';
 import { MemoryRouter } from 'react-router-dom';
 import { IndexStatus } from './IndexStatus';
 
@@ -20,7 +20,7 @@ function meta(overrides: Record<string, unknown> = {}) {
     registry: 'CCBQHBNIG5FIJEM6SQZQGTQRO3XXHV2BGVGGUY5JXXZ3Y55ZJSV3HMVF',
     fromLedger: 4697201,
     indexedToLedger: 4698280,
-    indexedAt: new Date(Date.now() - 3_600_000).toISOString(),
+    indexedAt: '2026-09-28T11:00:00Z',
     complete: true,
     gap: false,
     unhandledEvents: {},
@@ -29,13 +29,7 @@ function meta(overrides: Record<string, unknown> = {}) {
 }
 
 describe('IndexStatus', () => {
-  beforeEach(() => {
-    vi.useFakeTimers();
-    vi.setSystemTime(new Date('2026-09-28T12:00:00Z'));
-  });
-
   afterEach(() => {
-    vi.useRealTimers();
     vi.unstubAllGlobals();
   });
 

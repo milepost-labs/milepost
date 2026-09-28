@@ -1,5 +1,5 @@
 import type { FC } from 'react';
-import { useCallback, useState } from 'react';
+import { useCallback, useMemo } from 'react';
 import { Download } from 'lucide-react';
 import type { IndexedAward } from '../../lib/indexer';
 import { fetchAwards } from '../../lib/indexer';
@@ -55,12 +55,10 @@ export const AwardsTab: FC<AwardsTabProps> = ({
     { enabled: Boolean(programmeId) && !isSample },
   );
 
-  let awards: IndexedAward[] = [];
-  if (isSample) {
-    awards = phase === 'Settled' ? FIXTURE_AWARDS : [];
-  } else if (fetchedAwards) {
-    awards = fetchedAwards;
-  }
+  const awards = useMemo(() => {
+    if (isSample) return phase === 'Settled' ? FIXTURE_AWARDS : [];
+    return fetchedAwards ?? [];
+  }, [isSample, phase, fetchedAwards]);
 
   const advisoryNote = isSample
     ? 'Awards are the median of reviewer votes. Listed from the public index, advisory.'

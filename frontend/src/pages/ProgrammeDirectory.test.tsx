@@ -3,7 +3,17 @@ import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { MemoryRouter, useLocation } from 'react-router-dom';
 
 import { FIXTURE_PROGRAMMES } from '../fixtures/programmes';
+import { WalletProvider } from '../context/WalletContext';
 import { ProgrammeDirectory } from './ProgrammeDirectory';
+
+vi.mock('@stellar/freighter-api', () => ({
+  isConnected: vi.fn().mockResolvedValue({ isConnected: false }),
+  isAllowed: vi.fn().mockResolvedValue({ isAllowed: false }),
+  getAddress: vi.fn().mockResolvedValue({ address: '' }),
+  getNetwork: vi.fn().mockResolvedValue({ network: 'TESTNET', networkPassphrase: '' }),
+  requestAccess: vi.fn().mockResolvedValue({ address: '' }),
+  signTransaction: vi.fn().mockResolvedValue({ signedTxXdr: '', signerAddress: '' }),
+}));
 
 const meta = (indexedAt: string) => ({
   network: 'testnet',
@@ -46,8 +56,10 @@ function LocationProbe() {
 function renderDirectory(path = '/directory') {
   return render(
     <MemoryRouter initialEntries={[path]}>
-      <ProgrammeDirectory />
-      <LocationProbe />
+      <WalletProvider>
+        <ProgrammeDirectory />
+        <LocationProbe />
+      </WalletProvider>
     </MemoryRouter>,
   );
 }

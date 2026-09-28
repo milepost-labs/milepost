@@ -10,14 +10,13 @@
 
 import { formatAmount } from './amount';
 import type { IndexedProgramme } from './indexer';
-import {
-  chainFor,
+import { chainFor,
   FIXTURE_CHAIN,
   FIXTURE_PROGRAMMES,
   type FixtureChainRead,
   type FixturePhase,
 } from '../fixtures/programmes';
-import { FIXTURE_USER_ROLES, ROLE_LABELS, type UserRole } from '../fixtures/userRoles';
+import type { UserRole } from '../fixtures/userRoles';
 
 export type DirectoryPhase = 'All' | FixturePhase;
 

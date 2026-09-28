@@ -82,13 +82,6 @@ function deadlineToMs(deadline: bigint | number): number {
   return Number(deadline) * 1000;
 }
 
-function formatDateTime(deadline: bigint | number): string {
-  return new Intl.DateTimeFormat(undefined, {
-    dateStyle: "medium",
-    timeStyle: "short",
-  }).format(new Date(deadlineToMs(deadline)));
-}
-
 function getRelativeDeadline(deadline: bigint | number, nowMs: number): string {
   const deltaMs = deadlineToMs(deadline) - nowMs;
   const past = deltaMs <= 0;

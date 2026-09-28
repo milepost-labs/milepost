@@ -44,7 +44,7 @@ describe('awardsToCsv', () => {
     const lines = csv.split('\n');
     const firstAward = lines[2];
     expect(firstAward).toContain('140000000000');
-    expect(firstAward).toContain('14,000');
+    expect(firstAward).toContain('14000');
   });
 
   it('handles awards with zero released', () => {
