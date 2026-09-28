@@ -24,3 +24,6 @@ drafts/
 # means constant churn for no review value.
 test_snapshots/
 .vscode
+# cargo-mutants results; ./scripts/mutants.sh prints the part worth reading.
+mutants.out/
+mutants.out.old/

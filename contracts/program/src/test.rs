@@ -246,31 +246,96 @@ fn constructor_stores_config_and_reviewers() {
 
 /// Constructing with a quorum above the reviewer count would make every
 /// application permanently unfinalisable, so it is refused outright.
+///
+/// The constructor tests here name the error they expect. `construct_with`
+/// points at no real attestation registry, so any configuration that gets past
+/// validation still panics — on `SchemaNotFound` — and a bare `should_panic`
+/// passes whether or not the check under test exists.
 #[test]
-#[should_panic]
+#[should_panic(expected = "Error(Contract, #5)")] // InvalidQuorum
 fn quorum_above_reviewer_count_is_rejected() {
     construct_with(5, 3, APPLY_DEADLINE, REVIEW_DEADLINE, FEE_BPS);
 }
 
 #[test]
-#[should_panic]
+#[should_panic(expected = "Error(Contract, #4)")] // InvalidDeadlines
 fn review_deadline_before_apply_deadline_is_rejected() {
     construct_with(1, 3, REVIEW_DEADLINE, APPLY_DEADLINE, FEE_BPS);
 }
 
 #[test]
-#[should_panic]
+#[should_panic(expected = "Error(Contract, #6)")] // FeeTooHigh
 fn a_fee_above_the_ceiling_is_rejected() {
     construct_with(1, 3, APPLY_DEADLINE, REVIEW_DEADLINE, MAX_FEE_BPS + 1);
 }
 
 #[test]
-#[should_panic]
+#[should_panic(expected = "Error(Contract, #5)")] // InvalidQuorum
 fn zero_quorum_is_rejected() {
     construct_with(0, 3, APPLY_DEADLINE, REVIEW_DEADLINE, FEE_BPS);
 }
 
+/// `MAX_QUORUM` is the largest quorum allowed, not the first one refused.
+#[test]
+fn the_maximum_quorum_is_accepted() {
+    let f = setup(MAX_QUORUM, MAX_QUORUM);
+    assert_eq!(f.client.get_config().quorum, MAX_QUORUM);
+}
+
+#[test]
+#[should_panic(expected = "Error(Contract, #5)")] // InvalidQuorum
+fn a_quorum_above_the_maximum_is_rejected() {
+    // Enough reviewers that only the cap, not the reviewer count, refuses it.
+    construct_with(
+        MAX_QUORUM + 1,
+        MAX_QUORUM + 1,
+        APPLY_DEADLINE,
+        REVIEW_DEADLINE,
+        FEE_BPS,
+    );
+}
+
+// Each deadline must come strictly after the one before it, and the first
+// strictly after now. One test per rule, each sitting exactly on the boundary,
+// so dropping any one rule or loosening `<=` to `<` fails a test.
+
+#[test]
+#[should_panic(expected = "Error(Contract, #4)")] // InvalidDeadlines
+fn an_apply_deadline_that_is_not_in_the_future_is_rejected() {
+    construct_config(3, |c| c.apply_deadline = 0); // the test ledger starts at 0
+}
+
+#[test]
+#[should_panic(expected = "Error(Contract, #4)")] // InvalidDeadlines
+fn a_review_deadline_equal_to_the_apply_deadline_is_rejected() {
+    construct_config(3, |c| c.review_deadline = c.apply_deadline);
+}
+
+#[test]
+#[should_panic(expected = "Error(Contract, #4)")] // InvalidDeadlines
+fn a_release_deadline_equal_to_the_review_deadline_is_rejected() {
+    construct_config(3, |c| c.release_deadline = c.review_deadline);
+}
+
+#[test]
+#[should_panic(expected = "Error(Contract, #4)")] // InvalidDeadlines
+fn a_sweep_deadline_equal_to_the_release_deadline_is_rejected() {
+    construct_config(3, |c| c.sweep_deadline = c.release_deadline);
+}
+
 fn construct_with(quorum: u32, reviewer_count: u32, apply: u64, review: u64, fee_bps: u32) {
+    construct_config(reviewer_count, |c| {
+        c.quorum = quorum;
+        c.apply_deadline = apply;
+        c.review_deadline = review;
+        c.fee_bps = fee_bps;
+    });
+}
+
+/// Construct a programme from the default schedule with `edit` applied to its
+/// config. Nothing else is real — there is no attestation registry behind
+/// `attest` — so this is only for testing what the constructor refuses.
+fn construct_config(reviewer_count: u32, edit: impl FnOnce(&mut ProgrammeConfig)) {
     let env = milepost_test_utils::new_test_env();
     let asset = milepost_test_utils::register_token(&env);
     let mut reviewers = Vec::new(&env);
@@ -279,31 +344,27 @@ fn construct_with(quorum: u32, reviewer_count: u32, apply: u64, review: u64, fee
     }
     let verifier = Address::generate(&env);
 
-    env.register(
-        Programme,
-        (
-            ProgrammeConfig {
-                creator: Address::generate(&env),
-                token: asset,
-                treasury: Address::generate(&env),
-                attest: Address::generate(&env),
-                record: Address::generate(&env),
-                policy: Address::generate(&env),
-                schema: BytesN::from_array(&env, &[1u8; 32]),
-                fee_bps,
-                apply_deadline: apply,
-                review_deadline: review,
-                release_deadline: RELEASE_DEADLINE,
-                sweep_deadline: SWEEP_DEADLINE,
-                quorum,
-                tranches: 3,
-                minimum_award: 0, // No minimum by default
-                metadata_hash: BytesN::from_array(&env, &[7u8; 32]),
-            },
-            reviewers,
-            vec![&env, verifier],
-        ),
-    );
+    let mut config = ProgrammeConfig {
+        creator: Address::generate(&env),
+        token: asset,
+        treasury: Address::generate(&env),
+        attest: Address::generate(&env),
+        record: Address::generate(&env),
+        policy: Address::generate(&env),
+        schema: BytesN::from_array(&env, &[1u8; 32]),
+        fee_bps: FEE_BPS,
+        apply_deadline: APPLY_DEADLINE,
+        review_deadline: REVIEW_DEADLINE,
+        release_deadline: RELEASE_DEADLINE,
+        sweep_deadline: SWEEP_DEADLINE,
+        quorum: 1,
+        tranches: 3,
+        minimum_award: 0, // No minimum by default
+        metadata_hash: BytesN::from_array(&env, &[7u8; 32]),
+    };
+    edit(&mut config);
+
+    env.register(Programme, (config, reviewers, vec![&env, verifier]));
 }
 
 // ---- contributions ----
@@ -791,6 +852,33 @@ fn awards_cannot_exceed_the_budget() {
     assert_eq!(f.client.total_granted(), 800);
 }
 
+/// The budget is a ceiling, not a limit to stay under: awards that commit every
+/// last unit of it are allowed. An off-by-one here would strand the remainder of
+/// every fully-subscribed programme in refunds.
+#[test]
+fn awards_can_commit_the_budget_exactly() {
+    let f = setup(2, 3);
+    let donor = funded_donor(&f, 1_000);
+    f.client.contribute(&donor, &1_000); // budget is 900 after the 10% fee
+
+    let a = Address::generate(&f.env);
+    let b = Address::generate(&f.env);
+    f.client.apply(&a, &600, &hash(&f.env, 1));
+    f.client.apply(&b, &300, &hash(&f.env, 2));
+    to_review(&f);
+    for i in 0..2u32 {
+        let r = f.reviewers.get(i).unwrap();
+        f.client.review(&r, &a, &600);
+        f.client.review(&r, &b, &300);
+    }
+
+    let payee = Address::generate(&f.env);
+    f.client.allow_payee(&payee);
+    f.client.finalize(&a, &payee, &Mode::Direct);
+    assert_eq!(f.client.finalize(&b, &payee, &Mode::Direct).granted, 300);
+    assert_eq!(f.client.total_granted(), f.client.budget());
+}
+
 // ---- oversubscription ----
 //
 // `finalize` is permissionless and settles first-finalized-first-served, so
@@ -1116,6 +1204,43 @@ fn reviewer_entry_resolves_after_the_bump_threshold() {
     assert!(f.client.is_reviewer(&f.reviewers.get(0).unwrap()));
 }
 
+/// An entry is extended back to the full 90 days once its remaining life falls
+/// below the 60-day threshold, and left alone above it, so a busy entry does not
+/// pay for an extension on every touch.
+#[test]
+fn keepalive_extends_an_entry_once_it_falls_below_the_threshold() {
+    use soroban_sdk::testutils::storage::Persistent as _;
+
+    let f = setup(2, 3);
+    let donor = funded_donor(&f, 10_000);
+    f.client.contribute(&donor, &10_000);
+    let ttl = || {
+        f.env.as_contract(&f.client.address, || {
+            f.env
+                .storage()
+                .persistent()
+                .get_ttl(&Key::Donor(donor.clone()))
+        })
+    };
+    f.client.keepalive(&donor);
+    let start = f.env.ledger().sequence();
+    assert_eq!(ttl(), BUMP_LEDGERS);
+
+    // Twenty days on: seventy left, above the threshold, so untouched.
+    f.env
+        .ledger()
+        .set_sequence_number(start + 20 * DAY_IN_LEDGERS);
+    f.client.keepalive(&donor);
+    assert_eq!(ttl(), BUMP_LEDGERS - 20 * DAY_IN_LEDGERS);
+
+    // Forty days on: fifty left, below it, so back to the full ninety.
+    f.env
+        .ledger()
+        .set_sequence_number(start + 40 * DAY_IN_LEDGERS);
+    f.client.keepalive(&donor);
+    assert_eq!(ttl(), BUMP_LEDGERS);
+}
+
 #[test]
 fn keepalive_is_permissionless_and_refreshes_a_subject() {
     let f = setup(2, 3);
@@ -1339,6 +1464,21 @@ fn the_fee_sweeps_to_the_treasury_once() {
     assert_eq!(f.token.balance(&f.treasury), 1_000);
     assert_eq!(f.client.try_sweep_fee(), Err(Ok(Error::FeeAlreadySwept)));
     assert_eq!(f.token.balance(&f.treasury), 1_000);
+}
+
+/// A fee-free programme still closes out its fee, but moves no tokens doing it:
+/// a zero-amount transfer would put a payment to the treasury on the token's
+/// event stream that never happened in any sense that matters.
+#[test]
+fn a_zero_fee_sweep_moves_no_tokens() {
+    let f = setup_with_fee(2, 3, 0);
+    let donor = funded_donor(&f, 10_000);
+    f.client.contribute(&donor, &10_000);
+    to_review(&f);
+
+    assert_eq!(f.client.sweep_fee(), 0);
+    assert_events(&f.env, &f.token.address, &[]);
+    assert_eq!(f.client.try_sweep_fee(), Err(Ok(Error::FeeAlreadySwept)));
 }
 
 #[test]
@@ -1612,6 +1752,24 @@ fn partial_refund_with_invalid_amount_fails() {
     );
 }
 
+/// The cap on a partial refund is inclusive: a donor can take exactly what is
+/// left of their share, and then nothing more.
+#[test]
+fn a_partial_refund_can_take_exactly_what_is_left() {
+    let f = setup(2, 3);
+    let donor = funded_donor(&f, 10_000);
+    f.client.contribute(&donor, &10_000);
+    f.env.ledger().set_timestamp(RELEASE_DEADLINE);
+
+    assert_eq!(f.client.refund_partial(&donor, &5_000), 5_000);
+    assert_eq!(f.client.refund_partial(&donor, &4_000), 4_000);
+    assert_eq!(f.token.balance(&donor), 9_000);
+    assert_eq!(
+        f.client.try_refund_partial(&donor, &1),
+        Err(Ok(Error::AlreadyRefunded))
+    );
+}
+
 #[test]
 fn partial_refund_before_window_opens_fails() {
     let f = setup(2, 3);
@@ -1676,6 +1834,22 @@ fn unclaimed_refunds_sweep_to_the_treasury() {
     assert_eq!(f.token.balance(&f.client.address), 0);
 }
 
+/// Sweeping the unclaimed remainder already took the unswept fee with it, so the
+/// fee is closed: a later `sweep_fee` must not try to pay it a second time out
+/// of a balance that no longer holds it.
+#[test]
+fn sweeping_unclaimed_closes_out_an_unswept_fee() {
+    let f = setup(2, 3);
+    let donor = funded_donor(&f, 10_000);
+    f.client.contribute(&donor, &10_000);
+
+    f.env.ledger().set_timestamp(SWEEP_DEADLINE);
+    f.client.sweep_unclaimed();
+
+    assert_eq!(f.client.try_sweep_fee(), Err(Ok(Error::FeeAlreadySwept)));
+    assert_eq!(f.token.balance(&f.treasury), 10_000);
+}
+
 #[test]
 fn sweeping_waits_for_the_grace_period() {
     let f = setup(2, 3);
@@ -1717,16 +1891,6 @@ fn sweeping_an_empty_programme_is_rejected() {
     assert_eq!(
         f.client.try_sweep_unclaimed(),
         Err(Ok(Error::NothingToSweep))
-    );
-}
-
-#[test]
-fn a_sweep_deadline_before_the_release_deadline_is_rejected() {
-    let f = setup(2, 3);
-    let c = f.client.get_config();
-    assert!(
-        c.sweep_deadline > c.release_deadline,
-        "donors must get a grace period after releases end"
     );
 }
 
@@ -1861,6 +2025,32 @@ fn batch_release_rejects_oversize() {
         f.client.try_release_batch(&recipient, &uids, &f.verifier),
         Err(Ok(Error::BatchTooLarge))
     );
+}
+
+/// The bound is inclusive: a batch of exactly `MAX_PAYEE_BATCH` proofs is not
+/// refused as too large.
+#[test]
+fn batch_release_accepts_the_maximum_size() {
+    let f = setup_with(2, 3, MAX_PAYEE_BATCH);
+    let recipient = Address::generate(&f.env);
+    let school = Address::generate(&f.env);
+    award_to(&f, &recipient, &school, &5_000);
+
+    let mut uids = Vec::new(&f.env);
+    for n in 0..MAX_PAYEE_BATCH {
+        uids.push_back(proof(&f, &recipient, n as u8));
+    }
+    // Fifty tranches exceed both the CPU budget and the event data one
+    // transaction may carry on the network, so a batch this size is here for
+    // the size check only. What a batch costs is a separate question from
+    // where the bound sits.
+    f.env.cost_estimate().budget().reset_unlimited();
+    f.env.cost_estimate().disable_resource_limits();
+    assert_eq!(
+        f.client.release_batch(&recipient, &uids, &f.verifier),
+        5_000
+    );
+    assert_eq!(f.token.balance(&school), 5_000);
 }
 
 // ---- allocated mode ----
@@ -2541,6 +2731,27 @@ fn batch_exceeding_max_is_rejected() {
         f.client.try_allow_payees(&payees),
         Err(Ok(Error::BatchTooLarge))
     );
+    assert_eq!(
+        f.client.try_deny_payees(&payees),
+        Err(Ok(Error::BatchTooLarge))
+    );
+}
+
+/// The payee batch bound is inclusive, in both directions: exactly
+/// `MAX_PAYEE_BATCH` addresses can be verified in one call and removed in one.
+#[test]
+fn a_batch_of_exactly_the_maximum_is_accepted() {
+    let f = setup(2, 3);
+    let mut payees = Vec::new(&f.env);
+    for _ in 0..MAX_PAYEE_BATCH {
+        payees.push_back(Address::generate(&f.env));
+    }
+
+    f.client.allow_payees(&payees);
+    assert!(payees.iter().all(|p| f.client.is_payee(&p)));
+
+    f.client.deny_payees(&payees);
+    assert!(payees.iter().all(|p| !f.client.is_payee(&p)));
 }
 
 // ---- property tests for the median award mechanism ----

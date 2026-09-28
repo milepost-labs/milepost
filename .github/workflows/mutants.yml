@@ -1,0 +1,100 @@
+name: mutants
+
+# Mutation testing for the programme contract. Coverage says a line ran; this
+# says whether a test would notice if the line were wrong. See
+# docs/testing-guide.md#mutation-testing.
+#
+# A full run mutates every line of the programme and runs the whole suite once
+# per mutant — hours of CPU — so it is sharded and runs weekly or on demand.
+# Pull requests mutate only the lines they change, which is minutes, and fail if
+# any of those mutants survives.
+on:
+  pull_request:
+  schedule:
+    # Mondays 04:00 UTC.
+    - cron: "0 4 * * 1"
+  workflow_dispatch:
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  changed-lines:
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    timeout-minutes: 120
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+      # A prebuilt binary; `cargo install cargo-mutants` compiles for minutes.
+      - uses: taiki-e/install-action@v2
+        with:
+          tool: cargo-mutants
+
+      # Against the merge base, so lines main changed since the branch point are
+      # not charged to this PR.
+      - name: Diff against the base branch
+        run: git diff "origin/${{ github.base_ref }}...HEAD" > "$RUNNER_TEMP/pr.diff"
+
+      # Each mutant is a build and a test run; two at a time fits the runners'
+      # four cores without the test binaries starving each other into timeouts.
+      - name: Mutate changed lines
+        run: ./scripts/mutants.sh --jobs 2 --in-diff "$RUNNER_TEMP/pr.diff"
+
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: mutants-changed-lines
+          path: mutants.out
+          if-no-files-found: ignore
+
+  full-shard:
+    if: github.event_name != 'pull_request'
+    runs-on: ubuntu-latest
+    timeout-minutes: 120
+    strategy:
+      # Let every shard finish so the report covers all of them.
+      fail-fast: false
+      matrix:
+        shard: [0, 1, 2, 3, 4, 5, 6, 7]
+    steps:
+      - uses: actions/checkout@v7
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+      - uses: taiki-e/install-action@v2
+        with:
+          tool: cargo-mutants
+
+      - name: Mutate shard ${{ matrix.shard }} of 8
+        run: ./scripts/mutants.sh --jobs 2 --shard ${{ matrix.shard }}/8
+
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: mutants-shard-${{ matrix.shard }}
+          path: mutants.out
+
+  full-report:
+    needs: full-shard
+    if: always() && github.event_name != 'pull_request'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: mutants-shard-*
+          path: shards
+      # One report for the whole run. A shard that never produced results (it
+      # timed out, or the unmutated suite failed) is a failed run, not a clean one.
+      - name: Surviving mutants by function
+        run: |
+          count=$(ls -d shards/mutants-shard-* 2>/dev/null | wc -l)
+          if [ "$count" -ne 8 ]; then
+            echo "::error::Only $count of 8 shards uploaded results"
+            ./scripts/mutants.sh --report shards/mutants-shard-* || true
+            exit 1
+          fi
+          ./scripts/mutants.sh --report shards/mutants-shard-*
