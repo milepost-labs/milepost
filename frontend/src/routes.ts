@@ -8,6 +8,7 @@
 export interface AppRoute {
   path: string;
   label: string;
+  title: string;
 }
 
 export const APP_ROUTES: AppRoute[] = [

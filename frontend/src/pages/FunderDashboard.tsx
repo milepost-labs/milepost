@@ -12,6 +12,7 @@ import { contributionCard, fundingTotals } from '../lib/funding';
 import { fetchProgrammes } from '../lib/indexer';
 import { formatUsdc, mergeProgrammes } from '../lib/programmeView';
 import { describeAmount } from '../lib/amount';
+import { usePageTitle } from '../hooks/usePageTitle';
 import './FundingPage.css';
 
 const SIGNED_OUT_PREVIEW = [
@@ -30,6 +31,7 @@ const SIGNED_OUT_PREVIEW = [
  * merged with the sample programmes, as on the directory.
  */
 export const FunderDashboard = () => {
+  usePageTitle('Funder Dashboard');
   const { address } = useWallet();
   const programmeParam = useProgrammeParam();
   const [signInOpen, setSignInOpen] = useState(false);

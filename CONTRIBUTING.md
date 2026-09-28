@@ -118,6 +118,31 @@ wrong contract. See the [testing guide](docs/testing-guide.md) for the ordering
 rule, bindings regeneration, and the generated-file and fixture traps that have
 cost review rounds.
 
+### Mutation testing
+
+The programme contract is mutation-tested with
+[cargo-mutants](https://mutants.rs): each run makes small deliberate changes to
+the contract and checks that a test fails on every one. On every pull request CI
+mutates the programme lines you changed, and the `mutants` check **fails if any
+of those changes goes unnoticed by the tests**. A full run over the whole
+programme runs weekly and on demand.
+
+If you change `contracts/program/src/lib.rs`, run the same check locally before
+pushing:
+
+```bash
+cargo install --locked cargo-mutants   # once
+
+git diff main... > /tmp/pr.diff
+./scripts/mutants.sh --in-diff /tmp/pr.diff    # what CI runs on your PR
+./scripts/mutants.sh -F 'Programme::refund'    # or just the functions you touched
+```
+
+The script prints any surviving mutants grouped by function. Each one needs a
+test that fails on it, or, if it genuinely cannot change behaviour, an entry in
+`.cargo/mutants.toml` saying why. The [testing guide](docs/testing-guide.md#mutation-testing)
+covers reading the report, the full run, and how to tell the two apart.
+
 ---
 
 ## 5. Documentation Standards

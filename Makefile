@@ -1,10 +1,11 @@
-.PHONY: help build test lint frontend-local-bindings deploy seed
+.PHONY: help build test mutants lint frontend-local-bindings deploy seed
 
 # Default target listing all available tasks
 help:
 	@echo "Milepost Task Runner Commands:"
 	@echo "  make build          Build contract WASM artifacts"
 	@echo "  make test           Run contract tests (depends on build)"
+	@echo "  make mutants        Mutation-test the programme contract (ARGS passed to cargo-mutants)"
 	@echo "  make lint           Run rustfmt check and clippy (depends on build)"
 	@echo "  make frontend-local-bindings Build and test the app against this checkout's bindings (FRONTEND_DIR, default frontend)"
 	@echo "  make deploy         Deploy contracts using scripts/deploy.sh"
@@ -17,6 +18,11 @@ build:
 # Run smart contract tests (requires WASM build first as registry tests import programme WASM)
 test: build
 	cargo test --all-features
+
+# Mutation-test the programme contract. Hours for a full run; narrow it with
+# ARGS, e.g. make mutants ARGS="-F Programme::refund". See docs/testing-guide.md.
+mutants:
+	./scripts/mutants.sh $(ARGS)
 
 # Run formatting check and clippy linter (requires WASM build first)
 lint: build

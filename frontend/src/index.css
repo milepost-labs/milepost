@@ -1,4 +1,5 @@
 @import './styles/tokens.css';
+@import './styles/print.css';
 
 :root {
   /* Mature, Professional Color Palette */

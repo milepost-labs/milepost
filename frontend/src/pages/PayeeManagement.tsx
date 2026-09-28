@@ -3,10 +3,18 @@ import type { ProgrammeConfig } from '@milepost/program';
 import { useSoroban } from '../context/useSoroban';
 import { useWallet } from '../context/useWallet';
 import { useContractResult, useTransaction } from '../hooks';
-import { AddressChip, Badge, Button, Card, Field } from '../components/ui';
+import { AddressChip, Badge, Button, Card, Field, RadioGroup, TextArea } from '../components/ui';
 import { Empty, TransactionOutcome } from '../components/state/AsyncStates';
 import { DEMO_PROGRAMME_ID } from '../context/sorobanStore';
 import { FIXTURE_PAYEES, type PayeeFixture } from '../fixtures/payeeFixtures';
+import {
+  chunkAddresses,
+  classifyBulkAddresses,
+  MAX_PAYEE_BATCH,
+  parseBulkAddresses,
+  type BulkAddress,
+  type BulkMode,
+} from './payeeBulk';
 import './PayeeManagement.css';
 
 const PROGRAMME_ADDRESS = /^C[A-Z2-7]{55}$/;
@@ -140,6 +148,78 @@ export const PayeeManagement = () => {
 
   const canSubmit = isCreator && PAYEE_ADDRESS.test(addressInput.trim());
 
+  // --- Bulk verify / remove (issue #340) ---------------------------------
+  const [bulkMode, setBulkMode] = useState<BulkMode>('verify');
+  const [bulkText, setBulkText] = useState('');
+  const [bulkResults, setBulkResults] = useState<BulkAddress[] | null>(null);
+  const [bulkChecking, setBulkChecking] = useState(false);
+  const [bulkProgress, setBulkProgress] = useState<{ done: number; total: number } | null>(null);
+  const [bulkSending, setBulkSending] = useState(false);
+
+  const bulkTx = useTransaction({ contract: 'program' });
+
+  const eligibleAddresses = useMemo(
+    () => (bulkResults ?? []).filter((entry) => entry.status === 'eligible').map((entry) => entry.address),
+    [bulkResults],
+  );
+  const batches = useMemo(() => chunkAddresses(eligibleAddresses), [eligibleAddresses]);
+
+  const handleCheckBulk = async () => {
+    setBulkChecking(true);
+    setBulkResults(null);
+    bulkTx.reset();
+    try {
+      const results = await classifyBulkAddresses(bulkText, bulkMode, async (address) => {
+        const { result } = await programme.is_payee({ payee: address });
+        return result;
+      });
+      setBulkResults(results);
+    } finally {
+      setBulkChecking(false);
+    }
+  };
+
+  const handleSendBulk = async () => {
+    setBulkSending(true);
+    setBulkProgress({ done: 0, total: batches.length });
+    const verifiedInThisRun: string[] = [];
+    for (let i = 0; i < batches.length; i++) {
+      const batch = batches[i];
+      const call = bulkMode === 'verify' ? programme.allow_payees : programme.deny_payees;
+      const result = await bulkTx.send(() => call({ payees: batch }));
+      if (result === null) {
+        // Failed or blocked: stop rather than skip ahead. The batches
+        // already sent are real on-chain writes and stay done; the
+        // remaining ones are simply not attempted yet, so retrying (once
+        // whatever failed is fixed) picks up from here rather than
+        // resending what already landed.
+        setBulkProgress({ done: i, total: batches.length });
+        setBulkSending(false);
+        return;
+      }
+      if (bulkMode === 'verify') verifiedInThisRun.push(...batch);
+      setBulkProgress({ done: i + 1, total: batches.length });
+    }
+    for (const address of verifiedInThisRun) {
+      remember({ address, label: 'Bulk verified' });
+    }
+    setBulkText('');
+    setBulkResults(null);
+    setBulkProgress(null);
+    setBulkSending(false);
+  };
+
+  const bulkCounts = useMemo(() => {
+    const counts = { eligible: 0, invalid: 0, duplicate: 0, skipped: 0 };
+    for (const entry of bulkResults ?? []) {
+      if (entry.status === 'eligible') counts.eligible++;
+      else if (entry.status === 'invalid') counts.invalid++;
+      else if (entry.status === 'duplicate') counts.duplicate++;
+      else counts.skipped++; // already-verified or not-verified
+    }
+    return counts;
+  }, [bulkResults]);
+
   return (
     <div className="payee-mgmt">
       <header className="payee-mgmt__header">
@@ -222,6 +302,115 @@ export const PayeeManagement = () => {
           successTitle="Payee verified"
           successDescription="The address can now receive Direct payments or be chosen from escrow."
         />
+      </Card>
+
+      <Card title="Verify or remove payees in bulk">
+        <p className="payee-mgmt__consequence">
+          A programme paying fifty schools needs fifty payees verified. Paste one address per
+          line below; each is validated and checked against the current on-chain status before
+          anything is sent. Duplicates and addresses already in the state you're asking for are
+          skipped, not rejected — they simply won't be included in what gets sent.
+        </p>
+        {wallet.address && !isCreator && (
+          <p className="payee-mgmt__readonly" role="note">
+            Only the programme&rsquo;s creator can verify or remove payees.
+          </p>
+        )}
+        <div className="payee-mgmt__bulk-form">
+          <RadioGroup
+            label="Action"
+            name="bulk-mode"
+            value={bulkMode}
+            onChange={(value) => {
+              setBulkMode(value);
+              setBulkResults(null);
+            }}
+            options={[
+              { value: 'verify', label: 'Verify', description: 'Allow these addresses to receive payments.' },
+              { value: 'remove', label: 'Remove', description: 'Revoke payment eligibility for these addresses.' },
+            ]}
+          />
+          <TextArea
+            label="Payee addresses"
+            hint="One Stellar address per line."
+            placeholder={'G...\nG...\nG...'}
+            rows={6}
+            value={bulkText}
+            onChange={(event) => {
+              setBulkText(event.target.value);
+              setBulkResults(null);
+            }}
+          />
+          <Button
+            variant="secondary"
+            onClick={() => void handleCheckBulk()}
+            loading={bulkChecking}
+            disabled={parseBulkAddresses(bulkText).length === 0}
+          >
+            Check addresses
+          </Button>
+
+          {bulkResults && (
+            <div className="payee-mgmt__bulk-results" aria-live="polite">
+              <ul className="payee-mgmt__bulk-list">
+                {bulkResults.map((entry) => {
+                  const tone =
+                    entry.status === 'eligible'
+                      ? 'success'
+                      : entry.status === 'invalid'
+                      ? 'danger'
+                      : 'neutral';
+                  const text =
+                    entry.status === 'eligible'
+                      ? bulkMode === 'verify'
+                        ? 'Will be verified'
+                        : 'Will be removed'
+                      : entry.status === 'invalid'
+                      ? 'Not a valid address'
+                      : entry.status === 'duplicate'
+                      ? 'Duplicate in this list'
+                      : entry.status === 'already-verified'
+                      ? 'Already verified — skipped'
+                      : 'Not currently verified — skipped';
+                  return (
+                    <li key={entry.address} className="payee-mgmt__bulk-row">
+                      <code className="mono">{entry.address}</code>
+                      <Badge tone={tone}>{text}</Badge>
+                    </li>
+                  );
+                })}
+              </ul>
+              <p className="payee-mgmt__bulk-summary">
+                {bulkCounts.eligible} to {bulkMode === 'verify' ? 'verify' : 'remove'}
+                {bulkCounts.invalid > 0 && `, ${bulkCounts.invalid} invalid`}
+                {bulkCounts.duplicate > 0 && `, ${bulkCounts.duplicate} duplicate`}
+                {bulkCounts.skipped > 0 && `, ${bulkCounts.skipped} already ${bulkMode === 'verify' ? 'verified' : 'unverified'}`}
+                {batches.length > 1 && ` — sent as ${batches.length} batches of up to ${MAX_PAYEE_BATCH}`}
+                .
+              </p>
+              <Button
+                variant={bulkMode === 'remove' ? 'danger' : 'primary'}
+                onClick={() => void handleSendBulk()}
+                loading={bulkSending}
+                disabled={!isCreator || eligibleAddresses.length === 0}
+              >
+                {bulkMode === 'verify' ? 'Verify' : 'Remove'} {eligibleAddresses.length} payee
+                {eligibleAddresses.length === 1 ? '' : 's'}
+              </Button>
+              {bulkProgress && (
+                <p className="payee-mgmt__bulk-progress" role="status">
+                  Sending batch {Math.min(bulkProgress.done + 1, bulkProgress.total)} of {bulkProgress.total}
+                  {bulkProgress.done > 0 && ` (${bulkProgress.done} done)`}…
+                </p>
+              )}
+            </div>
+          )}
+          <TransactionOutcome
+            phase={bulkTx.phase}
+            error={bulkTx.error}
+            successTitle={bulkMode === 'verify' ? 'Batch verified' : 'Batch removed'}
+          />
+        </div>
       </Card>
 
       <Card title="Verified payees">

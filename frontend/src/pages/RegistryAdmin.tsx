@@ -1,23 +1,18 @@
 import { NavLink } from 'react-router-dom';
-import { RegistryAdminConsole } from '../components/admin/RegistryAdminConsole';
 import { DeployProgramme } from '../components/admin/DeployProgramme';
 import { ProtocolConfigCard } from '../components/admin/ProtocolConfigCard';
+import { ADMIN_SECTIONS } from './adminSections';
 import './RegistryAdmin.css';
-
-const SECTIONS = [
-  { to: '/finalize', label: 'Finalize awards' },
-  { to: '/admin', label: 'Deploy programme' },
-  { to: '/schemas/register', label: 'Schemas' },
-  { to: '/admin/standing', label: 'Standing' },
-];
 
 /**
  * Protocol administration: finalize awards, deploy programmes through the
  * registry, and register what verifiers sign.
  *
- * Deploy carries the constructor constraints (ordered deadlines, quorum bound,
- * verifiers, schema) and the protocol config card reads live from the
- * registry; the console below keeps the existing admin controls.
+ * Deploy carries the constructor constraints (ordered deadlines, quorum
+ * bound, verifiers, schema); the protocol config card reads live from the
+ * registry and, for the registry admin, is also where its settings are
+ * changed (issue #342) — there is no separate console duplicating the same
+ * fields.
  */
 export const RegistryAdmin = () => (
   <div className="dashboard-container admin-page">
@@ -29,7 +24,7 @@ export const RegistryAdmin = () => (
       </p>
     </header>
     <nav className="admin-page__sections" aria-label="Admin sections">
-      {SECTIONS.map((section) => (
+      {ADMIN_SECTIONS.map((section) => (
         <NavLink
           key={section.to + section.label}
           to={section.to}
@@ -46,6 +41,5 @@ export const RegistryAdmin = () => (
       <DeployProgramme />
       <ProtocolConfigCard />
     </div>
-    <RegistryAdminConsole />
   </div>
 );

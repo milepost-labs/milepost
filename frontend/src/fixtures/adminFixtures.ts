@@ -18,6 +18,8 @@ export interface ProtocolConfigFixture {
   feeBps: number;
   attest: string;
   record: string;
+  /** Default spend policy new programmes inherit — Config.policy. */
+  policy: string;
   admin: string;
 }
 
@@ -26,6 +28,7 @@ export const FIXTURE_PROTOCOL_CONFIG: ProtocolConfigFixture = {
   feeBps: 100,
   attest: 'CATTSTEXAMPLE9KPL4M7Q2W8E5R3T6Y2U9I4O7P3A6S2D5',
   record: 'CRECRDEXAMPLE2HVW8B4N7M1Q5W9E3R6T2Y7U4I1O8P5A3',
+  policy: 'CPOLCYEXAMPLE3JQX7B4N1M8Q6W2E9R5T3Y7U1I4O8P5A2XXXXXXXXXX',
   admin: 'GADMINEXAMPLE7QZE4B8N2M6Q1W9E5R3T7Y2U4I6O8P1A3S',
 };
 

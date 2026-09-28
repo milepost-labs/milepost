@@ -12,6 +12,7 @@
     "preview": "vite preview"
   },
   "dependencies": {
+    "@fontsource/inter": "^5.3.0",
     "@milepost/attest": "^0.1.1",
     "@milepost/policy-spend": "^0.1.1",
     "@milepost/program": "^0.1.1",

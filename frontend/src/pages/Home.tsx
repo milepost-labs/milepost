@@ -12,6 +12,7 @@ import { ModesCompared } from '../components/home/ModesCompared';
 import { Verticals } from '../components/home/Verticals';
 import { GUARANTEES, LIMITS, ROLES, type Claim } from './homeContent';
 import { LiveIndex } from '../components/home/LiveIndex';
+import { usePageTitle } from '../hooks/usePageTitle';
 
 /**
  * Every outbound link points at the public repository, which is where the
@@ -89,6 +90,7 @@ function ClaimCard({
 }
 
 export const Home: React.FC = () => {
+  usePageTitle('Transparent Funding for Public Goods');
   const observerRef = useRef<IntersectionObserver | null>(null);
 
   useEffect(() => {

@@ -148,6 +148,112 @@ Two traps that cost an afternoon each if you do not know them:
   event amounts got a total of zero and no way to tell the difference between a
   broken contract and a paused programme.
 
+## Mutation testing
+
+Line coverage on the programme is about 98%, and that figure says only that the
+tests *ran* each line. Mutation testing asks the question that matters for the
+contract holding the money: if this line were wrong, would a test fail?
+[cargo-mutants](https://mutants.rs) makes one small change at a time — `>`
+becomes `>=`, `-` becomes `+`, a function returns `Ok(0)` — rebuilds, and runs
+the programme's suite. A mutant the suite fails on is **caught**. One the suite
+still passes on has **survived**, and each survivor is a specific change to the
+contract that no test would notice.
+
+Scope is `contracts/program` only, configured in
+[`.cargo/mutants.toml`](../.cargo/mutants.toml), so a bare `cargo mutants` at the
+repository root targets nothing else.
+
+### Running it
+
+```sh
+cargo install --locked cargo-mutants
+
+# The functions you are changing: minutes.
+./scripts/mutants.sh -F 'Programme::execute_refund'
+
+# Exactly what CI runs on your pull request: the lines you changed.
+git diff main... > /tmp/pr.diff
+./scripts/mutants.sh --in-diff /tmp/pr.diff
+
+# Everything: about 270 mutants, around 90 minutes with four jobs on a laptop.
+./scripts/mutants.sh --jobs 4
+```
+
+`just mutants …` and `make mutants ARGS="…"` do the same. The script passes its
+arguments to cargo-mutants, then prints the survivors grouped by function, with
+the file position and the change for each:
+
+```text
+#### Surviving mutants by function
+
+| function | count |
+| --- | ---: |
+| `Programme::finalize` | 1 |
+
+`Programme::finalize`
+
+- `contracts/program/src/lib.rs:1008:22` replace > with >=
+```
+
+Everything else — every mutant's diff and build and test log — is in
+`mutants.out/`, which is gitignored. `mutants.out/diff/` shows exactly what was
+changed.
+
+### In CI
+
+The [`mutants`](../.github/workflows/mutants.yml) workflow runs two ways:
+
+- **On every pull request**, it mutates only the lines the PR changed in the
+  programme, against the merge base, and **fails if any of those mutants
+  survives**. A PR that touches no programme code finds nothing to mutate and
+  passes in seconds.
+- **Weekly (Mondays), and on demand** from the Actions tab, it mutates the whole
+  programme across eight shards and writes one survivors-by-function report to
+  the run summary. It fails if anything survived anywhere. This is what catches a
+  test being weakened or deleted, which a changed-lines run never mutates.
+
+The unmutated suite has to pass first; if it does not, the run fails rather than
+reporting every mutant as caught. A mutant that hangs the suite until it times
+out counts as caught — a hang is noticed — but is listed in the report, because
+it can also mean a test is merely slow.
+
+### The proptests are skipped
+
+Mutation runs skip `test::proptests` (`additional_cargo_test_args` in the
+config). With random inputs, a mutant can be caught on one run and survive the
+next, which would make the verdict — and the PR check — flap. So a mutant counts
+as caught only when a deterministic example test catches it. That also means a
+survivor is always fixed the same way: an example that names the case.
+
+### When a mutant survives
+
+Read the change (`mutants.out/diff/`, or the line and replacement in the report)
+and decide which of two things it is:
+
+1. **A missing test.** The mutant changes what the contract does and nothing
+   checks it. Nearly always a boundary: `>` against `>=` survives when no test
+   sits exactly on the limit. Write the test that sits on it. The tests added
+   when this was introduced are examples:
+   `awards_can_commit_the_budget_exactly`,
+   `a_partial_refund_can_take_exactly_what_is_left`,
+   `a_zero_fee_sweep_moves_no_tokens`,
+   `sweeping_unclaimed_closes_out_an_unswept_fee`,
+   `batch_release_accepts_the_maximum_size`.
+2. **An equivalent mutant.** It cannot change behaviour, because the case it
+   differs on cannot happen. Add it to `exclude_re` in `.cargo/mutants.toml`
+   with a comment explaining why it is unreachable. An exclusion without a reason
+   will be sent back in review.
+
+When in doubt it is (1). "No test would notice" is the finding; "it cannot
+happen" needs an argument.
+
+### Explained survivors
+
+| Mutant | Why it is excluded |
+| :--- | :--- |
+| `release_batch`: `award.tranches > 0` → `>=` | Differs only for an award with zero tranches. The constructor refuses `tranches == 0`, and every award copies the config's value, so the branch is unreachable. |
+| `review` (both branches): `approved < existing` → `<=` | Changes only whether a vote is inserted before or after an equal vote. Equal `i128`s are indistinguishable, so the sorted votes and the median are identical. |
+
 ## The full gate
 
 Before opening a PR that touches contract code, run the same gate CI does, in

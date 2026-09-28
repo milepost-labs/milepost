@@ -1,6 +1,11 @@
 import { describe, expect, it, vi } from 'vitest';
-import { fireEvent, render, screen } from '@testing-library/react';
+import type { ReactElement } from 'react';
+import { fireEvent, render as rtlRender, screen } from '@testing-library/react';
+import { MemoryRouter } from 'react-router-dom';
 import { Empty, ErrorState } from './AsyncStates';
+
+// The error panel reads the current route for its copied details.
+const render = (ui: ReactElement) => rtlRender(ui, { wrapper: MemoryRouter });
 
 describe('error panel', () => {
   it('says nothing was transferred when the contract returned the error', () => {

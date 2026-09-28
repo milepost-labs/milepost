@@ -1,15 +1,20 @@
 import { useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { Buffer } from 'buffer';
+import type { Application } from '@milepost/program';
 import './VerifierDashboard.css';
 import { useSoroban } from '../context/useSoroban';
 import { useWallet } from '../context/useWallet';
 import { useAnnouncer } from '../context/useAnnouncer';
+import { useContractRead, useContractResult } from '../hooks/useContractRead';
 import { useTransaction } from '../hooks/useTransaction';
-import { truncateAddress } from '../lib/format';
+import { looksLikeAddress, truncateAddress } from '../lib/format';
 import { explain } from '../lib/errors';
-import { Badge, Button, Field } from '../components/ui';
-import { ErrorPanel, PendingState } from '../components/state/AsyncStates';
+import { usePageTitle } from '../hooks/usePageTitle';
+import { formatAmount, validateAmount } from '../lib/amount';
+import { AmountField, Badge, Button, Field } from '../components/ui';
+import { ErrorPanel, PendingState, TransactionOutcome } from '../components/state/AsyncStates';
+import { FIXTURE_REVIEW_APPLICANTS } from '../fixtures/reviewFixtures';
 import {
   FIXTURE_MY_ATTESTATIONS,
   FIXTURE_VERIFIER_QUEUE,
@@ -32,8 +37,9 @@ type ItemStatus = 'idle' | 'pending' | 'error' | 'done' | 'declined';
  * tagged as sample data.
  */
 export const VerifierDashboard = () => {
+  usePageTitle('Verifier Dashboard');
   const { address, connect } = useWallet();
-  const { attest } = useSoroban();
+  const { attest, demoProgramme } = useSoroban();
   const announce = useAnnouncer();
 
   const [statusById, setStatusById] = useState<Record<string, ItemStatus>>({});
@@ -43,14 +49,39 @@ export const VerifierDashboard = () => {
   const [newlySigned, setNewlySigned] = useState<VerifierAttestation[]>([]);
   const [signingId, setSigningId] = useState<string | null>(null);
   const [connecting, setConnecting] = useState(false);
+  const [applicantInput, setApplicantInput] = useState('');
+  const [selectedApplicant, setSelectedApplicant] = useState('');
+  const [approvedInput, setApprovedInput] = useState('');
+  const [rememberedApplicants, setRememberedApplicants] = useState(
+    () => FIXTURE_REVIEW_APPLICANTS[demoProgramme.options.contractId] ?? [],
+  );
+  const [reviewFormError, setReviewFormError] = useState<string | null>(null);
 
   const signTx = useTransaction<Buffer>({ contract: 'attest' });
+  const reviewTx = useTransaction<void>({
+    contract: 'program',
+    onSuccess: () => {
+      applicationRead.refetch();
+      setApprovedInput('');
+    },
+  });
 
   const queue = useMemo(
     () => FIXTURE_VERIFIER_QUEUE.filter((item) => (statusById[item.id] ?? 'idle') !== 'declined' && (statusById[item.id] ?? 'idle') !== 'done'),
     [statusById],
   );
   const mine = useMemo(() => [...newlySigned, ...FIXTURE_MY_ATTESTATIONS], [newlySigned]);
+  const applicantValid = looksLikeAddress(selectedApplicant);
+  const isReviewerRead = useContractRead(
+    () => demoProgramme.is_reviewer({ addr: address ?? '' }),
+    [demoProgramme, address],
+    { contract: 'program', enabled: Boolean(address) },
+  );
+  const applicationRead = useContractResult<Application>(
+    () => demoProgramme.get_application({ applicant: selectedApplicant }),
+    [demoProgramme, selectedApplicant],
+    { contract: 'program', enabled: applicantValid },
+  );
 
   const programmes = useMemo(() => {
     const ids = new Set<string>();
@@ -141,6 +172,72 @@ export const VerifierDashboard = () => {
     setSigningId(null);
   };
 
+  const rememberApplicant = () => {
+    const applicant = applicantInput.trim();
+    setReviewFormError(null);
+    if (!looksLikeAddress(applicant)) {
+      setReviewFormError('Enter a valid applicant address.');
+      return;
+    }
+    setSelectedApplicant(applicant);
+    setRememberedApplicants((existing) =>
+      existing.some((item) => item.address === applicant)
+        ? existing
+        : [{ address: applicant, label: 'Manual applicant' }, ...existing],
+    );
+    setApplicantInput('');
+  };
+
+  const selectApplicant = (applicant: string) => {
+    setSelectedApplicant(applicant);
+    setApprovedInput('');
+    setReviewFormError(null);
+    reviewTx.reset();
+  };
+
+  const submitReview = async () => {
+    setReviewFormError(null);
+    if (!address) {
+      setReviewFormError('Connect a reviewer wallet first.');
+      return;
+    }
+    if (!applicantValid) {
+      setReviewFormError('Choose or enter a valid applicant address.');
+      return;
+    }
+    if (!isReviewerRead.data) {
+      setReviewFormError('The connected wallet is not registered as a reviewer for this programme.');
+      return;
+    }
+    const parsed = validateAmount(approvedInput, { asset: 'XLM' });
+    if (!parsed.ok) {
+      setReviewFormError(parsed.error);
+      return;
+    }
+    const application = applicationRead.data;
+    if (application && parsed.value > application.requested) {
+      setReviewFormError('The approved amount cannot exceed what the applicant requested.');
+      return;
+    }
+
+    const result = await reviewTx.send(async () => {
+      const tx = await demoProgramme.review({
+        reviewer: address,
+        applicant: selectedApplicant,
+        approved: parsed.value,
+      });
+      return {
+        signAndSend: async (options: Parameters<typeof tx.signAndSend>[0]) => {
+          const sent = await tx.signAndSend(options);
+          return { result: sent.result.unwrap() };
+        },
+      };
+    });
+    if (result !== null) {
+      announce(`Review vote submitted for ${truncateAddress(selectedApplicant)}.`);
+    }
+  };
+
   const signIn = async () => {
     setConnecting(true);
     try {
@@ -151,6 +248,8 @@ export const VerifierDashboard = () => {
   };
 
   const signError = signTx.error ? explain(signTx.error, 'attest') : null;
+  const application = applicationRead.data;
+  const reviewError = reviewTx.error ? explain(reviewTx.error, 'program') : null;
 
   return (
     <div className="dashboard-container verifier-page">
@@ -211,6 +310,118 @@ export const VerifierDashboard = () => {
           </div>
 
           <div className="verifier-page__grid">
+            <section aria-labelledby="reviewer-vote">
+              <h2 id="reviewer-vote" className="verifier-page__section-title">
+                Vote on applications
+              </h2>
+              <div className="reviewer-panel">
+                <p className="reviewer-panel__copy">
+                  Reviewers approve an amount up to the applicant&apos;s request. The contract
+                  stores one vote per reviewer and lets you amend it before finalisation.
+                </p>
+                <div className="reviewer-panel__status">
+                  <Badge tone={isReviewerRead.loading ? 'neutral' : isReviewerRead.data ? 'success' : 'danger'}>
+                    {isReviewerRead.loading ? 'Checking reviewer status' : isReviewerRead.data ? 'Reviewer wallet' : 'Not a reviewer'}
+                  </Badge>
+                  <span className="numeric" title={demoProgramme.options.contractId}>
+                    Programme {truncateAddress(demoProgramme.options.contractId, 6, 4)}
+                  </span>
+                </div>
+
+                <div className="reviewer-panel__add">
+                  <Field
+                    label="Applicant address"
+                    hint="Paste an applicant to load its current application and vote."
+                    value={applicantInput}
+                    onChange={(event) => setApplicantInput(event.target.value.trim())}
+                    placeholder="G…"
+                  />
+                  <Button variant="secondary" onClick={rememberApplicant}>
+                    Load applicant
+                  </Button>
+                </div>
+
+                {rememberedApplicants.length > 0 && (
+                  <ul className="reviewer-panel__queue" aria-label="Known applicants">
+                    {rememberedApplicants.map((applicant) => (
+                      <li key={applicant.address}>
+                        <button
+                          type="button"
+                          className={selectedApplicant === applicant.address ? 'reviewer-panel__applicant reviewer-panel__applicant--selected' : 'reviewer-panel__applicant'}
+                          onClick={() => selectApplicant(applicant.address)}
+                        >
+                          <span>{applicant.label}</span>
+                          <span className="numeric">{truncateAddress(applicant.address, 6, 4)}</span>
+                        </button>
+                      </li>
+                    ))}
+                  </ul>
+                )}
+
+                {selectedApplicant && (
+                  <div className="reviewer-panel__application">
+                    <div className="reviewer-panel__application-head">
+                      <span className="numeric" title={selectedApplicant}>
+                        {selectedApplicant}
+                      </span>
+                      <Button variant="secondary" size="sm" onClick={applicationRead.refetch} loading={applicationRead.fetching}>
+                        Refresh
+                      </Button>
+                    </div>
+                    {applicationRead.loading ? (
+                      <PendingState title="Loading application…" note="Reading the programme contract." />
+                    ) : applicationRead.error ? (
+                      <ErrorPanel explained={explain(applicationRead.error, 'program')} />
+                    ) : application ? (
+                      <>
+                        <dl className="reviewer-panel__facts">
+                          <div>
+                            <dt>Requested</dt>
+                            <dd className="numeric">{formatAmount(application.requested, { asset: 'XLM' })}</dd>
+                          </div>
+                          <div>
+                            <dt>Votes</dt>
+                            <dd className="numeric">{application.votes.length}</dd>
+                          </div>
+                          <div>
+                            <dt>Status</dt>
+                            <dd>{application.finalized ? 'Finalized' : application.withdrawn ? 'Withdrawn' : 'Open for review'}</dd>
+                          </div>
+                        </dl>
+                        <AmountField
+                          label="Approved amount"
+                          value={approvedInput}
+                          onChange={setApprovedInput}
+                          asset="XLM"
+                          balance={application.requested}
+                          hint="Cannot exceed the applicant's requested amount."
+                          disabled={application.finalized || application.withdrawn}
+                        />
+                        {reviewFormError && (
+                          <p className="reviewer-panel__error" role="alert">
+                            {reviewFormError}
+                          </p>
+                        )}
+                        {reviewError && <ErrorPanel explained={reviewError} live />}
+                        <Button
+                          onClick={() => void submitReview()}
+                          loading={reviewTx.busy}
+                          disabled={application.finalized || application.withdrawn || !isReviewerRead.data}
+                        >
+                          Submit review vote
+                        </Button>
+                        <TransactionOutcome phase={reviewTx.phase} error={reviewTx.error} successTitle="Review vote submitted" />
+                      </>
+                    ) : null}
+                  </div>
+                )}
+              </div>
+              <p className="verifier-page__sample-note">
+                <Badge tone="neutral">Sample data</Badge> Applicant shortcuts are sample until an
+                indexer supplies a reviewer queue.
+              </p>
+            </section>
+
             <section aria-labelledby="verifier-queue">
               <h2 id="verifier-queue" className="verifier-page__section-title">
                 Waiting for your confirmation

@@ -1,0 +1,42 @@
+@media print {
+  body {
+    background: white !important;
+    color: black !important;
+  }
+
+  .layout > *:not(main) {
+    display: none !important;
+  }
+
+  .skip-link {
+    display: none !important;
+  }
+
+  .page-wrapper {
+    padding: 0 !important;
+    min-height: auto !important;
+  }
+
+  .glass-panel {
+    background: white !important;
+    backdrop-filter: none !important;
+    border: 1px solid #ccc !important;
+    box-shadow: none !important;
+  }
+
+  a[href]::after {
+    content: " (" attr(href) ")";
+    font-size: 0.8em;
+    color: #555;
+  }
+
+  .btn-primary,
+  .btn-secondary {
+    display: none !important;
+  }
+
+  * {
+    animation: none !important;
+    transition: none !important;
+  }
+}

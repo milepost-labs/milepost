@@ -56,3 +56,61 @@
   color: var(--text-muted);
   line-height: var(--leading-body);
 }
+
+.protocol-config__note {
+  margin: 0;
+  padding: var(--space-3);
+  background: var(--surface-raised);
+  border-radius: var(--radius-md);
+  font-size: var(--text-sm);
+  color: var(--text-muted);
+}
+
+.protocol-config__editor {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+  padding-top: var(--space-4);
+  border-top: 1px solid var(--border);
+}
+
+.protocol-config__editor-title {
+  margin: 0;
+  font-size: var(--text-sm);
+  font-weight: var(--weight-bold);
+  text-transform: uppercase;
+  letter-spacing: 0.02em;
+  color: var(--text-muted);
+}
+
+.protocol-config__form {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+
+.protocol-config__handover {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  padding: var(--space-3);
+  background: var(--danger-soft);
+  border-radius: var(--radius-md);
+}
+
+.protocol-config__handover-warning {
+  margin: 0;
+  font-size: var(--text-sm);
+  color: var(--text);
+}
+
+.protocol-config__modal-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: var(--space-2);
+  margin-top: var(--space-3);
+}
+
+.protocol-config__form-submit {
+  align-self: flex-start;
+}

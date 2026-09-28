@@ -1,0 +1,36 @@
+# cargo-mutants configuration. How to run it, and how to read the report, is in
+# docs/testing-guide.md#mutation-testing.
+#
+# Scope is the programme contract only: it is the one that holds the money.
+# Extending this to another contract means adding its sources here and running
+# the full sweep once to see what survives before CI starts enforcing it.
+examine_globs = ["contracts/program/src/**/*.rs"]
+exclude_globs = ["contracts/program/src/test.rs", "contracts/program/src/*_test.rs"]
+test_package = ["milepost-program"]
+
+# The proptests are skipped. With random inputs a mutant can be caught on one run
+# and survive the next, so the verdict — and the build — would flap. A mutant
+# counts as caught only when a deterministic example test catches it, which also
+# means every surviving mutant is fixed by adding an example that names the case.
+additional_cargo_test_args = ["--", "--skip", "proptests"]
+
+# Mutants that no test can catch because they do not change behaviour. Each entry
+# says why; anything not listed here that survives is a missing test.
+#
+# Entries name the line and column because the same operator swap elsewhere in
+# the function is a real mutant that tests do catch. When an edit moves the line,
+# the entry stops matching and the mutant is reported as surviving again: that is
+# the prompt to re-check the reasoning and update the position, never to delete
+# the entry unread.
+exclude_re = [
+  # release_batch: `if award.tranches > 0` -> `>=`. The two differ only when an
+  # award has zero tranches, and the constructor refuses `tranches == 0`, which
+  # every award copies from the config. Unreachable, so equivalent.
+  'lib\.rs:1484:48: replace > with >= in Programme::release_batch$',
+  # review, amending and new-vote branches: `approved < existing` -> `<=` when
+  # finding where to insert a vote. The two differ only in whether a vote goes
+  # before or after an equal one, and equal i128s are indistinguishable, so the
+  # sorted vector — and the median taken from it — is identical either way.
+  'lib\.rs:865:29: replace < with <= in Programme::review$',
+  'lib\.rs:892:29: replace < with <= in Programme::review$',
+]

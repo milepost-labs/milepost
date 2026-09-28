@@ -5,9 +5,11 @@ import { RecipientAwards } from '../components/recipient/RecipientAwards';
 import { ApplyForm } from '../components/recipient/ApplyForm';
 import { ProgrammeParamNotice } from '../components/programme/ProgrammeParamNotice';
 import { useProgrammeParam } from '../hooks';
+import { usePageTitle } from '../hooks/usePageTitle';
 import './RecipientDashboard.css';
 
 export function RecipientDashboard() {
+  usePageTitle('Recipient Dashboard');
   const { address, connect } = useWallet();
   const [searchParams] = useSearchParams();
   const programmeParam = useProgrammeParam();
