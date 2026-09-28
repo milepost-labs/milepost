@@ -172,7 +172,10 @@ export const ProgrammeDirectory = () => {
         {stale && (
           <div role="status" className="directory-banner directory-banner--stale">
             The public index was last updated {ageText}. New programmes may be missing.
-            Anything you open is re-read on-chain.
+            Anything you open is re-read on-chain.{' '}
+            <Link to="/status" className="directory-banner__link">
+              View index status
+            </Link>
           </div>
         )}
 

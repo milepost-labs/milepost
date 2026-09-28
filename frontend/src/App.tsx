@@ -67,6 +67,9 @@ const Keepalive = lazyWithRetry(() =>
 const PayeeManagement = lazyWithRetry(() =>
   import("./pages/PayeeManagement").then((m) => ({ default: m.PayeeManagement })),
 );
+const IndexStatus = lazyWithRetry(() =>
+  import("./pages/IndexStatus").then((m) => ({ default: m.IndexStatus })),
+);
 const NotFound = lazyWithRetry(() => import("./pages/NotFound").then((m) => ({ default: m.NotFound })));
 
 // Keyed by the same paths as APP_ROUTES, so the header Menu (built from that
@@ -88,6 +91,7 @@ const ROUTE_ELEMENTS: Record<string, ReactElement> = {
   "/schemas/register": <RegisterSchema />,
   "/keepalive": <Keepalive />,
   "/admin/payees": <PayeeManagement />,
+  "/status": <IndexStatus />,
 };
 
 /**

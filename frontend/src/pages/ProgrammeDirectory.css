@@ -148,6 +148,11 @@
   font-weight: var(--weight-semibold);
 }
 
+.directory-banner__link {
+  color: var(--warning-strong);
+  text-decoration: underline;
+}
+
 .directory-banner--error {
   background: var(--refund-soft);
   display: flex;
