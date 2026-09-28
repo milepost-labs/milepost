@@ -5,7 +5,9 @@ import '../components/programme/phasePill.css';
 import { Skeleton, Empty } from '../components/state/AsyncStates';
 import { describeAmount } from '../lib/amount';
 import { useIndexedList } from '../hooks';
+import { useWallet } from '../context/useWallet';
 import { fetchMeta, fetchProgrammes, isStale } from '../lib/indexer';
+import { FIXTURE_USER_ROLES, ROLE_LABELS } from '../fixtures/userRoles';
 import {
   DEFAULT_DIRECTORY_SORT,
   DIRECTORY_PHASES,
@@ -46,9 +48,14 @@ export const ProgrammeDirectory = () => {
   const query = params.get('q') ?? '';
   const phase = asPhase(params.get('phase'));
   const sort = asSort(params.get('sort'));
+  const yoursOnly = params.get('yours') === '1';
+  const { status: walletStatus, address } = useWallet();
+  const isSignedIn = walletStatus === 'connected' && address != null;
 
   const metaRead = useIndexedList(async () => ({ meta: await fetchMeta(), readAt: Date.now() }), []);
   const listRead = useIndexedList(() => fetchProgrammes(), []);
+
+  const userRoles = isSignedIn ? FIXTURE_USER_ROLES : undefined;
 
   const setQuery = useCallback(
     (value: string) => {
@@ -80,18 +87,26 @@ export const ProgrammeDirectory = () => {
     [params, setParams],
   );
 
+  const toggleYours = useCallback(() => {
+    const next = new URLSearchParams(params);
+    if (yoursOnly) next.delete('yours');
+    else next.set('yours', '1');
+    setParams(next, { replace: true });
+  }, [params, setParams, yoursOnly]);
+
   const clearFilters = useCallback(() => {
     const next = new URLSearchParams(params);
     next.delete('q');
     next.delete('phase');
+    next.delete('yours');
     setParams(next, { replace: true });
   }, [params, setParams]);
 
-  const all = useMemo(() => mergeProgrammes(listRead.data), [listRead.data]);
+  const all = useMemo(() => mergeProgrammes(listRead.data, userRoles), [listRead.data, userRoles]);
   const counts = useMemo(() => phaseCounts(all, query), [all, query]);
   const shown = useMemo(
-    () => sortProgrammes(filterProgrammes(all, query, phase), sort),
-    [all, query, phase, sort],
+    () => sortProgrammes(filterProgrammes(all, query, phase, yoursOnly), sort),
+    [all, query, phase, sort, yoursOnly],
   );
 
   const loading = listRead.loading || metaRead.loading;
@@ -152,6 +167,16 @@ export const ProgrammeDirectory = () => {
                 </button>
               );
             })}
+            {isSignedIn && (
+              <button
+                type="button"
+                className={`directory-filter${yoursOnly ? ' directory-filter--on' : ''}`}
+                aria-pressed={yoursOnly}
+                onClick={toggleYours}
+              >
+                Yours
+              </button>
+            )}
           </div>
           <label className="directory-sort">
             <span className="directory-sort__label">Sort</span>
@@ -252,6 +277,16 @@ function ProgrammeCard({ programme }: { programme: DirectoryProgramme }) {
           </span>
           <span className={`phase-pill phase-pill--${chain.phase.toLowerCase()}`}>{chain.phase}</span>
         </div>
+
+        {programme.userRoles && programme.userRoles.length > 0 && (
+          <div className="directory-card-new__roles" aria-label="Your roles">
+            {programme.userRoles.map((role) => (
+              <span key={role} className="directory-role-badge">
+                {ROLE_LABELS[role]}
+              </span>
+            ))}
+          </div>
+        )}
 
         <span className="directory-card-new__status">{programmeStatus(chain)}</span>
 

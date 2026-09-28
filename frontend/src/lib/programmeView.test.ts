@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 
 import { FIXTURE_CHAIN_DEFAULT, FIXTURE_PROGRAMMES } from '../fixtures/programmes';
+import { FIXTURE_USER_ROLES } from '../fixtures/userRoles';
 import {
   filterProgrammes,
   formatAgo,
@@ -164,6 +165,28 @@ describe('sortProgrammes', () => {
       'CHIGH',
       'CLOW',
     ]);
+  });
+});
+
+describe('yours filter', () => {
+  it('attaches userRoles when provided', () => {
+    const merged = mergeProgrammes([], FIXTURE_USER_ROLES);
+    const withRoles = merged.find((p) => p.userRoles && p.userRoles.length > 0);
+    expect(withRoles).toBeDefined();
+    expect(withRoles?.userRoles).toContain('funder');
+  });
+
+  it('filters to only programmes with roles when yoursOnly is true', () => {
+    const all = mergeProgrammes([], FIXTURE_USER_ROLES);
+    const yours = filterProgrammes(all, '', 'All', true);
+    expect(yours.length).toBeGreaterThan(0);
+    expect(yours.every((p) => p.userRoles != null && p.userRoles.length > 0)).toBe(true);
+  });
+
+  it('returns all programmes when yoursOnly is false', () => {
+    const all = mergeProgrammes([], FIXTURE_USER_ROLES);
+    const allFiltered = filterProgrammes(all, '', 'All', false);
+    expect(allFiltered.length).toBe(all.length);
   });
 });
 
