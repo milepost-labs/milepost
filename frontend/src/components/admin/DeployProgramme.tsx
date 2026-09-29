@@ -344,7 +344,7 @@ export function DeployProgramme() {
             error={schemaInput !== '' ? (schemaError ?? undefined) : undefined}
             hint={
               schemaInput === ''
-                ? `The claim template tranches release against. It must already exist in attest. Known: ${FIXTURE_SCHEMAS.map((s) => s.id).join(', ')}.`
+                ? `The schema tranches release against. It must already exist in attest. Known: ${FIXTURE_SCHEMAS.map((s) => s.id).join(', ')}.`
                 : undefined
             }
             spellCheck={false}

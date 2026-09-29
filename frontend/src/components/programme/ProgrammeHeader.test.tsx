@@ -5,7 +5,7 @@ import { ProgrammeHeader } from './ProgrammeHeader';
 
 const baseProps = {
   id: 'CBQ4SCHOOLBURSARY2026XK3ZP7M2QWJ5T8VN4RD6HY',
-  name: 'Secondary school bursaries 2026',
+  name: 'Community resilience grants 2026',
   creator: 'GAKR7W…D2QX',
   createdLedger: 4811204,
 };
@@ -15,7 +15,7 @@ describe('ProgrammeHeader', () => {
     render(<ProgrammeHeader {...baseProps} phase="Open" />);
 
     expect(screen.getByRole('heading', { level: 1 }).textContent).toBe(
-      'Secondary school bursaries 2026',
+      'Community resilience grants 2026',
     );
     expect(screen.getAllByText('Open').length).toBeGreaterThan(0);
     expect(screen.queryByText(/ mode$/)).toBeNull();

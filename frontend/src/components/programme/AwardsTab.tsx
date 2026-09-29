@@ -61,7 +61,7 @@ export const AwardsTab: FC<AwardsTabProps> = ({
   }, [isSample, phase, fetchedAwards]);
 
   const advisoryNote = isSample
-    ? 'Awards are the median of reviewer votes. Listed from the public index, advisory.'
+    ? 'Awards use the middle reviewer vote after enough reviewers have voted. Listed from the public index, advisory.'
     : 'From the public index (awards.json), advisory. Each award is re-read on-chain before it is acted on.';
 
   const handleDownloadCsv = useCallback(() => {
@@ -74,7 +74,7 @@ export const AwardsTab: FC<AwardsTabProps> = ({
   if (phase === 'Open') {
     emptyMsg = 'No awards yet. Applications are still open.';
   } else if (phase === 'Review') {
-    emptyMsg = 'No awards are final yet. Each is set once it reaches quorum and someone finalizes it.';
+    emptyMsg = 'No awards are final yet. Each is set once enough reviewer votes are in and someone finalizes it.';
   } else if (phase === 'Settled') {
     emptyMsg = 'No awards were made.';
   }

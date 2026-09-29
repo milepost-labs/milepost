@@ -20,7 +20,7 @@ import './RegisterSchema.css';
 const HEX_32_BYTES = /^(0x)?[0-9a-fA-F]{64}$/;
 
 /**
- * Register an attestation schema (Screen 10, Schemas).
+ * Register a schema (Screen 10, Schemas).
  *
  * The form collects a name (`lowercase-words/vN`, a UI convention validated
  * before signing), a fields description, and whether attestations under the
@@ -118,8 +118,7 @@ export const RegisterSchema = () => {
       <header className="register-schema__header">
         <h1>Register a schema</h1>
         <p className="typo-text text-muted">
-          A programme cannot be deployed without a schema, so registering one comes first.
-          Schemas describe what a verifier signs. They carry no protocol vocabulary.
+          A programme cannot be deployed without a schema: the short checklist a verifier signs against. Register it first so every attestation uses the same words.
         </p>
       </header>
 
@@ -154,7 +153,7 @@ export const RegisterSchema = () => {
               <span className="schema-check__text">
                 <span className="schema-check__label">Attesters can revoke attestations under this schema</span>
                 <span className="schema-check__desc">
-                  Revocation stops a claim being used again, but never claws back a tranche
+                  Revocation stops a proof being used again, but never claws back a tranche
                   that already released. This choice is permanent.
                 </span>
               </span>
@@ -162,22 +161,20 @@ export const RegisterSchema = () => {
 
             <Field
               label="Supersedes (optional)"
-              placeholder="Predecessor schema UID, 32-byte hex"
+              placeholder="Earlier schema UID, 32-byte hex"
               value={predecessor}
               onChange={(e) => setPredecessor(e.target.value)}
               error={predecessorError ?? undefined}
-              hint="Only the schema authority may declare a predecessor. A cycle in the predecessor chain is rejected with CycleDetected (error 9)."
+              hint="Only the schema owner may link to an earlier template. The network refuses loops in that replacement history."
             />
 
             <p className="register-schema__opaque">
-              The <span className="numeric">definition</span> the registry stores is opaque to it:
-              name and fields are joined into one string the contract never interprets. Write
-              them for the humans who will verify later, because no check will catch vagueness.
+              The name and fields are stored as one text description. Write them for the humans who will verify later, because the network cannot tell whether a vague checklist is useful.
             </p>
 
             {!address && (
               <p className="ui-field__message ui-field__message--error" role="alert">
-                Sign in — the connected address becomes the schema authority.
+                Sign in — the connected address becomes the schema owner.
               </p>
             )}
 
@@ -212,7 +209,7 @@ export const RegisterSchema = () => {
                 <p className="state-error__message">{explained.message}</p>
                 {isCycle ? (
                   <p className="state-error__action">
-                    A schema cannot supersede itself, directly or through its predecessors.
+                    A schema cannot replace itself, directly or through earlier templates.
                     Pick a different predecessor or leave it empty. Nothing was registered.
                   </p>
                 ) : (

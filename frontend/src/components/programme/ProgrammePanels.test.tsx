@@ -77,7 +77,7 @@ describe('Issue #264 - WhereTheMoneyIs component', () => {
     expect(screen.getByText('0.00 USDC')).toBeDefined();
 
     // Footer stats with capped quorum (max 16)
-    expect(screen.getByText(/16 reviewers/)).toBeDefined();
+    expect(screen.getByText(/Reviewer votes needed/).textContent).toContain('16');
     expect(screen.getByText(/12,000\.00 USDC/)).toBeDefined(); // contributed
     expect(screen.getByText(/1,500\.00 USDC \(12\.50%\)/)).toBeDefined(); // fee
   });
@@ -179,7 +179,7 @@ describe('Issue #266 - VerifiersTab component', () => {
 
     // Distinction between reviewers and verifiers
     expect(
-      screen.getByText(/Verifiers differ from reviewers — verifiers unlock payments/),
+      screen.getByText(/Reviewers decide the award amount\. Verifiers confirm release/),
     ).toBeDefined();
 
     // Roster list
@@ -204,7 +204,7 @@ describe('Issue #267 - TermsTab component', () => {
     // Median rule explanation
     expect(screen.getByText('Median of reviewer votes')).toBeDefined();
     expect(
-      screen.getByText(/The award is the median of reviewer votes/),
+      screen.getByText(/submitted amounts are sorted and the middle value is selected/),
     ).toBeDefined();
 
     // Refund and sweep rule

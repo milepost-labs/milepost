@@ -84,7 +84,7 @@ function enabledReason(rule: Rule, input: ActionInput): string {
         ? `${input.refundable} is refundable, in proportion to what each funder put in.`
         : 'Your share is worked out from what you put in.';
     case 'finalize':
-      return 'Needs quorum votes on the application. In an oversubscribed round, whoever finalizes first decides the order.';
+      return 'Needs the required reviewer votes on the application. In an oversubscribed round, whoever finalizes first decides the order.';
     default:
       return 'Re-checked on-chain when you continue.';
   }

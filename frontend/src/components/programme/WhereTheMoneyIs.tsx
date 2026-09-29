@@ -160,7 +160,7 @@ export const WhereTheMoneyIs: FC<WhereTheMoneyIsProps> = ({
           </strong>
         </span>
         <span>
-          Quorum <strong>{cappedQuorum} reviewers</strong>
+          Reviewer votes needed <strong>{cappedQuorum}</strong>
         </span>
       </div>
     </section>

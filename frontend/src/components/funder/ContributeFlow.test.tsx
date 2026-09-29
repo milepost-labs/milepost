@@ -81,7 +81,7 @@ describe('ContributeFlow — amount step', () => {
   it('offers only Open programmes', () => {
     renderFlow();
     const options = screen.getAllByRole('radio').map((radio) => radio.closest('label')?.textContent);
-    expect(options).toEqual(['Secondary school bursaries 2026', 'Smallholder inputs, long rains']);
+    expect(options).toEqual(['Community resilience grants 2026', 'Smallholder inputs, long rains']);
   });
 
   it('refuses an amount above the balance before anything is signed', () => {
@@ -123,7 +123,7 @@ describe('ContributeFlow — confirm, receipt and failure', () => {
 
   it('confirms a contribution and shows the receipt, announced politely', async () => {
     renderFlow();
-    await toConfirm('Secondary school bursaries 2026');
+    await toConfirm('Community resilience grants 2026');
     expect(screen.getByText('Sample chain read: the programme is Open.')).toBeTruthy();
     expect(screen.getByText('100 USDC')).toBeTruthy();
 
@@ -134,7 +134,7 @@ describe('ContributeFlow — confirm, receipt and failure', () => {
     expect(screen.getByText(/Your money stays locked in the programme/)).toBeTruthy();
     await waitFor(() =>
       expect(mocks.announce).toHaveBeenCalledWith(
-        'Contribution of 100 USDC to Secondary school bursaries 2026 confirmed.',
+        'Contribution of 100 USDC to Community resilience grants 2026 confirmed.',
       ),
     );
   });

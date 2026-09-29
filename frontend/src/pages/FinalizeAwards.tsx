@@ -46,7 +46,7 @@ const MODE_OPTIONS: ModeOption[] = [
     tag: 'Direct',
     icon: Landmark,
     label: 'Direct',
-    summary: 'Paid straight to a verified payee you choose now — a school, clinic or supplier.',
+    summary: 'Paid straight to a verified payee you choose now — an approved wallet, business, or service provider.',
     consequence:
       'The recipient never holds the money and never chooses who receives it. Equally unbypassable as Allocated; the difference is the recipient loses choice.',
   },
@@ -54,7 +54,7 @@ const MODE_OPTIONS: ModeOption[] = [
     tag: 'Allocated',
     icon: ShieldCheck,
     label: 'Allocated',
-    summary: 'Held in escrow; the recipient directs it to a verified payee later.',
+    summary: 'Held in escrow, meaning locked programme funds; the recipient directs it to a verified payee later.',
     consequence:
       'The strongest guarantee available: funds can never reach anyone unverified because they never leave escrow until directed. Equally unbypassable as Direct, but the recipient keeps choice.',
   },
@@ -62,7 +62,7 @@ const MODE_OPTIONS: ModeOption[] = [
     tag: 'Restricted',
     icon: Lock,
     label: 'Restricted',
-    summary: 'Paid into the recipient’s smart wallet, gated by a spend policy.',
+    summary: 'Paid into the recipient’s smart wallet, gated by a spend policy, or wallet spending rule.',
     consequence:
       'Weaker than it looks: the policy constrains one signer, not the wallet. This screen only checks the policy is installed — at release, not now.',
   },
@@ -396,7 +396,7 @@ export const FinalizeAwards = () => {
       <header className="dashboard-header animate-fade-up">
         <h1>Finalize Awards</h1>
         <p className="typo-text text-muted">
-          Settle quorum-reached applications into awards. The mode you pick decides whether the money can reach anyone unverified.
+          Settle applications with enough reviewer votes into awards. The payment mode you pick decides whether released money can reach an unverified destination.
         </p>
       </header>
 
@@ -428,7 +428,7 @@ export const FinalizeAwards = () => {
         <div className="stat-card">
           <div className="stat-icon"><CheckCircle size={24} /></div>
           <div className="stat-content">
-            <span className="stat-label">Reviewer Quorum</span>
+            <span className="stat-label">Reviewer votes needed</span>
             <span className="stat-value">
               <AsyncView {...config} onRetry={config.refetch}>
                 {(value) => `${value.quorum} votes`}
@@ -500,7 +500,7 @@ export const FinalizeAwards = () => {
                     <div className="application-card__header">
                       <h3>Application</h3>
                       <Badge tone={app.finalized ? 'success' : quorumReached ? 'warning' : 'neutral'}>
-                        {app.finalized ? 'Finalized' : quorumReached ? 'Quorum reached' : 'Awaiting votes'}
+                        {app.finalized ? 'Finalized' : quorumReached ? 'Enough votes in' : 'Awaiting votes'}
                       </Badge>
                     </div>
                     <div className="application-card__grid">
@@ -553,7 +553,7 @@ export const FinalizeAwards = () => {
                       <div className="finalize-flow__heading">
                         <h3>Choose how the award is paid</h3>
                         <p className="typo-text text-muted">
-                          The mode decides whether the money stays accountable. Allocated and Direct are equally unbypassable — they differ in who chooses the payee.
+                          The payment mode decides where released money may go. Allocated and Direct both require a verified payee; they differ in who chooses that payee.
                         </p>
                       </div>
 
@@ -586,7 +586,7 @@ export const FinalizeAwards = () => {
                         <div className="payee-section">
                           <h4>Verified payee</h4>
                           <p className="typo-text text-muted">
-                            Direct awards are paid straight to a verified institution. The payee must be one this programme has verified, or the call fails.
+                            Direct awards are paid straight to a verified destination, called a payee. The payee must be one this programme has verified before the award can be finalized.
                           </p>
                           <div className="payee-row">
                             <Field
@@ -638,7 +638,7 @@ export const FinalizeAwards = () => {
                       {granted !== null && budget.data !== null && (
                         <div className={`budget-note ${insufficient || belowMinimum ? 'budget-note--error' : 'budget-note--ok'}`}>
                           <div>
-                            <span className="detail-label">Computed award (median)</span>
+                            <span className="detail-label">Computed award (middle vote)</span>
                             <span className="detail-value">{formatAmount(granted, { asset: 'XLM' })}</span>
                           </div>
                           <div>
@@ -667,12 +667,12 @@ export const FinalizeAwards = () => {
                             <strong>Award is below the programme minimum and cannot be finalised.</strong>
                           </p>
                           <p style={{ margin: '0 0 0.25rem', fontSize: '0.875rem' }}>
-                            Median: <strong>{formatAmount(granted, { asset: 'XLM' })}</strong>
+                            Middle reviewer vote: <strong>{formatAmount(granted, { asset: 'XLM' })}</strong>
                             {' '}&mdash; Minimum: <strong>{formatAmount(minimumAward, { asset: 'XLM' })}</strong>
                             {' '}&mdash; Shortfall: <strong>{formatAmount(minimumAward - granted, { asset: 'XLM' })}</strong>
                           </p>
                           <p style={{ margin: 0, fontSize: '0.875rem', color: 'var(--color-muted)' }}>
-                            The application is unchanged and stays finalisable — if reviewers add higher votes and the median rises above the minimum, this call will succeed.
+                            The application is unchanged and stays finalisable — if reviewers add higher votes and the middle vote rises above the minimum, this call will succeed.
                           </p>
                         </div>
                       )}
@@ -712,7 +712,7 @@ export const FinalizeAwards = () => {
                             </p>
                             {isBelowMin && granted !== null && minimumAward > 0n && (
                               <p style={{ margin: '0.5rem 0 0.25rem', fontSize: '0.875rem' }}>
-                                Median: <strong>{formatAmount(granted, { asset: 'XLM' })}</strong>
+                                Middle reviewer vote: <strong>{formatAmount(granted, { asset: 'XLM' })}</strong>
                                 {' '}&mdash; Minimum: <strong>{formatAmount(minimumAward, { asset: 'XLM' })}</strong>
                                 {' '}&mdash; Shortfall: <strong>{formatAmount(minimumAward - granted, { asset: 'XLM' })}</strong>
                               </p>

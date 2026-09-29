@@ -45,14 +45,14 @@ const PROGRAM: Table = {
   2: { kind: 'blocked', message: 'The window for this action is not open.', action: 'Check the programme timeline for when it opens or closed.' },
   3: { kind: 'invalid', message: 'The amount must be greater than zero.' },
   4: { kind: 'invalid', message: 'The deadlines must run in order: applications, then review, then release, then sweep.' },
-  5: { kind: 'invalid', message: 'The quorum must be at least 1 and no more than the number of reviewers.' },
+  5: { kind: 'invalid', message: 'The required reviewer votes must be at least 1 and no more than the number of reviewers.' },
   6: { kind: 'invalid', message: 'That protocol fee is above the maximum of 10%.' },
   7: { kind: 'invalid', message: 'A programme needs at least one reviewer.' },
   8: { kind: 'none', message: 'No application from this account yet.' },
   9: { kind: 'conflict', message: 'You have already applied to this programme.', action: 'Only one application per programme is allowed.' },
   10: { kind: 'conflict', message: 'You have already reviewed this application.' },
   11: { kind: 'invalid', message: 'You cannot approve more than the applicant asked for.' },
-  12: { kind: 'blocked', message: 'Not enough reviewers have voted yet.', action: 'The award settles once quorum is reached.' },
+  12: { kind: 'blocked', message: 'Not enough reviewers have voted yet.', action: 'The award settles once the required reviewer votes are in.' },
   13: { kind: 'conflict', message: 'This application has already been settled into an award.' },
   14: { kind: 'blocked', message: 'The programme does not have enough budget left for this award.', action: 'Awards are settled in the order they are finalised.' },
   15: { kind: 'fault', message: 'That amount is too large to process.' },
@@ -90,8 +90,8 @@ const ATTEST: Table = {
   5: { kind: 'denied', message: 'Only the verifier who made an attestation can revoke it.' },
   6: { kind: 'conflict', message: 'This attestation has already been revoked.' },
   7: { kind: 'invalid', message: 'The expiry date is in the past.' },
-  8: { kind: 'denied', message: 'This schema is restricted — only its authority can attest under it.' },
-  9: { kind: 'conflict', message: 'A cycle was detected in the schema predecessor chain.', action: 'A schema cannot supersede itself, directly or through its predecessors.' },
+  8: { kind: 'denied', message: 'This schema is restricted — only its authority can sign under it.' },
+  9: { kind: 'conflict', message: 'This schema repeats itself in its replacement chain.', action: 'A schema cannot supersede itself, directly or through its predecessors.' },
 };
 
 const RECORD: Table = {

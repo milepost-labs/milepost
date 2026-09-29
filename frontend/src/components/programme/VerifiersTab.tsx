@@ -18,7 +18,7 @@ export const VerifiersTab: FC<VerifiersTabProps> = ({
       tabIndex={0}
     >
       <p className="verifiers-tab__intro">
-        Verifiers whose attestations this programme accepts. Each attestation unlocks one tranche.
+        Verifiers are trusted signers who confirm a condition was met. Each signed confirmation, called an attestation, unlocks one tranche: one instalment of the award.
       </p>
 
       <div className="verifiers-tab__note-card" role="note">
@@ -28,9 +28,8 @@ export const VerifiersTab: FC<VerifiersTabProps> = ({
           Until it is, the verifiers below are examples, not this programme's real roster.
         </p>
         <p className="verifiers-tab__distinction">
-          <strong>Reviewers vs Verifiers:</strong> Verifiers differ from reviewers — verifiers unlock payments
-          by signing attestations when milestone conditions are met, while reviewers vote during the review phase
-          to determine the award amount.
+          <strong>Reviewers vs verifiers:</strong> Reviewers decide the award amount. Verifiers confirm release
+          conditions later by signing attestations when milestones are met.
         </p>
       </div>
 

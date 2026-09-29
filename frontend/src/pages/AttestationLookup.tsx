@@ -113,8 +113,9 @@ export const AttestationLookup = () => {
       <header className="attest-lookup__header">
         <h1>Look up an attestation</h1>
         <p className="typo-text text-muted">
-          Check what a verifier signed, about whom, and whether it has already released a
-          tranche. No sign-in needed.
+          An attestation is a signed statement that a condition was met. Check what was
+          signed, about whom, and whether it has already released a tranche (one instalment
+          of an award). No sign-in needed.
         </p>
       </header>
 
@@ -209,7 +210,7 @@ export const AttestationLookup = () => {
         <>
           <p className="typo-text text-muted attest-lookup__claim-intro">
             Looking up by id shows what an attestation says. This answers a narrower question:
-            does <em>this</em> subject hold a valid claim under <em>this</em> schema from{' '}
+            does <em>this</em> subject hold a valid claim under <em>this</em> schema (the checklist it was signed against) from{' '}
             <em>this</em> attester? An attestation can be perfectly valid and still be the wrong
             one — signed by someone else, or about someone else — so gating anything of value on
             it should use this check, not just whether it exists.

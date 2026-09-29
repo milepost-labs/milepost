@@ -787,7 +787,7 @@ export const ProgrammeDetail = () => {
           </AsyncView>
         </Card>
 
-        <Card title="Contract configuration">
+        <Card title="Programme rules">
           <AsyncView {...config} onRetry={config.refetch} contract="program">
             {(value) => (
               <dl className="config-list">
@@ -804,13 +804,13 @@ export const ProgrammeDetail = () => {
                   </dd>
                 </div>
                 <div>
-                  <dt>Token contract</dt>
+                  <dt>Asset contract</dt>
                   <dd className="numeric" title={value.token}>
                     {formatAddress(value.token)}
                   </dd>
                 </div>
                 <div>
-                  <dt>Quorum</dt>
+                  <dt>Reviewer votes needed</dt>
                   <dd className="numeric">{value.quorum} reviewer votes</dd>
                 </div>
                 <div>
@@ -836,7 +836,7 @@ export const ProgrammeDetail = () => {
           </AsyncView>
         </Card>
 
-        <Card title="Reviewer and verifier sets">
+        <Card title="Reviewer and verifier access">
           <AsyncView {...config} onRetry={config.refetch} contract="program">
             {(value) => (
               <div className="membership-grid">
@@ -845,10 +845,8 @@ export const ProgrammeDetail = () => {
                   <div>
                     <h3>Reviewers</h3>
                     <p>
-                      The contract enforces reviewer membership with{" "}
-                      <span className="numeric">is_reviewer(addr)</span>. This
-                      binding does not expose an enumerable reviewer list, so
-                      the page shows the live quorum instead.
+                      The programme checks reviewer membership by address with{" "}
+                      <span className="numeric">is_reviewer(addr)</span>. The app cannot list every reviewer yet, so this page shows the live reviewer-vote requirement instead.
                     </p>
                     <Badge tone="accent">{value.quorum} votes required</Badge>
                   </div>
@@ -858,13 +856,11 @@ export const ProgrammeDetail = () => {
                   <div>
                     <h3>Verifiers</h3>
                     <p>
-                      The contract enforces verifier membership with{" "}
-                      <span className="numeric">is_verifier(addr)</span>. The
-                      current program API confirms membership by address but
-                      does not list every verifier.
+                      The programme checks verifier membership by address with{" "}
+                      <span className="numeric">is_verifier(addr)</span>. The current app can confirm one verifier address at a time but does not list every verifier yet.
                     </p>
                     <Badge tone="neutral">
-                      {value.tranches} tranche schedule
+                      {value.tranches} tranches
                     </Badge>
                   </div>
                 </div>
@@ -873,8 +869,7 @@ export const ProgrammeDetail = () => {
                   <div>
                     <h3>Linked infrastructure</h3>
                     <p>
-                      Attestations, standing, policy, and treasury addresses are
-                      read from <span className="numeric">get_config</span>.
+                      Attestations, standing records, spending rules, and treasury addresses are read from programme configuration.
                     </p>
                     <Link
                       to={`/funders?programme=${encodeURIComponent(programmeId)}`}
@@ -907,7 +902,7 @@ export const ProgrammeDetail = () => {
                       marginBottom: "0.5rem",
                     }}
                   >
-                    Programme Schema
+                    Schema
                   </h3>
                   <p
                     style={{
@@ -916,8 +911,7 @@ export const ProgrammeDetail = () => {
                       marginBottom: "0.75rem",
                     }}
                   >
-                    Attestations must satisfy this schema to unlock tranches.
-                    The schema is fixed at programme creation.
+                    A schema defines what verifiers are allowed to confirm. Attestations must match this template before a tranche can release.
                   </p>
                   <div
                     style={{
@@ -940,7 +934,7 @@ export const ProgrammeDetail = () => {
                       marginBottom: "0.5rem",
                     }}
                   >
-                    Verifier Roster
+                    Verifier roster
                   </h3>
                   <p
                     style={{
@@ -949,9 +943,7 @@ export const ProgrammeDetail = () => {
                       marginBottom: "0.75rem",
                     }}
                   >
-                    Only attestations signed by these trusted verifiers can
-                    release funds. Recipients should know whose signature they
-                    need to obtain.
+                    Only confirmations signed by these trusted verifiers can release funds. Recipients should know whose signature they need to obtain.
                   </p>
                   <p
                     style={{
@@ -960,10 +952,7 @@ export const ProgrammeDetail = () => {
                       color: "var(--color-muted)",
                     }}
                   >
-                    Note: The programme contract stores verifiers in a set
-                    without enumeration. This roster would be populated from
-                    deployment records or an indexer. For demonstration,
-                    verifier checking is available via{" "}
+                    Note: the app cannot list verifier addresses from this programme yet. This roster will come from deployment records or the public index. For now, verifier checking is available via{" "}
                     <span className="numeric">is_verifier(addr)</span>.
                   </p>
                 </div>
