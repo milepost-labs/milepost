@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 
 import { FIXTURE_CHAIN_DEFAULT, FIXTURE_PROGRAMMES } from '../fixtures/programmes';
+import { FIXTURE_USER_ROLES } from '../fixtures/userRoles';
 import {
   filterProgrammes,
   formatAgo,
@@ -11,7 +12,40 @@ import {
   programmeCta,
   programmeStatus,
   shortId,
+  sortProgrammes,
+  type DirectoryProgramme,
 } from './programmeView';
+
+function directoryProgramme({
+  id,
+  name = id,
+  phase = 'Open',
+  contributed,
+  createdLedger,
+  closesInDays,
+}: {
+  id: string;
+  name?: string;
+  phase?: DirectoryProgramme['chain']['phase'];
+  contributed: string;
+  createdLedger: number;
+  closesInDays?: number;
+}): DirectoryProgramme {
+  return {
+    id,
+    name,
+    creator: null,
+    createdLedger,
+    sample: true,
+    chain: {
+      ...FIXTURE_CHAIN_DEFAULT,
+      phase,
+      contributed,
+      fee: '0',
+      closesInDays,
+    },
+  };
+}
 
 describe('mergeProgrammes', () => {
   it('appends the fixture set when the index is empty', () => {
@@ -73,6 +107,86 @@ describe('filterProgrammes and matchesQuery', () => {
     const cancelled = filterProgrammes(all, '', 'Cancelled');
     expect(cancelled).toHaveLength(1);
     expect(cancelled[0].chain.phase).toBe('Cancelled');
+  });
+});
+
+describe('sortProgrammes', () => {
+  it('defaults to newest first', () => {
+    const sorted = sortProgrammes(mergeProgrammes([]));
+    expect(sorted[0].id).toBe(FIXTURE_PROGRAMMES[0].id);
+  });
+
+  it('sorts open programmes by closing soonest before entries without a close date', () => {
+    const sorted = sortProgrammes(mergeProgrammes([]), 'closing-soonest');
+    expect(sorted.slice(0, 2).map((p) => p.name)).toEqual([
+      'Secondary school bursaries 2026',
+      'Smallholder inputs, long rains',
+    ]);
+    expect(sorted.at(-1)?.chain.closesInDays).toBeUndefined();
+  });
+
+  it('sorts by largest budget using contributed less fee', () => {
+    const sorted = sortProgrammes(mergeProgrammes([]), 'largest-budget');
+    expect(sorted[0].name).toBe('SME supplier microgrants Q2');
+  });
+
+  it('compares large stroop budgets as BigInt instead of Number', () => {
+    const smaller = directoryProgramme({
+      id: 'CSMALL',
+      contributed: '9007199254740992',
+      createdLedger: 2,
+    });
+    const larger = directoryProgramme({
+      id: 'CLARGE',
+      contributed: '9007199254740993',
+      createdLedger: 1,
+    });
+
+    expect(sortProgrammes([smaller, larger], 'largest-budget').map((p) => p.id)).toEqual([
+      'CLARGE',
+      'CSMALL',
+    ]);
+  });
+
+  it('composes after search and phase filtering', () => {
+    const rows = [
+      directoryProgramme({ id: 'CLOW', name: 'Alpha low', contributed: '10', createdLedger: 3 }),
+      directoryProgramme({ id: 'CHIGH', name: 'Alpha high', contributed: '30', createdLedger: 1 }),
+      directoryProgramme({
+        id: 'CREVIEW',
+        name: 'Alpha review',
+        phase: 'Review',
+        contributed: '90',
+        createdLedger: 2,
+      }),
+    ];
+
+    expect(sortProgrammes(filterProgrammes(rows, 'alpha', 'Open'), 'largest-budget').map((p) => p.id)).toEqual([
+      'CHIGH',
+      'CLOW',
+    ]);
+  });
+});
+
+describe('yours filter', () => {
+  it('attaches userRoles when provided', () => {
+    const merged = mergeProgrammes([], FIXTURE_USER_ROLES);
+    const withRoles = merged.find((p) => p.userRoles && p.userRoles.length > 0);
+    expect(withRoles).toBeDefined();
+    expect(withRoles?.userRoles).toContain('funder');
+  });
+
+  it('filters to only programmes with roles when yoursOnly is true', () => {
+    const all = mergeProgrammes([], FIXTURE_USER_ROLES);
+    const yours = filterProgrammes(all, '', 'All', true);
+    expect(yours.length).toBeGreaterThan(0);
+    expect(yours.every((p) => p.userRoles != null && p.userRoles.length > 0)).toBe(true);
+  });
+
+  it('returns all programmes when yoursOnly is false', () => {
+    const all = mergeProgrammes([], FIXTURE_USER_ROLES);
+    const allFiltered = filterProgrammes(all, '', 'All', false);
+    expect(allFiltered.length).toBe(all.length);
   });
 });
 

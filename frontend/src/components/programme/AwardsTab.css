@@ -13,6 +13,11 @@
   line-height: var(--leading-body);
 }
 
+.awards-tab__actions {
+  display: flex;
+  justify-content: flex-end;
+}
+
 .awards-tab__status {
   padding: var(--space-4);
   font-size: var(--text-sm);
@@ -62,17 +67,13 @@
   font-size: var(--text-caption);
   font-weight: var(--weight-semibold);
   color: var(--text);
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
+  overflow-wrap: anywhere;
 }
 
 .awards-tab__subtitle {
   font-size: var(--text-xs);
   color: var(--text-muted);
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
+  overflow-wrap: break-word;
 }
 
 .awards-tab__row-amount {
@@ -97,15 +98,12 @@
   height: 8px;
   border-radius: var(--radius-square);
   min-width: 4px;
+  box-sizing: border-box;
 }
 
 @media (max-width: 480px) {
   .awards-tab__row {
     padding: var(--space-3);
     gap: var(--space-2);
-  }
-
-  .awards-tab__subtitle {
-    white-space: normal;
   }
 }

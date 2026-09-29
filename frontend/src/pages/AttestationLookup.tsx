@@ -1,426 +1,286 @@
-import { useState, useEffect } from 'react';
-import { Buffer } from 'buffer';
-import { CheckCircle2, XCircle, ShieldCheck } from 'lucide-react';
-import { useContractResult } from '../hooks';
-import { useSoroban } from '../context/useSoroban';
-import { AsyncView } from '../components/state/AsyncStates';
-import { Badge, Button, Card, Field } from '../components/ui';
-import { AttestationKeepalive } from '../components/keepalive/Keepalive';
+import { useState, type ChangeEvent, type FormEvent } from 'react';
+import { Badge, Field } from '../components/ui';
+import { FIXTURE_ATTESTATIONS, type AttestationFixture } from '../fixtures/attestationFixtures';
+import {
+  validateVerifyClaimInput,
+  verifyClaim,
+  type VerifyClaimFieldErrors,
+  type VerifyClaimResult,
+} from '../lib/attestationVerify';
 import './AttestationLookup.css';
 
-const HEX_32_BYTES = /^(0x)?[0-9a-fA-F]{64}$/;
-const STELLAR_ADDRESS = /^G[A-Z2-7]{55}$/;
+type LookupMode = 'id' | 'claim';
 
-const formatDate = (seconds: bigint) =>
-  new Date(Number(seconds) * 1000).toLocaleString();
+interface ResultRow {
+  key: string;
+  value: string;
+}
 
-function CheckRow({
-  pass,
-  label,
-  detail,
-}: {
-  pass: boolean;
-  label: string;
-  detail: string;
-}) {
-  return (
-    <div className="attest-check">
-      <span
-        className={`attest-check__icon ${pass ? 'attest-check__icon--pass' : 'attest-check__icon--fail'}`}
-        aria-hidden="true"
-      >
-        {pass ? <CheckCircle2 size={18} /> : <XCircle size={18} />}
-      </span>
-      <div className="attest-check__body">
-        <p className="attest-check__title">{label}</p>
-        <p className="attest-check__detail">{detail}</p>
-      </div>
-      <Badge tone={pass ? 'success' : 'danger'}>{pass ? 'Pass' : 'Fail'}</Badge>
-    </div>
+function statusFor(attestation: AttestationFixture): { label: string; tone: 'success' | 'accent' | 'danger' } {
+  if (attestation.revoked) return { label: 'Revoked', tone: 'danger' };
+  if (attestation.used) return { label: 'Used to release a payment instalment', tone: 'accent' };
+  return { label: 'Valid, not used yet', tone: 'success' };
+}
+
+function rowsFor(attestation: AttestationFixture): ResultRow[] {
+  const base: ResultRow[] = [
+    { key: 'Claim template', value: attestation.schema },
+    { key: 'Verifier', value: attestation.attester },
+    { key: 'Recipient', value: attestation.subject },
+    { key: 'Signed at ledger', value: attestation.ledger.toLocaleString() },
+  ];
+  return base.concat(
+    Object.entries(attestation.data).map(([key, value]) => ({ key, value: String(value) })),
   );
 }
 
+const EMPTY_CLAIM_FORM = { uid: '', subject: '', schema: '', attester: '' };
+
 /**
- * Signed proof lookup and verification.
+ * Signed proof lookup.
  *
- * Paste a UID to see the signed proof record and its claim template, then
- * optionally provide recipient, claim template UID and verifier to run all four checks
- * that the release check combines — each reported independently so a refusal is
- * actionable.
+ * Two modes. "Look up by id" answers what a signed proof says — search by
+ * id, recipient or verifier. "Check a claim" answers the narrower question
+ * anything gating value should actually ask: does this recipient hold a valid
+ * claim under this claim template from this verifier (`attest.verify`, not just
+ * `is_valid`). The proof contract has no way to list every proof by recipient or
+ * verifier — only to fetch one uid at a time — so both modes stay
+ * fixture-backed (see `attestationFixtures.ts` and `attestationVerify.ts`)
+ * until an indexer handler publishes a searchable list. No sign-in needed:
+ * anyone can check what a verifier signed.
  */
 export const AttestationLookup = () => {
-  const { attest } = useSoroban();
+  const [mode, setMode] = useState<LookupMode>('id');
 
-  // --- uid lookup ---
-  const [uidInput, setUidInput] = useState('');
-  const [uid, setUid] = useState<Buffer | null>(null);
-  const [uidError, setUidError] = useState<string | null>(null);
+  const [query, setQuery] = useState('');
+  const [searched, setSearched] = useState('');
 
-  // --- optional verify inputs ---
-  const [subjectInput, setSubjectInput] = useState('');
-  const [schemaInput, setSchemaInput] = useState('');
-  const [attesterInput, setAttesterInput] = useState('');
-  const [verifyTriggered, setVerifyTriggered] = useState(false);
-
-  const attestation = useContractResult(
-    () => attest.get({ uid: uid! }),
-    [attest, uid],
-    { enabled: uid !== null },
-  );
-
-  const schema = useContractResult(
-    () =>
-      attestation.data
-        ? attest.get_schema({ uid: attestation.data.schema })
-        : Promise.reject(new Error('no attestation')),
-    [attest, attestation.data],
-    { enabled: attestation.data !== null },
-  );
-
-  const handleLookup = () => {
-    const raw = uidInput.trim().replace(/^0x/i, '');
-    if (!HEX_32_BYTES.test(uidInput.trim())) {
-      setUidError('Enter a 32-byte hex UID (64 hex characters).');
-      return;
-    }
-    setUidError(null);
-    setUid(Buffer.from(raw, 'hex'));
-    setVerifyTriggered(false);
+  const handleSubmit = (event: FormEvent) => {
+    event.preventDefault();
+    setSearched(query);
   };
 
-  // --- derived check results ---
-  // Reading the clock during render is impure — two renders would disagree.
-  // Ticking it as state matches ProgrammeDetail and keeps expiry honest
-  // without a refresh.
-  const [nowSeconds, setNowSeconds] = useState(() => BigInt(Math.floor(Date.now() / 1000)));
-  useEffect(() => {
-    const interval = window.setInterval(
-      () => setNowSeconds(BigInt(Math.floor(Date.now() / 1000))),
-      30_000,
-    );
-    return () => window.clearInterval(interval);
-  }, []);
-  const a = attestation.data;
+  const pick = (uid: string) => {
+    setMode('id');
+    setQuery(uid);
+    setSearched(uid);
+  };
 
-  const checkLive = a
-    ? a.revoked_at === null || a.revoked_at === undefined
-    : null;
+  const trimmed = searched.trim().toLowerCase();
+  const searchedYet = trimmed.length > 0;
+  const hits = searchedYet
+    ? FIXTURE_ATTESTATIONS.filter(
+        (a) =>
+          a.uid.toLowerCase() === trimmed ||
+          a.subject.toLowerCase().includes(trimmed) ||
+          a.attester.toLowerCase().includes(trimmed),
+      )
+    : [];
+  const noneFound = searchedYet && hits.length === 0;
 
-  const checkNotExpired = a
-    ? a.expires_at === null || a.expires_at === undefined || a.expires_at > nowSeconds
-    : null;
+  const [claimForm, setClaimForm] = useState(EMPTY_CLAIM_FORM);
+  const [claimErrors, setClaimErrors] = useState<VerifyClaimFieldErrors>({});
+  const [claimResult, setClaimResult] = useState<VerifyClaimResult | null>(null);
 
-  const verifySubject = subjectInput.trim();
-  const verifySchema = schemaInput.trim().replace(/^0x/i, '');
-  const verifyAttester = attesterInput.trim();
+  const updateClaimField = (field: keyof typeof EMPTY_CLAIM_FORM) => (event: ChangeEvent<HTMLInputElement>) => {
+    setClaimForm((prev) => ({ ...prev, [field]: event.target.value }));
+  };
 
-  const canVerify =
-    STELLAR_ADDRESS.test(verifySubject) &&
-    HEX_32_BYTES.test(schemaInput.trim()) &&
-    STELLAR_ADDRESS.test(verifyAttester);
+  const fillClaimSample = (attestation: AttestationFixture) => {
+    setClaimForm({
+      uid: attestation.uid,
+      subject: attestation.subject,
+      schema: attestation.schema,
+      attester: attestation.attester,
+    });
+    setClaimErrors({});
+    setClaimResult(null);
+  };
 
-  const checkSubject = verifyTriggered && a ? a.subject === verifySubject : null;
-  const checkSchema =
-    verifyTriggered && a
-      ? a.schema.toString('hex') === verifySchema
-      : null;
-  const checkAttester =
-    verifyTriggered && a ? a.attester === verifyAttester : null;
+  const handleClaimSubmit = (event: FormEvent) => {
+    event.preventDefault();
+    const errors = validateVerifyClaimInput(claimForm);
+    setClaimErrors(errors);
+    if (Object.keys(errors).length > 0) {
+      setClaimResult(null);
+      return;
+    }
+    setClaimResult(verifyClaim(FIXTURE_ATTESTATIONS, claimForm));
+  };
 
   return (
     <div className="attest-lookup">
       <header className="attest-lookup__header">
-        <h1>Signed proof lookup</h1>
+        <h1>Look up a signed proof</h1>
         <p className="typo-text text-muted">
-          Look up a signed verifier confirmation, called an attestation, by UID. You can inspect its claim template and check validity, expiry, recipient, template, and verifier separately. A refusal that tells you which check failed tells you what
-          to fix.
+          Check what a verifier signed, about whom, and whether it has already released a
+          payment instalment. No sign-in needed.
         </p>
       </header>
 
-      <Card title="Look up by proof UID">
-        <div className="attest-search">
-          <Field
-            label="Proof UID"
-            placeholder="32-byte hex (64 characters)"
-            value={uidInput}
-            onChange={(e) => {
-              setUidInput(e.target.value);
-              setUidError(null);
-            }}
-            error={uidError ?? undefined}
-          />
-          <div className="attest-search__actions">
-            <Button onClick={handleLookup} disabled={!uidInput.trim()}>
-              Look up
-            </Button>
-          </div>
-        </div>
-      </Card>
-
-      {uid !== null && (
-        <AsyncView
-          {...attestation}
-          onRetry={attestation.refetch}
-          contract="attest"
-          empty={{ title: 'Signed proof not found', description: 'No signed proof exists for this UID.' }}
+      <div className="attest-lookup__tabs" role="tablist" aria-label="Lookup mode">
+        <button
+          type="button"
+          role="tab"
+          aria-selected={mode === 'id'}
+          className={`attest-lookup__tab${mode === 'id' ? ' attest-lookup__tab--active' : ''}`}
+          onClick={() => setMode('id')}
         >
-          {(a) => {
-            const isRevoked =
-              a.revoked_at !== null && a.revoked_at !== undefined;
-            const isExpired =
-              !isRevoked &&
-              a.expires_at !== null &&
-              a.expires_at !== undefined &&
-              a.expires_at <= nowSeconds;
+          Look up by id
+        </button>
+        <button
+          type="button"
+          role="tab"
+          aria-selected={mode === 'claim'}
+          className={`attest-lookup__tab${mode === 'claim' ? ' attest-lookup__tab--active' : ''}`}
+          onClick={() => setMode('claim')}
+        >
+          Check a claim
+        </button>
+      </div>
 
-            return (
-              <>
-                <Card
-                  title="Signed proof"
-                  aside={
-                    isRevoked ? (
-                      <Badge tone="danger">Revoked</Badge>
-                    ) : isExpired ? (
-                      <Badge tone="neutral">Expired</Badge>
-                    ) : (
-                      <Badge tone="success">Live</Badge>
-                    )
-                  }
-                >
-                  <div className="attest-detail-grid">
-                    <div className="attest-field">
-                      <span className="attest-field__label">UID</span>
-                      <span className="attest-field__value attest-field__value--mono">
-                        {a.uid.toString('hex')}
-                      </span>
-                    </div>
-                    <div className="attest-field">
-                      <span className="attest-field__label">Verifier</span>
-                      <span className="attest-field__value attest-field__value--mono">
-                        {a.attester}
-                      </span>
-                    </div>
-                    <div className="attest-field">
-                      <span className="attest-field__label">Subject (recipient)</span>
-                      <span className="attest-field__value attest-field__value--mono">
-                        {a.subject}
-                      </span>
-                    </div>
-                    <div className="attest-field">
-                      <span className="attest-field__label">Claim template UID</span>
-                      <span className="attest-field__value attest-field__value--mono">
-                        {a.schema.toString('hex')}
-                      </span>
-                    </div>
-                    <div className="attest-field">
-                      <span className="attest-field__label">Data hash</span>
-                      <span className="attest-field__value attest-field__value--mono">
-                        {a.data_hash.toString('hex')}
-                      </span>
-                    </div>
-                    <div className="attest-field">
-                      <span className="attest-field__label">Created</span>
-                      <span className="attest-field__value">
-                        {formatDate(a.created_at)}
-                      </span>
-                    </div>
-                    <div className="attest-field">
-                      <span className="attest-field__label">Expires</span>
-                      <span className="attest-field__value">
-                        {a.expires_at !== null && a.expires_at !== undefined
-                          ? formatDate(a.expires_at)
-                          : 'Never'}
-                      </span>
-                    </div>
-                    <div className="attest-field">
-                      <span className="attest-field__label">Revoked at</span>
-                      <span className="attest-field__value">
-                        {a.revoked_at !== null && a.revoked_at !== undefined
-                          ? formatDate(a.revoked_at)
-                          : '—'}
-                      </span>
-                    </div>
+      {mode === 'id' && (
+        <>
+          <form role="search" onSubmit={handleSubmit} className="attest-lookup__form">
+            <Field
+              label="Signed proof id or address"
+              placeholder="Signed proof id, recipient or verifier"
+              value={query}
+              onChange={(event) => setQuery(event.target.value)}
+            />
+            <button type="submit" className="attest-lookup__submit">
+              Look up
+            </button>
+          </form>
+
+          <div className="attest-lookup__samples">
+            <span>Sample ids:</span>
+            {FIXTURE_ATTESTATIONS.map((a) => (
+              <button
+                key={a.uid}
+                type="button"
+                className="attest-lookup__sample"
+                onClick={() => pick(a.uid)}
+              >
+                {a.uid}
+              </button>
+            ))}
+          </div>
+
+          <div aria-live="polite" className="attest-lookup__results">
+            {noneFound && (
+              <div className="attest-not-found">
+                <span className="attest-not-found__title">Nothing found for &ldquo;{searched.trim()}&rdquo;</span>
+                <span className="attest-not-found__detail">
+                  Check the id. Signed proofs are read on-chain; archived ones need a keepalive
+                  before they can be read.
+                </span>
+              </div>
+            )}
+
+            {hits.map((attestation) => {
+              const status = statusFor(attestation);
+              return (
+                <article key={attestation.uid} className="attest-result-card">
+                  <div className="attest-result-card__head">
+                    <span className="attest-result-card__uid">{attestation.uid}</span>
+                    <Badge tone={status.tone}>{status.label}</Badge>
                   </div>
-                </Card>
-
-                <AsyncView
-                  {...schema}
-                  onRetry={schema.refetch}
-                  contract="attest"
-                  empty={{ title: 'Claim template not found', description: 'The claim template for this signed proof could not be resolved.' }}
-                >
-                  {(s) => (
-                    <Card title="Claim template">
-                      <div className="attest-detail-grid">
-                        <div className="attest-field">
-                          <span className="attest-field__label">UID</span>
-                          <span className="attest-field__value attest-field__value--mono">
-                            {s.uid.toString('hex')}
-                          </span>
-                        </div>
-                        <div className="attest-field">
-                          <span className="attest-field__label">Authority</span>
-                          <span className="attest-field__value attest-field__value--mono">
-                            {s.authority}
-                          </span>
-                        </div>
-                        <div className="attest-field">
-                          <span className="attest-field__label">Revocable</span>
-                          <span className="attest-field__value">
-                            {s.revocable ? 'Yes' : 'No'}
-                          </span>
-                        </div>
-                        <div className="attest-field">
-                          <span className="attest-field__label">Restricted</span>
-                          <span className="attest-field__value">
-                            {s.restricted ? 'Yes — only the authority may sign' : 'No — open to any verifier'}
-                          </span>
-                        </div>
-                      </div>
-                      {s.definition && (
-                        <div className="attest-schema-def">
-                          <h3>Definition</h3>
-                          <p className="attest-schema-def__text">{s.definition}</p>
-                        </div>
-                      )}
-                    </Card>
-                  )}
-                </AsyncView>
-
-                <Card title="Validity checks">
-                  <p className="attest-verify-intro">
-                    These checks decide whether a release can use this proof. Each is reported separately because "invalid" alone does not say what to fix.
-                  </p>
-
-                  <div className="attest-checks">
-                    <CheckRow
-                      pass={checkLive === true}
-                      label="Not revoked"
-                      detail={
-                        isRevoked
-                          ? `Revoked at ${formatDate(a.revoked_at!)}`
-                          : 'No revocation on record.'
-                      }
-                    />
-                    <CheckRow
-                      pass={checkNotExpired === true}
-                      label="Not expired"
-                      detail={
-                        isExpired
-                          ? `Expired at ${formatDate(a.expires_at!)}`
-                          : a.expires_at !== null && a.expires_at !== undefined
-                          ? `Expires ${formatDate(a.expires_at)}`
-                          : 'No expiry set — does not expire on its own.'
-                      }
-                    />
-                  </div>
-
-                  <div className="attest-verify-grid" style={{ marginTop: 'var(--space-5)' }}>
-                    <p className="attest-verify-intro" style={{ marginBottom: 0 }}>
-                      To check that this proof is about the right recipient, under the right claim template, and from the right verifier, provide the expected values and run the check.
-                    </p>
-                    <Field
-                      label="Expected recipient (Stellar address)"
-                      placeholder="G..."
-                      value={subjectInput}
-                      onChange={(e) => {
-                        setSubjectInput(e.target.value);
-                        setVerifyTriggered(false);
-                      }}
-                      hint="The recipient this proof should be about."
-                    />
-                    <Field
-                      label="Expected claim template UID"
-                      placeholder="32-byte hex (64 characters)"
-                      value={schemaInput}
-                      onChange={(e) => {
-                        setSchemaInput(e.target.value);
-                        setVerifyTriggered(false);
-                      }}
-                      hint="The claim template this proof must use."
-                    />
-                    <Field
-                      label="Expected verifier (Stellar address)"
-                      placeholder="G..."
-                      value={attesterInput}
-                      onChange={(e) => {
-                        setAttesterInput(e.target.value);
-                        setVerifyTriggered(false);
-                      }}
-                      hint="The verifier who must have signed this proof."
-                    />
-                    <div>
-                      <Button
-                        icon={<ShieldCheck size={16} />}
-                        onClick={() => setVerifyTriggered(true)}
-                        disabled={!canVerify}
-                      >
-                        Check recipient, template &amp; verifier
-                      </Button>
+                  {rowsFor(attestation).map((row) => (
+                    <div key={row.key} className="attest-result-row">
+                      <span className="attest-result-row__key">{row.key}</span>
+                      <span className="attest-result-row__value">{row.value}</span>
                     </div>
-                  </div>
+                  ))}
+                </article>
+              );
+            })}
 
-                  {verifyTriggered && (
-                    <div className="attest-checks" style={{ marginTop: 'var(--space-4)' }}>
-                      <CheckRow
-                        pass={checkSubject === true}
-                        label="Correct recipient"
-                        detail={
-                          checkSubject
-                            ? `Recipient matches: ${a.subject}`
-                            : `Expected ${verifySubject}, got ${a.subject}`
-                        }
-                      />
-                      <CheckRow
-                        pass={checkSchema === true}
-                        label="Correct claim template"
-                        detail={
-                          checkSchema
-                            ? `Claim template matches: ${a.schema.toString('hex')}`
-                            : `Expected ${verifySchema}, got ${a.schema.toString('hex')}`
-                        }
-                      />
-                      <CheckRow
-                        pass={checkAttester === true}
-                        label="Correct verifier"
-                        detail={
-                          checkAttester
-                            ? `Verifier matches: ${a.attester}`
-                            : `Expected ${verifyAttester}, got ${a.attester}`
-                        }
-                      />
+            {searchedYet && (
+              <span className="attest-lookup__sample-note">
+                Sample signed proofs for the design phase.
+              </span>
+            )}
+          </div>
+        </>
+      )}
 
-                      <div
-                        style={{
-                          marginTop: 'var(--space-3)',
-                          padding: 'var(--space-3) var(--space-4)',
-                          borderRadius: 'var(--radius-md)',
-                          background:
-                            checkSubject && checkSchema && checkAttester && checkLive && checkNotExpired
-                              ? 'rgba(34,197,94,0.08)'
-                              : 'rgba(239,68,68,0.08)',
-                          border: `1px solid ${checkSubject && checkSchema && checkAttester && checkLive && checkNotExpired ? 'var(--color-success, #22c55e)' : 'var(--color-error, #ef4444)'}`,
-                        }}
-                      >
-                        <p style={{ margin: 0, fontWeight: 600 }}>
-                          {checkSubject &&
-                          checkSchema &&
-                          checkAttester &&
-                          checkLive &&
-                          checkNotExpired
-                            ? 'The release check would pass — all conditions match.'
-                            : 'The release check would fail — one or more conditions do not match.'}
-                        </p>
-                      </div>
-                    </div>
-                  )}
-                </Card>
+      {mode === 'claim' && (
+        <>
+          <p className="typo-text text-muted attest-lookup__claim-intro">
+            Looking up by id shows what a signed proof says. This answers a narrower question:
+            does <em>this</em> recipient hold a valid claim under <em>this</em> claim template (the rule the verifier signed under) from{' '}
+            <em>this</em> verifier? A signed proof can be perfectly valid and still be the wrong
+            one — signed by someone else, or about someone else — so gating anything of value on
+            it should use this check, not just whether it exists.
+          </p>
 
-                <AttestationKeepalive uid={a.uid} createdAt={a.created_at} />
-              </>
-            );
-          }}
-        </AsyncView>
+          <form onSubmit={handleClaimSubmit} className="attest-lookup__claim-form" noValidate>
+            <Field
+              label="Signed proof id"
+              placeholder="Signed proof id"
+              value={claimForm.uid}
+              onChange={updateClaimField('uid')}
+              error={claimErrors.uid}
+            />
+            <Field
+              label="Recipient address"
+              placeholder="G…"
+              value={claimForm.subject}
+              onChange={updateClaimField('subject')}
+              error={claimErrors.subject}
+            />
+            <Field
+              label="Claim template"
+              placeholder="e.g. condition-met/v1"
+              value={claimForm.schema}
+              onChange={updateClaimField('schema')}
+              error={claimErrors.schema}
+            />
+            <Field
+              label="Verifier address"
+              placeholder="G…"
+              value={claimForm.attester}
+              onChange={updateClaimField('attester')}
+              error={claimErrors.attester}
+            />
+            <button type="submit" className="attest-lookup__submit">
+              Check claim
+            </button>
+          </form>
+
+          <div className="attest-lookup__samples">
+            <span>Try a sample:</span>
+            {FIXTURE_ATTESTATIONS.map((a) => (
+              <button
+                key={a.uid}
+                type="button"
+                className="attest-lookup__sample"
+                onClick={() => fillClaimSample(a)}
+              >
+                {a.uid}
+              </button>
+            ))}
+          </div>
+
+          <div aria-live="polite" className="attest-lookup__results">
+            {claimResult && (
+              <div className={`attest-claim-result attest-claim-result--${claimResult.valid ? 'yes' : 'no'}`}>
+                <Badge tone={claimResult.valid ? 'success' : 'danger'}>
+                  {claimResult.valid ? 'Yes' : 'No'}
+                </Badge>
+                <span className="attest-claim-result__text">
+                  {claimResult.valid
+                    ? 'This recipient holds a valid claim under this claim template from this verifier.'
+                    : claimResult.reason}
+                </span>
+              </div>
+            )}
+            <span className="attest-lookup__sample-note">
+              Sample signed proofs for the design phase.
+            </span>
+          </div>
+        </>
       )}
     </div>
   );

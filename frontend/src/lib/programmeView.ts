@@ -10,18 +10,28 @@
 
 import { formatAmount } from './amount';
 import type { IndexedProgramme } from './indexer';
-import {
-  chainFor,
+import { chainFor,
   FIXTURE_CHAIN,
   FIXTURE_PROGRAMMES,
   type FixtureChainRead,
   type FixturePhase,
 } from '../fixtures/programmes';
+import type { UserRole } from '../fixtures/userRoles';
 
 export type DirectoryPhase = 'All' | FixturePhase;
 
 /** Filter pills, in display order. */
 export const DIRECTORY_PHASES: DirectoryPhase[] = ['All', 'Open', 'Review', 'Settled', 'Cancelled'];
+
+export const DIRECTORY_SORTS = [
+  { value: 'newest', label: 'Newest' },
+  { value: 'closing-soonest', label: 'Closing soonest' },
+  { value: 'largest-budget', label: 'Largest budget' },
+] as const;
+
+export type DirectorySort = (typeof DIRECTORY_SORTS)[number]['value'];
+
+export const DEFAULT_DIRECTORY_SORT: DirectorySort = 'newest';
 
 export interface DirectoryProgramme {
   id: string;
@@ -31,6 +41,8 @@ export interface DirectoryProgramme {
   /** True for stand-in entries, so the card can tag them. */
   sample: boolean;
   chain: FixtureChainRead;
+  /** The current user's roles in this programme, if signed in. */
+  userRoles?: UserRole[];
 }
 
 /**
@@ -38,7 +50,10 @@ export interface DirectoryProgramme {
  * fixture entries are appended after deduping on id so a fixture that happens
  * to name a real programme does not render twice.
  */
-export function mergeProgrammes(index: IndexedProgramme[] | null | undefined): DirectoryProgramme[] {
+export function mergeProgrammes(
+  index: IndexedProgramme[] | null | undefined,
+  userRoles?: Record<string, UserRole[]>,
+): DirectoryProgramme[] {
   const seen = new Set<string>();
   const out: DirectoryProgramme[] = [];
 
@@ -52,6 +67,7 @@ export function mergeProgrammes(index: IndexedProgramme[] | null | undefined): D
       createdLedger: entry.createdLedger,
       sample: false,
       chain: chainFor(entry.id),
+      userRoles: userRoles?.[entry.id],
     });
   }
 
@@ -65,6 +81,7 @@ export function mergeProgrammes(index: IndexedProgramme[] | null | undefined): D
       createdLedger: entry.createdLedger,
       sample: true,
       chain: FIXTURE_CHAIN[entry.id] ?? chainFor(entry.id),
+      userRoles: userRoles?.[entry.id],
     });
   }
 
@@ -77,15 +94,58 @@ export function matchesQuery(programme: DirectoryProgramme, query: string): bool
   return programme.name.toLowerCase().includes(q) || programme.id.toLowerCase().includes(q);
 }
 
-/** Programmes matching both the search text and the phase pill. */
+/** Programmes matching both the search text, phase pill and optionally the "yours" filter. */
 export function filterProgrammes(
   all: DirectoryProgramme[],
   query: string,
   phase: DirectoryPhase,
+  yoursOnly = false,
 ): DirectoryProgramme[] {
   return all.filter(
-    (programme) => matchesQuery(programme, query) && (phase === 'All' || programme.chain.phase === phase),
+    (programme) =>
+      matchesQuery(programme, query) &&
+      (phase === 'All' || programme.chain.phase === phase) &&
+      (!yoursOnly || (programme.userRoles != null && programme.userRoles.length > 0)),
   );
+}
+
+function budgetOf(programme: DirectoryProgramme): bigint {
+  return BigInt(programme.chain.contributed || '0') - BigInt(programme.chain.fee || '0');
+}
+
+function compareBigIntDesc(left: bigint, right: bigint): number {
+  if (left === right) return 0;
+  return left > right ? -1 : 1;
+}
+
+function compareNewest(left: DirectoryProgramme, right: DirectoryProgramme): number {
+  return (right.createdLedger ?? -1) - (left.createdLedger ?? -1);
+}
+
+function compareClosingSoonest(left: DirectoryProgramme, right: DirectoryProgramme): number {
+  const leftDays = left.chain.closesInDays ?? Number.POSITIVE_INFINITY;
+  const rightDays = right.chain.closesInDays ?? Number.POSITIVE_INFINITY;
+  if (leftDays !== rightDays) return leftDays - rightDays;
+  return compareNewest(left, right);
+}
+
+/** Sort choices for the directory. Amounts stay as BigInt stroops. */
+export function sortProgrammes(
+  programmes: DirectoryProgramme[],
+  sort: DirectorySort = DEFAULT_DIRECTORY_SORT,
+): DirectoryProgramme[] {
+  return [...programmes].sort((left, right) => {
+    switch (sort) {
+      case 'closing-soonest':
+        return compareClosingSoonest(left, right);
+      case 'largest-budget': {
+        const budgetOrder = compareBigIntDesc(budgetOf(left), budgetOf(right));
+        return budgetOrder === 0 ? compareNewest(left, right) : budgetOrder;
+      }
+      case 'newest':
+        return compareNewest(left, right);
+    }
+  });
 }
 
 /** Counts per pill, over programmes matching the current search text. */
@@ -151,11 +211,20 @@ export function formatUsdc(stroops: string | bigint): string {
  * then refundable (from the right), with the remainder shown as unawarded.
  */
 export function moneySquares(chain: FixtureChainRead, n: number): string[] {
-  const budget = Number(chain.contributed) - Number(chain.fee);
-  if (budget <= 0) return Array.from({ length: n }, () => 'var(--surface-raised)');
-  const released = Math.round((Number(chain.released) / budget) * n);
-  const awarded = Math.round((Number(chain.awarded) / budget) * n);
-  const refundable = Math.round((Number(chain.refundable) / budget) * n);
+  const budget = BigInt(chain.contributed || '0') - BigInt(chain.fee || '0');
+  if (budget <= 0n) return Array.from({ length: n }, () => 'var(--surface-raised)');
+
+  const share = (stroops: string): number => {
+    const value = BigInt(stroops || '0');
+    const scaled = (value * BigInt(n) + budget / 2n) / budget;
+    if (scaled <= 0n) return 0;
+    if (scaled >= BigInt(n)) return n;
+    return Number(scaled);
+  };
+
+  const released = share(chain.released);
+  const awarded = share(chain.awarded);
+  const refundable = share(chain.refundable);
 
   return Array.from({ length: n }, (_, i) => {
     if (i < released) return 'var(--accent)';

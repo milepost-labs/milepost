@@ -32,7 +32,7 @@
 
 .where-the-money-is__grid {
   display: grid;
-  grid-template-columns: repeat(20, minmax(0, 1fr));
+  grid-template-columns: repeat(var(--money-cols), minmax(0, 1fr));
   gap: var(--space-1);
   width: 100%;
   box-sizing: border-box;
@@ -43,6 +43,7 @@
   border-radius: var(--radius-square);
   display: block;
   min-width: 0;
+  box-sizing: border-box;
 }
 
 .where-the-money-is__legend {
@@ -67,14 +68,13 @@
   height: 12px;
   border-radius: var(--radius-square);
   flex: none;
+  box-sizing: border-box;
 }
 
 .where-the-money-is__legend-label {
   flex: 1;
   color: var(--text-muted);
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
+  overflow-wrap: break-word;
 }
 
 .where-the-money-is__legend-value {
@@ -106,7 +106,7 @@
   }
 
   .where-the-money-is__grid {
-    gap: 3px;
+    --money-cols: var(--money-cols-narrow);
   }
 
   .where-the-money-is__footer {

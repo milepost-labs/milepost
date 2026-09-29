@@ -3,11 +3,17 @@ import { Link, useSearchParams } from 'react-router-dom';
 import { MoneyRow } from '../components/programme/MoneyRow';
 import '../components/programme/phasePill.css';
 import { Skeleton, Empty } from '../components/state/AsyncStates';
+import { describeAmount } from '../lib/amount';
 import { useIndexedList } from '../hooks';
+import { useWallet } from '../context/useWallet';
 import { fetchMeta, fetchProgrammes, isStale } from '../lib/indexer';
+import { FIXTURE_USER_ROLES, ROLE_LABELS } from '../fixtures/userRoles';
 import {
+  DEFAULT_DIRECTORY_SORT,
   DIRECTORY_PHASES,
+  DIRECTORY_SORTS,
   filterProgrammes,
+  sortProgrammes,
   formatAgo,
   formatUsdc,
   mergeProgrammes,
@@ -16,6 +22,7 @@ import {
   programmeStatus,
   shortId,
   type DirectoryPhase,
+  type DirectorySort,
   type DirectoryProgramme,
 } from '../lib/programmeView';
 import './ProgrammeDirectory.css';
@@ -23,21 +30,32 @@ import './ProgrammeDirectory.css';
 const asPhase = (value: string | null): DirectoryPhase =>
   DIRECTORY_PHASES.includes(value as DirectoryPhase) ? (value as DirectoryPhase) : 'All';
 
+const asSort = (value: string | null): DirectorySort =>
+  DIRECTORY_SORTS.some((option) => option.value === value)
+    ? (value as DirectorySort)
+    : DEFAULT_DIRECTORY_SORT;
+
 /**
  * `/directory` — every programme, narrowed by a search box and phase pills.
  *
  * The list comes from the public index and is advisory; the chain values shown
  * on each card are stand-ins (`FIXTURE_CHAIN`) until the per-programme reads
- * are wired, and every card says so. Filter state lives in the URL so a
- * filtered view can be linked and survives a reload.
+ * are wired, and every card says so. Filter and sort state live in the URL so a
+ * narrowed view can be linked and survives a reload.
  */
 export const ProgrammeDirectory = () => {
   const [params, setParams] = useSearchParams();
   const query = params.get('q') ?? '';
   const phase = asPhase(params.get('phase'));
+  const sort = asSort(params.get('sort'));
+  const yoursOnly = params.get('yours') === '1';
+  const { status: walletStatus, address } = useWallet();
+  const isSignedIn = walletStatus === 'connected' && address != null;
 
   const metaRead = useIndexedList(async () => ({ meta: await fetchMeta(), readAt: Date.now() }), []);
   const listRead = useIndexedList(() => fetchProgrammes(), []);
+
+  const userRoles = isSignedIn ? FIXTURE_USER_ROLES : undefined;
 
   const setQuery = useCallback(
     (value: string) => {
@@ -59,21 +77,36 @@ export const ProgrammeDirectory = () => {
     [params, setParams],
   );
 
+  const setSort = useCallback(
+    (value: DirectorySort) => {
+      const next = new URLSearchParams(params);
+      if (value === DEFAULT_DIRECTORY_SORT) next.delete('sort');
+      else next.set('sort', value);
+      setParams(next, { replace: true });
+    },
+    [params, setParams],
+  );
+
+  const toggleYours = useCallback(() => {
+    const next = new URLSearchParams(params);
+    if (yoursOnly) next.delete('yours');
+    else next.set('yours', '1');
+    setParams(next, { replace: true });
+  }, [params, setParams, yoursOnly]);
+
   const clearFilters = useCallback(() => {
     const next = new URLSearchParams(params);
     next.delete('q');
     next.delete('phase');
+    next.delete('yours');
     setParams(next, { replace: true });
   }, [params, setParams]);
 
-  const all = useMemo(() => mergeProgrammes(listRead.data), [listRead.data]);
+  const all = useMemo(() => mergeProgrammes(listRead.data, userRoles), [listRead.data, userRoles]);
   const counts = useMemo(() => phaseCounts(all, query), [all, query]);
   const shown = useMemo(
-    () =>
-      filterProgrammes(all, query, phase).sort(
-        (a, b) => (b.createdLedger ?? 0) - (a.createdLedger ?? 0),
-      ),
-    [all, query, phase],
+    () => sortProgrammes(filterProgrammes(all, query, phase, yoursOnly), sort),
+    [all, query, phase, sort, yoursOnly],
   );
 
   const loading = listRead.loading || metaRead.loading;
@@ -134,14 +167,40 @@ export const ProgrammeDirectory = () => {
                 </button>
               );
             })}
+            {isSignedIn && (
+              <button
+                type="button"
+                className={`directory-filter${yoursOnly ? ' directory-filter--on' : ''}`}
+                aria-pressed={yoursOnly}
+                onClick={toggleYours}
+              >
+                Yours
+              </button>
+            )}
           </div>
+          <label className="directory-sort">
+            <span className="directory-sort__label">Sort</span>
+            <select
+              value={sort}
+              onChange={(event) => setSort(asSort(event.target.value))}
+            >
+              {DIRECTORY_SORTS.map((option) => (
+                <option key={option.value} value={option.value}>
+                  {option.label}
+                </option>
+              ))}
+            </select>
+          </label>
           <span className="directory-indexline">{indexLine}</span>
         </div>
 
         {stale && (
           <div role="status" className="directory-banner directory-banner--stale">
             The public index was last updated {ageText}. New programmes may be missing.
-            Anything you open is re-read on-chain.
+            Anything you open is re-read on-chain.{' '}
+            <Link to="/status" className="directory-banner__link">
+              View index status
+            </Link>
           </div>
         )}
 
@@ -219,14 +278,24 @@ function ProgrammeCard({ programme }: { programme: DirectoryProgramme }) {
           <span className={`phase-pill phase-pill--${chain.phase.toLowerCase()}`}>{chain.phase}</span>
         </div>
 
+        {programme.userRoles && programme.userRoles.length > 0 && (
+          <div className="directory-card-new__roles" aria-label="Your roles">
+            {programme.userRoles.map((role) => (
+              <span key={role} className="directory-role-badge">
+                {ROLE_LABELS[role]}
+              </span>
+            ))}
+          </div>
+        )}
+
         <span className="directory-card-new__status">{programmeStatus(chain)}</span>
 
         <MoneyRow chain={chain} count={20} variant="card" />
 
         <div className="directory-card-new__figures">
-          <Figure label="Budget" value={formatUsdc(budget)} />
-          <Figure label="Awarded" value={formatUsdc(chain.awarded)} />
-          <Figure label="Released" value={formatUsdc(chain.released)} />
+          <Figure label="Budget" value={formatUsdc(budget)} amount={budget} />
+          <Figure label="Awarded" value={formatUsdc(chain.awarded)} amount={chain.awarded} />
+          <Figure label="Released" value={formatUsdc(chain.released)} amount={chain.released} />
         </div>
 
         <div className="directory-card-new__foot">
@@ -240,11 +309,16 @@ function ProgrammeCard({ programme }: { programme: DirectoryProgramme }) {
   );
 }
 
-function Figure({ label, value }: { label: string; value: string }) {
+function Figure({ label, value, amount }: { label: string; value: string; amount?: bigint | string }) {
   return (
     <span className="directory-figure">
       <span className="directory-figure__label">{label}</span>
-      <span className="directory-figure__value numeric">{value}</span>
+      <span
+        className="directory-figure__value numeric"
+        aria-label={amount !== undefined ? `${label}: ${describeAmount(amount, 'USDC')}` : undefined}
+      >
+        {value}
+      </span>
     </span>
   );
 }

@@ -1,0 +1,35 @@
+.admin-page {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-5);
+}
+
+.admin-page__sections {
+  display: flex;
+  gap: var(--space-1);
+  flex-wrap: wrap;
+}
+
+.admin-page__pill {
+  border-radius: var(--radius-full);
+  padding: var(--space-2) var(--space-4);
+  font-size: var(--text-sm);
+  font-weight: var(--weight-bold);
+  text-decoration: none;
+  color: var(--text-muted);
+  min-height: var(--tap-min);
+  display: inline-flex;
+  align-items: center;
+}
+
+.admin-page__pill--current {
+  background: var(--surface);
+  color: var(--text);
+}
+
+.admin-page__grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 24rem), 1fr));
+  gap: var(--space-4-5);
+  align-items: start;
+}

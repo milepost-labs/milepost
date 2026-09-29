@@ -1,313 +1,183 @@
-import { useState, type FormEvent } from "react";
-import { Client, networks } from "@milepost/record";
-import { useWallet } from "../../context/useWallet";
-import { useContractRead, useContractResult } from "../../hooks/useContractRead";
-import { useTransaction } from "../../hooks/useTransaction";
-import { looksLikeAddress, truncateAddress } from "../../lib/format";
-import { TransactionOutcome } from "../state/AsyncStates";
-import { Badge, Button, Card, Field } from "../ui";
+import { useState, type FormEvent } from 'react';
+import { useSoroban } from '../../context/useSoroban';
+import { useWallet } from '../../context/useWallet';
+import { useContractRead, useContractResult } from '../../hooks/useContractRead';
+import { useTransaction } from '../../hooks/useTransaction';
+import { looksLikeAddress, truncateAddress } from '../../lib/format';
+import { AddressChip, Badge, Button, Field } from '../ui';
+import { Loading, TransactionOutcome } from '../state/AsyncStates';
+import './StandingWriterAdmin.css';
 
-const recordClient = new Client({
-  ...networks.testnet,
-  rpcUrl: "https://soroban-testnet.stellar.org",
-});
-
+/**
+ * Which contracts may write standing (issue #341).
+ *
+ * `record.add_writer` / `remove_writer` gate who can credit a recipient's
+ * track record; the registry is `record`'s admin, which is how a deployed
+ * programme contract earns write access in the first place. This used to be
+ * its own page (`AdminDashboard.tsx` at `/admin/standing`); it is now a
+ * section of the same admin area as protocol config and deploy, reached from
+ * the same nav — same `add_writer`/`remove_writer`/`is_writer` calls, same
+ * checks, just built on the current UI kit instead of inline styles and a
+ * component-owned `Client`.
+ */
 export function StandingWriterAdmin() {
+  const { record } = useSoroban();
   const wallet = useWallet();
-  const [writerInput, setWriterInput] = useState<string>("");
-  const [writerToCheck, setWriterToCheck] = useState<string>("");
-  const [validationError, setValidationError] = useState<string | null>(null);
 
-  const adminReq = useContractResult(() => recordClient.get_admin(), [], {
-    contract: "record",
-  });
+  const [writerInput, setWriterInput] = useState('');
+  const [writerToCheck, setWriterToCheck] = useState('');
+  const [inputError, setInputError] = useState<string | null>(null);
 
-  const writerStatusReq = useContractRead(
+  const adminRead = useContractResult(() => record.get_admin(), [record], { contract: 'record' });
+  const admin = adminRead.data;
+  const isAdmin = Boolean(wallet.address && admin && wallet.address.toLowerCase() === admin.toLowerCase());
+
+  const statusRead = useContractRead(
     () => {
       if (!writerToCheck || !looksLikeAddress(writerToCheck)) {
         return Promise.resolve({ result: false });
       }
-      return recordClient.is_writer({ addr: writerToCheck });
+      return record.is_writer({ addr: writerToCheck });
     },
-    [writerToCheck],
-    { contract: "record" },
+    [record, writerToCheck],
+    { contract: 'record' },
   );
 
-  const admin = adminReq.data;
-  const isAdmin = Boolean(
-    wallet.address &&
-    admin &&
-    wallet.address.toLowerCase() === admin.toLowerCase(),
-  );
+  const addTx = useTransaction({ contract: 'record', onSuccess: () => statusRead.refetch() });
+  const removeTx = useTransaction({ contract: 'record', onSuccess: () => statusRead.refetch() });
 
-  const addTx = useTransaction({
-    contract: "record",
-    onSuccess: () => writerStatusReq.refetch(),
-  });
-  const removeTx = useTransaction({
-    contract: "record",
-    onSuccess: () => writerStatusReq.refetch(),
-  });
-
-  const handleAddWriter = async (e: FormEvent) => {
+  const handleAdd = async (e: FormEvent) => {
     e.preventDefault();
-    setValidationError(null);
-
+    setInputError(null);
     if (!looksLikeAddress(writerInput)) {
-      setValidationError("Enter a valid writer contract address.");
+      setInputError('Enter a valid contract address.');
       return;
     }
-
-    await addTx.send(async () => {
-      return recordClient.add_writer({ writer: writerInput });
-    });
-
-    if (!addTx.error) {
-      setWriterInput("");
-      setWriterToCheck(writerInput);
+    const target = writerInput;
+    const result = await addTx.send(() => record.add_writer({ writer: target }));
+    if (result !== null) {
+      setWriterInput('');
+      setWriterToCheck(target);
     }
   };
 
-  const handleRemoveWriter = async (e: FormEvent) => {
+  const handleRemove = async (e: FormEvent) => {
     e.preventDefault();
-    setValidationError(null);
-
+    setInputError(null);
     if (!looksLikeAddress(writerInput)) {
-      setValidationError("Enter a valid writer contract address.");
+      setInputError('Enter a valid contract address.');
       return;
     }
-
-    await removeTx.send(async () => {
-      return recordClient.remove_writer({ writer: writerInput });
-    });
-
-    if (!removeTx.error) {
-      setWriterInput("");
-      setWriterToCheck(writerInput);
+    const target = writerInput;
+    const result = await removeTx.send(() => record.remove_writer({ writer: target }));
+    if (result !== null) {
+      setWriterInput('');
+      setWriterToCheck(target);
     }
   };
 
   return (
-    <Card>
-      <div style={{ padding: "1.5rem" }}>
-        <div
-          style={{
-            display: "flex",
-            justifyContent: "space-between",
-            alignItems: "start",
-            marginBottom: "1rem",
-          }}
-        >
-          <div>
-            <h2
-              style={{
-                fontSize: "1.25rem",
-                fontWeight: 600,
-                marginBottom: "0.5rem",
-              }}
-            >
-              Standing Writer Administration
-            </h2>
-            <p
-              style={{
-                fontSize: "0.875rem",
-                color: "var(--color-muted)",
-                margin: 0,
-              }}
-            >
-              Manage which contracts may write recipient standing
-            </p>
-          </div>
-          <Badge tone={isAdmin ? "accent" : "neutral"}>
-            {isAdmin ? "Admin" : "Read-Only"}
-          </Badge>
-        </div>
-
-        <div
-          style={{
-            padding: "1rem",
-            backgroundColor: "var(--color-warning-bg, #fff3cd)",
-            border: "1px solid var(--color-warning, #ffc107)",
-            borderRadius: "var(--radius-md)",
-            marginBottom: "1.5rem",
-          }}
-        >
-          <p style={{ margin: 0, fontSize: "0.875rem", fontWeight: 500 }}>
-            <strong>Critical Permission:</strong> Writer contracts can credit
-            standing for any recipient. Granting write access allows a contract
-            to create track records that other funders will trust when
-            underwriting future applications. Only authorize contracts you
-            control or fully trust.
+    <section className="standing-writers" aria-labelledby="standing-writers">
+      <div className="standing-writers__head">
+        <div>
+          <h2 id="standing-writers">Standing writers</h2>
+          <p className="standing-writers__subtitle">
+            Contracts allowed to credit a recipient&rsquo;s standing.
           </p>
         </div>
+        {admin && <Badge tone={isAdmin ? 'accent' : 'neutral'}>{isAdmin ? 'Record admin' : 'Read-only'}</Badge>}
+      </div>
 
-        {!isAdmin && wallet.address && (
-          <div
-            style={{
-              padding: "1rem",
-              backgroundColor: "var(--color-surface)",
-              borderRadius: "var(--radius-md)",
-              marginBottom: "1.5rem",
-            }}
-          >
-            <p style={{ margin: 0, fontSize: "0.875rem" }}>
-              You are viewing in <strong>read-only</strong> mode. Connected
-              wallet ({truncateAddress(wallet.address)}) is not the record admin
-              ({admin ? truncateAddress(admin) : "loading..."}).
-            </p>
-          </div>
-        )}
+      <div
+        className="standing-writers__note standing-writers__note--warning"
+        role="note"
+      >
+        <strong>Critical permission.</strong> A writer contract can credit standing for any
+        recipient. Only authorize a contract you control or fully trust — other funders rely
+        on this track record when underwriting future applications.
+      </div>
 
-        {admin && (
-          <div style={{ marginBottom: "1.5rem" }}>
-            <div
-              style={{
-                display: "grid",
-                gridTemplateColumns: "auto 1fr",
-                gap: "0.5rem 1rem",
-                padding: "1rem",
-                backgroundColor: "var(--color-surface)",
-                borderRadius: "var(--radius-md)",
-              }}
-            >
-              <span style={{ fontWeight: 500 }}>Record Admin:</span>
-              <span className="mono" title={admin}>
-                {truncateAddress(admin)}
-              </span>
-            </div>
-          </div>
-        )}
+      {!isAdmin && wallet.address && admin && (
+        <p className="standing-writers__note" role="note">
+          You are viewing in read-only mode. Connected wallet (
+          <AddressChip address={wallet.address} copyLabel="Copy your address" />) is not the
+          record admin (<AddressChip address={admin} copyLabel="Copy record admin address" />).
+        </p>
+      )}
 
-        <div style={{ marginBottom: "1.5rem" }}>
-          <h3
-            style={{
-              fontSize: "1rem",
-              fontWeight: 600,
-              marginBottom: "0.75rem",
-            }}
-          >
-            Check Writer Status
-          </h3>
-          <Field
-            label="Contract Address"
-            hint="Enter a contract address to check its writer status"
-          >
-            <div style={{ display: "flex", gap: "0.5rem" }}>
-              <input
-                type="text"
-                className="input-text"
-                value={writerToCheck}
-                onChange={(e) => setWriterToCheck(e.target.value.trim())}
-                placeholder="C..."
-                style={{ flex: 1 }}
-              />
-              {writerToCheck && looksLikeAddress(writerToCheck) && (
-                <div
-                  style={{
-                    display: "flex",
-                    alignItems: "center",
-                    paddingLeft: "0.5rem",
-                  }}
-                >
-                  {writerStatusReq.loading ? (
-                    <Badge tone="neutral">Checking...</Badge>
-                  ) : (
-                    <Badge tone={writerStatusReq.data ? "success" : "neutral"}>
-                      {writerStatusReq.data
-                        ? "Authorized Writer"
-                        : "Not a Writer"}
-                    </Badge>
-                  )}
-                </div>
-              )}
-            </div>
-          </Field>
-        </div>
+      {adminRead.loading && !admin ? (
+        <Loading label="Loading record admin" rows={1} />
+      ) : (
+        admin && (
+          <p className="standing-writers__admin">
+            Record admin: <AddressChip address={admin} copyLabel="Copy record admin address" />
+          </p>
+        )
+      )}
 
-        {validationError && (
-          <div
-            style={{
-              padding: "0.75rem",
-              backgroundColor: "var(--color-error-bg, #f8d7da)",
-              border: "1px solid var(--color-error, #dc3545)",
-              borderRadius: "var(--radius-md)",
-              marginBottom: "1rem",
-            }}
-          >
-            {validationError}
-          </div>
-        )}
-
-        {isAdmin && (
-          <div>
-            <h3
-              style={{
-                fontSize: "1rem",
-                fontWeight: 600,
-                marginBottom: "0.75rem",
-              }}
-            >
-              Admin Controls
-            </h3>
-
-            <form onSubmit={handleAddWriter} style={{ marginBottom: "1rem" }}>
-              <Field
-                label="Add Writer"
-                hint="Grant standing write permission to a contract"
-              >
-                <div style={{ display: "flex", gap: "0.5rem" }}>
-                  <input
-                    type="text"
-                    className="input-text"
-                    value={writerInput}
-                    onChange={(e) => setWriterInput(e.target.value.trim())}
-                    placeholder="C..."
-                    style={{ flex: 1 }}
-                  />
-                  <Button type="submit" loading={addTx.busy}>
-                    Add Writer
-                  </Button>
-                </div>
-              </Field>
-              <TransactionOutcome
-                phase={addTx.phase}
-                error={addTx.error}
-                successTitle="Writer added"
-              />
-            </form>
-
-            <form onSubmit={handleRemoveWriter}>
-              <Field
-                label="Remove Writer"
-                hint="Revoke standing write permission from a contract"
-              >
-                <div style={{ display: "flex", gap: "0.5rem" }}>
-                  <input
-                    type="text"
-                    className="input-text"
-                    value={writerInput}
-                    onChange={(e) => setWriterInput(e.target.value.trim())}
-                    placeholder="C..."
-                    style={{ flex: 1 }}
-                  />
-                  <Button
-                    type="submit"
-                    loading={removeTx.busy}
-                    variant="danger"
-                  >
-                    Remove Writer
-                  </Button>
-                </div>
-              </Field>
-              <TransactionOutcome
-                phase={removeTx.phase}
-                error={removeTx.error}
-                successTitle="Writer removed"
-              />
-            </form>
-          </div>
+      <div className="standing-writers__check">
+        <Field
+          label="Check writer status"
+          hint="Enter a contract address to check whether it can write standing."
+          value={writerToCheck}
+          onChange={(e) => setWriterToCheck(e.target.value.trim())}
+          placeholder="C…"
+        />
+        {writerToCheck && looksLikeAddress(writerToCheck) && (
+          <Badge tone={statusRead.loading ? 'neutral' : statusRead.data ? 'success' : 'neutral'}>
+            {statusRead.loading ? 'Checking…' : statusRead.data ? 'Authorized writer' : 'Not a writer'}
+          </Badge>
         )}
       </div>
-    </Card>
+
+      {inputError && (
+        <p className="standing-writers__note standing-writers__note--error" role="alert">
+          {inputError}
+        </p>
+      )}
+
+      {isAdmin && (
+        <div className="standing-writers__controls">
+          <h3 className="standing-writers__controls-title">Admin controls</h3>
+
+          <form onSubmit={handleAdd} className="standing-writers__form">
+            <Field
+              label="Add writer"
+              hint="Grant standing-write permission to a contract."
+              value={writerInput}
+              onChange={(e) => setWriterInput(e.target.value.trim())}
+              placeholder="C…"
+            />
+            <Button type="submit" loading={addTx.busy} className="standing-writers__submit">
+              Add writer
+            </Button>
+            <TransactionOutcome phase={addTx.phase} error={addTx.error} successTitle="Writer added" />
+          </form>
+
+          <form onSubmit={handleRemove} className="standing-writers__form">
+            <Field
+              label="Remove writer"
+              hint="Revoke standing-write permission from a contract."
+              value={writerInput}
+              onChange={(e) => setWriterInput(e.target.value.trim())}
+              placeholder="C…"
+            />
+            <Button
+              type="submit"
+              variant="danger"
+              loading={removeTx.busy}
+              className="standing-writers__submit"
+            >
+              Remove writer
+            </Button>
+            <TransactionOutcome phase={removeTx.phase} error={removeTx.error} successTitle="Writer removed" />
+          </form>
+        </div>
+      )}
+      <p className="standing-writers__foot">
+        Record admin: {admin ? truncateAddress(admin) : 'loading…'}. Only the record admin can
+        add or remove writers.
+      </p>
+    </section>
   );
 }

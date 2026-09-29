@@ -52,17 +52,17 @@ const PROGRAM: Table = {
   9: { kind: 'conflict', message: 'You have already applied to this programme.', action: 'Only one application per programme is allowed.' },
   10: { kind: 'conflict', message: 'You have already reviewed this application.' },
   11: { kind: 'invalid', message: 'You cannot approve more than the applicant asked for.' },
-  12: { kind: 'blocked', message: 'Not enough reviewers have voted yet.', action: 'The award can settle after the required reviewer votes are in.' },
+  12: { kind: 'blocked', message: 'Not enough reviewers have voted yet.', action: 'The award settles once the required reviewer votes are in.' },
   13: { kind: 'conflict', message: 'This application has already been settled into an award.' },
   14: { kind: 'blocked', message: 'The programme does not have enough budget left for this award.', action: 'Awards are settled in the order they are finalised.' },
   15: { kind: 'fault', message: 'That amount is too large to process.' },
   16: { kind: 'blocked', message: 'This programme has been cancelled.' },
   17: { kind: 'denied', message: 'A programme that holds funds or has made awards cannot be cancelled.' },
-  18: { kind: 'invalid', message: 'A programme needs at least one trusted verifier, or no payment instalment could ever be released.' },
+  18: { kind: 'invalid', message: 'A programme needs at least one verifier, or no payment instalment could ever be released.' },
   19: { kind: 'none', message: 'No award for this account yet.' },
   20: { kind: 'none', message: 'Every payment instalment of this award has already been released.' },
-  21: { kind: 'denied', message: 'That proof does not match this release.', action: 'It may have expired, been revoked, or be signed for a different recipient, verifier, programme, or claim template.' },
-  22: { kind: 'conflict', message: 'That proof has already released a payment.', action: 'Each signed proof can unlock one payment instalment.' },
+  21: { kind: 'denied', message: 'That proof is not valid for this release.', action: 'It may be revoked, expired, or not a claim by this verifier about this recipient under this programme’s claim template.' },
+  22: { kind: 'conflict', message: 'That proof has already released a payment instalment.', action: 'Each proof unlocks exactly one payment instalment.' },
   23: { kind: 'blocked', message: 'The release window for this programme has closed.' },
   24: { kind: 'conflict', message: 'The protocol fee has already been sent to the treasury.' },
   25: { kind: 'blocked', message: 'Refunds are not open yet.', action: 'They open once the release window closes.' },
@@ -70,27 +70,28 @@ const PROGRAM: Table = {
   27: { kind: 'none', message: 'There is nothing to refund.', action: 'This usually means the programme paid out in full.' },
   28: { kind: 'blocked', message: 'Unclaimed funds cannot be swept yet.', action: 'Donors still have time to claim their refunds.' },
   29: { kind: 'none', message: 'There is nothing left to sweep.' },
-  30: { kind: 'denied', message: 'That address is not an approved payment destination for this programme.', action: 'Only the programme creator can approve a payee.' },
+  30: { kind: 'denied', message: 'That address is not a verified payee for this programme.', action: 'Only the programme creator can verify a payee.' },
   31: { kind: 'conflict', message: 'That payee is already verified.' },
   32: { kind: 'none', message: 'That address was not a verified payee.' },
   33: { kind: 'invalid', message: 'That is more than you have available to direct.' },
-  34: { kind: 'blocked', message: 'This award pays into a wallet with no spending rule installed.', action: 'Install the spend policy before this restricted payment can be released.' },
+  34: { kind: 'blocked', message: 'This award pays into a wallet with no spend policy installed.', action: 'The policy must be installed before a restricted payment instalment can be released.' },
   35: { kind: 'blocked', message: 'Allocations can no longer be directed — the sweep window has opened.' },
-  36: { kind: 'invalid', message: 'Too many payees were submitted at once.' },
+  36: { kind: 'invalid', message: 'The payee batch size is too large.' },
   37: { kind: 'conflict', message: 'This application has been withdrawn.', action: 'Withdrawn applications cannot be reviewed, finalized, or re-applied.' },
-  38: { kind: 'blocked', message: 'The middle reviewer vote is below this programme’s minimum award and cannot be finalised.', action: 'The application is unchanged and can still be finalised later if the minimum is met.' },
+  38: { kind: 'blocked', message: 'The median award is below this programme\u2019s minimum and cannot be finalised.', action: 'The application is unchanged and can still be finalised later if the minimum is met.' },
   39: { kind: 'blocked', message: 'This programme is paused.', action: 'The creator has temporarily halted contributions, applications, reviews, awards and releases. Refunds and sweeps still work \u2014 wait for the creator to unpause before retrying.' },
 };
 
 const ATTEST: Table = {
-  1: { kind: 'none', message: 'No claim template was found for that UID.' },
+  1: { kind: 'none', message: 'No such claim template.' },
   2: { kind: 'conflict', message: 'A claim template with this definition and authority already exists.' },
-  3: { kind: 'none', message: 'No signed proof was found for that UID.' },
-  4: { kind: 'denied', message: 'Signed proofs made under this claim template cannot be revoked.' },
-  5: { kind: 'denied', message: 'Only the verifier who signed this proof can revoke it.' },
+  3: { kind: 'none', message: 'No such signed proof.' },
+  4: { kind: 'denied', message: 'Signed proofs under this claim template cannot be revoked.' },
+  5: { kind: 'denied', message: 'Only the verifier who made a signed proof can revoke it.' },
   6: { kind: 'conflict', message: 'This signed proof has already been revoked.' },
   7: { kind: 'invalid', message: 'The expiry date is in the past.' },
   8: { kind: 'denied', message: 'This claim template is restricted — only its authority can sign under it.' },
+  9: { kind: 'conflict', message: 'This claim template repeats itself in its replacement chain.', action: 'A claim template cannot supersede itself, directly or through its predecessors.' },
 };
 
 const RECORD: Table = {
@@ -113,8 +114,8 @@ const POLICY: Table = {
   1: { kind: 'blocked', message: 'This wallet has no spend policy configured.' },
   2: { kind: 'conflict', message: 'This wallet already has a policy configured.' },
   3: { kind: 'denied', message: 'Only the policy steward can change these rules.' },
-  4: { kind: 'denied', message: 'This signer may only transfer the programme’s asset to approved destinations.' },
-  5: { kind: 'denied', message: 'That destination is not an approved payee.' },
+  4: { kind: 'denied', message: 'This signer may only make transfers, and only of the programme’s asset.' },
+  5: { kind: 'denied', message: 'That destination is not a verified payee.' },
   6: { kind: 'blocked', message: 'That would exceed the spending limit for this period.' },
   7: { kind: 'denied', message: 'This signer can only move its own wallet’s funds.' },
   8: { kind: 'invalid', message: 'The amount must be greater than zero.' },
@@ -186,4 +187,27 @@ export function explain(error: unknown, contract: ContractName = 'program'): Exp
 /** Whether this should be shown as a failure at all. */
 export function isFailure(explained: Explained): boolean {
   return explained.kind !== 'none';
+}
+
+/**
+ * Plain-text form of an error, for a "Copy details" control on the panel
+ * that shows it.
+ *
+ * Built only from `Explained` — the curated message, contract and code —
+ * plus the route and time the caller supplies. Never the raw thrown value,
+ * so a signed payload or a secret embedded in some future error object has
+ * no path into this text.
+ */
+export function formatErrorDetails(
+  explained: Explained,
+  context: { route: string; time: Date },
+): string {
+  const lines = [`Message: ${explained.message}`];
+  if (explained.contract && explained.code !== undefined) {
+    lines.push(`Contract: ${explained.contract}`);
+    lines.push(`Error code: ${explained.code}`);
+  }
+  lines.push(`Route: ${context.route}`);
+  lines.push(`Time: ${context.time.toISOString()}`);
+  return lines.join('\n');
 }

@@ -15,6 +15,10 @@ build:
 test: build
     cargo test --all-features
 
+# Mutation-test the programme contract; extra args go to cargo-mutants (see docs/testing-guide.md)
+mutants *args:
+    ./scripts/mutants.sh {{args}}
+
 # Run formatting check and clippy linter (depends on build)
 lint: build
     cargo fmt --all --check

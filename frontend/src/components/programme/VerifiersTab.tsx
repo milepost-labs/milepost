@@ -15,6 +15,7 @@ export const VerifiersTab: FC<VerifiersTabProps> = ({
       role="tabpanel"
       id="panel-verifiers"
       aria-labelledby="tab-verifiers"
+      tabIndex={0}
     >
       <p className="verifiers-tab__intro">
         Verifiers are trusted signers who confirm a condition was met. Their signed confirmations, called attestations, can unlock one payment instalment, or tranche.

@@ -15,7 +15,8 @@ import { PausedBanner } from "../components/programme/PausedBanner";
 import { ProgrammeHeader } from "../components/programme/ProgrammeHeader";
 import { WhereTheMoneyIs } from "../components/programme/WhereTheMoneyIs";
 import { ProgrammeTabs } from "../components/programme/ProgrammeTabs";
-import { Badge, Button, Card, Field, PhaseBadge, Stat, Table } from "../components/ui";
+import { ProgrammeActions } from "../components/programme/ProgrammeActions";
+import { Badge, Button, Card, Deadline, Field, PhaseBadge, Stat, Table } from "../components/ui";
 import { useSoroban } from "../context/useSoroban";
 import { useContractRead, useContractResult, useIndexedList, useProgramme } from "../hooks";
 import { fetchProgrammes } from "../lib/indexer";
@@ -79,13 +80,6 @@ const formatAddress = (address: string) =>
 
 function deadlineToMs(deadline: bigint | number): number {
   return Number(deadline) * 1000;
-}
-
-function formatDateTime(deadline: bigint | number): string {
-  return new Intl.DateTimeFormat(undefined, {
-    dateStyle: "medium",
-    timeStyle: "short",
-  }).format(new Date(deadlineToMs(deadline)));
 }
 
 function getRelativeDeadline(deadline: bigint | number, nowMs: number): string {
@@ -566,6 +560,15 @@ export const ProgrammeDetail = () => {
     phaseName === "Cancelled" ||
     (config.data !== null &&
       nowMs / 1000 >= Number(config.data.release_deadline));
+  // Same rule as the money panel: once refunds open, whatever has not been
+  // released, refunded or swept is refundable.
+  const refundable =
+    refundsOpen && figures
+      ? figures.budget -
+        figures.totalReleased -
+        (figures.totalRefunded ?? ZERO) -
+        (figures.totalSwept ?? ZERO)
+      : ZERO;
 
   const timelineRows = useMemo(() => {
     const programmeConfig = config.data;
@@ -686,36 +689,45 @@ export const ProgrammeDetail = () => {
           </AsyncView>
         </Card>
 
-        <div className="programme-section--center">
-          <AsyncView
-            data={figures}
-            loading={moneyLoading}
-            error={moneyError}
-            onRetry={refetchMoney}
-            contract="program"
-          >
-            {(value) => (
-              <WhereTheMoneyIs
-                contributed={value.totalContributed}
-                fee={value.fee}
-                granted={value.totalGranted}
-                released={value.totalReleased}
-                refunded={value.totalRefunded ?? ZERO}
-                swept={value.totalSwept ?? ZERO}
-                refundsOpen={refundsOpen}
-                feeBps={config.data?.fee_bps}
-                quorum={config.data?.quorum ?? 1}
-                asset={ASSET_LABEL}
-              />
-            )}
-          </AsyncView>
+        <div className="programme-main">
+          <div className="programme-section--center">
+            <AsyncView
+              data={figures}
+              loading={moneyLoading}
+              error={moneyError}
+              onRetry={refetchMoney}
+              contract="program"
+            >
+              {(value) => (
+                <WhereTheMoneyIs
+                  contributed={value.totalContributed}
+                  fee={value.fee}
+                  granted={value.totalGranted}
+                  released={value.totalReleased}
+                  refunded={value.totalRefunded ?? ZERO}
+                  swept={value.totalSwept ?? ZERO}
+                  refundsOpen={refundsOpen}
+                  feeBps={config.data?.fee_bps}
+                  quorum={config.data?.quorum ?? 1}
+                  asset={ASSET_LABEL}
+                />
+              )}
+            </AsyncView>
 
-          <ProgrammeTabs
+            <ProgrammeTabs
+              programmeId={programmeId}
+              phase={phaseName}
+              quorum={config.data?.quorum ?? 1}
+              isSample={isDefault}
+              asset={ASSET_LABEL}
+            />
+          </div>
+
+          <ProgrammeActions
             programmeId={programmeId}
-            phase={phaseName}
-            quorum={config.data?.quorum ?? 1}
-            isSample={isDefault}
-            asset={ASSET_LABEL}
+            phase={phase.data?.tag ?? null}
+            refundsOpen={refundsOpen}
+            refundable={refundable > ZERO ? formatXlm(refundable) : null}
           />
         </div>
 
@@ -754,15 +766,8 @@ export const ProgrammeDetail = () => {
                       key: "date",
                       header: "Date",
                       render: (row) => (
-                        <span className="numeric">
-                          {formatDateTime(row.deadline)}
-                        </span>
+                        <Deadline unixSeconds={row.deadline} />
                       ),
-                    },
-                    {
-                      key: "time",
-                      header: "Time",
-                      render: (row) => row.relative,
                     },
                     {
                       key: "status",
@@ -866,7 +871,10 @@ export const ProgrammeDetail = () => {
                     <p>
                       Signed proofs, standing records, spending rules, and treasury addresses are read from programme configuration.
                     </p>
-                    <Link to="/funders" className="programme-link">
+                    <Link
+                      to={`/funders?programme=${encodeURIComponent(programmeId)}`}
+                      className="programme-link"
+                    >
                       Back to funder dashboard
                     </Link>
                   </div>

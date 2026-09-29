@@ -40,13 +40,21 @@ function unwrap<T extends { error?: unknown }>(result: T): T {
   return result;
 }
 
+const IS_FIXTURE_MODE = import.meta.env.VITE_FIXTURES === '1';
+const FIXTURE_WALLET_ADDRESS = 'GA7QYNF7SOWQ3GLR2BGMZEHXAVIRZA4KVWLTJJFC7MGXUA74P7UJVSGZ';
+
 export function WalletProvider({ children }: { children: ReactNode }) {
-  const [status, setStatus] = useState<WalletStatus>('checking');
-  const [address, setAddress] = useState<string | null>(null);
-  const [network, setNetwork] = useState<string | null>(null);
+  const [status, setStatus] = useState<WalletStatus>(IS_FIXTURE_MODE ? 'connected' : 'checking');
+  const [address, setAddress] = useState<string | null>(IS_FIXTURE_MODE ? FIXTURE_WALLET_ADDRESS : null);
+  const [network, setNetwork] = useState<string | null>(IS_FIXTURE_MODE ? 'TESTNET' : null);
   const [networkError, setNetworkError] = useState<string | null>(null);
 
   const readNetwork = useCallback(async () => {
+    if (IS_FIXTURE_MODE) {
+      setNetwork('TESTNET');
+      setNetworkError(null);
+      return true;
+    }
     const result = unwrap(await getNetwork());
     setNetwork(result.network);
     const actual = result.network ?? 'an unknown network';
@@ -64,6 +72,13 @@ export function WalletProvider({ children }: { children: ReactNode }) {
   // Restore an existing connection on load, so a refresh does not look like a
   // disconnect.
   useEffect(() => {
+    if (IS_FIXTURE_MODE) {
+      setStatus('connected');
+      setAddress(FIXTURE_WALLET_ADDRESS);
+      setNetwork('TESTNET');
+      return;
+    }
+
     let cancelled = false;
 
     (async () => {
@@ -96,6 +111,12 @@ export function WalletProvider({ children }: { children: ReactNode }) {
   }, [readNetwork]);
 
   const connect = useCallback(async () => {
+    if (IS_FIXTURE_MODE) {
+      setAddress(FIXTURE_WALLET_ADDRESS);
+      setNetwork('TESTNET');
+      setStatus('connected');
+      return;
+    }
     const { address: granted } = unwrap(await requestAccess());
     const onExpectedNetwork = await readNetwork();
     setAddress(granted);
@@ -113,6 +134,7 @@ export function WalletProvider({ children }: { children: ReactNode }) {
   // update the status, so the banner clears without a reconnect. Reads and
   // browsing never depended on this; only writes check it.
   const recheckNetwork = useCallback(async () => {
+    if (IS_FIXTURE_MODE) return;
     try {
       const onExpectedNetwork = await readNetwork();
       setStatus((previous) => {
@@ -127,6 +149,9 @@ export function WalletProvider({ children }: { children: ReactNode }) {
 
   const sign = useCallback(
     async (xdr: string) => {
+      if (IS_FIXTURE_MODE) {
+        return { signedTxXdr: xdr, signerAddress: address ?? FIXTURE_WALLET_ADDRESS };
+      }
       if (!address) throw new Error('Connect a wallet before signing.');
       const result = unwrap(await getNetwork());
       if (result.networkPassphrase !== EXPECTED_PASSPHRASE) {

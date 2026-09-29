@@ -1,9 +1,19 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { fireEvent, render, screen, waitFor } from '@testing-library/react';
-import { MemoryRouter } from 'react-router-dom';
+import { MemoryRouter, useLocation } from 'react-router-dom';
 
 import { FIXTURE_PROGRAMMES } from '../fixtures/programmes';
+import { WalletProvider } from '../context/WalletContext';
 import { ProgrammeDirectory } from './ProgrammeDirectory';
+
+vi.mock('@stellar/freighter-api', () => ({
+  isConnected: vi.fn().mockResolvedValue({ isConnected: false }),
+  isAllowed: vi.fn().mockResolvedValue({ isAllowed: false }),
+  getAddress: vi.fn().mockResolvedValue({ address: '' }),
+  getNetwork: vi.fn().mockResolvedValue({ network: 'TESTNET', networkPassphrase: '' }),
+  requestAccess: vi.fn().mockResolvedValue({ address: '' }),
+  signTransaction: vi.fn().mockResolvedValue({ signedTxXdr: '', signerAddress: '' }),
+}));
 
 const meta = (indexedAt: string) => ({
   network: 'testnet',
@@ -38,10 +48,18 @@ function mockIndex(options: {
   );
 }
 
+function LocationProbe() {
+  const location = useLocation();
+  return <output aria-label="current location">{location.pathname + location.search}</output>;
+}
+
 function renderDirectory(path = '/directory') {
   return render(
     <MemoryRouter initialEntries={[path]}>
-      <ProgrammeDirectory />
+      <WalletProvider>
+        <ProgrammeDirectory />
+        <LocationProbe />
+      </WalletProvider>
     </MemoryRouter>,
   );
 }
@@ -62,9 +80,11 @@ describe('ProgrammeDirectory', () => {
 
   it('renders a card for every programme once the index resolves', async () => {
     renderDirectory();
+    // The index fetch and the directory's merge can take over a second under a
+    // full parallel run, past waitFor's default.
     await waitFor(async () => {
       expect(await cardCount()).toBe(FIXTURE_PROGRAMMES.length);
-    });
+    }, { timeout: 5000 });
   });
 
   it('filters cards by search text', async () => {
@@ -98,6 +118,27 @@ describe('ProgrammeDirectory', () => {
     expect(screen.getAllByRole('link')).toHaveLength(1);
   });
 
+  it('restores sort from the URL', async () => {
+    renderDirectory('/directory?sort=largest-budget');
+    const links = await screen.findAllByRole('link');
+
+    expect((screen.getByLabelText(/sort/i) as HTMLSelectElement).value).toBe('largest-budget');
+    expect(links[0].textContent).toContain('SME supplier microgrants Q2');
+  });
+
+  it('updates the URL while preserving search and phase filters', async () => {
+    renderDirectory('/directory?phase=Open&q=school');
+    await screen.findAllByRole('link');
+
+    fireEvent.change(screen.getByLabelText(/sort/i), { target: { value: 'largest-budget' } });
+
+    await waitFor(() => {
+      expect(screen.getByLabelText(/current location/i).textContent).toBe(
+        '/directory?phase=Open&q=school&sort=largest-budget',
+      );
+    });
+  });
+
   it('shows a stale warning when the index is older than the threshold', async () => {
     mockIndex({ indexedAt: new Date(Date.now() - 48 * 3_600_000).toISOString() });
     renderDirectory();
@@ -110,9 +151,11 @@ describe('ProgrammeDirectory', () => {
     renderDirectory();
 
     expect(await screen.findByRole('alert')).toBeTruthy();
+    // The index fetch and the directory's merge can take over a second under a
+    // full parallel run, past waitFor's default.
     await waitFor(async () => {
       expect(await cardCount()).toBe(FIXTURE_PROGRAMMES.length);
-    });
+    }, { timeout: 5000 });
   });
 
   it('shows an empty state with a way out when nothing matches', async () => {

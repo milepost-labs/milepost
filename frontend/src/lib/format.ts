@@ -104,3 +104,16 @@ export function explorerUrl(hash: string, network: string): string {
   return `https://stellar.expert/explorer/${net}/tx/${hash}`;
 }
 
+/**
+ * Build a Stellar Expert URL for an account or contract address.
+ * Accounts start with 'G', contracts start with 'C'.
+ */
+export function addressExplorerUrl(address: string, network = 'testnet'): string {
+  const net = network.toLowerCase().includes('testnet') ? 'testnet' : 'public';
+  if (address.startsWith('C')) {
+    return `https://stellar.expert/explorer/${net}/contract/${address}`;
+  }
+  return `https://stellar.expert/explorer/${net}/account/${address}`;
+}
+
+

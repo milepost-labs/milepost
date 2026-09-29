@@ -107,6 +107,28 @@
   opacity: 0.7;
 }
 
+.directory-sort {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+  color: var(--text-muted);
+  font-size: var(--text-caption);
+  font-weight: var(--weight-semibold);
+}
+
+.directory-sort select {
+  border: 0;
+  border-radius: var(--radius-input);
+  background: var(--surface);
+  color: var(--text);
+  padding: var(--space-2) var(--space-3);
+  min-height: var(--tap-min);
+  box-sizing: border-box;
+  font: inherit;
+  font-size: var(--text-sm);
+  font-weight: var(--weight-semibold);
+}
+
 .directory-indexline {
   margin-left: auto;
   font-size: var(--text-caption);
@@ -126,6 +148,11 @@
   font-weight: var(--weight-semibold);
 }
 
+.directory-banner__link {
+  color: var(--warning-strong);
+  text-decoration: underline;
+}
+
 .directory-banner--error {
   background: var(--refund-soft);
   display: flex;
@@ -136,7 +163,7 @@
 
 .directory-banner__title {
   font-weight: var(--weight-bold);
-  color: var(--refund);
+  color: var(--refund-strong);
 }
 
 .directory-banner__body {
@@ -200,6 +227,22 @@
   gap: var(--space-3);
 }
 
+.directory-card-new__roles {
+  display: flex;
+  gap: var(--space-2);
+  flex-wrap: wrap;
+}
+
+.directory-role-badge {
+  display: inline-block;
+  padding: var(--space-1) var(--space-2);
+  border-radius: var(--radius-full);
+  background: var(--accent-soft);
+  color: var(--accent-strong);
+  font-size: var(--text-xs);
+  font-weight: var(--weight-semibold);
+}
+
 .directory-card-new__title {
   display: flex;
   flex-direction: column;
@@ -245,6 +288,7 @@
 .directory-figure__value {
   font-size: var(--text-sm);
   font-weight: var(--weight-semibold);
+  overflow-wrap: anywhere;
 }
 
 .directory-card-new__foot {
@@ -277,8 +321,29 @@
 }
 
 @media (max-width: 560px) {
+  .directory-sort {
+    width: 100%;
+  }
+
+  .directory-sort select {
+    flex: 1;
+  }
+
   .directory-indexline {
     margin-left: 0;
     width: 100%;
+  }
+}
+
+/* Three figures side by side leave about 90px each at 360px, which is not
+   enough for an amount. Two columns with the third spanning keeps every figure
+   on one line. */
+@media (max-width: 480px) {
+  .directory-card-new__figures {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .directory-card-new__figures > :last-child {
+    grid-column: 1 / -1;
   }
 }

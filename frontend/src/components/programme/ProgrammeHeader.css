@@ -99,7 +99,7 @@
 }
 
 .programme-header__cancelled b {
-  color: var(--refund);
+  color: var(--refund-strong);
 }
 
 @media (max-width: 560px) {

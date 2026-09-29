@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { FIXTURE_HERO_AWARD } from './heroFixtures';
+import { describeAmount, STROOPS_PER_UNIT } from '../../lib/amount';
 import './HeroDemo.css';
 
 function formatAmount(value: number): string {
@@ -44,7 +45,12 @@ export function HeroDemo() {
           return (
             <div key={index} className={`hero-demo__tranche hero-demo__tranche--${state}`}>
               <span className="hero-demo__tranche-index">Tranche {index + 1}</span>
-              <span className="hero-demo__tranche-amount numeric">{formatAmount(amount)}</span>
+              <span
+                className="hero-demo__tranche-amount numeric"
+                aria-label={describeAmount(BigInt(amount) * STROOPS_PER_UNIT, 'USDC')}
+              >
+                {formatAmount(amount)}
+              </span>
               <span className="hero-demo__tranche-state">{stateLabel}</span>
             </div>
           );

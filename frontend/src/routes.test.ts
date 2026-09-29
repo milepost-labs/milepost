@@ -14,6 +14,13 @@ describe('APP_ROUTES', () => {
       expect(route.label.trim().length).toBeGreaterThan(0);
     }
   });
+
+  it('every route has a title', () => {
+    for (const route of APP_ROUTES) {
+      expect(route.title).toBeTruthy();
+      expect(typeof route.title).toBe('string');
+    }
+  });
 });
 
 describe('landing roles section', () => {

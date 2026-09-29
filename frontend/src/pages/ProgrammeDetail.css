@@ -81,8 +81,18 @@
 .programme-grid > .ui-card:first-child,
 .programme-grid > .ui-card:nth-child(2),
 .programme-grid > .ui-card:nth-child(3),
-.programme-section--center {
+.programme-main {
   grid-column: span 2;
+}
+
+/* Money and tabs on the left, the sticky actions panel on the right. The
+   panel drops under the money column once the two no longer fit side by side. */
+.programme-main {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, var(--grid-min-column)), 1fr));
+  gap: var(--space-5);
+  align-items: start;
+  min-width: 0;
 }
 
 .programme-section--center {
@@ -262,6 +272,7 @@
   .programme-grid > .ui-card:first-child,
   .programme-grid > .ui-card:nth-child(2),
   .programme-grid > .ui-card:nth-child(3),
+  .programme-main,
   .membership-card--wide {
     grid-column: auto;
   }
@@ -282,10 +293,14 @@
   border: 1px solid;
 }
 
+/* The state colour is carried by the border and the heading; the body copy
+   stays --text-muted. Tints come from the soft tokens so they follow the
+   theme, and the heading uses the -strong step because the base status hues
+   are not readable as text. */
 .metadata-state--ok {
-  background: rgba(34, 197, 94, 0.08);
-  border-color: var(--color-success, #22c55e);
-  color: var(--color-success, #22c55e);
+  background: var(--success-soft);
+  border-color: var(--success-strong);
+  color: var(--success-strong);
 }
 
 .metadata-state--ok strong {
@@ -294,15 +309,15 @@
 }
 
 .metadata-state--warn {
-  background: rgba(234, 179, 8, 0.08);
-  border-color: var(--color-warning, #eab308);
-  color: var(--color-warning, #eab308);
+  background: var(--warning-soft);
+  border-color: var(--warning-strong);
+  color: var(--warning-strong);
 }
 
 .metadata-state--error {
-  background: rgba(239, 68, 68, 0.08);
-  border-color: var(--color-error, #ef4444);
-  color: var(--color-error, #ef4444);
+  background: var(--danger-soft);
+  border-color: var(--danger-strong);
+  color: var(--danger-strong);
 }
 
 .metadata-state p {

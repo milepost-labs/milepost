@@ -68,7 +68,7 @@ export const Navbar = () => {
   const wrongNetwork = status === 'wrong-network';
 
   return (
-    <header className="navbar glass-panel">
+    <header className="navbar">
       <div className="navbar-container">
         <div className="navbar-brand">
           <Link to="/" className="brand-logo">

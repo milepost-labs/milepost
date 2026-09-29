@@ -1,0 +1,130 @@
+.about-deployment {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-6);
+  max-width: var(--page-max-width);
+}
+
+.about-header {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+
+.about-title {
+  margin: 0;
+  font-size: var(--text-h1);
+  font-weight: var(--weight-bold);
+  line-height: var(--leading-heading);
+}
+
+.about-lead {
+  margin: 0;
+  font-size: var(--text-body-lg);
+  max-width: 60ch;
+}
+
+.about-section {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+}
+
+.about-section-heading {
+  margin: 0;
+  font-size: var(--text-lg);
+  font-weight: var(--weight-bold);
+  color: var(--text);
+}
+
+.about-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, var(--grid-min-card)), 1fr));
+  gap: var(--space-3);
+}
+
+.about-card {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+  padding: var(--space-4);
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+}
+
+.about-card--full {
+  grid-column: 1 / -1;
+}
+
+.about-label {
+  font-size: var(--text-xs);
+  color: var(--text-muted);
+  text-transform: uppercase;
+  letter-spacing: var(--tracking-label);
+}
+
+.about-value {
+  font-size: var(--text-base);
+  font-weight: var(--weight-semibold);
+  color: var(--text);
+}
+
+.about-indexer-link {
+  color: var(--accent);
+  word-break: break-all;
+  font-size: var(--text-sm);
+  min-height: 44px;
+  display: inline-flex;
+  align-items: center;
+}
+
+.about-contract-list {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.about-contract-card {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  align-items: center;
+  gap: var(--space-3);
+  padding: var(--space-4) var(--space-5);
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+}
+
+.about-contract-info {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+  min-width: min(100%, 260px);
+}
+
+.about-contract-name {
+  font-size: var(--text-base);
+  font-weight: var(--weight-bold);
+  color: var(--text);
+}
+
+.about-contract-desc {
+  margin: 0;
+  font-size: var(--text-sm);
+}
+
+.about-contract-chip {
+  flex-shrink: 0;
+}
+
+@media (max-width: 640px) {
+  .about-contract-card {
+    flex-direction: column;
+    align-items: flex-start;
+  }
+}

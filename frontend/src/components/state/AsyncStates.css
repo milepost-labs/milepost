@@ -163,6 +163,14 @@
   color: var(--text-muted);
 }
 
+.state-error__head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: var(--space-3);
+}
+
 .state-error__message {
   font-weight: var(--weight-medium);
   color: var(--text-main);

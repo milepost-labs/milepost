@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { formatDate, timeUntil, hasPassed, truncateAddress, looksLikeAddress, toDate, explorerUrl } from './format';
+import { formatDate, timeUntil, hasPassed, truncateAddress, looksLikeAddress, toDate, explorerUrl, addressExplorerUrl } from './format';
 
 const NOW = new Date('2026-03-10T12:00:00Z');
 const at = (iso: string) => Math.floor(new Date(iso).getTime() / 1000);
@@ -89,3 +89,20 @@ describe('explorerUrl', () => {
     expect(url).toContain('deadbeef');
   });
 });
+
+describe('addressExplorerUrl', () => {
+  it('builds account explorer link for G... addresses', () => {
+    const addr = 'GAH3D4RM45ETE4W7VDRCWZBPRPT63CJXAGXFYVBC2FGANBZTS4OTKXCA';
+    expect(addressExplorerUrl(addr, 'testnet')).toBe(
+      `https://stellar.expert/explorer/testnet/account/${addr}`,
+    );
+  });
+
+  it('builds contract explorer link for C... addresses', () => {
+    const contract = 'CD236SGR4CHW3N5WA5REW7CDLCS4ZLDEX6JVEAIHZK7NSN4W7WD7YDAL';
+    expect(addressExplorerUrl(contract, 'testnet')).toBe(
+      `https://stellar.expert/explorer/testnet/contract/${contract}`,
+    );
+  });
+});
+

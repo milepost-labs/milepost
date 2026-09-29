@@ -1,6 +1,8 @@
-import { useEffect, type ReactNode } from 'react';
-import { explain, isFailure, type ContractName, type Explained } from '../../lib/errors';
-import { useAnnouncer } from '../../context/useAnnouncer';
+import { useMemo, type ReactNode } from 'react';
+import { useLocation } from 'react-router-dom';
+import { explain, formatErrorDetails, isFailure, type ContractName, type Explained } from '../../lib/errors';
+import { useAnnounceTransaction } from '../../hooks/useAnnounceTransaction';
+import { CopyButton } from '../ui/CopyButton';
 import './AsyncStates.css';
 
 /**
@@ -171,9 +173,22 @@ export function ErrorPanel({
       ? `Nothing was transferred · ${explained.contract} error ${explained.code}`
       : null;
 
+  const { pathname } = useLocation();
+  // Recomputed only when a new error arrives, not on every render, so
+  // "Time" reflects when this failure happened rather than when it was last
+  // painted.
+  const details = useMemo(
+    () => formatErrorDetails(explained, { route: pathname, time: new Date() }),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [explained],
+  );
+
   return (
     <div className={`state-error state-error--${explained.kind}`} role={live ? 'alert' : undefined}>
-      <p className="state-error__message">{explained.message}</p>
+      <div className="state-error__head">
+        <p className="state-error__message">{explained.message}</p>
+        <CopyButton value={details} label="Copy error details" showLabel />
+      </div>
       {explained.action && <p className="state-error__action">{explained.action}</p>}
       {technical && <p className="state-error__technical numeric">{technical}</p>}
       {onRetry && (
@@ -307,17 +322,12 @@ export function TransactionOutcome({
   /** Offer only where sending the same transaction again makes sense. */
   onRetry?: () => void;
 }) {
-  const announce = useAnnouncer();
   const pending = phase === 'building' || phase === 'signing' || phase === 'submitting';
   const pendingText = pendingTitle ?? 'Waiting for the network…';
 
   // Announced once per transition through the one shared region, so the
   // inline states below stay visual and nothing is read out twice.
-  useEffect(() => {
-    if (error) announce(error.message, isFailure(error) ? 'alert' : 'status');
-    else if (pending) announce(pendingText);
-    else if (phase === 'success') announce(successTitle);
-  }, [announce, error, pending, pendingText, phase, successTitle]);
+  useAnnounceTransaction({ phase, error, pending: pendingText, success: successTitle });
 
   if (error) return <ErrorPanel explained={error} onRetry={onRetry} live={false} />;
   if (pending) {

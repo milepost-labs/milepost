@@ -1,5 +1,5 @@
-import { ShieldAlert, ShieldCheck } from 'lucide-react';
-import { truncateAddress } from '../../lib/format';
+import { ExternalLink, ShieldAlert, ShieldCheck } from 'lucide-react';
+import { addressExplorerUrl, truncateAddress } from '../../lib/format';
 import { registryVerificationCopy } from '../../lib/registryVerification';
 import { CopyButton } from './CopyButton';
 
@@ -26,9 +26,21 @@ export interface AddressChipProps {
    * caller's job; this only renders what it is told.
    */
   verified?: boolean;
+  /** Whether to render an external link to the Stellar Expert explorer. */
+  showExplorerLink?: boolean;
+  /** Network name for explorer link (default: 'testnet'). */
+  network?: string;
 }
 
-export function AddressChip({ address, lead, tail, copyLabel = 'Copy address', verified }: AddressChipProps) {
+export function AddressChip({
+  address,
+  lead,
+  tail,
+  copyLabel = 'Copy address',
+  verified,
+  showExplorerLink,
+  network = 'testnet',
+}: AddressChipProps) {
   const display = truncateAddress(address, lead, tail);
   const verification = verified === undefined ? null : registryVerificationCopy(verified);
 
@@ -42,6 +54,19 @@ export function AddressChip({ address, lead, tail, copyLabel = 'Copy address', v
         </span>
       )}
       <CopyButton value={address} label={copyLabel} />
+      {showExplorerLink && (
+        <a
+          href={addressExplorerUrl(address, network)}
+          target="_blank"
+          rel="noreferrer"
+          className="address-chip__explorer"
+          aria-label={`View ${address.startsWith('C') ? 'contract' : 'account'} on Stellar Expert`}
+          title="View on Stellar Expert"
+        >
+          <ExternalLink size={14} aria-hidden="true" />
+        </a>
+      )}
     </span>
   );
 }
+

@@ -1,44 +1,35 @@
 @import './styles/tokens.css';
+@import './styles/print.css';
 
 :root {
-  /* Mature, Professional Color Palette */
-  
-  /* Primary Accent: Sophisticated Azure / Navy */
+  /* Color mappings to design tokens */
   --hue-primary: 215;
-  --color-primary-light: hsl(215, 80%, 40%); /* Rich Blue */
-  --color-primary-dark: hsl(215, 90%, 65%);  /* Soft Sky Blue for dark mode */
+  --color-primary-light: hsl(215, 80%, 40%);
+  --color-primary-dark: hsl(215, 90%, 65%);
 
   /* Surface and Background (Light Mode) */
-  --bg-color: hsl(210, 20%, 98%); /* Clean off-white */
-  --surface-color: hsl(0, 0%, 100%);
-  --surface-hover: hsl(210, 16%, 93%);
-  --surface-border: hsl(214, 32%, 91%);
-  
+  --bg-color: #f8fafc;
+  --surface-color: #ffffff;
+  --surface-hover: #f1f5f9;
+  --surface-border: #e2e8f0;
+
   /* Typography Colors */
-  --text-main: hsl(222, 47%, 11%); /* Deep slate, almost black */
-  --text-muted: hsl(215, 16%, 47%); /* Professional gray */
-  
+  --text-main: hsl(222, 47%, 11%);
+  --text-muted: hsl(215, 16%, 47%);
+
   /* Status Colors */
   --color-success: hsl(158, 73%, 33%);
   --color-warning: hsl(38, 92%, 50%);
   --color-error: hsl(348, 83%, 47%);
 
-  /* Glassmorphism Variables */
-  --glass-bg: rgba(255, 255, 255, 0.85);
-  --glass-border: rgba(226, 232, 240, 0.8);
-  --glass-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.05), 0 2px 4px -1px rgba(0, 0, 0, 0.03);
-  
   /* Typography Variables */
   --font-family: var(--font-ui);
-  
-  /* Transition / Animation Variables */
+
+  /* Transition Variables */
   --transition-fast: 150ms ease-out;
   --transition-normal: 300ms ease-out;
 }
 
-/* Dark base colours, from the design reference's dark palette. The tokens in
-   styles/tokens.css derive from these, so without them the dark theme put
-   dark-theme accents on a light page. */
 [data-theme='dark'] {
   --bg-color: #16191e;
   --surface-color: #1f242b;
@@ -46,12 +37,8 @@
   --surface-border: #2f3640;
   --text-main: #edf0f3;
   --text-muted: #a4aab4;
-  --glass-bg: rgba(31, 36, 43, 0.85);
-  --glass-border: rgba(255, 255, 255, 0.08);
   color-scheme: dark;
 }
-
-
 
 /* Global Reset & Base Styles */
 * {
@@ -61,129 +48,114 @@
 }
 
 body {
-  font-family: var(--font-family);
-  background-color: var(--bg-color);
-  color: var(--text-main);
+  font-family: var(--font-ui);
+  background-color: var(--bg);
+  color: var(--text);
   transition: background-color var(--transition-normal), color var(--transition-normal);
-  line-height: 1.6;
+  line-height: var(--leading-relaxed);
   -webkit-font-smoothing: antialiased;
   min-height: 100vh;
 }
 
-/* Utility Classes */
-.glass-panel {
-  background: var(--glass-bg);
-  backdrop-filter: blur(16px);
-  -webkit-backdrop-filter: blur(16px);
-  border: 1px solid var(--glass-border);
-  box-shadow: var(--glass-shadow);
-  border-radius: 12px;
-}
-
 .btn-primary {
-  background-color: var(--color-primary-light);
-  color: #fff;
+  background-color: var(--accent);
+  color: var(--accent-contrast);
   border: none;
-  padding: 0.75rem 1.5rem;
-  border-radius: 6px; /* Sharper corners for a mature look */
-  font-weight: 500;
-  font-size: 0.95rem;
+  padding: var(--space-2) var(--space-4);
+  border-radius: var(--radius-sm);
+  font-weight: var(--weight-medium);
+  font-size: var(--text-sm);
   cursor: pointer;
-  transition: all var(--transition-fast);
+  transition: opacity var(--transition-fast);
   display: inline-flex;
   align-items: center;
-  gap: 0.5rem;
+  gap: var(--space-2);
 }
 
-
-
 .btn-primary:hover {
-  filter: brightness(1.1);
-  transform: translateY(-1px);
+  opacity: 0.9;
 }
 
 .btn-secondary {
   background-color: transparent;
-  color: var(--text-main);
-  border: 1px solid var(--surface-border);
-  padding: 0.75rem 1.5rem;
-  border-radius: 6px;
-  font-weight: 500;
-  font-size: 0.95rem;
+  color: var(--text);
+  border: 1px solid var(--border);
+  padding: var(--space-2) var(--space-4);
+  border-radius: var(--radius-sm);
+  font-weight: var(--weight-medium);
+  font-size: var(--text-sm);
   cursor: pointer;
-  transition: all var(--transition-fast);
+  transition: background-color var(--transition-fast);
 }
 
 .btn-secondary:hover {
-  background-color: var(--surface-hover);
+  background-color: var(--surface-raised);
 }
 
 h1, h2, h3, h4 {
-  font-weight: 600; /* Less bold, more refined */
-  line-height: 1.2;
-  margin-bottom: 1rem;
-  letter-spacing: -0.01em;
+  font-weight: var(--weight-bold);
+  line-height: var(--leading-heading);
+  letter-spacing: var(--tracking-tight);
 }
 
 h1 {
-  font-size: 3rem;
-  letter-spacing: -0.03em;
+  font-size: var(--text-h1);
+  letter-spacing: var(--tracking-heading);
 }
 
 a {
-  color: var(--color-primary-light);
+  color: var(--accent);
   text-decoration: none;
   transition: color var(--transition-fast);
 }
 
-
-
 a:hover {
-  opacity: 0.8;
+  text-decoration: underline;
 }
 
 /* Layout Classes */
 .container {
-  max-width: 1280px; /* Wider container */
+  max-width: var(--page-max-width);
   margin: 0 auto;
-  padding: 0 2rem;
+  padding: 0 var(--page-gutter);
 }
 
 .page-wrapper {
-  padding: 4rem 0;
+  padding: var(--page-pad-top) 0 var(--page-pad-bottom);
   min-height: calc(100vh - 80px);
 }
 
 @media (max-width: 640px) {
   .container {
-    padding: 0 1rem;
+    padding: 0 var(--space-3);
   }
 
   .page-wrapper {
-    padding: 2rem 0;
+    padding: var(--space-4) 0;
   }
 }
 
 /* Micro-animations */
 @keyframes fadeUp {
-  from { opacity: 0; transform: translateY(15px); }
+  from { opacity: 0; transform: translateY(12px); }
   to { opacity: 1; transform: translateY(0); }
 }
 
 .animate-fade-up {
-  animation: fadeUp 0.8s cubic-bezier(0.2, 0.8, 0.2, 1) forwards;
+  animation: fadeUp 0.4s ease-out forwards;
 }
 
 /* Custom Scrollbar */
 ::-webkit-scrollbar {
   width: 6px;
+  height: 6px;
 }
 ::-webkit-scrollbar-track {
-  background: var(--bg-color);
+  background: var(--bg);
 }
 ::-webkit-scrollbar-thumb {
-  background: var(--surface-border);
-  border-radius: 3px;
+  background: var(--surface-raised);
+  border-radius: var(--radius-full);
 }
 ::-webkit-scrollbar-thumb:hover {
   background: var(--text-muted);

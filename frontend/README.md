@@ -31,6 +31,10 @@ npm run lint    # eslint, including React Compiler rules
 npm test        # vitest
 ```
 
+With `npm run dev`, `/dev/ui` shows every component in `src/components/ui/`
+and `src/components/state/` in its states, in both themes. It exists only in
+development builds; CI fails if it reaches a production build.
+
 Node 24. ESLint 10 requires `^20.19 || ^22.13 || >=24`.
 
 The React Compiler lint rules are **on**, and they are not cosmetic — they catch

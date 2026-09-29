@@ -161,13 +161,35 @@ jobs:
       - name: Enforce the app's bundle size budget
         run: ./frontend/scripts/check-bundle-size.sh >> "$GITHUB_STEP_SUMMARY"
 
+      # The component gallery at /dev/ui is for development builds only.
+      - name: Check no development-only pages reached the build
+        run: ./frontend/scripts/check-no-dev-pages.sh
+
       # Not cosmetic. The React Compiler rules here catch render-purity and
       # cascading-setState bugs that type-check cleanly and misbehave at runtime.
       - name: Lint the app
         run: npm run lint --prefix frontend
 
-      - name: Test the app against local bindings
-        run: npm test --prefix frontend
+      # Runs the suite once, with coverage. Vitest fails the step on a failing
+      # test or on coverage below the floors in frontend/vite.config.ts.
+      #
+      # Run without `set -e` so the report still reaches the job summary when
+      # the gate fails; that is exactly when someone needs to read it.
+      - name: Test the app against local bindings, with coverage
+        run: |
+          set +e
+          npm run test:coverage --prefix frontend
+          status=$?
+          set -e
+
+          if [ -f frontend/coverage/coverage-summary.json ]; then
+            node frontend/scripts/coverage-summary.mjs >> "$GITHUB_STEP_SUMMARY"
+          fi
+
+          if [ "$status" -ne 0 ]; then
+            echo "::error::App tests failed or coverage fell below the floor in frontend/vite.config.ts"
+          fi
+          exit $status
 
       # The app has its own lockfile and its own copy of the advisory policy;
       # the five binding lockfiles are checked at the end of this job.

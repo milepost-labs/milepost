@@ -4,7 +4,7 @@ use super::*;
 use soroban_sdk::{
     testutils::{Address as _, Ledger as _},
     token::{StellarAssetClient, TokenClient},
-    vec, Env, String,
+    vec, Env, Event as _, String,
 };
 
 /// A stand-in for the spend policy. The programme only asks whether a policy is
@@ -33,6 +33,7 @@ mod policy {
     }
 }
 
+use milepost_test_utils::assert_events;
 use milepost_test_utils::hash;
 use milepost_test_utils::schedule::*;
 
@@ -245,31 +246,96 @@ fn constructor_stores_config_and_reviewers() {
 
 /// Constructing with a quorum above the reviewer count would make every
 /// application permanently unfinalisable, so it is refused outright.
+///
+/// The constructor tests here name the error they expect. `construct_with`
+/// points at no real attestation registry, so any configuration that gets past
+/// validation still panics — on `SchemaNotFound` — and a bare `should_panic`
+/// passes whether or not the check under test exists.
 #[test]
-#[should_panic]
+#[should_panic(expected = "Error(Contract, #5)")] // InvalidQuorum
 fn quorum_above_reviewer_count_is_rejected() {
     construct_with(5, 3, APPLY_DEADLINE, REVIEW_DEADLINE, FEE_BPS);
 }
 
 #[test]
-#[should_panic]
+#[should_panic(expected = "Error(Contract, #4)")] // InvalidDeadlines
 fn review_deadline_before_apply_deadline_is_rejected() {
     construct_with(1, 3, REVIEW_DEADLINE, APPLY_DEADLINE, FEE_BPS);
 }
 
 #[test]
-#[should_panic]
+#[should_panic(expected = "Error(Contract, #6)")] // FeeTooHigh
 fn a_fee_above_the_ceiling_is_rejected() {
     construct_with(1, 3, APPLY_DEADLINE, REVIEW_DEADLINE, MAX_FEE_BPS + 1);
 }
 
 #[test]
-#[should_panic]
+#[should_panic(expected = "Error(Contract, #5)")] // InvalidQuorum
 fn zero_quorum_is_rejected() {
     construct_with(0, 3, APPLY_DEADLINE, REVIEW_DEADLINE, FEE_BPS);
 }
 
+/// `MAX_QUORUM` is the largest quorum allowed, not the first one refused.
+#[test]
+fn the_maximum_quorum_is_accepted() {
+    let f = setup(MAX_QUORUM, MAX_QUORUM);
+    assert_eq!(f.client.get_config().quorum, MAX_QUORUM);
+}
+
+#[test]
+#[should_panic(expected = "Error(Contract, #5)")] // InvalidQuorum
+fn a_quorum_above_the_maximum_is_rejected() {
+    // Enough reviewers that only the cap, not the reviewer count, refuses it.
+    construct_with(
+        MAX_QUORUM + 1,
+        MAX_QUORUM + 1,
+        APPLY_DEADLINE,
+        REVIEW_DEADLINE,
+        FEE_BPS,
+    );
+}
+
+// Each deadline must come strictly after the one before it, and the first
+// strictly after now. One test per rule, each sitting exactly on the boundary,
+// so dropping any one rule or loosening `<=` to `<` fails a test.
+
+#[test]
+#[should_panic(expected = "Error(Contract, #4)")] // InvalidDeadlines
+fn an_apply_deadline_that_is_not_in_the_future_is_rejected() {
+    construct_config(3, |c| c.apply_deadline = 0); // the test ledger starts at 0
+}
+
+#[test]
+#[should_panic(expected = "Error(Contract, #4)")] // InvalidDeadlines
+fn a_review_deadline_equal_to_the_apply_deadline_is_rejected() {
+    construct_config(3, |c| c.review_deadline = c.apply_deadline);
+}
+
+#[test]
+#[should_panic(expected = "Error(Contract, #4)")] // InvalidDeadlines
+fn a_release_deadline_equal_to_the_review_deadline_is_rejected() {
+    construct_config(3, |c| c.release_deadline = c.review_deadline);
+}
+
+#[test]
+#[should_panic(expected = "Error(Contract, #4)")] // InvalidDeadlines
+fn a_sweep_deadline_equal_to_the_release_deadline_is_rejected() {
+    construct_config(3, |c| c.sweep_deadline = c.release_deadline);
+}
+
 fn construct_with(quorum: u32, reviewer_count: u32, apply: u64, review: u64, fee_bps: u32) {
+    construct_config(reviewer_count, |c| {
+        c.quorum = quorum;
+        c.apply_deadline = apply;
+        c.review_deadline = review;
+        c.fee_bps = fee_bps;
+    });
+}
+
+/// Construct a programme from the default schedule with `edit` applied to its
+/// config. Nothing else is real — there is no attestation registry behind
+/// `attest` — so this is only for testing what the constructor refuses.
+fn construct_config(reviewer_count: u32, edit: impl FnOnce(&mut ProgrammeConfig)) {
     let env = milepost_test_utils::new_test_env();
     let asset = milepost_test_utils::register_token(&env);
     let mut reviewers = Vec::new(&env);
@@ -278,31 +344,27 @@ fn construct_with(quorum: u32, reviewer_count: u32, apply: u64, review: u64, fee
     }
     let verifier = Address::generate(&env);
 
-    env.register(
-        Programme,
-        (
-            ProgrammeConfig {
-                creator: Address::generate(&env),
-                token: asset,
-                treasury: Address::generate(&env),
-                attest: Address::generate(&env),
-                record: Address::generate(&env),
-                policy: Address::generate(&env),
-                schema: BytesN::from_array(&env, &[1u8; 32]),
-                fee_bps,
-                apply_deadline: apply,
-                review_deadline: review,
-                release_deadline: RELEASE_DEADLINE,
-                sweep_deadline: SWEEP_DEADLINE,
-                quorum,
-                tranches: 3,
-                minimum_award: 0, // No minimum by default
-                metadata_hash: BytesN::from_array(&env, &[7u8; 32]),
-            },
-            reviewers,
-            vec![&env, verifier],
-        ),
-    );
+    let mut config = ProgrammeConfig {
+        creator: Address::generate(&env),
+        token: asset,
+        treasury: Address::generate(&env),
+        attest: Address::generate(&env),
+        record: Address::generate(&env),
+        policy: Address::generate(&env),
+        schema: BytesN::from_array(&env, &[1u8; 32]),
+        fee_bps: FEE_BPS,
+        apply_deadline: APPLY_DEADLINE,
+        review_deadline: REVIEW_DEADLINE,
+        release_deadline: RELEASE_DEADLINE,
+        sweep_deadline: SWEEP_DEADLINE,
+        quorum: 1,
+        tranches: 3,
+        minimum_award: 0, // No minimum by default
+        metadata_hash: BytesN::from_array(&env, &[7u8; 32]),
+    };
+    edit(&mut config);
+
+    env.register(Programme, (config, reviewers, vec![&env, verifier]));
 }
 
 // ---- contributions ----
@@ -790,6 +852,33 @@ fn awards_cannot_exceed_the_budget() {
     assert_eq!(f.client.total_granted(), 800);
 }
 
+/// The budget is a ceiling, not a limit to stay under: awards that commit every
+/// last unit of it are allowed. An off-by-one here would strand the remainder of
+/// every fully-subscribed programme in refunds.
+#[test]
+fn awards_can_commit_the_budget_exactly() {
+    let f = setup(2, 3);
+    let donor = funded_donor(&f, 1_000);
+    f.client.contribute(&donor, &1_000); // budget is 900 after the 10% fee
+
+    let a = Address::generate(&f.env);
+    let b = Address::generate(&f.env);
+    f.client.apply(&a, &600, &hash(&f.env, 1));
+    f.client.apply(&b, &300, &hash(&f.env, 2));
+    to_review(&f);
+    for i in 0..2u32 {
+        let r = f.reviewers.get(i).unwrap();
+        f.client.review(&r, &a, &600);
+        f.client.review(&r, &b, &300);
+    }
+
+    let payee = Address::generate(&f.env);
+    f.client.allow_payee(&payee);
+    f.client.finalize(&a, &payee, &Mode::Direct);
+    assert_eq!(f.client.finalize(&b, &payee, &Mode::Direct).granted, 300);
+    assert_eq!(f.client.total_granted(), f.client.budget());
+}
+
 // ---- oversubscription ----
 //
 // `finalize` is permissionless and settles first-finalized-first-served, so
@@ -1115,6 +1204,43 @@ fn reviewer_entry_resolves_after_the_bump_threshold() {
     assert!(f.client.is_reviewer(&f.reviewers.get(0).unwrap()));
 }
 
+/// An entry is extended back to the full 90 days once its remaining life falls
+/// below the 60-day threshold, and left alone above it, so a busy entry does not
+/// pay for an extension on every touch.
+#[test]
+fn keepalive_extends_an_entry_once_it_falls_below_the_threshold() {
+    use soroban_sdk::testutils::storage::Persistent as _;
+
+    let f = setup(2, 3);
+    let donor = funded_donor(&f, 10_000);
+    f.client.contribute(&donor, &10_000);
+    let ttl = || {
+        f.env.as_contract(&f.client.address, || {
+            f.env
+                .storage()
+                .persistent()
+                .get_ttl(&Key::Donor(donor.clone()))
+        })
+    };
+    f.client.keepalive(&donor);
+    let start = f.env.ledger().sequence();
+    assert_eq!(ttl(), BUMP_LEDGERS);
+
+    // Twenty days on: seventy left, above the threshold, so untouched.
+    f.env
+        .ledger()
+        .set_sequence_number(start + 20 * DAY_IN_LEDGERS);
+    f.client.keepalive(&donor);
+    assert_eq!(ttl(), BUMP_LEDGERS - 20 * DAY_IN_LEDGERS);
+
+    // Forty days on: fifty left, below it, so back to the full ninety.
+    f.env
+        .ledger()
+        .set_sequence_number(start + 40 * DAY_IN_LEDGERS);
+    f.client.keepalive(&donor);
+    assert_eq!(ttl(), BUMP_LEDGERS);
+}
+
 #[test]
 fn keepalive_is_permissionless_and_refreshes_a_subject() {
     let f = setup(2, 3);
@@ -1338,6 +1464,21 @@ fn the_fee_sweeps_to_the_treasury_once() {
     assert_eq!(f.token.balance(&f.treasury), 1_000);
     assert_eq!(f.client.try_sweep_fee(), Err(Ok(Error::FeeAlreadySwept)));
     assert_eq!(f.token.balance(&f.treasury), 1_000);
+}
+
+/// A fee-free programme still closes out its fee, but moves no tokens doing it:
+/// a zero-amount transfer would put a payment to the treasury on the token's
+/// event stream that never happened in any sense that matters.
+#[test]
+fn a_zero_fee_sweep_moves_no_tokens() {
+    let f = setup_with_fee(2, 3, 0);
+    let donor = funded_donor(&f, 10_000);
+    f.client.contribute(&donor, &10_000);
+    to_review(&f);
+
+    assert_eq!(f.client.sweep_fee(), 0);
+    assert_events(&f.env, &f.token.address, &[]);
+    assert_eq!(f.client.try_sweep_fee(), Err(Ok(Error::FeeAlreadySwept)));
 }
 
 #[test]
@@ -1611,6 +1752,24 @@ fn partial_refund_with_invalid_amount_fails() {
     );
 }
 
+/// The cap on a partial refund is inclusive: a donor can take exactly what is
+/// left of their share, and then nothing more.
+#[test]
+fn a_partial_refund_can_take_exactly_what_is_left() {
+    let f = setup(2, 3);
+    let donor = funded_donor(&f, 10_000);
+    f.client.contribute(&donor, &10_000);
+    f.env.ledger().set_timestamp(RELEASE_DEADLINE);
+
+    assert_eq!(f.client.refund_partial(&donor, &5_000), 5_000);
+    assert_eq!(f.client.refund_partial(&donor, &4_000), 4_000);
+    assert_eq!(f.token.balance(&donor), 9_000);
+    assert_eq!(
+        f.client.try_refund_partial(&donor, &1),
+        Err(Ok(Error::AlreadyRefunded))
+    );
+}
+
 #[test]
 fn partial_refund_before_window_opens_fails() {
     let f = setup(2, 3);
@@ -1675,6 +1834,22 @@ fn unclaimed_refunds_sweep_to_the_treasury() {
     assert_eq!(f.token.balance(&f.client.address), 0);
 }
 
+/// Sweeping the unclaimed remainder already took the unswept fee with it, so the
+/// fee is closed: a later `sweep_fee` must not try to pay it a second time out
+/// of a balance that no longer holds it.
+#[test]
+fn sweeping_unclaimed_closes_out_an_unswept_fee() {
+    let f = setup(2, 3);
+    let donor = funded_donor(&f, 10_000);
+    f.client.contribute(&donor, &10_000);
+
+    f.env.ledger().set_timestamp(SWEEP_DEADLINE);
+    f.client.sweep_unclaimed();
+
+    assert_eq!(f.client.try_sweep_fee(), Err(Ok(Error::FeeAlreadySwept)));
+    assert_eq!(f.token.balance(&f.treasury), 10_000);
+}
+
 #[test]
 fn sweeping_waits_for_the_grace_period() {
     let f = setup(2, 3);
@@ -1716,16 +1891,6 @@ fn sweeping_an_empty_programme_is_rejected() {
     assert_eq!(
         f.client.try_sweep_unclaimed(),
         Err(Ok(Error::NothingToSweep))
-    );
-}
-
-#[test]
-fn a_sweep_deadline_before_the_release_deadline_is_rejected() {
-    let f = setup(2, 3);
-    let c = f.client.get_config();
-    assert!(
-        c.sweep_deadline > c.release_deadline,
-        "donors must get a grace period after releases end"
     );
 }
 
@@ -1860,6 +2025,32 @@ fn batch_release_rejects_oversize() {
         f.client.try_release_batch(&recipient, &uids, &f.verifier),
         Err(Ok(Error::BatchTooLarge))
     );
+}
+
+/// The bound is inclusive: a batch of exactly `MAX_PAYEE_BATCH` proofs is not
+/// refused as too large.
+#[test]
+fn batch_release_accepts_the_maximum_size() {
+    let f = setup_with(2, 3, MAX_PAYEE_BATCH);
+    let recipient = Address::generate(&f.env);
+    let school = Address::generate(&f.env);
+    award_to(&f, &recipient, &school, &5_000);
+
+    let mut uids = Vec::new(&f.env);
+    for n in 0..MAX_PAYEE_BATCH {
+        uids.push_back(proof(&f, &recipient, n as u8));
+    }
+    // Fifty tranches exceed both the CPU budget and the event data one
+    // transaction may carry on the network, so a batch this size is here for
+    // the size check only. What a batch costs is a separate question from
+    // where the bound sits.
+    f.env.cost_estimate().budget().reset_unlimited();
+    f.env.cost_estimate().disable_resource_limits();
+    assert_eq!(
+        f.client.release_batch(&recipient, &uids, &f.verifier),
+        5_000
+    );
+    assert_eq!(f.token.balance(&school), 5_000);
 }
 
 // ---- allocated mode ----
@@ -2176,6 +2367,177 @@ fn a_restricted_release_needs_the_policy_installed() {
     assert_eq!(f.token.balance(&wallet), 300);
 }
 
+// ---- open mode (issue #296) ----
+
+/// Award `granted` in `Open` mode and release every tranche, so the recipient
+/// holds the money in their own account with nothing governing it.
+fn open_to(f: &Fixture, recipient: &Address, granted: &i128) -> i128 {
+    let donor = funded_donor(f, 100_000);
+    f.client.contribute(&donor, &100_000);
+    f.client.apply(recipient, granted, &hash(&f.env, 1));
+    to_review(f);
+    for i in 0..f.client.get_config().quorum {
+        f.client
+            .review(&f.reviewers.get(i).unwrap(), recipient, granted);
+    }
+    f.client.finalize(recipient, recipient, &Mode::Open);
+    let mut released = 0;
+    for t in 0..f.client.get_config().tranches {
+        released += f
+            .client
+            .release(recipient, &proof(f, recipient, t as u8 + 1), &f.verifier);
+    }
+    released
+}
+
+#[test]
+fn an_open_award_pays_the_recipient_with_nothing_in_the_way() {
+    // The point of the mode: no escrow, no policy, no payee list. Whatever
+    // the recipient does with money already in their account is theirs to do.
+    let f = setup(2, 3);
+    let recipient = Address::generate(&f.env);
+
+    assert_eq!(open_to(&f, &recipient, &900), 900);
+    assert_eq!(f.token.balance(&recipient), 900);
+    assert_eq!(
+        f.client.allocation_of(&recipient),
+        0,
+        "no escrow to direct, because the money is already theirs"
+    );
+    assert_eq!(f.client.total_released(), 900);
+    assert_eq!(f.record.get(&recipient).total_received, 900);
+}
+
+#[test]
+fn an_open_release_does_not_ask_about_a_policy() {
+    // The contrast that makes the mode deliberate rather than a fallback: the
+    // same wallet, in the same programme, refused in Restricted mode and
+    // released without a question here.
+    let f = setup(2, 3);
+    let recipient = Address::generate(&f.env);
+    let wallet = Address::generate(&f.env);
+    let donor = funded_donor(&f, 100_000);
+    f.client.contribute(&donor, &100_000);
+    f.client.apply(&recipient, &900, &hash(&f.env, 1));
+    to_review(&f);
+    for i in 0..2u32 {
+        f.client
+            .review(&f.reviewers.get(i).unwrap(), &recipient, &900);
+    }
+
+    f.client.finalize(&recipient, &wallet, &Mode::Restricted);
+    assert_eq!(
+        f.client
+            .try_release(&recipient, &proof(&f, &recipient, 1), &f.verifier),
+        Err(Ok(Error::PolicyNotInstalled))
+    );
+
+    let g = setup(2, 3);
+    let g_recipient = Address::generate(&g.env);
+    g.client.contribute(&funded_donor(&g, 100_000), &100_000);
+    g.client.apply(&g_recipient, &900, &hash(&g.env, 1));
+    to_review(&g);
+    for i in 0..2u32 {
+        g.client
+            .review(&g.reviewers.get(i).unwrap(), &g_recipient, &900);
+    }
+    g.client.finalize(&g_recipient, &g_recipient, &Mode::Open);
+
+    assert_eq!(
+        g.client
+            .release(&g_recipient, &proof(&g, &g_recipient, 1), &g.verifier),
+        300
+    );
+    assert_eq!(g.token.balance(&g_recipient), 300);
+}
+
+#[test]
+fn an_open_award_cannot_name_a_payee() {
+    // The hole this closes: Open used to be a catch-all at payout, so an Open
+    // award could name any address at all and pay it unverified — Direct's
+    // destination with Direct's check skipped.
+    let f = setup(2, 3);
+    let recipient = Address::generate(&f.env);
+    let donor = funded_donor(&f, 100_000);
+    f.client.contribute(&donor, &100_000);
+    f.client.apply(&recipient, &900, &hash(&f.env, 1));
+    to_review(&f);
+    for i in 0..2u32 {
+        f.client
+            .review(&f.reviewers.get(i).unwrap(), &recipient, &900);
+    }
+
+    let stranger = Address::generate(&f.env);
+    assert_eq!(
+        f.client.try_finalize(&recipient, &stranger, &Mode::Open),
+        Err(Ok(Error::OpenPayeeNotRecipient))
+    );
+
+    // A verified payee is refused too: the check is that the destination is the
+    // recipient, not that the payee list happens to contain it.
+    f.client.allow_payee(&stranger);
+    assert_eq!(
+        f.client.try_finalize(&recipient, &stranger, &Mode::Open),
+        Err(Ok(Error::OpenPayeeNotRecipient))
+    );
+    assert_eq!(f.token.balance(&stranger), 0);
+
+    // The application is untouched and still finalisable as the Open award it
+    // is meant to be.
+    let award = f.client.finalize(&recipient, &recipient, &Mode::Open);
+    assert_eq!(award.payee, recipient);
+    assert_eq!(award.mode, Mode::Open);
+}
+
+#[test]
+fn an_open_award_releases_in_a_batch() {
+    let f = setup_with(2, 3, 2);
+    let recipient = Address::generate(&f.env);
+    let donor = funded_donor(&f, 100_000);
+    f.client.contribute(&donor, &100_000);
+    f.client.apply(&recipient, &900, &hash(&f.env, 1));
+    to_review(&f);
+    for i in 0..2u32 {
+        f.client
+            .review(&f.reviewers.get(i).unwrap(), &recipient, &900);
+    }
+    f.client.finalize(&recipient, &recipient, &Mode::Open);
+
+    let uids = vec![&f.env, proof(&f, &recipient, 1), proof(&f, &recipient, 2)];
+    let total = f.client.release_batch(&recipient, &uids, &f.verifier);
+
+    assert_eq!(total, 900);
+    assert_eq!(f.token.balance(&recipient), 900);
+    assert_eq!(f.record.get(&recipient).tranches, 2);
+}
+
+#[test]
+fn no_mode_can_pay_a_tranche_to_an_address_it_was_not_told_to() {
+    // All four modes, one question: can a tranche land somewhere the creator
+    // never agreed to? Direct and Open refuse at finalize; Allocated and
+    // Restricted only ever pay the recipient's own escrow or wallet.
+    let f = setup(2, 3);
+    let recipient = Address::generate(&f.env);
+    let casino = Address::generate(&f.env);
+    f.client.contribute(&funded_donor(&f, 100_000), &100_000);
+    f.client.apply(&recipient, &900, &hash(&f.env, 1));
+    to_review(&f);
+    for i in 0..2u32 {
+        f.client
+            .review(&f.reviewers.get(i).unwrap(), &recipient, &900);
+    }
+
+    assert_eq!(
+        f.client.try_finalize(&recipient, &casino, &Mode::Direct),
+        Err(Ok(Error::PayeeNotVerified))
+    );
+    assert_eq!(
+        f.client.try_finalize(&recipient, &casino, &Mode::Open),
+        Err(Ok(Error::OpenPayeeNotRecipient))
+    );
+    assert_eq!(f.token.balance(&casino), 0);
+}
+
 // ---- payee registry ----
 
 #[test]
@@ -2369,6 +2731,27 @@ fn batch_exceeding_max_is_rejected() {
         f.client.try_allow_payees(&payees),
         Err(Ok(Error::BatchTooLarge))
     );
+    assert_eq!(
+        f.client.try_deny_payees(&payees),
+        Err(Ok(Error::BatchTooLarge))
+    );
+}
+
+/// The payee batch bound is inclusive, in both directions: exactly
+/// `MAX_PAYEE_BATCH` addresses can be verified in one call and removed in one.
+#[test]
+fn a_batch_of_exactly_the_maximum_is_accepted() {
+    let f = setup(2, 3);
+    let mut payees = Vec::new(&f.env);
+    for _ in 0..MAX_PAYEE_BATCH {
+        payees.push_back(Address::generate(&f.env));
+    }
+
+    f.client.allow_payees(&payees);
+    assert!(payees.iter().all(|p| f.client.is_payee(&p)));
+
+    f.client.deny_payees(&payees);
+    assert!(payees.iter().all(|p| !f.client.is_payee(&p)));
 }
 
 // ---- property tests for the median award mechanism ----
@@ -4282,4 +4665,513 @@ fn keepalive_extends_application_and_award() {
     assert_eq!(a.granted, 900);
     let app = f.client.get_application(&applicant);
     assert_eq!(app.requested, 900);
+}
+
+// ---- events (issue #297) ----
+//
+// Every one of these is consumed off-chain, by something that cannot call the
+// contract: an indexer rebuilding a programme's timeline, a donor checking what
+// happened to their money, an underwriting service reading released totals. So
+// the assertions below are exact — topics, every field, and order — and they
+// state the amounts, not just the shape.
+//
+// `ProgrammeCreated` is the one exception and is deliberately absent: the test
+// environment does not record events published from a constructor, so there is
+// no honest way to assert it. See docs/testing-guide.md.
+
+#[test]
+fn contributing_publishes_the_donor_and_the_amount() {
+    let f = setup(2, 3);
+    let donor = funded_donor(&f, 100_000);
+
+    f.client.contribute(&donor, &100_000);
+
+    assert_events(
+        &f.env,
+        &f.client.address,
+        &[Contributed {
+            donor,
+            amount: 100_000,
+        }
+        .to_xdr(&f.env, &f.client.address)],
+    );
+}
+
+#[test]
+fn applying_publishes_the_application_as_submitted() {
+    let f = setup(2, 3);
+    let applicant = Address::generate(&f.env);
+    let metadata = hash(&f.env, 1);
+    f.env.ledger().set_timestamp(2_000);
+
+    f.client.apply(&applicant, &900, &metadata);
+
+    assert_events(
+        &f.env,
+        &f.client.address,
+        &[Applied {
+            applicant: applicant.clone(),
+            application: Application {
+                applicant,
+                requested: 900,
+                metadata_hash: metadata,
+                submitted_at: 2_000,
+                votes: Vec::new(&f.env),
+                finalized: false,
+                withdrawn: false,
+            },
+        }
+        .to_xdr(&f.env, &f.client.address)],
+    );
+}
+
+#[test]
+fn a_first_vote_publishes_a_review_and_a_revote_publishes_the_change() {
+    // Two different events, because a consumer reconstructing the vote
+    // sequence needs to know which reviews were corrections.
+    let f = setup(2, 3);
+    let applicant = Address::generate(&f.env);
+    f.client.apply(&applicant, &900, &hash(&f.env, 1));
+    to_review(&f);
+    let reviewer = f.reviewers.get(0).unwrap();
+
+    f.client.review(&reviewer, &applicant, &900);
+    assert_events(
+        &f.env,
+        &f.client.address,
+        &[Reviewed {
+            applicant: applicant.clone(),
+            reviewer: reviewer.clone(),
+            approved: 900,
+        }
+        .to_xdr(&f.env, &f.client.address)],
+    );
+
+    f.client.review(&reviewer, &applicant, &600);
+    assert_events(
+        &f.env,
+        &f.client.address,
+        &[VoteAmended {
+            applicant,
+            reviewer,
+            previous: 900,
+            approved: 600,
+        }
+        .to_xdr(&f.env, &f.client.address)],
+    );
+}
+
+#[test]
+fn finalizing_publishes_the_award_as_settled() {
+    let f = setup(2, 3);
+    let recipient = Address::generate(&f.env);
+    let school = Address::generate(&f.env);
+    f.client.contribute(&funded_donor(&f, 100_000), &100_000);
+    f.client.apply(&recipient, &900, &hash(&f.env, 1));
+    to_review(&f);
+    f.client
+        .review(&f.reviewers.get(0).unwrap(), &recipient, &900);
+    f.client
+        .review(&f.reviewers.get(1).unwrap(), &recipient, &600);
+    f.client.allow_payee(&school);
+
+    f.client.finalize(&recipient, &school, &Mode::Direct);
+
+    assert_events(
+        &f.env,
+        &f.client.address,
+        &[Awarded {
+            recipient: recipient.clone(),
+            award: Award {
+                recipient,
+                // Median of [600, 900].
+                granted: 600,
+                released: 0,
+                tranches: 3,
+                tranches_released: 0,
+                payee: school,
+                mode: Mode::Direct,
+            },
+        }
+        .to_xdr(&f.env, &f.client.address)],
+    );
+}
+
+#[test]
+fn releasing_publishes_the_tranche_and_the_award_it_left_behind() {
+    // `award` is the state *after* the release, which is what makes the event
+    // self-sufficient: an indexer never has to replay the contract to know how
+    // much of an award is left.
+    let f = setup(2, 3);
+    let recipient = Address::generate(&f.env);
+    let school = Address::generate(&f.env);
+    award_to(&f, &recipient, &school, &900);
+    let uid = proof(&f, &recipient, 1);
+
+    f.client.release(&recipient, &uid, &f.verifier);
+
+    assert_events(
+        &f.env,
+        &f.client.address,
+        &[Released {
+            recipient: recipient.clone(),
+            payee: school.clone(),
+            amount: 300,
+            attestation: uid,
+            award: Award {
+                recipient,
+                granted: 900,
+                released: 300,
+                tranches: 3,
+                tranches_released: 1,
+                payee: school,
+                mode: Mode::Direct,
+            },
+        }
+        .to_xdr(&f.env, &f.client.address)],
+    );
+}
+
+#[test]
+fn releasing_escrows_publishes_the_allocation_too() {
+    let f = setup(2, 3);
+    let recipient = Address::generate(&f.env);
+    allocated_to(&f, &recipient, &900);
+    let uid = proof(&f, &recipient, 2);
+
+    // `allocated_to` released the first tranche; this one shows the allocation
+    // moving again, in the same call as the release that moved it.
+    f.client.release(&recipient, &uid, &f.verifier);
+
+    assert_events(
+        &f.env,
+        &f.client.address,
+        &[
+            AllocationChanged {
+                recipient: recipient.clone(),
+                allocation: 600,
+            }
+            .to_xdr(&f.env, &f.client.address),
+            Released {
+                recipient: recipient.clone(),
+                payee: recipient.clone(),
+                amount: 300,
+                attestation: uid,
+                award: Award {
+                    recipient: recipient.clone(),
+                    granted: 900,
+                    released: 600,
+                    tranches: 3,
+                    tranches_released: 2,
+                    payee: recipient.clone(),
+                    mode: Mode::Allocated,
+                },
+            }
+            .to_xdr(&f.env, &f.client.address),
+        ],
+    );
+}
+
+#[test]
+fn directing_publishes_the_payment_and_what_is_left() {
+    let f = setup(2, 3);
+    let recipient = Address::generate(&f.env);
+    let school = Address::generate(&f.env);
+    allocated_to(&f, &recipient, &900);
+    f.client.allow_payee(&school);
+
+    f.client.spend(&recipient, &school, &200);
+
+    assert_events(
+        &f.env,
+        &f.client.address,
+        &[Directed {
+            recipient,
+            payee: school,
+            amount: 200,
+            remaining: 100,
+        }
+        .to_xdr(&f.env, &f.client.address)],
+    );
+}
+
+#[test]
+fn a_batch_release_publishes_one_event_per_tranche_and_a_summary() {
+    // The per-tranche events carry their own amounts — a consumer summing them
+    // must get the same total the call returned.
+    let f = setup_with(2, 3, 3);
+    let recipient = Address::generate(&f.env);
+    let school = Address::generate(&f.env);
+    award_to(&f, &recipient, &school, &900);
+    let uids = vec![
+        &f.env,
+        proof(&f, &recipient, 1),
+        proof(&f, &recipient, 2),
+        proof(&f, &recipient, 3),
+    ];
+
+    let total = f.client.release_batch(&recipient, &uids, &f.verifier);
+
+    assert_eq!(total, 900);
+    let tranche = |n: u32, released: i128, uid: BytesN<32>| {
+        Released {
+            recipient: recipient.clone(),
+            payee: school.clone(),
+            amount: 300,
+            attestation: uid,
+            award: Award {
+                recipient: recipient.clone(),
+                granted: 900,
+                released,
+                tranches: 3,
+                tranches_released: n,
+                payee: school.clone(),
+                mode: Mode::Direct,
+            },
+        }
+        .to_xdr(&f.env, &f.client.address)
+    };
+    assert_events(
+        &f.env,
+        &f.client.address,
+        &[
+            tranche(1, 300, uids.get(0).unwrap()),
+            tranche(2, 600, uids.get(1).unwrap()),
+            tranche(3, 900, uids.get(2).unwrap()),
+            ReleasedBatch {
+                recipient: recipient.clone(),
+                tranches: 3,
+                amount: 900,
+            }
+            .to_xdr(&f.env, &f.client.address),
+        ],
+    );
+}
+
+#[test]
+fn verifying_and_unverifying_payees_publishes_both_ways() {
+    let f = setup(2, 3);
+    let school = Address::generate(&f.env);
+
+    f.client.allow_payee(&school);
+    assert_events(
+        &f.env,
+        &f.client.address,
+        &[PayeeChanged {
+            payee: school.clone(),
+            verified: true,
+        }
+        .to_xdr(&f.env, &f.client.address)],
+    );
+
+    f.client.deny_payee(&school);
+    assert_events(
+        &f.env,
+        &f.client.address,
+        &[PayeeChanged {
+            payee: school,
+            verified: false,
+        }
+        .to_xdr(&f.env, &f.client.address)],
+    );
+}
+
+#[test]
+fn a_payee_batch_publishes_one_event_per_change() {
+    let f = setup(2, 3);
+    let a = Address::generate(&f.env);
+    let b = Address::generate(&f.env);
+    let already = Address::generate(&f.env);
+    f.client.allow_payee(&already);
+
+    f.client
+        .allow_payees(&vec![&f.env, a.clone(), b.clone(), already.clone()]);
+
+    assert_events(
+        &f.env,
+        &f.client.address,
+        &[
+            PayeeChanged {
+                payee: a,
+                verified: true,
+            }
+            .to_xdr(&f.env, &f.client.address),
+            PayeeChanged {
+                payee: b,
+                verified: true,
+            }
+            .to_xdr(&f.env, &f.client.address),
+        ],
+    );
+}
+
+#[test]
+fn rotating_verifiers_publishes_both_ways() {
+    let f = setup(2, 3);
+    let second = Address::generate(&f.env);
+
+    f.client.add_verifier(&second);
+    assert_events(
+        &f.env,
+        &f.client.address,
+        &[VerifierChanged {
+            verifier: second.clone(),
+            added: true,
+        }
+        .to_xdr(&f.env, &f.client.address)],
+    );
+
+    f.client.remove_verifier(&second);
+    assert_events(
+        &f.env,
+        &f.client.address,
+        &[VerifierChanged {
+            verifier: second,
+            added: false,
+        }
+        .to_xdr(&f.env, &f.client.address)],
+    );
+}
+
+#[test]
+fn withdrawing_publishes_the_applicant() {
+    let f = setup(2, 3);
+    let applicant = Address::generate(&f.env);
+    f.client.apply(&applicant, &900, &hash(&f.env, 1));
+
+    f.client.withdraw(&applicant);
+
+    assert_events(
+        &f.env,
+        &f.client.address,
+        &[ApplicationWithdrawn { applicant }.to_xdr(&f.env, &f.client.address)],
+    );
+}
+
+#[test]
+fn sweeping_the_fee_publishes_the_amount() {
+    let f = setup(2, 3);
+    f.client.contribute(&funded_donor(&f, 100_000), &100_000);
+    to_review(&f);
+
+    let swept = f.client.sweep_fee();
+
+    assert_eq!(swept, 10_000, "10% of 100_000");
+    assert_events(
+        &f.env,
+        &f.client.address,
+        &[FeeSwept { amount: 10_000 }.to_xdr(&f.env, &f.client.address)],
+    );
+}
+
+#[test]
+fn refunding_publishes_the_donor_and_their_share() {
+    let f = setup(2, 3);
+    let donor = funded_donor(&f, 100_000);
+    f.client.contribute(&donor, &100_000);
+    f.env.ledger().set_timestamp(RELEASE_DEADLINE + 1);
+
+    let amount = f.client.refund(&donor);
+
+    assert_eq!(amount, 90_000, "everything but the 10% fee");
+    assert_events(
+        &f.env,
+        &f.client.address,
+        &[Refunded {
+            donor,
+            amount: 90_000,
+        }
+        .to_xdr(&f.env, &f.client.address)],
+    );
+}
+
+#[test]
+fn sweeping_unclaimed_publishes_what_nobody_claimed() {
+    let f = setup(2, 3);
+    f.client.contribute(&funded_donor(&f, 100_000), &100_000);
+    f.env.ledger().set_timestamp(SWEEP_DEADLINE + 1);
+
+    let swept = f.client.sweep_unclaimed();
+
+    assert_eq!(swept, 100_000);
+    assert_events(
+        &f.env,
+        &f.client.address,
+        &[UnclaimedSwept { amount: 100_000 }.to_xdr(&f.env, &f.client.address)],
+    );
+}
+
+#[test]
+fn extending_the_deadline_publishes_both_old_and_new() {
+    // All four values, so a consumer can tell that an extension moved the sweep
+    // deadline with the release deadline rather than squeezing the donor grace
+    // period.
+    let f = setup(2, 3);
+    f.client.extend_release_deadline(&50_000);
+
+    assert_events(
+        &f.env,
+        &f.client.address,
+        &[DeadlineExtended {
+            old_release_deadline: RELEASE_DEADLINE,
+            new_release_deadline: 50_000,
+            old_sweep_deadline: SWEEP_DEADLINE,
+            new_sweep_deadline: 50_000,
+        }
+        .to_xdr(&f.env, &f.client.address)],
+    );
+}
+
+#[test]
+fn pausing_and_resuming_publish_who_did_it() {
+    let f = setup(2, 3);
+
+    f.client.pause();
+    assert_events(
+        &f.env,
+        &f.client.address,
+        &[Paused {
+            by: f.creator.clone(),
+        }
+        .to_xdr(&f.env, &f.client.address)],
+    );
+
+    f.client.unpause();
+    assert_events(
+        &f.env,
+        &f.client.address,
+        &[Unpaused {
+            by: f.creator.clone(),
+        }
+        .to_xdr(&f.env, &f.client.address)],
+    );
+}
+
+#[test]
+fn cancelling_publishes_when_it_took_effect() {
+    let f = setup(2, 3);
+    f.env.ledger().set_timestamp(1_234);
+
+    f.client.cancel();
+
+    assert_events(
+        &f.env,
+        &f.client.address,
+        &[ProgrammeCancelled { at: 1_234 }.to_xdr(&f.env, &f.client.address)],
+    );
+}
+
+#[test]
+fn keeping_an_entry_alive_publishes_the_subject() {
+    let f = setup(2, 3);
+    let recipient = Address::generate(&f.env);
+    allocated_to(&f, &recipient, &900);
+
+    f.client.keepalive(&recipient);
+
+    assert_events(
+        &f.env,
+        &f.client.address,
+        &[KeptAlive { subject: recipient }.to_xdr(&f.env, &f.client.address)],
+    );
 }
