@@ -164,11 +164,11 @@ export const ApplicationTimeline = () => {
                   detail: isWithdrawn
                     ? 'Application was withdrawn by the applicant.'
                     : app.finalized
-                      ? `Reviewed by ${app.votes.length} reviewer${app.votes.length === 1 ? '' : 's'}; settled at the median vote.`
+                      ? `Reviewed by ${app.votes.length} reviewer${app.votes.length === 1 ? '' : 's'}; settled at the middle reviewer vote.`
                       : notAwarded
                         ? `Only ${app.votes.length} of ${cfg.quorum} required reviewer votes came in before the review window closed.`
                         : quorumMet
-                          ? `Quorum reached (${app.votes.length}/${cfg.quorum}) — waiting on anyone to trigger finalization.`
+                          ? `Enough reviewer votes are in (${app.votes.length}/${cfg.quorum}) — waiting on anyone to trigger finalization.`
                           : `${app.votes.length} of ${cfg.quorum} required reviewer votes in.`,
                   deadline: isWithdrawn || app.finalized ? undefined : `Review closes ${formatDate(cfg.review_deadline)}`,
                 },
@@ -179,12 +179,12 @@ export const ApplicationTimeline = () => {
                   detail: isWithdrawn
                     ? 'Withdrawn applications will not receive an award.'
                     : notAwarded
-                      ? 'This application will not be awarded — quorum was not reached before reviewing closed.'
+                      ? 'This application will not be awarded — not enough reviewer votes came in before reviewing closed.'
                       : app.finalized && award.data
-                        ? `Granted ${formatXlm(award.data.granted)} of the ${formatXlm(app.requested)} requested, paid via ${award.data.mode.tag} mode.`
+                        ? `Granted ${formatXlm(award.data.granted)} of the ${formatXlm(app.requested)} requested, paid under ${award.data.mode.tag} mode, the rule for where released money may go.`
                         : app.finalized
                           ? 'Finalized — award details are loading.'
-                          : 'Waiting on quorum, then anyone to finalize.',
+                          : 'Waiting for enough reviewer votes, then anyone can finalize.',
                 },
                 {
                   key: 'releasing',
@@ -201,7 +201,7 @@ export const ApplicationTimeline = () => {
                     : !app.finalized
                       ? 'Starts once the application is finalized into an award.'
                       : award.data
-                        ? `${award.data.tranches_released} of ${award.data.tranches} tranches released — ${formatXlm(award.data.released)} of ${formatXlm(award.data.granted)} paid so far.`
+                        ? `${award.data.tranches_released} of ${award.data.tranches} payment instalments released — ${formatXlm(award.data.released)} of ${formatXlm(award.data.granted)} paid so far.`
                         : 'Award details are loading.',
                   deadline:
                     !isWithdrawn && !notAwarded && app.finalized

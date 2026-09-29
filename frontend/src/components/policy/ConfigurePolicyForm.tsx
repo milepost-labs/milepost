@@ -88,19 +88,19 @@ export function ConfigurePolicyForm({ initialWallet = '', onSuccess }: Configure
   return (
     <Card className="configure-policy-card">
       <div className="configure-policy-header">
-        <h2 className="configure-policy-title">Configure Spend Policy</h2>
+        <h2 className="configure-policy-title">Configure spend policy</h2>
         {existingPolicy ? (
-          <Badge tone="success">Policy Active</Badge>
+          <Badge tone="success">Policy active</Badge>
         ) : (
-          <Badge tone="accent">First Configuration</Badge>
+          <Badge tone="accent">First configuration</Badge>
         )}
       </div>
 
       {existingPolicy && (
         <div className="existing-policy-callout">
-          <h4>Existing Policy Found</h4>
+          <h4>Existing policy found</h4>
           <p>
-            <strong>Cap:</strong> {formatAmount(existingPolicy.cap, { asset: 'XLM' })} ({formatExact(existingPolicy.cap)} stroops)
+            <strong>Cap:</strong> {formatAmount(existingPolicy.cap, { asset: 'XLM' })} (exact value: {formatExact(existingPolicy.cap)} smallest units)
           </p>
           <p>
             <strong>Period:</strong> {Number(existingPolicy.period)} seconds ({Math.round(Number(existingPolicy.period) / 3600)} hours)
@@ -115,7 +115,7 @@ export function ConfigurePolicyForm({ initialWallet = '', onSuccess }: Configure
       {isFirstConfiguration && isValidWalletAddr && (
         <div className="dual-auth-warning" role="note">
           <p>
-            <strong>First-Time Dual Authorization Required:</strong>
+            <strong>First-time dual authorization required:</strong>
           </p>
           <p>
             The initial policy configuration requires signatures from <strong>both</strong> the steward and the target wallet address before any spending occurs. A single-signer request will fail.

@@ -25,18 +25,15 @@ function archivalExplainer() {
   return (
     <>
       <p className="typo-text text-muted keepalive__explain">
-        Soroban stores entries like attestations and standing records on-chain with an expiry. If nobody
-        extends (bumps) the entry, it becomes <strong>archived</strong> — it still exists but reads as missing until
-        restored. Protocol 23 auto-restores archived entries, but restoration costs extra and can fail at the worst
-        moment — for example when a proof is needed to release funds.
+        Milepost stores signed proofs and standing records with an expiry. If nobody
+        extends the entry, it becomes <strong>archived</strong> — it still exists but reads as missing until
+        restored. Restoration can cost extra and fail at the worst moment — for example when a proof is needed to release funds.
       </p>
       <p className="typo-text text-muted keepalive__explain">
-        Every keepalive can be done by <strong>anyone</strong> — you don&apos;t need to own the attestation or the
-        standing record. If you&apos;re willing to pay the fee, you can keep someone else&apos;s entry alive.
+        Every expiry extension can be done by <strong>anyone</strong> — you don&apos;t need to own the signed proof or the standing record. If you&apos;re willing to pay the fee, you can keep someone else&apos;s entry alive.
       </p>
       <p className="typo-text text-muted keepalive__explain" style={{ fontSize: 'var(--text-sm)' }}>
-        Entries are extended to ~90 days from the bump, and only re-extended when under ~60 days remaining — calling
-        keepalive in a loop cannot push expiry out without bound.
+        Entries are extended to about 90 days from the extension, and only re-extended when under about 60 days remaining — calling extension in a loop cannot push expiry out without bound.
       </p>
     </>
   );
@@ -63,10 +60,10 @@ export function AttestationKeepalive({ uid, createdAt }: { uid: Buffer; createdA
 
   return (
     <Card
-      title="Keep this attestation alive"
+      title="Keep this signed proof alive"
       aside={
         approaching ? (
-          <Badge tone="warning">May need keepalive</Badge>
+          <Badge tone="warning">May need extension</Badge>
         ) : (
           <Badge tone="neutral">Archival protection</Badge>
         )
@@ -77,8 +74,8 @@ export function AttestationKeepalive({ uid, createdAt }: { uid: Buffer; createdA
           <div className="keepalive__flag" role="status">
             <Clock size={16} aria-hidden="true" />
             <span>
-              This attestation was created {ageDays} days ago and is approaching the window where it should be
-              extended. Consider bumping it now.
+              This signed proof was created {ageDays} days ago and is approaching the window where it should be
+              extended. Consider extending it now.
             </span>
           </div>
         )}
@@ -90,11 +87,11 @@ export function AttestationKeepalive({ uid, createdAt }: { uid: Buffer; createdA
             loadingLabel={phaseLabel(tx.phase) || 'Extending…'}
             icon={<ShieldCheck size={16} />}
           >
-            Extend expiry (keepalive)
+            Extend expiry
           </Button>
           {tx.phase === 'success' && (
             <span className="keepalive__success" role="status">
-              Extended — this attestation&apos;s expiry is now ~90 days out.
+              Extended — this signed proof&apos;s expiry is now about 90 days out.
             </span>
           )}
         </div>
@@ -105,7 +102,7 @@ export function AttestationKeepalive({ uid, createdAt }: { uid: Buffer; createdA
           </div>
         )}
         <p className="typo-text text-muted" style={{ fontSize: 'var(--text-xs)', margin: 0 }}>
-          Permissionless: anyone may extend anyone&apos;s entry.
+          Anyone may extend anyone&apos;s entry.
         </p>
       </div>
     </Card>
@@ -136,7 +133,7 @@ export function StandingKeepalive({ subject, lastSeen }: { subject: string; last
       title="Keep this standing alive"
       aside={
         approaching ? (
-          <Badge tone="warning">May need keepalive</Badge>
+          <Badge tone="warning">May need extension</Badge>
         ) : (
           <Badge tone="neutral">Archival protection</Badge>
         )
@@ -153,16 +150,15 @@ export function StandingKeepalive({ subject, lastSeen }: { subject: string; last
           </div>
         )}
         <p className="typo-text text-muted keepalive__explain">
-          A recipient&apos;s standing is a long-lived, persistent record — but like any Soroban persistent entry it
-          expires if nobody bumps it. An archived standing reads as missing and can break underwriting until restored.
+          A recipient&apos;s standing is a long-lived, persistent record — but it expires if nobody extends it. An archived standing reads as missing until restored, which can block review of future applications.
           Restoration is automatic but costs extra and can fail at the worst moment.
         </p>
         <p className="typo-text text-muted keepalive__explain">
           Anyone may keep it alive — the recipient themselves, a programme, or any observer willing to pay the fee.
         </p>
         <p className="typo-text text-muted keepalive__explain" style={{ fontSize: 'var(--text-sm)' }}>
-          Entries are extended to ~90 days from the bump, and only re-extended when under ~60 days remaining —
-          calling keepalive in a loop cannot push expiry out without bound.
+          Entries are extended to about 90 days from the extension, and only re-extended when under about 60 days remaining —
+          calling extension in a loop cannot push expiry out without bound.
         </p>
         <div className="keepalive__actions">
           <Button
@@ -171,11 +167,11 @@ export function StandingKeepalive({ subject, lastSeen }: { subject: string; last
             loadingLabel={phaseLabel(tx.phase) || 'Extending…'}
             icon={<ShieldCheck size={16} />}
           >
-            Extend expiry (keepalive)
+            Extend expiry
           </Button>
           {tx.phase === 'success' && (
             <span className="keepalive__success" role="status">
-              Extended — this standing&apos;s expiry is now ~90 days out.
+              Extended — this standing&apos;s expiry is now about 90 days out.
             </span>
           )}
         </div>
@@ -186,7 +182,7 @@ export function StandingKeepalive({ subject, lastSeen }: { subject: string; last
           </div>
         )}
         <p className="typo-text text-muted" style={{ fontSize: 'var(--text-xs)', margin: 0 }}>
-          Permissionless: anyone may extend anyone&apos;s entry.
+          Anyone may extend anyone&apos;s entry.
         </p>
       </div>
     </Card>

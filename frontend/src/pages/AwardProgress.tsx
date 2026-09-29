@@ -9,7 +9,7 @@ import { formatAmount } from '../lib/amount';
 import { explain } from '../lib/errors';
 import './AwardProgress.css';
 
-/** Seeded testnet recipient (Ada) — one tranche in, more to come. */
+/** Seeded testnet recipient (Ada) — one payment instalment in, more to come. */
 const DEMO_RECIPIENT = 'GAH3D4RM45ETE4W7VDRCWZBPRPT63CJXAGXFYVBC2FGANBZTS4OTKXCA';
 const DEMO_VERIFIER = 'GB4CCGYQ27CQR45FGZYVVXKTRM4GTBSML7U7GHLLLDK7CFEZ4JKLBZFP';
 const DEMO_ATTESTATION = '7648441cc4224ab7f6956fbce0502020c9583bc62611626ba833e37e8d3e18cd';
@@ -43,9 +43,9 @@ const STATUS_LABEL: Record<TrancheStatus, string> = {
 const MODE_EXPLANATION: Record<string, string> = {
   Direct: 'Paid straight to a verified payee fixed at award time. You never hold the funds and never choose where they go.',
   Allocated:
-    'Held in escrow as it releases. You choose which verified payee is paid, when, and how much, from your allocation.',
+    'Held aside in programme escrow as it releases. You choose which approved payee is paid, when, and how much, from your allocation.',
   Restricted:
-    'Paid into your smart wallet, where a spend policy limits onward spending to verified destinations.',
+    'Paid into your smart wallet, where a spend policy, or wallet spending rule, limits onward spending to approved destinations.',
   Open: 'Paid to you directly, with no restriction on how you use it.',
 };
 
@@ -126,7 +126,7 @@ export const AwardProgress = () => {
 
   const handleRelease = async () => {
     if (!isValidUid) {
-      setAttestationError('Enter a 32-byte hex attestation UID (64 characters).');
+      setAttestationError('Enter the signed proof UID as 64 hex characters.');
       return;
     }
     if (!isValidAttester) {
@@ -163,7 +163,7 @@ export const AwardProgress = () => {
       <header className="dashboard-header">
         <h1>Award progress</h1>
         <p className="typo-text text-muted">
-          What has been paid, what remains, and release a tranche against a verified attestation.
+          What has been paid, what remains, and how to release the next payment instalment using a verifier-signed proof.
         </p>
       </header>
 
@@ -209,7 +209,7 @@ export const AwardProgress = () => {
           }));
 
           const columns: Column<TrancheRow>[] = [
-            { key: 'tranche', header: 'Tranche', render: (row) => `#${row.index}` },
+            { key: 'tranche', header: 'Instalment', render: (row) => `#${row.index}` },
             { key: 'amount', header: 'Amount', render: (row) => formatXlm(row.amount), numeric: true },
             {
               key: 'status',
@@ -235,7 +235,7 @@ export const AwardProgress = () => {
                 </Card>
               </section>
 
-              <Card title="Tranche progress">
+              <Card title="Payment instalment progress">
                 <div className="tranche-progress">
                   <div className="tranche-progress__bar" role="presentation">
                     {schedule.map((amount, i) => (
@@ -243,12 +243,12 @@ export const AwardProgress = () => {
                         key={i}
                         className={`tranche-progress__segment${i < data.tranches_released ? ' tranche-progress__segment--released' : ''}`}
                         style={{ flexGrow: Math.max(1, Number(amount / 10_000_000n)) }}
-                        title={`Tranche ${i + 1}: ${formatXlm(amount)}`}
+                        title={`Payment instalment ${i + 1}: ${formatXlm(amount)}`}
                       />
                     ))}
                   </div>
                   <p className="typo-text text-muted tranche-progress__label">
-                    {data.tranches_released} of {data.tranches} tranches released
+                    {data.tranches_released} of {data.tranches} payment instalments released
                   </p>
                 </div>
 
@@ -256,12 +256,12 @@ export const AwardProgress = () => {
                   <p className="typo-text award-complete">This award has been fully released.</p>
                 ) : (
                   <p className="typo-text award-next-step">
-                    Releasing is permissionless — anyone may submit a signed attestation from a trusted verifier to unlock the next tranche.
+                    Anyone may submit a signed proof from a trusted verifier to unlock the next payment instalment.
                   </p>
                 )}
 
                 <Table
-                  caption="Tranche schedule"
+                  caption="Payment instalment schedule"
                   columns={columns}
                   rows={rows}
                   keyOf={(row) => String(row.index)}
@@ -269,20 +269,20 @@ export const AwardProgress = () => {
               </Card>
 
               {!fullyReleased && (
-                <Card title="Release a tranche against an attestation">
+                <Card title="Release the next payment instalment">
                   <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
                     <p className="typo-text text-muted">
-                      Provide a valid 32-byte attestation UID signed by a trusted verifier for this recipient under this programme&rsquo;s schema.
+                      Provide the 64-character proof UID signed by a trusted verifier for this recipient under this programme&rsquo;s claim template.
                     </p>
 
                     <div style={{ display: 'flex', gap: '0.5rem' }}>
                       <Button variant="secondary" size="sm" onClick={fillDemoProof}>
-                        Use demo verifier &amp; attestation
+                        Use demo verifier &amp; proof
                       </Button>
                     </div>
 
                     <Field
-                      label="Attestation UID (Hex)"
+                      label="Proof UID"
                       placeholder="7648441cc4224ab7f6956fbce..."
                       value={attestationInput}
                       onChange={(e) => {
@@ -290,11 +290,11 @@ export const AwardProgress = () => {
                         setAttestationError(null);
                       }}
                       error={attestationError}
-                      hint="32-byte hex hash issued by the verifier."
+                      hint="64-character hex ID issued by the verifier."
                     />
 
                     <Field
-                      label="Verifier address (Attester)"
+                      label="Verifier address (signer)"
                       placeholder="G..."
                       value={attesterInput}
                       onChange={(e) => {
@@ -316,7 +316,7 @@ export const AwardProgress = () => {
                         )}
                         {isSpent && (
                           <span style={{ fontSize: '0.875rem', color: 'var(--color-muted)' }}>
-                            This proof has already released a tranche and cannot be used again.
+                            This proof has already released a payment instalment and cannot be used again.
                           </span>
                         )}
                       </div>
@@ -334,7 +334,7 @@ export const AwardProgress = () => {
                     {releaseTx.result !== null && (
                       <div style={{ padding: '0.75rem', backgroundColor: 'rgba(34, 197, 94, 0.1)', border: '1px solid var(--color-success)', borderRadius: 'var(--radius-md)' }}>
                         <p style={{ margin: 0, fontWeight: 600, color: 'var(--color-success)' }}>
-                          Tranche released! {formatAmount(releaseTx.result)} XLM moved.
+                          Payment instalment released! {formatAmount(releaseTx.result)} XLM moved.
                         </p>
                         <p style={{ margin: '0.25rem 0 0', fontSize: '0.875rem' }}>
                           {data.mode.tag === 'Direct' && `Paid directly to fixed payee ${shorten(data.payee)}.`}
@@ -351,7 +351,7 @@ export const AwardProgress = () => {
                       disabled={!isValidUid || !isValidAttester || isSpent || releaseTx.busy || fullyReleased}
                       fullWidth
                     >
-                      {releaseTx.busy ? phaseLabel(releaseTx.phase) : 'Release tranche'}
+                      {releaseTx.busy ? phaseLabel(releaseTx.phase) : 'Release payment instalment'}
                     </Button>
                   </div>
                 </Card>
@@ -361,7 +361,7 @@ export const AwardProgress = () => {
                 <div className="mode-panel">
                   <Badge tone="accent">{data.mode.tag}</Badge>
                   <p className="typo-text text-muted">
-                    {MODE_EXPLANATION[data.mode.tag] ?? 'Where funds go once released.'}
+                    {MODE_EXPLANATION[data.mode.tag] ?? 'Where released money goes.'}
                   </p>
                   {data.mode.tag !== 'Allocated' && (
                     <p className="typo-text mode-panel__payee">

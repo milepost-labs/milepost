@@ -59,14 +59,14 @@ export const AwardsTab: FC<AwardsTabProps> = ({
   }
 
   const advisoryNote = isSample
-    ? 'Awards are the median of reviewer votes. Listed from the public index, advisory.'
+    ? 'Awards use the middle reviewer vote after enough reviewers have voted. Listed from the public index, advisory.'
     : 'From the public index (awards.json), advisory. Each award is re-read on-chain before it is acted on.';
 
   let emptyMsg = 'The index has no awards for this programme yet.';
   if (phase === 'Open') {
     emptyMsg = 'No awards yet. Applications are still open.';
   } else if (phase === 'Review') {
-    emptyMsg = 'No awards are final yet. Each is set once it reaches quorum and someone finalizes it.';
+    emptyMsg = 'No awards are final yet. Each is set once enough reviewer votes are in and someone finalizes it.';
   } else if (phase === 'Settled') {
     emptyMsg = 'No awards were made.';
   }
@@ -105,7 +105,7 @@ export const AwardsTab: FC<AwardsTabProps> = ({
             const tranchesReleased = Number(award.tranchesReleased ?? 0);
             const hasTranches = tranches > 0;
 
-            const trancheLabel = `${tranchesReleased} of ${tranches} tranches released`;
+            const trancheLabel = `${tranchesReleased} of ${tranches} payment instalments released`;
 
             return (
               <div
@@ -121,11 +121,11 @@ export const AwardsTab: FC<AwardsTabProps> = ({
                   </span>
                   <span className="awards-tab__subtitle">
                     {hasTranches
-                      ? `${tranchesReleased} of ${tranches} tranches · ${formatAmount(
+                      ? `${tranchesReleased} of ${tranches} instalments · ${formatAmount(
                           released,
                           { asset },
                         )} released`
-                      : 'Tranche status read on-chain'}
+                      : 'Payment instalment status read on-chain'}
                   </span>
                 </div>
 

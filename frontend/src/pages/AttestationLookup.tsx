@@ -41,11 +41,11 @@ function CheckRow({
 }
 
 /**
- * Attestation lookup and verification.
+ * Signed proof lookup and verification.
  *
- * Paste a uid to see the full attestation record and its schema, then
- * optionally provide subject, schema uid and attester to run all four checks
- * that verify() combines — each reported independently so a refusal is
+ * Paste a UID to see the signed proof record and its claim template, then
+ * optionally provide recipient, claim template UID and verifier to run all four checks
+ * that the release check combines — each reported independently so a refusal is
  * actionable.
  */
 export const AttestationLookup = () => {
@@ -130,19 +130,17 @@ export const AttestationLookup = () => {
   return (
     <div className="attest-lookup">
       <header className="attest-lookup__header">
-        <h1>Attestation Lookup</h1>
+        <h1>Signed proof lookup</h1>
         <p className="typo-text text-muted">
-          Look up an attestation by UID, see its schema, and verify each of the
-          four checks separately — validity, expiry, subject, schema, and
-          attester. A refusal that tells you which check failed tells you what
+          Look up a signed verifier confirmation, called an attestation, by UID. You can inspect its claim template and check validity, expiry, recipient, template, and verifier separately. A refusal that tells you which check failed tells you what
           to fix.
         </p>
       </header>
 
-      <Card title="Look up by UID">
+      <Card title="Look up by proof UID">
         <div className="attest-search">
           <Field
-            label="Attestation UID"
+            label="Proof UID"
             placeholder="32-byte hex (64 characters)"
             value={uidInput}
             onChange={(e) => {
@@ -164,7 +162,7 @@ export const AttestationLookup = () => {
           {...attestation}
           onRetry={attestation.refetch}
           contract="attest"
-          empty={{ title: 'Attestation not found', description: 'No attestation exists for this UID.' }}
+          empty={{ title: 'Signed proof not found', description: 'No signed proof exists for this UID.' }}
         >
           {(a) => {
             const isRevoked =
@@ -178,7 +176,7 @@ export const AttestationLookup = () => {
             return (
               <>
                 <Card
-                  title="Attestation"
+                  title="Signed proof"
                   aside={
                     isRevoked ? (
                       <Badge tone="danger">Revoked</Badge>
@@ -197,19 +195,19 @@ export const AttestationLookup = () => {
                       </span>
                     </div>
                     <div className="attest-field">
-                      <span className="attest-field__label">Attester</span>
+                      <span className="attest-field__label">Verifier</span>
                       <span className="attest-field__value attest-field__value--mono">
                         {a.attester}
                       </span>
                     </div>
                     <div className="attest-field">
-                      <span className="attest-field__label">Subject</span>
+                      <span className="attest-field__label">Subject (recipient)</span>
                       <span className="attest-field__value attest-field__value--mono">
                         {a.subject}
                       </span>
                     </div>
                     <div className="attest-field">
-                      <span className="attest-field__label">Schema UID</span>
+                      <span className="attest-field__label">Claim template UID</span>
                       <span className="attest-field__value attest-field__value--mono">
                         {a.schema.toString('hex')}
                       </span>
@@ -249,10 +247,10 @@ export const AttestationLookup = () => {
                   {...schema}
                   onRetry={schema.refetch}
                   contract="attest"
-                  empty={{ title: 'Schema not found', description: 'The schema this attestation was made under could not be resolved.' }}
+                  empty={{ title: 'Claim template not found', description: 'The claim template for this signed proof could not be resolved.' }}
                 >
                   {(s) => (
-                    <Card title="Schema">
+                    <Card title="Claim template">
                       <div className="attest-detail-grid">
                         <div className="attest-field">
                           <span className="attest-field__label">UID</span>
@@ -275,7 +273,7 @@ export const AttestationLookup = () => {
                         <div className="attest-field">
                           <span className="attest-field__label">Restricted</span>
                           <span className="attest-field__value">
-                            {s.restricted ? 'Yes — only authority may attest' : 'No — open to any attester'}
+                            {s.restricted ? 'Yes — only the authority may sign' : 'No — open to any verifier'}
                           </span>
                         </div>
                       </div>
@@ -291,9 +289,7 @@ export const AttestationLookup = () => {
 
                 <Card title="Validity checks">
                   <p className="attest-verify-intro">
-                    These are the four checks <code>verify(uid, subject, schema,
-                    attester)</code> combines. Each is reported separately because
-                    "invalid" alone does not say what to fix.
+                    These checks decide whether a release can use this proof. Each is reported separately because "invalid" alone does not say what to fix.
                   </p>
 
                   <div className="attest-checks">
@@ -321,39 +317,37 @@ export const AttestationLookup = () => {
 
                   <div className="attest-verify-grid" style={{ marginTop: 'var(--space-5)' }}>
                     <p className="attest-verify-intro" style={{ marginBottom: 0 }}>
-                      To check the remaining two conditions — that this attestation
-                      is about the right subject, under the right schema, from the
-                      right attester — provide the expected values and run the check.
+                      To check that this proof is about the right recipient, under the right claim template, and from the right verifier, provide the expected values and run the check.
                     </p>
                     <Field
-                      label="Expected subject (Stellar address)"
+                      label="Expected recipient (Stellar address)"
                       placeholder="G..."
                       value={subjectInput}
                       onChange={(e) => {
                         setSubjectInput(e.target.value);
                         setVerifyTriggered(false);
                       }}
-                      hint="The recipient this attestation should be about."
+                      hint="The recipient this proof should be about."
                     />
                     <Field
-                      label="Expected schema UID"
+                      label="Expected claim template UID"
                       placeholder="32-byte hex (64 characters)"
                       value={schemaInput}
                       onChange={(e) => {
                         setSchemaInput(e.target.value);
                         setVerifyTriggered(false);
                       }}
-                      hint="The claim template this attestation must be under."
+                      hint="The claim template this proof must use."
                     />
                     <Field
-                      label="Expected attester (Stellar address)"
+                      label="Expected verifier (Stellar address)"
                       placeholder="G..."
                       value={attesterInput}
                       onChange={(e) => {
                         setAttesterInput(e.target.value);
                         setVerifyTriggered(false);
                       }}
-                      hint="The verifier who must have signed this attestation."
+                      hint="The verifier who must have signed this proof."
                     />
                     <div>
                       <Button
@@ -361,7 +355,7 @@ export const AttestationLookup = () => {
                         onClick={() => setVerifyTriggered(true)}
                         disabled={!canVerify}
                       >
-                        Check subject, schema &amp; attester
+                        Check recipient, template &amp; verifier
                       </Button>
                     </div>
                   </div>
@@ -370,28 +364,28 @@ export const AttestationLookup = () => {
                     <div className="attest-checks" style={{ marginTop: 'var(--space-4)' }}>
                       <CheckRow
                         pass={checkSubject === true}
-                        label="Correct subject"
+                        label="Correct recipient"
                         detail={
                           checkSubject
-                            ? `Subject matches: ${a.subject}`
+                            ? `Recipient matches: ${a.subject}`
                             : `Expected ${verifySubject}, got ${a.subject}`
                         }
                       />
                       <CheckRow
                         pass={checkSchema === true}
-                        label="Correct schema"
+                        label="Correct claim template"
                         detail={
                           checkSchema
-                            ? `Schema matches: ${a.schema.toString('hex')}`
+                            ? `Claim template matches: ${a.schema.toString('hex')}`
                             : `Expected ${verifySchema}, got ${a.schema.toString('hex')}`
                         }
                       />
                       <CheckRow
                         pass={checkAttester === true}
-                        label="Correct attester"
+                        label="Correct verifier"
                         detail={
                           checkAttester
-                            ? `Attester matches: ${a.attester}`
+                            ? `Verifier matches: ${a.attester}`
                             : `Expected ${verifyAttester}, got ${a.attester}`
                         }
                       />
@@ -414,8 +408,8 @@ export const AttestationLookup = () => {
                           checkAttester &&
                           checkLive &&
                           checkNotExpired
-                            ? 'verify() would return true — all four conditions pass.'
-                            : 'verify() would return false — one or more conditions fail.'}
+                            ? 'The release check would pass — all conditions match.'
+                            : 'The release check would fail — one or more conditions do not match.'}
                         </p>
                       </div>
                     </div>

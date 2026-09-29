@@ -17,7 +17,7 @@ export const VerifiersTab: FC<VerifiersTabProps> = ({
       aria-labelledby="tab-verifiers"
     >
       <p className="verifiers-tab__intro">
-        Verifiers whose attestations this programme accepts. Each attestation unlocks one tranche.
+        Verifiers are trusted signers who confirm a condition was met. Their signed confirmations, called attestations, can unlock one payment instalment, or tranche.
       </p>
 
       <div className="verifiers-tab__note-card" role="note">
@@ -27,9 +27,8 @@ export const VerifiersTab: FC<VerifiersTabProps> = ({
           Until it is, the verifiers below are examples, not this programme's real roster.
         </p>
         <p className="verifiers-tab__distinction">
-          <strong>Reviewers vs Verifiers:</strong> Verifiers differ from reviewers — verifiers unlock payments
-          by signing attestations when milestone conditions are met, while reviewers vote during the review phase
-          to determine the award amount.
+          <strong>Reviewers vs verifiers:</strong> Reviewers decide the award amount. Verifiers confirm release
+          conditions later by signing attestations when milestones are met.
         </p>
       </div>
 
@@ -40,7 +39,7 @@ export const VerifiersTab: FC<VerifiersTabProps> = ({
               <span className="verifiers-tab__label">{vr.label}</span>
               <span className="verifiers-tab__address numeric">{vr.address}</span>
             </div>
-            <span className="verifiers-tab__schema">Schema · {vr.schema}</span>
+            <span className="verifiers-tab__schema">Claim template · {vr.schema}</span>
           </div>
         ))}
       </div>

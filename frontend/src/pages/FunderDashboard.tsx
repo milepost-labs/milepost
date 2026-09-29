@@ -210,9 +210,9 @@ export const FunderDashboard = () => {
           }}
         >
           <div>
-            <h1>Funder Dashboard</h1>
+            <h1>Funder dashboard</h1>
             <p className="typo-text text-muted">
-              Manage your committed funds and track disbursement milestones.
+              Manage your committed funds and track which money has been released.
             </p>
           </div>
           {isCreator && !isCancelled && (
@@ -284,7 +284,7 @@ export const FunderDashboard = () => {
             <TrendingUp size={24} />
           </div>
           <div className="stat-content">
-            <span className="stat-label">Net Budget (After Fees)</span>
+            <span className="stat-label">Budget after fees</span>
             <span className="stat-value numeric">
               <AsyncView {...budget} onRetry={budget.refetch}>
                 {(value) => formatXlm(value)}
@@ -533,23 +533,22 @@ export const FunderDashboard = () => {
         className="programs-section animate-fade-up"
         style={{ animationDelay: "300ms" }}
       >
-        <h2>Active Programs</h2>
+        <h2>Active programmes</h2>
         <div className="programs-grid">
           <div className="program-card glass-panel">
             <div className="program-header">
-              <h3>CS Scholarship 2026 (Seeded)</h3>
+              <h3>Community resilience grants 2026 (seeded)</h3>
               <AsyncView {...phase} onRetry={phase.refetch}>
                 {(value) => <PhaseBadge phase={value.tag} />}
               </AsyncView>
             </div>
             <p className="typo-text text-muted">
-              Supporting 50 undergraduate computer science students across
-              Lagos.
+              Supporting milestone-based community projects across the region.
             </p>
 
             <div className="progress-container">
               <div className="progress-labels">
-                <span>Disbursement Progress</span>
+                <span>Release progress</span>
                 <span>40%</span>
               </div>
               <div className="progress-bar">
@@ -559,11 +558,11 @@ export const FunderDashboard = () => {
 
             <div className="program-actions">
               <Link to="/programme" className="btn-secondary">
-                View Details
+                View details
               </Link>
               {!isCancelled && (
                 <button type="button" className="btn-primary">
-                  Commit More Funds
+                  Commit more funds
                 </button>
               )}
             </div>

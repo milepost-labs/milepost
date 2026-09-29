@@ -15,7 +15,7 @@ const DEMO_RECIPIENT = 'GAH3D4RM45ETE4W7VDRCWZBPRPT63CJXAGXFYVBC2FGANBZTS4OTKXCA
 /**
  * There is no contract call that lists a programme's verified payees: the
  * registry stores them per address, so membership can be checked but not
- * enumerated. The seeded school is known ahead of time, so
+ * enumerated. The seeded payee is known ahead of time, so
  * it seeds the picker; anyone can add another candidate address to check.
  */
 const SEEDED_PAYEES: Record<string, string[]> = {
@@ -134,7 +134,7 @@ export const RecipientDashboard = () => {
 
   const openConfirm = () => {
     if (!selectedPayee) {
-      setAmountError('Pick a verified payee first.');
+      setAmountError('Pick an approved payee first.');
       return;
     }
     const parsed = tryParseAmount(amountInput);
@@ -190,7 +190,7 @@ export const RecipientDashboard = () => {
         {isDemo && (
           <Badge tone="neutral">Viewing Ada&rsquo;s testnet award — connect a wallet to use your own</Badge>
         )}
-        <p className="typo-text text-muted">Track your award and direct your allocation to a verified payee.</p>
+        <p className="typo-text text-muted">Track your award and direct your allocation to an approved payee, meaning a destination this programme allows.</p>
       </header>
 
       <Card title="Recipient views">
@@ -216,7 +216,7 @@ export const RecipientDashboard = () => {
         empty={{
           title: 'No application yet',
           description:
-            'Your granted amount, released tranches, and allocation will appear here once you apply and this programme finalizes an award for your application.',
+            'Your granted amount, released payment instalments, and allocation will appear here once you apply and this programme finalizes an award for your application.',
           action: (
             <Link to="/recipients/application-timeline" className="btn-secondary">
               Check your application
@@ -234,7 +234,7 @@ export const RecipientDashboard = () => {
                 <Stat label="Released" value={formatXlm(data.released)} numeric />
               </Card>
               <Card>
-                <Stat label="Tranches released" value={`${data.tranches_released} / ${data.tranches}`} />
+                <Stat label="Payment instalments released" value={`${data.tranches_released} / ${data.tranches}`} />
               </Card>
             </section>
 
@@ -262,13 +262,14 @@ export const RecipientDashboard = () => {
                 ) : (
                   <>
                     <div className="payee-picker">
-                      <h3>Verified payees</h3>
+                      <h3>Approved payees</h3>
+                      <p className="typo-text text-muted">Payees are approved payment destinations, such as a wallet, business, or service provider.</p>
                       {candidates.length === 0 && (
                         <p className="typo-text text-muted">
                           No payees checked yet on this device — add one below.
                         </p>
                       )}
-                      <div className="payee-list" role="radiogroup" aria-label="Verified payees">
+                      <div className="payee-list" role="radiogroup" aria-label="Approved payees">
                         {candidates.map((address) => {
                           const status = payeeStatus[address] ?? 'checking';
                           const verified = status === 'verified';
@@ -289,7 +290,7 @@ export const RecipientDashboard = () => {
                                 {shorten(address)}
                               </span>
                               <Badge tone={verified ? 'success' : status === 'checking' ? 'neutral' : 'danger'}>
-                                {status === 'checking' ? 'Checking…' : verified ? 'Verified' : 'Not verified'}
+                                {status === 'checking' ? 'Checking…' : verified ? 'Approved' : 'Not approved'}
                               </Badge>
                             </label>
                           );
@@ -306,7 +307,7 @@ export const RecipientDashboard = () => {
                             setCandidateError(null);
                           }}
                           error={candidateError}
-                          hint="Only the programme creator can verify a payee — this checks whether one already is."
+                          hint="Only the programme creator can approve a payee — this checks whether one already is approved."
                         />
                         <Button variant="secondary" size="sm" onClick={handleAddCandidate}>
                           Check payee
@@ -350,7 +351,7 @@ export const RecipientDashboard = () => {
       <Modal
         open={confirmOpen}
         onClose={closeConfirm}
-        title="Confirm allocation"
+        title="Confirm payment"
         busy={transaction.busy}
         footer={
           <>

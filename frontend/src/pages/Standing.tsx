@@ -87,7 +87,7 @@ function HistoryVerifier({ onChainRoot }: { onChainRoot: Buffer }) {
     }
 
     if (entries.length === 0) {
-      // Genesis: on-chain root must be all-zeroes.
+      // Genesis: recorded root must be all-zeroes.
       const genesisRoot = Buffer.alloc(32, 0).toString('hex');
       if (onChainRoot.toString('hex') === genesisRoot) {
         setResult({ kind: 'genesis' });
@@ -110,12 +110,12 @@ function HistoryVerifier({ onChainRoot }: { onChainRoot: Buffer }) {
         return;
       }
       if (typeof e.amount !== 'string' || !/^\d+$/.test(e.amount)) {
-        setParseError(`Entry ${i + 1}: "amount" must be a decimal string (stroops).`);
+        setParseError(`Entry ${i + 1}: "amount" must be a decimal string (stroops, the smallest Stellar unit).`);
         return;
       }
       const cleanAttest = (e.attestation ?? '').replace(/^0x/i, '');
       if (!HEX_32_BYTES.test(e.attestation ?? '')) {
-        setParseError(`Entry ${i + 1}: "attestation" must be a 32-byte hex string.`);
+        setParseError(`Entry ${i + 1}: "attestation" must be the 32-byte hex UID for a signed proof.`);
         return;
       }
       if (typeof e.timestamp !== 'string' || !/^\d+$/.test(e.timestamp)) {
@@ -144,7 +144,7 @@ function HistoryVerifier({ onChainRoot }: { onChainRoot: Buffer }) {
         root = nextRoot;
       }
 
-      // Compare the final computed root against the on-chain root.
+      // Compare the final computed root against the recorded root.
       const computed = root.toString('hex');
       const onChain = onChainRoot.toString('hex');
 
@@ -154,7 +154,7 @@ function HistoryVerifier({ onChainRoot }: { onChainRoot: Buffer }) {
         // To find the first diverging entry, bisect: fold prefixes of increasing
         // length and find the smallest prefix whose result differs from a full
         // honest history. Here we report the last entry as the divergence point
-        // since we only have the final on-chain root (no intermediate roots are
+        // since we only have the final recorded root (no intermediate roots are
         // stored on-chain). The mismatch report gives both hashes so the caller
         // can investigate.
         setResult({
@@ -178,8 +178,8 @@ function HistoryVerifier({ onChainRoot }: { onChainRoot: Buffer }) {
     <div className="history-verifier">
       <p className="typo-text text-muted" style={{ margin: '0 0 var(--space-3)' }}>
         Paste the claimed credit history as a JSON array. Each entry must contain{' '}
-        <code>programme</code>, <code>amount</code> (stroops as a string),{' '}
-        <code>attestation</code> (32-byte hex), and <code>timestamp</code> (unix seconds
+        <code>programme</code>, <code>amount</code> (stroops, the smallest Stellar unit, as a string),{' '}
+        <code>attestation</code> (the 32-byte signed proof UID), and <code>timestamp</code> (unix seconds
         as a string). The chain is folded through the contract&rsquo;s own{' '}
         <code>next_root</code> so the hash logic is identical to what was recorded.
       </p>
@@ -244,7 +244,7 @@ function HistoryVerifier({ onChainRoot }: { onChainRoot: Buffer }) {
                 <strong>History verified.</strong>
                 <p className="typo-text text-muted" style={{ margin: '0.25rem 0 0' }}>
                   Folding these credits through <code>next_root</code> reproduces the
-                  on-chain root exactly. The claimed history matches what was recorded.
+                  recorded root exactly. The claimed history matches what was recorded.
                 </p>
               </div>
             </div>
@@ -256,7 +256,7 @@ function HistoryVerifier({ onChainRoot }: { onChainRoot: Buffer }) {
               <div>
                 <strong>Genesis confirmed.</strong>
                 <p className="typo-text text-muted" style={{ margin: '0.25rem 0 0' }}>
-                  No credits in the claimed history and the on-chain root is all zeroes — this address has not received any tranches yet.
+                  No credits in the claimed history and the recorded root is all zeroes — this address has not received any payment instalments yet.
                 </p>
               </div>
             </div>
@@ -267,14 +267,14 @@ function HistoryVerifier({ onChainRoot }: { onChainRoot: Buffer }) {
               <XCircle size={18} aria-hidden="true" />
               <div>
                 <strong>
-                  Mismatch — the claimed history does not reproduce the on-chain root.
+                  Mismatch — the claimed history does not reproduce the recorded root.
                 </strong>
                 <p className="typo-text text-muted" style={{ margin: '0.25rem 0 0' }}>
                   After folding all {result.firstBadIndex + 1} entr
                   {result.firstBadIndex === 0 ? 'y' : 'ies'}, the computed root does not
-                  match what is stored on-chain. At least one entry has a wrong programme
-                  address, amount, attestation, or timestamp — or an entry is missing or
-                  out of order. Check the full list against on-chain events.
+                  match what is stored in the standing record. At least one entry has a wrong programme
+                  address, amount, signed proof UID, or timestamp — or an entry is missing or
+                  out of order. Check the full list against recorded release events.
                 </p>
                 <dl className="history-verifier__roots">
                   <div>
@@ -282,7 +282,7 @@ function HistoryVerifier({ onChainRoot }: { onChainRoot: Buffer }) {
                     <dd className="numeric">{result.computedRoot}</dd>
                   </div>
                   <div>
-                    <dt>On-chain root</dt>
+                    <dt>Recorded root</dt>
                     <dd className="numeric">{result.onChainRoot}</dd>
                   </div>
                 </dl>
@@ -373,7 +373,7 @@ export const Standing = () => {
         onRetry={standing.refetch}
         empty={{
           title: 'No track record yet',
-          description: 'Standing appears after a first tranche is released to this address, on any programme.',
+          description: 'Standing appears after a first payment instalment is released to this address, on any programme.',
         }}
       >
         {(data) => (
@@ -381,7 +381,7 @@ export const Standing = () => {
           <Card title="Track record" aside={<Badge tone="accent">Cross-programme</Badge>}>
             <div className="standing-grid">
               <Stat label="Programmes" value={data.programmes} />
-              <Stat label="Tranches released" value={data.tranches} />
+              <Stat label="Payment instalments released" value={data.tranches} />
               <Stat label="Total received" value={formatXlm(data.total_received)} numeric />
               <Stat label="First seen" value={formatDate(data.first_seen)} />
               <Stat label="Last seen" value={formatDate(data.last_seen)} />
@@ -391,8 +391,8 @@ export const Standing = () => {
               <h3>History root</h3>
               <p className="typo-text text-muted">
                 A hash chain over every credit this address has received, in order — genesis is all zeroes, and
-                each release folds in the programme, amount, attestation and timestamp. It is what lets anyone
-                verify a claimed off-chain history against what actually happened on-chain; the value itself
+                each release folds in the programme, amount, signed proof UID and timestamp. It is what lets anyone
+                verify a claimed off-chain history against what actually happened; the value itself
                 isn&rsquo;t meant to be read on its own.
               </p>
               <details>
@@ -402,8 +402,7 @@ export const Standing = () => {
             </div>
             <p className="standing-disclaimer typo-text text-muted">
               This is a record of history, not a score — Milepost does not compute creditworthiness from it.
-              It can&rsquo;t be transferred or bought, and it only reflects tranches this address has actually
-              received.
+              It can&rsquo;t be transferred or bought, and it only reflects payment instalments this address has actually received.
             </p>
           </Card>
 

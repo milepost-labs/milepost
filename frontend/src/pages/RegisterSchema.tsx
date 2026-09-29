@@ -52,14 +52,13 @@ export const RegisterSchema = () => {
   return (
     <div className="register-schema">
       <header className="register-schema__header">
-        <h1>Register attestation schema</h1>
+        <h1>Register claim template</h1>
         <p className="typo-text text-muted">
-          Every programme needs a schema before any verifier can attest under it. The schema defines what a claim means;
-          the UID it returns is what you configure the programme with.
+          Every programme needs a claim template before verifiers can sign confirmations. Milepost also calls this a schema; its UID is what you configure the programme with.
         </p>
       </header>
 
-      <Card title="New schema">
+      <Card title="New claim template">
         <div className="register-schema__form">
           <TextArea
             label="Definition"
@@ -71,7 +70,7 @@ export const RegisterSchema = () => {
             }}
             rows={4}
             error={definitionError ?? undefined}
-            hint="Human-readable description of what the claim means and how data_hash should be interpreted. The registry never parses it — be precise for humans who will verify later."
+            hint="Human-readable description of what the claim means and how the evidence hash should be interpreted. Be precise for people who will verify later."
           />
 
           <fieldset className="schema-flags">
@@ -90,8 +89,8 @@ export const RegisterSchema = () => {
                 <span className="schema-flag__label">Allow revocation</span>
                 <span className="schema-flag__desc">
                   {revocable
-                    ? 'Attestations under this schema can later be revoked by the original attester. Useful if a claim may need to be withdrawn when circumstances change. This choice is permanent — a revocable schema can never be made irrevocable later.'
-                    : 'Attestations under this schema can never be revoked — even you cannot withdraw a mistaken claim. Only choose this if the claim must be permanent by design. This cannot be changed later.'}
+                    ? 'Signed confirmations under this claim template can later be revoked by the original verifier. Useful if a claim may need to be withdrawn when circumstances change. This choice is permanent.'
+                    : 'Signed confirmations under this claim template can never be revoked — even you cannot withdraw a mistaken claim. Only choose this if the claim must be permanent by design.'}
                 </span>
               </span>
             </label>
@@ -106,8 +105,8 @@ export const RegisterSchema = () => {
                 <span className="schema-flag__label">Restrict to authority only</span>
                 <span className="schema-flag__desc">
                   {restricted
-                    ? 'Only you (the authority that registers the schema) may attest under it — no one else can sign claims even if they know the UID. This is an irreversible choice at registration.'
-                    : 'Any attester may attest under this schema. If you enable restriction, only you may attest and that restriction can never be removed afterwards.'}
+                    ? 'Only you, as the template authority, may sign confirmations under it. No one else can sign claims even if they know the UID.'
+                    : 'Any verifier may sign confirmations under this claim template. If you enable restriction, only you may sign and that restriction cannot be removed later.'}
                 </span>
               </span>
             </label>
@@ -115,7 +114,7 @@ export const RegisterSchema = () => {
 
           {!address && (
             <p className="ui-field__message ui-field__message--error" role="alert">
-              Connect a wallet — the connected address becomes the schema authority.
+              Connect a wallet — the connected address becomes the claim template authority.
             </p>
           )}
 
@@ -127,7 +126,7 @@ export const RegisterSchema = () => {
               disabled={!definition.trim() || !address || tx.busy}
               icon={<ShieldCheck size={16} />}
             >
-              Register schema
+              Register template
             </Button>
             {tx.result && (
               <Button variant="ghost" onClick={() => tx.reset()}>
@@ -143,10 +142,9 @@ export const RegisterSchema = () => {
               {isConflict && (
                 <div className="schema-conflict">
                   <p className="typo-text" style={{ margin: 0 }}>
-                    A schema with this definition and authority already exists — the registry derives the UID from
-                    those two fields, so registering the same pair twice is a conflict rather than a new entry. No new
+                    A claim template with this definition and authority already exists. The UID comes from those two fields, so registering the same pair twice points to the existing template instead of creating a new one. No new
                     UID was created. If you need the existing UID, look it up by the deterministic pairing (authority + definition)
-                    or check your recent transactions for the original <code>SchemaRegistered</code> event.
+                    or check your recent transactions for the original registration event.
                   </p>
                 </div>
               )}
@@ -162,14 +160,14 @@ export const RegisterSchema = () => {
             <div className="schema-success" role="status" aria-live="polite">
               <div className="schema-success__header">
                 <Check size={18} aria-hidden="true" />
-                <strong>Schema registered</strong>
+                <strong>Claim template registered</strong>
               </div>
               <p className="typo-text text-muted" style={{ margin: 0 }}>
                 Copy this UID — it is what a programme is configured with. You will need it when deploying the programme.
               </p>
               <div className="schema-success__uid">
                 <code className="numeric schema-success__value">{successUidHex}</code>
-                <CopyButton value={successUidHex} label="Copy schema UID" />
+                <CopyButton value={successUidHex} label="Copy claim template UID" />
               </div>
               <div className="schema-success__meta">
                 <span className="schema-success__meta-item">
@@ -184,8 +182,8 @@ export const RegisterSchema = () => {
       <Card title="How this is used">
         <ul className="typo-text text-muted" style={{ margin: 0, paddingLeft: '1.2rem', display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
           <li>The UID is deterministic from authority + definition — the same inputs always produce the same UID.</li>
-          <li>A restricted schema guarantees only the authority can attest; an unrestricted schema lets any verifier attest.</li>
-          <li>A revocable schema lets the attester withdraw a claim later; an irrevocable schema makes every attestation permanent.</li>
+          <li>A restricted claim template allows only its authority to sign; an unrestricted template lets any verifier sign.</li>
+          <li>A revocable claim template lets the verifier withdraw a claim later; an irrevocable template makes every signed confirmation permanent.</li>
         </ul>
       </Card>
     </div>

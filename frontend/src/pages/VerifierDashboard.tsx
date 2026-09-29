@@ -195,7 +195,7 @@ function AttestationModal({
   const handleAttest = async () => {
     if (!recipient || !verifier) return;
     if (!HEX_32_BYTES.test(schemaInput.trim())) {
-      setFormError('Enter the schema UID as a 32-byte hex string (64 characters).');
+      setFormError('Enter the claim template UID as a 64-character hex string.');
       return;
     }
     if (!HEX_32_BYTES.test(hashInput.trim())) {
@@ -205,7 +205,7 @@ function AttestationModal({
     if (!noExpiry && expiry !== undefined) {
       const nowSeconds = BigInt(Math.floor(Date.now() / 1000));
       if (expiry <= nowSeconds) {
-        setFormError('The expiry must be in the future — a past expiry is rejected on-chain.');
+        setFormError('The expiry must be in the future.');
         return;
       }
     }
@@ -262,7 +262,7 @@ function AttestationModal({
     <Modal
       open={open}
       onClose={handleClose}
-      title={recipient ? `Sign attestation for ${shorten(recipient)}` : 'Sign attestation'}
+      title={recipient ? `Sign confirmation for ${shorten(recipient)}` : 'Sign confirmation'}
       busy={closeDisabled}
       footer={
         <>
@@ -276,7 +276,7 @@ function AttestationModal({
               disabled={!validSchema || !validHash || (noExpiry ? false : expiry === undefined) || attestTx.busy}
               loadingLabel={phaseLabel(attestTx.phase) || 'Signing…'}
             >
-              Sign attestation
+              Sign confirmation
             </Button>
           ) : (
             <Button
@@ -285,7 +285,7 @@ function AttestationModal({
               disabled={releaseTx.busy}
               loadingLabel={phaseLabel(releaseTx.phase) || 'Releasing…'}
             >
-              Release the tranche now
+              Release the payment now
             </Button>
           )}
         </>
@@ -297,22 +297,22 @@ function AttestationModal({
             <div className="attest-modal__notice" role="note">
               <ShieldCheck size={18} />
               <p className="typo-text">
-                This signs an attestation about <strong className="numeric">{recipient ? shorten(recipient) : ''}</strong>,
-                unlocking tranche {nextTranche} of {trancheCount} — <strong>it releases funds</strong> once a release is
+                This signs a verifier confirmation, called an attestation, about <strong className="numeric">{recipient ? shorten(recipient) : ''}</strong>,
+                unlocking payment instalment {nextTranche} of {trancheCount} — <strong>it releases funds</strong> once a release is
                 submitted.
               </p>
             </div>
 
             <Field
-              label="Schema UID"
+              label="Claim template UID"
               placeholder="32-byte hex (64 characters)"
               value={schemaInput}
               onChange={(event) => {
                 setSchemaInput(event.target.value);
                 setFormError(null);
               }}
-              error={schemaInput && !validSchema ? 'Enter a 32-byte hex schema UID.' : undefined}
-              hint="The claim template this attestation is made under."
+              error={schemaInput && !validSchema ? 'Enter a 64-character claim template UID.' : undefined}
+              hint="The template that defines what this signed confirmation means."
             />
 
             <Field
@@ -324,7 +324,7 @@ function AttestationModal({
                 setFormError(null);
               }}
               error={hashInput && !validHash ? 'Enter a 32-byte hex hash.' : undefined}
-              hint="Hash of the evidence attesting to this recipient’s milestone. The contract records the hash, not the evidence itself."
+              hint="Hash of the evidence for this recipient’s milestone. Milepost records the hash, not the evidence itself."
             />
 
             <div className="attest-modal__expiry">
@@ -344,7 +344,7 @@ function AttestationModal({
                     setExpiry(value === null ? undefined : BigInt(value));
                     setFormError(null);
                   }}
-                  hint="After this time the attestation no longer counts as valid. A past expiry is rejected."
+                  hint="After this time the signed confirmation no longer counts as valid."
                 />
               )}
             </div>
@@ -364,20 +364,20 @@ function AttestationModal({
         ) : (
           <>
             <Success
-              title="Attestation signed"
+              title="Confirmation signed"
               description={
                 <>
-                  <p className="typo-text">Attestation UID:</p>
+                  <p className="typo-text">Proof UID:</p>
                   <p className="numeric attest-modal__uid">{attestedUid.toString('hex')}</p>
                 </>
               }
             />
             <p className="typo-text text-muted">
-              Release is permissionless — anyone may submit it. Trigger it now so the recipient doesn’t keep waiting, or close and leave it for later.
+              Anyone may submit this signed confirmation. Trigger it now so the recipient doesn’t keep waiting, or close and leave it for later.
             </p>
             {releaseTx.result !== null && (
               <p role="status" className="attest-modal__released">
-                Tranche released — {formatXlm(releaseTx.result)} moved.
+                Payment instalment released — {formatXlm(releaseTx.result)} moved.
               </p>
             )}
             {releaseError && (
@@ -455,7 +455,7 @@ function RevokeModal({
     <Modal
       open={open}
       onClose={handleClose}
-      title="Revoke attestation"
+      title="Revoke signed confirmation"
       busy={revokeTx.busy}
       footer={
         <>
@@ -475,13 +475,13 @@ function RevokeModal({
     >
       <div className="revoke-modal">
         <p className="typo-text">
-          Revoke the attestation about <strong className="numeric">{record ? shorten(record.subject) : ''}</strong>
+          Revoke the signed confirmation about <strong className="numeric">{record ? shorten(record.subject) : ''}</strong>
           <span className="numeric revoke-modal__uid">{record ? record.uid : ''}</span>
         </p>
         <div className="revoke-modal__notice" role="note">
           <ShieldCheck size={18} />
           <p>
-            This marks the attestation revoked so it can no longer be used to release a tranche.{" "}
+            This marks the signed confirmation revoked so it can no longer release a payment instalment.{" "}
             <strong>Funds that already released are not recovered</strong> — revocation does not claw anything back.
           </p>
         </div>
@@ -546,15 +546,15 @@ function MyAttestations({
   if (records.length === 0) {
     return (
       <Empty
-        title="No attestations yet"
-        description="Attestations you sign here appear here so you can revoke one if a milestone was attested in error or circumstances change."
+        title="No signed confirmations yet"
+        description="Signed confirmations you create here appear here so you can revoke one if the milestone was confirmed in error or circumstances change."
       />
     );
   }
 
   const columns: Column<AttestRecord>[] = [
     { key: 'subject', header: 'Recipient', render: (row) => <span className="numeric" title={row.subject}>{shorten(row.subject)}</span> },
-    { key: 'uid', header: 'Attestation', render: (row) => <span className="numeric" title={row.uid}>{truncateAddress(row.uid, 6, 6)}</span> },
+    { key: 'uid', header: 'Proof', render: (row) => <span className="numeric" title={row.uid}>{truncateAddress(row.uid, 6, 6)}</span> },
     { key: 'status', header: 'Status', render: (row) => <AttestationBadge state={status[row.uid]} /> },
     {
       key: 'action',
@@ -575,7 +575,7 @@ function MyAttestations({
   return (
     <>
       <Table
-        caption={`Attestations signed by ${attester}`}
+        caption={`Signed confirmations by ${attester}`}
         columns={columns}
         rows={records}
         keyOf={(row) => row.uid}
@@ -696,7 +696,7 @@ function ProgrammeQueue({
     return (
       <Empty
         title="You are not a verifier on this programme"
-        description="Only accounts the programme trusts as verifiers can sign the attestations that release tranches. Verifier onboarding is handled off-chain by the programme."
+        description="Only accounts this programme trusts as verifiers can sign confirmations that release payment instalments. The programme handles verifier onboarding outside this app."
       />
     );
   }
@@ -709,7 +709,7 @@ function ProgrammeQueue({
     return (
       <Empty
         title="The awards list is unavailable"
-        description="The published index could not be reached, so nobody can be listed here. Signing an attestation still works, and the list returns when the index does."
+        description="The published index could not be reached, so nobody can be listed here. Signing a confirmation still works, and the list returns when the index does."
         action={
           <Button variant="secondary" size="sm" onClick={indexed.refetch}>
             Try again
@@ -734,14 +734,14 @@ function ProgrammeQueue({
     return (
       <Empty
         title="Nothing waiting on you"
-        description="Every known award has had all its tranches released. New awards or recipients will appear here once there is a milestone to attest."
+        description="Every known award has had all its payment instalments released. New awards or recipients will appear here once there is a milestone to confirm."
       />
     );
   }
 
   const columns: Column<Milestone>[] = [
     { key: 'recipient', header: 'Recipient', render: (row) => <span className="numeric" title={row.recipient}>{shorten(row.recipient)}</span> },
-    { key: 'progress', header: 'Tranches', render: (row) => `${row.tranchesReleased} / ${row.tranches}` },
+    { key: 'progress', header: 'Payment instalments', render: (row) => `${row.tranchesReleased} / ${row.tranches}` },
     { key: 'released', header: 'Released', render: (row) => formatXlm(row.released), numeric: true },
     { key: 'remaining', header: 'Remaining', render: (row) => formatXlm(row.granted - row.released), numeric: true },
     {
@@ -749,7 +749,7 @@ function ProgrammeQueue({
       header: 'Waiting on',
       render: (row) => (
         <Badge tone={row.tranchesReleased === 0 ? 'warning' : 'accent'}>
-          {row.tranchesReleased === 0 ? 'First tranche' : `Tranche ${row.tranchesReleased + 1}`}
+          {row.tranchesReleased === 0 ? 'First payment' : `Payment ${row.tranchesReleased + 1}`}
         </Badge>
       ),
     },
@@ -758,7 +758,7 @@ function ProgrammeQueue({
       header: '',
       render: (row) => (
         <Button variant="secondary" size="sm" onClick={() => setSelected(row)} disabled={!verifier}>
-          Sign attestation
+          Sign confirmation
         </Button>
       ),
     },
@@ -767,7 +767,7 @@ function ProgrammeQueue({
   return (
     <>
       <Table
-        caption={`Recipients awaiting attestation on ${programmeId}`}
+        caption={`Recipients awaiting verifier confirmation on ${programmeId}`}
         columns={columns}
         rows={milestones}
         keyOf={(row) => row.recipient}
@@ -893,19 +893,18 @@ export const VerifierDashboard = () => {
 
       <header className="dashboard-header animate-fade-up">
         <h1>Verifier Dashboard</h1>
-        <p className="typo-text text-muted">See who is waiting on your attestation to unlock their next tranche.</p>
+        <p className="typo-text text-muted">See who is waiting on your signed confirmation, called an attestation, to unlock their next payment instalment.</p>
       </header>
 
       <section className="attestation-section animate-fade-up" style={{ animationDelay: '100ms' }}>
         <div className="attestation-section__header">
-          <h2>Recipients awaiting attestation</h2>
+          <h2>Recipients awaiting confirmation</h2>
           <Badge tone={address ? 'neutral' : 'warning'}>{address ? truncateAddress(address) : 'No wallet connected'}</Badge>
         </div>
         <div className="attestation-section__intro">
           <ShieldCheck size={18} />
           <p className="typo-text text-muted">
-            No tranche is released until a trusted verifier signs it. These recipients&rsquo; next milestone is sitting
-            on you.
+            No payment instalment is released until a trusted verifier signs a confirmation. These recipients&rsquo; next milestone is waiting on you.
           </p>
         </div>
         <ProgrammeQueue client={programmeAt(DEMO_PROGRAMME_ID)} programmeId={DEMO_PROGRAMME_ID} verifier={address ?? null} attest={attest} onAttended={handleAttended} />
@@ -913,14 +912,13 @@ export const VerifierDashboard = () => {
         {address && (
           <div className="attestation-section__panel">
             <div className="attestation-section__header">
-              <h2>Your attestations</h2>
+              <h2>Your signed confirmations</h2>
               <Badge tone="neutral">{truncateAddress(address)}</Badge>
             </div>
             <div className="attestation-section__intro">
               <ShieldCheck size={18} />
               <p className="typo-text text-muted">
-                Revoke one of your own attestations if it was made in error — revocation marks it invalid for future
-                tranches without undoing any that already released.
+                Revoke one of your signed confirmations if it was made in error — revocation makes it invalid for future payments without undoing any money already released.
               </p>
             </div>
             <MyAttestations
@@ -936,8 +934,8 @@ export const VerifierDashboard = () => {
         <div className="stat-card glass-panel">
           <div className="stat-icon"><Clock size={24} /></div>
           <div className="stat-content">
-            <span className="stat-label">Attestations needed</span>
-            <span className="stat-value">1 per awaiting tranche</span>
+            <span className="stat-label">Confirmations needed</span>
+            <span className="stat-value">1 per awaiting payment</span>
           </div>
         </div>
       </section>
@@ -991,11 +989,11 @@ export const VerifierDashboard = () => {
                         <div className="vote-spread" aria-label="Sorted reviewer approvals">
                           {currentApplication.votes.map((vote, index) => (
                             <span key={`${vote}-${index}`} className={`badge${index === medianIndex ? ' vote-median' : ''}`}>
-                              {formatAmount(vote)} XLM{index === medianIndex ? ' · median' : ''}
+                              {formatAmount(vote)} XLM{index === medianIndex ? ' · middle vote' : ''}
                             </span>
                           ))}
                         </div>
-                        {median !== null && <p className="median-result">Settling award: <strong>{formatAmount(median)} XLM</strong></p>}
+                        {median !== null && <p className="median-result">Award if finalized now: <strong>{formatAmount(median)} XLM</strong></p>}
                         {!address && <p className="text-warning">Connect a wallet to review.</p>}
                         {address && reviewer.data === false && <p className="text-warning">This wallet is not a registered reviewer.</p>}
                         {canReview && (
@@ -1019,7 +1017,7 @@ export const VerifierDashboard = () => {
                             />
                             {pendingValue !== null && (
                               <p className="typo-text text-muted" role="status">
-                                Median {isAmending ? 'if amended' : 'if submitted'}:{' '}
+                                Middle reviewer vote {isAmending ? 'if amended' : 'if submitted'}:{' '}
                                 <strong>{median !== null ? `${formatAmount(median)} XLM` : '—'}</strong>
                                 {' → '}
                                 <strong>{projectedMedian !== null ? `${formatAmount(projectedMedian)} XLM` : '—'}</strong>

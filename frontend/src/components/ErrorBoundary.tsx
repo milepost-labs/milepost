@@ -88,7 +88,7 @@ export class ErrorBoundary extends React.Component<Props, State> {
             <Link to="/funders" className="ui-button ui-button--ghost ui-button--sm">Funders</Link>
             <Link to="/recipients" className="ui-button ui-button--ghost ui-button--sm">Recipients</Link>
             <Link to="/verifiers" className="ui-button ui-button--ghost ui-button--sm">Verifiers</Link>
-            <Link to="/attestations" className="ui-button ui-button--ghost ui-button--sm">Attestations</Link>
+            <Link to="/attestations" className="ui-button ui-button--ghost ui-button--sm">Signed proofs</Link>
             <Link to="/policy" className="ui-button ui-button--ghost ui-button--sm">Policy</Link>
             <Link to="/admin" className="ui-button ui-button--ghost ui-button--sm">Admin</Link>
           </nav>

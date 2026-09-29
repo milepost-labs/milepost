@@ -23,8 +23,8 @@ export const APP_ROUTES: AppRoute[] = [
   { path: '/policy', label: 'Spend policy' },
   { path: '/admin', label: 'Admin' },
   { path: '/admin/standing', label: 'Admin standing lookup' },
-  { path: '/attestations', label: 'Attestation lookup' },
-  { path: '/schemas/register', label: 'Register schema' },
+  { path: '/attestations', label: 'Signed proof lookup' },
+  { path: '/schemas/register', label: 'Register claim template' },
 ];
 
 /**

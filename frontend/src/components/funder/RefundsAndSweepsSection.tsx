@@ -77,7 +77,7 @@ export function RefundsAndSweepsSection() {
                                     {isPastRelease ? (
                                       <Badge tone="success">Refund window open</Badge>
                                     ) : (
-                                      <span style={{ color: 'var(--color-muted)' }}>Available after {deadlineDate}</span>
+                                      <span style={{ color: 'var(--color-muted)' }}>Available only after the release window closes on {deadlineDate}.</span>
                                     )}
                                   </div>
                                   
@@ -87,7 +87,7 @@ export function RefundsAndSweepsSection() {
                                       disabled={!isPastRelease || refundTx.busy || estimatedRefund === 0n}
                                       onClick={() => refundTx.send(() => programme.refund({ donor: donorAddress }))}
                                     >
-                                      {isPastRelease ? "Claim Refund" : `Claimable on ${deadlineDate}`}
+                                      Claim refund
                                     </Button>
                                     {refundTx.busy && <span style={{ fontSize: '0.75rem', color: 'var(--color-muted)' }}>{phaseLabel(refundTx.phase)}</span>}
                                     {refundError && (
@@ -115,7 +115,7 @@ export function RefundsAndSweepsSection() {
         <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem', padding: '1.5rem' }}>
           <h3 style={{ fontSize: '1.125rem', fontWeight: 600, margin: 0 }}>Programme Sweeps</h3>
           <p style={{ fontSize: '0.875rem', color: 'var(--color-muted)', margin: 0 }}>
-            Sweeps return unclaimed funds to donors or transfer fees to the treasury. These actions are permissionless.
+            Sweeps return unclaimed funds to donors or transfer fees to the treasury. Anyone may run these close-out actions.
           </p>
 
           <AsyncView {...configReq} onRetry={configReq.refetch}>
@@ -150,8 +150,9 @@ export function RefundsAndSweepsSection() {
                       disabled={!isPastSweep || sweepUnclaimedTx.busy}
                       onClick={() => sweepUnclaimedTx.send(() => programme.sweep_unclaimed())}
                     >
-                      {isPastSweep ? "Sweep Unclaimed" : `Available on ${sweepDate}`}
+                      Sweep unclaimed
                     </Button>
+                    {!isPastSweep && <span style={{ fontSize: '0.75rem', color: 'var(--color-muted)' }}>Available only after the sweep window opens on {sweepDate}.</span>}
                     {sweepUnclaimedTx.busy && <span style={{ fontSize: '0.75rem', color: 'var(--color-muted)' }}>{phaseLabel(sweepUnclaimedTx.phase)}</span>}
                     {sweepUnclaimedTx.error && (
                       <span style={{ fontSize: '0.875rem', color: 'var(--color-error)' }}>{explain(sweepUnclaimedTx.error, 'program').message}</span>

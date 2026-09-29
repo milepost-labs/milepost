@@ -15,8 +15,8 @@ export const NotFound = () => {
         <Link to="/funders" className="not-found__link">Funders</Link>
         <Link to="/recipients" className="not-found__link">Recipients</Link>
         <Link to="/verifiers" className="not-found__link">Verifiers</Link>
-        <Link to="/attestations" className="not-found__link">Attestations</Link>
-        <Link to="/schemas/register" className="not-found__link">Register schema</Link>
+        <Link to="/attestations" className="not-found__link">Signed proofs</Link>
+        <Link to="/schemas/register" className="not-found__link">Register claim template</Link>
         <Link to="/policy" className="not-found__link">Policy</Link>
         <Link to="/admin" className="not-found__link">Admin</Link>
       </nav>

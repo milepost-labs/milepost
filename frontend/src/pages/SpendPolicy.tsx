@@ -43,8 +43,7 @@ export const SpendPolicy = () => {
       <header className="dashboard-header">
         <h1>Spend policy</h1>
         <p className="typo-text text-muted">
-          A policy signer limits what a funded wallet may authorise — transfers only, to verified
-          payees, within a cap. It is what makes a <code>Restricted</code> tranche restricted.
+          A spend policy is a wallet rule that limits transfers to approved payees and keeps them within a cap. It is what makes a <code>Restricted</code> payment instalment restricted.
         </p>
       </header>
 
