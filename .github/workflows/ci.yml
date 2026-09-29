@@ -165,6 +165,14 @@ jobs:
       - name: Check no development-only pages reached the build
         run: ./frontend/scripts/check-no-dev-pages.sh
 
+      # Page CSS may use the existing baseline, but new colour literals and
+      # off-scale spacing must go through the token system.
+      - name: Check new page CSS uses design tokens
+        run: node frontend/scripts/check-design-system.mjs --diff-base "${GITHUB_BASE_SHA:-origin/main}"
+
+      - name: Test the design-system guard
+        run: npm run test:design-system --prefix frontend
+
       # Not cosmetic. The React Compiler rules here catch render-purity and
       # cascading-setState bugs that type-check cleanly and misbehave at runtime.
       - name: Lint the app

@@ -13,10 +13,23 @@ npm test        # vitest run
 npm run lint    # eslint, including React Compiler rules
 npm run build   # tsc -b && vite build
 npm run test:coverage   # the suite with coverage, as CI runs it
+npm run test:design-system # tests the page-CSS token guard
 ```
 
 CI fails if coverage falls below the floors in `vite.config.ts`; see
 [Test coverage](../CONTRIBUTING.md#test-coverage) in CONTRIBUTING.md.
+
+## The design-system guard
+
+Page CSS is checked in CI for newly added hard-coded hex colours and spacing
+lengths that are not on the 4px scale. The check is diff-aware so existing
+page CSS can be migrated deliberately without making this issue a restyling
+task. Use `var(--token)` for normal values.
+
+For a genuine one-off exception, put `/* design-system-guard: allow color */`
+or `/* design-system-guard: allow spacing */` on the declaration or on the
+immediately preceding line. Use `allow all` only when both exceptions are
+unavoidable, and explain the reason in the surrounding CSS comment.
 
 Vitest runs in **jsdom** with the setup in `src/test/setup.ts` and
 `restoreMocks: true` (see `vite.config.ts`), so every mock is reset between
