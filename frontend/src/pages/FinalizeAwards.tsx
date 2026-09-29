@@ -54,7 +54,7 @@ const MODE_OPTIONS: ModeOption[] = [
     tag: 'Allocated',
     icon: ShieldCheck,
     label: 'Allocated',
-    summary: 'Held in escrow, meaning locked programme funds; the recipient directs it to an approved payee later.',
+    summary: 'Held in escrow, meaning locked programme funds; the recipient directs it to a verified payee later.',
     consequence:
       'The strongest guarantee available: funds can never reach anyone unverified because they never leave escrow until directed. Equally unbypassable as Direct, but the recipient keeps choice.',
   },
@@ -396,7 +396,7 @@ export const FinalizeAwards = () => {
       <header className="dashboard-header animate-fade-up">
         <h1>Finalize Awards</h1>
         <p className="typo-text text-muted">
-          Settle applications with enough reviewer votes into awards. The payment mode you pick decides whether released money can reach an unapproved destination.
+          Settle applications with enough reviewer votes into awards. The payment mode you pick decides whether released money can reach an unverified destination.
         </p>
       </header>
 
@@ -553,7 +553,7 @@ export const FinalizeAwards = () => {
                       <div className="finalize-flow__heading">
                         <h3>Choose how the award is paid</h3>
                         <p className="typo-text text-muted">
-                          The payment mode decides where released money may go. Allocated and Direct both require an approved payee; they differ in who chooses that payee.
+                          The payment mode decides where released money may go. Allocated and Direct both require a verified payee; they differ in who chooses that payee.
                         </p>
                       </div>
 
@@ -586,7 +586,7 @@ export const FinalizeAwards = () => {
                         <div className="payee-section">
                           <h4>Verified payee</h4>
                           <p className="typo-text text-muted">
-                            Direct awards are paid straight to an approved destination, called a payee. The payee must be one this programme has approved before the award can be finalized.
+                            Direct awards are paid straight to a verified destination, called a payee. The payee must be one this programme has verified before the award can be finalized.
                           </p>
                           <div className="payee-row">
                             <Field
@@ -617,7 +617,7 @@ export const FinalizeAwards = () => {
                           )}
                           {payeeToVerify !== '' && payeeCheck.data === false && (
                             <p className="notice notice--blocked">
-                              <AlertTriangle size={16} /> This address is not an approved payee. Only the programme creator can approve a payee.
+                              <AlertTriangle size={16} /> This address is not a verified payee. Only the programme creator can verify a payee.
                             </p>
                           )}
                         </div>
@@ -766,7 +766,7 @@ function AwardResultCard({ title, award }: { title: string; award: Award }) {
           <span className="detail-value mono" title={award.payee}>{truncate(award.payee)}</span>
         </div>
         <div>
-          <span className="detail-label">Payment instalments</span>
+          <span className="detail-label">Tranches</span>
           <span className="detail-value">{award.tranches}</span>
         </div>
       </div>

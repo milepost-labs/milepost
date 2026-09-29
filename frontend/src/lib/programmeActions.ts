@@ -51,8 +51,8 @@ const RULES: Rule[] = [
   { key: 'finalize', label: 'Finalize awards', who: 'Anyone', button: 'Finalize', needs: 'Review', route: '/finalize' },
   {
     key: 'release',
-    label: 'Release a payment instalment',
-    who: 'Recipients, with a verifier’s signed proof',
+    label: 'Release a tranche',
+    who: 'Recipients, with a verifier’s attestation',
     button: 'Release',
     needs: 'Settled',
     route: '/recipients/award-progress',

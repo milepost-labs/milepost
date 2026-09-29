@@ -20,17 +20,17 @@ import './RegisterSchema.css';
 const HEX_32_BYTES = /^(0x)?[0-9a-fA-F]{64}$/;
 
 /**
- * Register a claim template (Screen 10, Schemas).
+ * Register a schema (Screen 10, Schemas).
  *
  * The form collects a name (`lowercase-words/vN`, a UI convention validated
- * before signing), a fields description, and whether signed proofs under the
- * claim template may later be revoked. Both are composed into the opaque `definition`
+ * before signing), a fields description, and whether attestations under the
+ * schema may later be revoked. Both are composed into the opaque `definition`
  * string the contract stores — the registry never parses it, so being precise
  * here is what lets a verifier years later agree on what a claim meant.
  *
- * Registered claim templates are listed with their UID because the UID is what a
+ * Registered schemas are listed with their UID because the UID is what a
  * programme is configured with at deploy time. The list is `FIXTURE_SCHEMAS`
- * plus anything registered this session: the contract keeps no "all claim templates"
+ * plus anything registered this session: the contract keeps no "all schemas"
  * list, so a real list would come from an indexer handler that does not exist
  * yet.
  */
@@ -51,7 +51,7 @@ export const RegisterSchema = () => {
   const nameError =
     name !== '' && !isValidSchemaName(name) ? SCHEMA_NAME_ERROR : null;
   const fieldsError =
-    fields !== '' && fields.trim() === '' ? 'Describe the fields this claim template covers.' : null;
+    fields !== '' && fields.trim() === '' ? 'Describe the fields this schema covers.' : null;
   const predecessorError =
     predecessor.trim() !== '' && !HEX_32_BYTES.test(predecessor.trim())
       ? 'Enter a 32-byte hex UID (64 hex characters), or leave this empty.'
@@ -102,7 +102,7 @@ export const RegisterSchema = () => {
         },
         ...prev,
       ]);
-      announce('Claim template registered.');
+      announce('Schema registered.');
     } else if (tx.error) {
       announce('Schema registration failed.', 'alert');
     }
@@ -116,17 +116,17 @@ export const RegisterSchema = () => {
   return (
     <div className="register-schema">
       <header className="register-schema__header">
-        <h1>Register a claim template</h1>
+        <h1>Register a schema</h1>
         <p className="typo-text text-muted">
-          A programme cannot be deployed without a claim template: the short checklist a verifier signs against. Register it first so every proof uses the same words.
+          A programme cannot be deployed without a schema: the short checklist a verifier signs against. Register it first so every attestation uses the same words.
         </p>
       </header>
 
       <div className="register-schema__grid">
-        <Card title="New claim template">
+        <Card title="New schema">
           <div className="register-schema__form">
             <Field
-              label="Claim template name"
+              label="Schema name"
               placeholder="shifts-confirmed/v1"
               value={name}
               onChange={(e) => setName(e.target.value)}
@@ -136,7 +136,7 @@ export const RegisterSchema = () => {
 
             <TextArea
               label="Fields"
-              placeholder="programme: address, instalment_number: u32"
+              placeholder="programme: address, tranche: u32"
               value={fields}
               onChange={(e) => setFields(e.target.value)}
               rows={3}
@@ -151,9 +151,9 @@ export const RegisterSchema = () => {
                 onChange={(e) => setRevocable(e.target.checked)}
               />
               <span className="schema-check__text">
-                <span className="schema-check__label">Verifiers can revoke signed proofs under this claim template</span>
+                <span className="schema-check__label">Attesters can revoke attestations under this schema</span>
                 <span className="schema-check__desc">
-                  Revocation stops a proof being used again, but never claws back a payment instalment
+                  Revocation stops a proof being used again, but never claws back a tranche
                   that already released. This choice is permanent.
                 </span>
               </span>
@@ -161,11 +161,11 @@ export const RegisterSchema = () => {
 
             <Field
               label="Supersedes (optional)"
-              placeholder="Earlier claim template UID, 32-byte hex"
+              placeholder="Earlier schema UID, 32-byte hex"
               value={predecessor}
               onChange={(e) => setPredecessor(e.target.value)}
               error={predecessorError ?? undefined}
-              hint="Only the claim template owner may link to an earlier template. The network refuses loops in that replacement history."
+              hint="Only the schema owner may link to an earlier template. The network refuses loops in that replacement history."
             />
 
             <p className="register-schema__opaque">
@@ -174,7 +174,7 @@ export const RegisterSchema = () => {
 
             {!address && (
               <p className="ui-field__message ui-field__message--error" role="alert">
-                Sign in — the connected address becomes the claim template owner.
+                Sign in — the connected address becomes the schema owner.
               </p>
             )}
 
@@ -186,7 +186,7 @@ export const RegisterSchema = () => {
                 disabled={!valid || tx.busy}
                 icon={<ShieldCheck size={16} aria-hidden="true" />}
               >
-                Register claim template
+                Register schema
               </Button>
               {tx.result && (
                 <Button
@@ -209,7 +209,7 @@ export const RegisterSchema = () => {
                 <p className="state-error__message">{explained.message}</p>
                 {isCycle ? (
                   <p className="state-error__action">
-                    A claim template cannot replace itself, directly or through earlier templates.
+                    A schema cannot replace itself, directly or through earlier templates.
                     Pick a different predecessor or leave it empty. Nothing was registered.
                   </p>
                 ) : (
@@ -221,23 +221,23 @@ export const RegisterSchema = () => {
 
             {tx.phase === 'success' && successUidHex && (
               <div className="schema-success" role="status">
-                <strong className="schema-success__title">Claim template registered</strong>
+                <strong className="schema-success__title">Schema registered</strong>
                 <p className="typo-text text-muted">
-                  Copy this UID — it is what a programme uses at deploy time at deploy time.
+                  Copy this UID — it is what a programme is configured with at deploy time.
                 </p>
                 <div className="schema-success__uid">
                   <code className="numeric schema-success__value">{successUidHex}</code>
-                  <CopyButton value={successUidHex} label="Copy claim template UID" />
+                  <CopyButton value={successUidHex} label="Copy schema UID" />
                 </div>
               </div>
             )}
           </div>
         </Card>
 
-        <section className="register-schema__list" aria-label="Registered claim templates">
-          <h2 className="register-schema__list-title">Registered claim templates</h2>
+        <section className="register-schema__list" aria-label="Registered schemas">
+          <h2 className="register-schema__list-title">Registered schemas</h2>
           {schemas.length === 0 ? (
-            <p className="typo-text text-muted">No claim templates registered yet.</p>
+            <p className="typo-text text-muted">No schemas registered yet.</p>
           ) : (
             <ul className="schema-list">
               {schemas.map((schema) => (
@@ -256,7 +256,7 @@ export const RegisterSchema = () => {
               ))}
             </ul>
           )}
-          <p className="register-schema__sample-note">Sample claim templates for the design phase.</p>
+          <p className="register-schema__sample-note">Sample schemas for the design phase.</p>
         </section>
       </div>
     </div>

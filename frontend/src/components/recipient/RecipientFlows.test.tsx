@@ -272,10 +272,10 @@ describe('Recipient Issues Suite (#272, #273, #274, #275)', () => {
       expect(screen.getByText('Apply for an award')).toBeDefined();
 
       // Only Open programmes should be listed in the radio group
-      expect(screen.getByText(/Secondary school bursaries 2026/i)).toBeDefined();
+      expect(screen.getByText(/Community resilience grants 2026/i)).toBeDefined();
       expect(screen.getByText(/Smallholder inputs, long rains/i)).toBeDefined();
       // SME supplier microgrants Q2 is in Settled phase, and Vocational bursaries is in Review, so neither should be listed
-      expect(screen.queryByText(/Vocational bursaries, cohort 3/i)).toBeNull();
+      expect(screen.queryByText(/Workforce skills grants, cohort 3/i)).toBeNull();
     });
 
     it('explains the median rule before submitting', () => {

@@ -26,7 +26,7 @@ export interface VerifyClaimFieldErrors {
 export function validateVerifyClaimInput(input: VerifyClaimInput): VerifyClaimFieldErrors {
   const errors: VerifyClaimFieldErrors = {};
   if (!input.uid.trim()) {
-    errors.uid = 'Enter the signed proof id to check.';
+    errors.uid = 'Enter the attestation id to check.';
   }
   if (!input.subject.trim()) {
     errors.subject = 'Enter the subject address.';
@@ -34,10 +34,10 @@ export function validateVerifyClaimInput(input: VerifyClaimInput): VerifyClaimFi
     errors.subject = 'That does not look like a Stellar address.';
   }
   if (!input.schema.trim()) {
-    errors.schema = 'Enter the claim template.';
+    errors.schema = 'Enter the schema.';
   }
   if (!input.attester.trim()) {
-    errors.attester = 'Enter the verifier address.';
+    errors.attester = 'Enter the attester address.';
   } else if (!STELLAR_ADDRESS.test(input.attester.trim())) {
     errors.attester = 'That does not look like a Stellar address.';
   }
@@ -68,19 +68,19 @@ export function verifyClaim(
   const attestation = attestations.find((a) => a.uid.toLowerCase() === uid);
 
   if (!attestation) {
-    return { valid: false, reason: 'No signed proof exists with this id.' };
+    return { valid: false, reason: 'No attestation exists with this id.' };
   }
   if (attestation.revoked) {
-    return { valid: false, reason: 'This signed proof has been revoked by its verifier.' };
+    return { valid: false, reason: 'This attestation has been revoked by its attester.' };
   }
   if (attestation.subject.trim().toLowerCase() !== input.subject.trim().toLowerCase()) {
-    return { valid: false, reason: 'This signed proof is not about the subject you gave.' };
+    return { valid: false, reason: 'This attestation is not about the subject you gave.' };
   }
   if (attestation.schema.trim().toLowerCase() !== input.schema.trim().toLowerCase()) {
-    return { valid: false, reason: 'This signed proof was made under a different claim template.' };
+    return { valid: false, reason: 'This attestation was made under a different schema.' };
   }
   if (attestation.attester.trim().toLowerCase() !== input.attester.trim().toLowerCase()) {
-    return { valid: false, reason: 'This signed proof was not made by the verifier you gave.' };
+    return { valid: false, reason: 'This attestation was not made by the attester you gave.' };
   }
   return { valid: true };
 }

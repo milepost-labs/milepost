@@ -132,7 +132,7 @@ export const AwardsTab: FC<AwardsTabProps> = ({
             const tranchesReleased = Number(award.tranchesReleased ?? 0);
             const hasTranches = tranches > 0;
 
-            const trancheLabel = `${tranchesReleased} of ${tranches} payment instalments released`;
+            const trancheLabel = `${tranchesReleased} of ${tranches} tranches released`;
 
             return (
               <div
@@ -148,11 +148,11 @@ export const AwardsTab: FC<AwardsTabProps> = ({
                   </span>
                   <span className="awards-tab__subtitle">
                     {hasTranches
-                      ? `${tranchesReleased} of ${tranches} instalments · ${formatAmount(
+                      ? `${tranchesReleased} of ${tranches} tranches · ${formatAmount(
                           released,
                           { asset },
                         )} released`
-                      : 'Payment instalment status read on-chain'}
+                      : 'Tranche status read on-chain'}
                   </span>
                 </div>
 

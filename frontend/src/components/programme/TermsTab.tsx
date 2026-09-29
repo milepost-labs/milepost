@@ -12,12 +12,12 @@ const MODES = [
   {
     mode: 'Allocated',
     description:
-      'Reserved for the recipient. They choose which verified payee receives it, and when, from inside the programme.',
+      'Held in escrow, locked inside the programme. The recipient chooses which verified payee receives it, and when. This depends on nothing outside the contract.',
   },
   {
     mode: 'Restricted',
     description:
-      "Paid into the recipient's smart wallet, where a spending rule in the wallet limits transfers to verified destinations.",
+      "Paid into the recipient's smart wallet, where a spending rule in the wallet (a policy signer) limits transfers to verified destinations. Only as strong as that wallet's configuration.",
   },
   { mode: 'Open', description: 'Paid to the recipient with no restriction.' },
 ];

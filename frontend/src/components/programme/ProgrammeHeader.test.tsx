@@ -4,7 +4,7 @@ import { render, screen } from '@testing-library/react';
 import { ProgrammeHeader } from './ProgrammeHeader';
 
 const baseProps = {
-  id: 'CBQ4COMMUNITYRESILIENCE26XK3ZP7M2QWJ5T8VN4RD6HY',
+  id: 'CBQ4SCHOOLBURSARY2026XK3ZP7M2QWJ5T8VN4RD6HY',
   name: 'Community resilience grants 2026',
   creator: 'GAKR7W…D2QX',
   createdLedger: 4811204,

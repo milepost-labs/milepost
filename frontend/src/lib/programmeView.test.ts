@@ -119,7 +119,7 @@ describe('sortProgrammes', () => {
   it('sorts open programmes by closing soonest before entries without a close date', () => {
     const sorted = sortProgrammes(mergeProgrammes([]), 'closing-soonest');
     expect(sorted.slice(0, 2).map((p) => p.name)).toEqual([
-      'Secondary school bursaries 2026',
+      'Community resilience grants 2026',
       'Smallholder inputs, long rains',
     ]);
     expect(sorted.at(-1)?.chain.closesInDays).toBeUndefined();

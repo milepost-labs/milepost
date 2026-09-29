@@ -45,7 +45,7 @@ export interface FixtureChainRead {
 
 export const FIXTURE_PROGRAMMES: FixtureProgramme[] = [
   {
-    id: 'CBQ4COMMUNITYRESILIENCE26XK3ZP7M2QWJ5T8VN4RD6HY',
+    id: 'CBQ4SCHOOLBURSARY2026XK3ZP7M2QWJ5T8VN4RD6HY',
     name: 'Community resilience grants 2026',
     creator: 'GAKR7W…D2QX',
     createdLedger: 4811204,
@@ -77,7 +77,7 @@ export const FIXTURE_PROGRAMMES: FixtureProgramme[] = [
 ];
 
 export const FIXTURE_CHAIN: Record<string, FixtureChainRead> = {
-  CBQ4COMMUNITYRESILIENCE26XK3ZP7M2QWJ5T8VN4RD6HY: {
+  CBQ4SCHOOLBURSARY2026XK3ZP7M2QWJ5T8VN4RD6HY: {
     phase: 'Open',
     mode: 'Direct',
     contributed: '126000000000',

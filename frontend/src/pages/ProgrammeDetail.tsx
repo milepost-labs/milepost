@@ -63,7 +63,7 @@ const timelineSteps: TimelineStep[] = [
   {
     key: "release_deadline",
     label: "Releases close",
-    description: "Approved payment instalment releases stop here.",
+    description: "Approved tranche releases stop here.",
   },
   {
     key: "sweep_deadline",
@@ -657,7 +657,7 @@ export const ProgrammeDetail = () => {
                 {(value) => formatXlm(value)}
               </AsyncView>
             }
-            hint="Payment instalments already paid out"
+            hint="Tranches already paid out"
             numeric
           />
         </Card>
@@ -814,7 +814,7 @@ export const ProgrammeDetail = () => {
                   <dd className="numeric">{value.quorum} reviewer votes</dd>
                 </div>
                 <div>
-                  <dt>Payment instalments</dt>
+                  <dt>Tranches</dt>
                   <dd className="numeric">{value.tranches}</dd>
                 </div>
                 <div>
@@ -860,7 +860,7 @@ export const ProgrammeDetail = () => {
                       <span className="numeric">is_verifier(addr)</span>. The current app can confirm one verifier address at a time but does not list every verifier yet.
                     </p>
                     <Badge tone="neutral">
-                      {value.tranches} payment instalments
+                      {value.tranches} tranches
                     </Badge>
                   </div>
                 </div>
@@ -869,7 +869,7 @@ export const ProgrammeDetail = () => {
                   <div>
                     <h3>Linked infrastructure</h3>
                     <p>
-                      Signed proofs, standing records, spending rules, and treasury addresses are read from programme configuration.
+                      Attestations, standing records, spending rules, and treasury addresses are read from programme configuration.
                     </p>
                     <Link
                       to={`/funders?programme=${encodeURIComponent(programmeId)}`}
@@ -884,7 +884,7 @@ export const ProgrammeDetail = () => {
           </AsyncView>
         </Card>
 
-        <Card title="Trusted verifiers and claim template">
+        <Card title="Trusted verifiers and schema">
           <AsyncView {...config} onRetry={config.refetch} contract="program">
             {(value) => (
               <div
@@ -902,7 +902,7 @@ export const ProgrammeDetail = () => {
                       marginBottom: "0.5rem",
                     }}
                   >
-                    Claim template
+                    Schema
                   </h3>
                   <p
                     style={{
@@ -911,7 +911,7 @@ export const ProgrammeDetail = () => {
                       marginBottom: "0.75rem",
                     }}
                   >
-                    A claim template defines what verifiers are allowed to confirm. Signed proofs must match this template before a payment instalment can release.
+                    A schema defines what verifiers are allowed to confirm. Attestations must match this template before a tranche can release.
                   </p>
                   <div
                     style={{

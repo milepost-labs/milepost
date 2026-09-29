@@ -72,10 +72,10 @@ describe('Funding dashboard', () => {
 
   it('offers a refund claim only on contributions where it is claimable', async () => {
     renderPage();
-    await screen.findByRole('link', { name: 'Secondary school bursaries 2026' });
+    await screen.findByRole('link', { name: 'Community resilience grants 2026' });
 
-    expect(within(card('Secondary school bursaries 2026')).queryByRole('button', { name: 'Claim refund' })).toBeNull();
-    expect(within(card('Secondary school bursaries 2026')).getByText(/Still open/)).toBeTruthy();
+    expect(within(card('Community resilience grants 2026')).queryByRole('button', { name: 'Claim refund' })).toBeNull();
+    expect(within(card('Community resilience grants 2026')).getByText(/Still open/)).toBeTruthy();
     expect(within(card('SME supplier microgrants Q2')).getByRole('button', { name: 'Claim refund' })).toBeTruthy();
     expect(within(card('Flood response cash transfers')).getByRole('button', { name: 'Claim refund' })).toBeTruthy();
     expect(screen.getAllByRole('button', { name: 'Claim refund' })).toHaveLength(2);

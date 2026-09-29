@@ -18,15 +18,15 @@ interface ResultRow {
 
 function statusFor(attestation: AttestationFixture): { label: string; tone: 'success' | 'accent' | 'danger' } {
   if (attestation.revoked) return { label: 'Revoked', tone: 'danger' };
-  if (attestation.used) return { label: 'Used to release a payment instalment', tone: 'accent' };
+  if (attestation.used) return { label: 'Used to release a tranche', tone: 'accent' };
   return { label: 'Valid, not used yet', tone: 'success' };
 }
 
 function rowsFor(attestation: AttestationFixture): ResultRow[] {
   const base: ResultRow[] = [
-    { key: 'Claim template', value: attestation.schema },
-    { key: 'Verifier', value: attestation.attester },
-    { key: 'Recipient', value: attestation.subject },
+    { key: 'Schema', value: attestation.schema },
+    { key: 'Attester', value: attestation.attester },
+    { key: 'Subject', value: attestation.subject },
     { key: 'Signed at ledger', value: attestation.ledger.toLocaleString() },
   ];
   return base.concat(
@@ -37,14 +37,14 @@ function rowsFor(attestation: AttestationFixture): ResultRow[] {
 const EMPTY_CLAIM_FORM = { uid: '', subject: '', schema: '', attester: '' };
 
 /**
- * Signed proof lookup.
+ * Attestation lookup.
  *
- * Two modes. "Look up by id" answers what a signed proof says — search by
+ * Two modes. "Look up by id" answers what an attestation says — search by
  * id, recipient or verifier. "Check a claim" answers the narrower question
- * anything gating value should actually ask: does this recipient hold a valid
- * claim under this claim template from this verifier (`attest.verify`, not just
- * `is_valid`). The proof contract has no way to list every proof by recipient or
- * verifier — only to fetch one uid at a time — so both modes stay
+ * anything gating value should actually ask: does this subject hold a valid
+ * claim under this schema from this attester (`attest.verify`, not just
+ * `is_valid`). The `attest` contract has no way to enumerate by subject or
+ * attester — only to fetch one uid at a time — so both modes stay
  * fixture-backed (see `attestationFixtures.ts` and `attestationVerify.ts`)
  * until an indexer handler publishes a searchable list. No sign-in needed:
  * anyone can check what a verifier signed.
@@ -111,10 +111,11 @@ export const AttestationLookup = () => {
   return (
     <div className="attest-lookup">
       <header className="attest-lookup__header">
-        <h1>Look up a signed proof</h1>
+        <h1>Look up an attestation</h1>
         <p className="typo-text text-muted">
-          Check what a verifier signed, about whom, and whether it has already released a
-          payment instalment. No sign-in needed.
+          An attestation is a signed statement that a condition was met. Check what was
+          signed, about whom, and whether it has already released a tranche (one instalment
+          of an award). No sign-in needed.
         </p>
       </header>
 
@@ -143,8 +144,8 @@ export const AttestationLookup = () => {
         <>
           <form role="search" onSubmit={handleSubmit} className="attest-lookup__form">
             <Field
-              label="Signed proof id or address"
-              placeholder="Signed proof id, recipient or verifier"
+              label="Attestation id or address"
+              placeholder="Attestation id, recipient or verifier"
               value={query}
               onChange={(event) => setQuery(event.target.value)}
             />
@@ -172,7 +173,7 @@ export const AttestationLookup = () => {
               <div className="attest-not-found">
                 <span className="attest-not-found__title">Nothing found for &ldquo;{searched.trim()}&rdquo;</span>
                 <span className="attest-not-found__detail">
-                  Check the id. Signed proofs are read on-chain; archived ones need a keepalive
+                  Check the id. Attestations are read on-chain; archived ones need a keepalive
                   before they can be read.
                 </span>
               </div>
@@ -198,7 +199,7 @@ export const AttestationLookup = () => {
 
             {searchedYet && (
               <span className="attest-lookup__sample-note">
-                Sample signed proofs for the design phase.
+                Sample attestations for the design phase.
               </span>
             )}
           </div>
@@ -208,37 +209,37 @@ export const AttestationLookup = () => {
       {mode === 'claim' && (
         <>
           <p className="typo-text text-muted attest-lookup__claim-intro">
-            Looking up by id shows what a signed proof says. This answers a narrower question:
-            does <em>this</em> recipient hold a valid claim under <em>this</em> claim template (the rule the verifier signed under) from{' '}
-            <em>this</em> verifier? A signed proof can be perfectly valid and still be the wrong
+            Looking up by id shows what an attestation says. This answers a narrower question:
+            does <em>this</em> subject hold a valid claim under <em>this</em> schema (the checklist it was signed against) from{' '}
+            <em>this</em> attester? An attestation can be perfectly valid and still be the wrong
             one — signed by someone else, or about someone else — so gating anything of value on
             it should use this check, not just whether it exists.
           </p>
 
           <form onSubmit={handleClaimSubmit} className="attest-lookup__claim-form" noValidate>
             <Field
-              label="Signed proof id"
-              placeholder="Signed proof id"
+              label="Attestation id"
+              placeholder="Attestation id"
               value={claimForm.uid}
               onChange={updateClaimField('uid')}
               error={claimErrors.uid}
             />
             <Field
-              label="Recipient address"
+              label="Subject address"
               placeholder="G…"
               value={claimForm.subject}
               onChange={updateClaimField('subject')}
               error={claimErrors.subject}
             />
             <Field
-              label="Claim template"
+              label="Schema"
               placeholder="e.g. condition-met/v1"
               value={claimForm.schema}
               onChange={updateClaimField('schema')}
               error={claimErrors.schema}
             />
             <Field
-              label="Verifier address"
+              label="Attester address"
               placeholder="G…"
               value={claimForm.attester}
               onChange={updateClaimField('attester')}
@@ -271,13 +272,13 @@ export const AttestationLookup = () => {
                 </Badge>
                 <span className="attest-claim-result__text">
                   {claimResult.valid
-                    ? 'This recipient holds a valid claim under this claim template from this verifier.'
+                    ? 'This subject holds a valid claim under this schema from this attester.'
                     : claimResult.reason}
                 </span>
               </div>
             )}
             <span className="attest-lookup__sample-note">
-              Sample signed proofs for the design phase.
+              Sample attestations for the design phase.
             </span>
           </div>
         </>

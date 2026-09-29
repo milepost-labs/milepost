@@ -167,8 +167,14 @@ jobs:
 
       # Page CSS may use the existing baseline, but new colour literals and
       # off-scale spacing must go through the token system.
+      # The checkout is shallow, so the commit to diff against is fetched
+      # explicitly: the PR's base, or the previous commit on a push.
       - name: Check new page CSS uses design tokens
-        run: node frontend/scripts/check-design-system.mjs --diff-base "${GITHUB_BASE_SHA:-origin/main}"
+        env:
+          BASE_SHA: ${{ github.event.pull_request.base.sha || github.event.before }}
+        run: |
+          git fetch --no-tags --depth=1 origin "$BASE_SHA"
+          node frontend/scripts/check-design-system.mjs --diff-base "$BASE_SHA"
 
       - name: Test the design-system guard
         run: npm run test:design-system --prefix frontend

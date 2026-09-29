@@ -11,6 +11,6 @@ export interface AdminSection {
 export const ADMIN_SECTIONS: AdminSection[] = [
   { to: '/finalize', label: 'Finalize awards' },
   { to: '/admin', label: 'Deploy programme' },
-  { to: '/schemas/register', label: 'Claim templates' },
+  { to: '/schemas/register', label: 'Schemas' },
   { to: '/admin/standing', label: 'Standing writers' },
 ];
