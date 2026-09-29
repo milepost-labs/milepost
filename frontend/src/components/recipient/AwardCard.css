@@ -46,16 +46,6 @@
   color: var(--text-muted);
 }
 
-.award-card__mode-badge {
-  font-size: var(--text-xs);
-  font-weight: var(--weight-bold);
-  border-radius: var(--radius-full);
-  padding: 5px 12px;
-  background: var(--surface-raised);
-  color: var(--text-muted);
-  white-space: nowrap;
-}
-
 /* Tranche tiles (C03) */
 .award-card__tranches {
   list-style: none;
