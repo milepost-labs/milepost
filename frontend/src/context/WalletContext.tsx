@@ -72,12 +72,8 @@ export function WalletProvider({ children }: { children: ReactNode }) {
   // Restore an existing connection on load, so a refresh does not look like a
   // disconnect.
   useEffect(() => {
-    if (IS_FIXTURE_MODE) {
-      setStatus('connected');
-      setAddress(FIXTURE_WALLET_ADDRESS);
-      setNetwork('TESTNET');
-      return;
-    }
+    // Fixture mode starts connected; the initial state already says so.
+    if (IS_FIXTURE_MODE) return;
 
     let cancelled = false;
 

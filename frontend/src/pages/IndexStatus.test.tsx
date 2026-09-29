@@ -14,13 +14,17 @@ function stubFetch(body: unknown, ok = true) {
   );
 }
 
+// Relative to now, so "fresh" stays fresh whenever the suite runs.
+const HOUR = 3_600_000;
+const hoursAgo = (hours: number) => new Date(Date.now() - hours * HOUR).toISOString();
+
 function meta(overrides: Record<string, unknown> = {}) {
   return {
     network: 'testnet',
     registry: 'CCBQHBNIG5FIJEM6SQZQGTQRO3XXHV2BGVGGUY5JXXZ3Y55ZJSV3HMVF',
     fromLedger: 4697201,
     indexedToLedger: 4698280,
-    indexedAt: '2026-09-28T11:00:00Z',
+    indexedAt: hoursAgo(1),
     complete: true,
     gap: false,
     unhandledEvents: {},
@@ -58,7 +62,7 @@ describe('IndexStatus', () => {
   });
 
   it('renders stale state', async () => {
-    stubFetch(meta({ indexedAt: '2026-09-20T12:00:00Z' }));
+    stubFetch(meta({ indexedAt: hoursAgo(24 * 8) }));
     render(
       <MemoryRouter>
         <IndexStatus />
