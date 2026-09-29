@@ -25,6 +25,9 @@ export default defineConfig({
   },
   test: {
     environment: 'jsdom',
+    // App tests only. scripts/*.test.mjs use node:test and run through
+    // `npm run test:design-system`.
+    include: ['src/**/*.test.{ts,tsx}'],
     setupFiles: ['./src/test/setup.ts'],
     // Tests mock the contract clients; nothing should touch the network.
     // Fail loudly if something tries.
