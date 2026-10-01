@@ -44,7 +44,7 @@ jobs:
       - name: Mutate changed lines
         run: ./scripts/mutants.sh --jobs 2 --in-diff "$RUNNER_TEMP/pr.diff"
 
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         if: always()
         with:
           name: mutants-changed-lines
@@ -71,7 +71,7 @@ jobs:
       - name: Mutate shard ${{ matrix.shard }} of 8
         run: ./scripts/mutants.sh --jobs 2 --shard ${{ matrix.shard }}/8
 
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         if: always()
         with:
           name: mutants-shard-${{ matrix.shard }}
@@ -83,7 +83,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
-      - uses: actions/download-artifact@v4
+      - uses: actions/download-artifact@v8
         with:
           pattern: mutants-shard-*
           path: shards
