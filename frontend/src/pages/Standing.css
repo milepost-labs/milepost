@@ -251,3 +251,77 @@
   font-size: var(--text-caption);
   color: var(--text-muted);
 }
+
+/* ── History root and verifier ─────────────────────────────────────────── */
+
+.standing-root {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+  margin: 0;
+  padding: var(--space-3) var(--space-4);
+  border-radius: var(--radius-row);
+  background: var(--surface);
+}
+
+.standing-root__label {
+  font-size: var(--text-caption);
+  color: var(--text-muted);
+}
+
+.standing-root__value {
+  overflow-wrap: anywhere;
+  font-size: var(--text-sm);
+}
+
+.standing-history {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+}
+
+.standing-history__intro {
+  margin: 0;
+  font-size: var(--text-sm);
+  line-height: var(--leading-body);
+  color: var(--text-muted);
+}
+
+.standing-history__actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-3);
+}
+
+.standing-history__result {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  padding: var(--space-4);
+  border-radius: var(--radius-row);
+  background: var(--surface);
+}
+
+.standing-history__result p {
+  margin: 0;
+  font-size: var(--text-sm);
+  line-height: var(--leading-body);
+}
+
+.standing-history__roots {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  margin: var(--space-2) 0 0;
+}
+
+.standing-history__roots dt {
+  font-size: var(--text-caption);
+  color: var(--text-muted);
+}
+
+.standing-history__roots dd {
+  margin: 0;
+  overflow-wrap: anywhere;
+  font-size: var(--text-sm);
+}

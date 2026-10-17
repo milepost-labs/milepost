@@ -1,11 +1,12 @@
 import { useEffect, useMemo, useState, type FormEvent } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import type { ProgrammeConfig } from '@milepost/program';
 import { useSoroban } from '../context/useSoroban';
 import { useWallet } from '../context/useWallet';
-import { useContractResult, useTransaction } from '../hooks';
+import { useContractResult, useProgrammeParam, useTransaction } from '../hooks';
 import { AddressChip, Badge, Button, Card, Field, RadioGroup, TextArea } from '../components/ui';
-import { Empty, TransactionOutcome } from '../components/state/AsyncStates';
-import { DEMO_PROGRAMME_ID } from '../context/sorobanStore';
+import { ProgrammeParamNotice } from '../components/programme/ProgrammeParamNotice';
+import { Empty, ErrorState, PendingState, TransactionOutcome } from '../components/state/AsyncStates';
 import { FIXTURE_PAYEES, type PayeeFixture } from '../fixtures/payeeFixtures';
 import {
   chunkAddresses,
@@ -49,22 +50,42 @@ function loadCandidates(programmeId: string): PayeeFixture[] {
 export const PayeeManagement = () => {
   const { programmeAt } = useSoroban();
   const wallet = useWallet();
+  const programmeParam = useProgrammeParam();
+  const [searchParams, setSearchParams] = useSearchParams();
 
-  const [programmeInput, setProgrammeInput] = useState(DEMO_PROGRAMME_ID);
-  const [programmeId, setProgrammeId] = useState(DEMO_PROGRAMME_ID);
+  const linkedProgrammeId =
+    programmeParam.status === 'valid' ? programmeParam.programmeId : null;
+  const [programmeInputOverride, setProgrammeInputOverride] = useState<string | null>(null);
+  const [programmeIdOverride, setProgrammeIdOverride] = useState<string | null>(null);
   const [programmeError, setProgrammeError] = useState<string | null>(null);
 
-  const programme = useMemo(() => programmeAt(programmeId), [programmeAt, programmeId]);
+  // A valid ?programme= link fills the field until someone types over it.
+  const programmeInput = programmeInputOverride ?? linkedProgrammeId ?? '';
+  const programmeId = programmeIdOverride ?? linkedProgrammeId;
+
+  const programme = useMemo(
+    () => (programmeId ? programmeAt(programmeId) : null),
+    [programmeAt, programmeId],
+  );
 
   const config = useContractResult<ProgrammeConfig>(
-    () => programme.get_config(),
+    () => programme!.get_config(),
     [programme],
-    { contract: 'program' },
+    {
+      contract: 'program',
+      enabled: Boolean(programme) && !programmeParam.blocksProgramme,
+    },
   );
-  const isCreator = Boolean(wallet.address && config.data && config.data.creator === wallet.address);
+  const isCreator = Boolean(
+    wallet.address &&
+      config.data &&
+      !config.fetching &&
+      config.data.creator === wallet.address,
+  );
 
   const [sessionAdds, setSessionAdds] = useState<Record<string, PayeeFixture[]>>({});
   const candidates = useMemo(() => {
+    if (!programmeId) return [];
     const stored = loadCandidates(programmeId);
     const extra = (sessionAdds[programmeId] ?? []).filter(
       (c) => !stored.some((s) => s.address === c.address),
@@ -74,6 +95,7 @@ export const PayeeManagement = () => {
 
   const [statusByAddress, setStatusByAddress] = useState<Record<string, PayeeStatus>>({});
   useEffect(() => {
+    if (!programme || candidates.length === 0) return;
     let cancelled = false;
     (async () => {
       const entries = await Promise.all(
@@ -95,6 +117,7 @@ export const PayeeManagement = () => {
   }, [programme, candidates]);
 
   const remember = (payee: PayeeFixture) => {
+    if (!programmeId) return;
     if (candidates.some((c) => c.address === payee.address)) return;
     try {
       const next = [...loadCandidates(programmeId), payee];
@@ -115,7 +138,11 @@ export const PayeeManagement = () => {
       return;
     }
     setProgrammeError(null);
-    setProgrammeId(value);
+    setProgrammeInputOverride(value);
+    setProgrammeIdOverride(value);
+    const next = new URLSearchParams(searchParams);
+    next.set('programme', value);
+    setSearchParams(next, { replace: true });
   };
 
   const [addressInput, setAddressInput] = useState('');
@@ -133,6 +160,10 @@ export const PayeeManagement = () => {
 
   const handleVerify = (event: FormEvent) => {
     event.preventDefault();
+    if (!programme) {
+      setAddError('Choose a programme first.');
+      return;
+    }
     const address = addressInput.trim();
     if (!PAYEE_ADDRESS.test(address)) {
       setAddError('Enter a valid Stellar address.');
@@ -143,10 +174,11 @@ export const PayeeManagement = () => {
   };
 
   const handleRevoke = (address: string) => {
+    if (!programme) return;
     void tx.send(() => programme.deny_payee({ payee: address }));
   };
 
-  const canSubmit = isCreator && PAYEE_ADDRESS.test(addressInput.trim());
+  const canSubmit = Boolean(programme) && isCreator && PAYEE_ADDRESS.test(addressInput.trim());
 
   // --- Bulk verify / remove (issue #340) ---------------------------------
   const [bulkMode, setBulkMode] = useState<BulkMode>('verify');
@@ -165,6 +197,7 @@ export const PayeeManagement = () => {
   const batches = useMemo(() => chunkAddresses(eligibleAddresses), [eligibleAddresses]);
 
   const handleCheckBulk = async () => {
+    if (!programme) return;
     setBulkChecking(true);
     setBulkResults(null);
     bulkTx.reset();
@@ -180,6 +213,7 @@ export const PayeeManagement = () => {
   };
 
   const handleSendBulk = async () => {
+    if (!programme) return;
     setBulkSending(true);
     setBulkProgress({ done: 0, total: batches.length });
     const verifiedInThisRun: string[] = [];
@@ -231,17 +265,19 @@ export const PayeeManagement = () => {
         </p>
       </header>
 
+      <ProgrammeParamNotice state={programmeParam} />
+
       <Card title="Programme">
         <div className="payee-mgmt__programme">
           <Field
             label="Programme address"
             value={programmeInput}
             onChange={(event) => {
-              setProgrammeInput(event.target.value);
+              setProgrammeInputOverride(event.target.value);
               setProgrammeError(null);
             }}
             error={programmeError}
-            hint="The funding round whose payees you're managing."
+            hint="The funding round whose payees you're managing. Open this page from a programme to fill it in."
           />
           <Button onClick={handleLookupProgramme}>Look up</Button>
         </div>
@@ -253,6 +289,17 @@ export const PayeeManagement = () => {
         )}
       </Card>
 
+      {!programme || programmeParam.blocksProgramme ? (
+        <Empty
+          title="Choose a programme"
+          description="Paste a programme contract address above, or open Payee management from the programme’s page. Nothing is preselected."
+        />
+      ) : config.error ? (
+        <ErrorState error={config.error} contract="program" onRetry={config.refetch} />
+      ) : config.loading && !config.data ? (
+        <PendingState title="Reading the programme…" note="Checking who created it and whether you can manage its payees." />
+      ) : (
+        <>
       {!wallet.address && (
         <Empty
           title="Sign in to verify or remove a payee"
@@ -457,6 +504,8 @@ export const PayeeManagement = () => {
           </ul>
         )}
       </Card>
+        </>
+      )}
     </div>
   );
 };

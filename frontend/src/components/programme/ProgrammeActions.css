@@ -116,3 +116,18 @@
   color: var(--text-muted);
   cursor: not-allowed;
 }
+
+.programme-actions__manage {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-2) var(--space-3);
+  margin-top: var(--space-3);
+  padding-top: var(--space-3);
+  border-top: 1px solid var(--border);
+}
+
+.programme-actions__manage-note {
+  font-size: var(--text-caption);
+  color: var(--text-muted);
+}

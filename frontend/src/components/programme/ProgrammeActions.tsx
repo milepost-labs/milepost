@@ -88,6 +88,18 @@ export function ProgrammeActions({ programmeId, phase, refundsOpen, refundable }
         })}
       </ul>
 
+      <div className="programme-actions__manage">
+        <Link
+          to={`/admin/payees?programme=${encodeURIComponent(programmeId)}`}
+          className="programme-actions__button"
+        >
+          Manage payees
+        </Link>
+        <span className="programme-actions__manage-note">
+          Only the programme&rsquo;s creator can verify or remove a payee.
+        </span>
+      </div>
+
       <SignInSheet open={signInOpen} onClose={() => setSignInOpen(false)} />
     </aside>
   );

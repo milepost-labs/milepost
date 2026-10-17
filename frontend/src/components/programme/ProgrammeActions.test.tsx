@@ -53,6 +53,12 @@ describe('ProgrammeActions', () => {
     expect(document.getElementById(finalize.getAttribute('aria-describedby')!)).not.toBeNull();
   });
 
+  it('links to payee management with the programme preselected', () => {
+    renderPanel();
+    const manage = screen.getByRole('link', { name: 'Manage payees' });
+    expect(manage.getAttribute('href')).toBe(`/admin/payees?programme=${ID}`);
+  });
+
   it('names who each action is for', () => {
     renderPanel();
     expect(within(row('Contribute')).getByText('Funders')).toBeTruthy();
@@ -64,7 +70,7 @@ describe('ProgrammeActions', () => {
     renderPanel({ phase: 'Open' });
 
     expect(screen.getByText(/Sign in to act on this programme/)).toBeTruthy();
-    expect(screen.queryAllByRole('link')).toHaveLength(0);
+    expect(within(screen.getByRole('list')).queryAllByRole('link')).toHaveLength(0);
     expect(within(row('Contribute')).getByText('Sign in to contribute.')).toBeTruthy();
 
     fireEvent.click(screen.getByRole('button', { name: 'Sign in' }));

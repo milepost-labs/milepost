@@ -42,9 +42,14 @@ export interface TransactionState<T> {
 }
 
 export function useTransaction<T = unknown>(
-  options: { contract?: ContractName; onSuccess?: (result: T) => void } = {},
+  options: {
+    contract?: ContractName;
+    onSuccess?: (result: T) => void;
+    /** Called whenever a send fails, including before signing is attempted. */
+    onError?: (error: Explained) => void;
+  } = {},
 ): TransactionState<T> {
-  const { contract = 'program', onSuccess } = options;
+  const { contract = 'program', onSuccess, onError } = options;
   const wallet = useWallet();
 
   const [phase, setPhase] = useState<TransactionPhase>('idle');
@@ -66,19 +71,27 @@ export function useTransaction<T = unknown>(
       if (inFlight.current) return null;
 
       if (!wallet.address) {
+        const blocked: Explained = {
+          kind: 'blocked',
+          message: 'Connect a wallet first.',
+          action: 'Use Connect in the header.',
+        };
         setPhase('error');
-        setError({ kind: 'blocked', message: 'Connect a wallet first.', action: 'Use Connect in the header.' });
+        setError(blocked);
+        onError?.(blocked);
         return null;
       }
       if (wallet.status === 'wrong-network') {
-        setPhase('error');
-        setError({
+        const blocked: Explained = {
           kind: 'blocked',
           message:
             wallet.networkError ??
             `Your wallet is on ${wallet.network ?? 'an unknown network'}, but these contracts are deployed on ${wallet.expectedNetwork}.`,
           action: 'Switch network in Freighter, then check again and try again.',
-        });
+        };
+        setPhase('error');
+        setError(blocked);
+        onError?.(blocked);
         return null;
       }
 
@@ -109,12 +122,13 @@ export function useTransaction<T = unknown>(
         // A declined signature is a choice, not a failure. Treating it as an
         // error leaves a red banner over a decision someone deliberately made.
         setPhase(explained.kind === 'none' ? 'idle' : 'error');
+        onError?.(explained);
         return null;
       } finally {
         inFlight.current = false;
       }
     },
-    [wallet, contract, onSuccess],
+    [wallet, contract, onSuccess, onError],
   );
 
   return {

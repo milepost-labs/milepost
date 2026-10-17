@@ -120,3 +120,23 @@
   font-size: var(--text-xs);
   color: var(--text-muted);
 }
+
+.keepalive-page__targets {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, var(--grid-min-card)), 1fr));
+  gap: var(--space-3);
+}
+
+.keepalive-page__blocked {
+  margin: 0;
+  padding: var(--space-3) var(--space-4);
+  border-radius: var(--radius-row);
+  background: var(--warning-soft);
+  color: var(--warning-strong);
+  font-size: var(--text-sm);
+  line-height: var(--leading-body);
+}
+
+.ttl-row__error {
+  grid-column: 1 / -1;
+}

@@ -31,7 +31,14 @@ type VerificationState = {
   error: unknown;
 };
 
-const PROGRAMME_PARAM_ROUTES = new Set(['/funders', '/recipients', '/finalize', '/keepalive']);
+const PROGRAMME_PARAM_ROUTES = new Set([
+  '/funders',
+  '/recipients',
+  '/finalize',
+  '/keepalive',
+  '/admin/payees',
+  '/verifiers',
+]);
 
 export function consumesProgrammeParam(pathname: string): boolean {
   const normalized = pathname.length > 1 ? pathname.replace(/\/+$/, '') : pathname;

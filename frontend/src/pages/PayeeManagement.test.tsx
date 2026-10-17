@@ -1,5 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { MemoryRouter } from 'react-router-dom';
 import { chunkAddresses, classifyBulkAddresses, parseAndDedupe, parseBulkAddresses } from './payeeBulk';
 import { PayeeManagement } from './PayeeManagement';
 
@@ -96,6 +97,7 @@ describe('chunkAddresses', () => {
 // --- Component: the end-to-end bulk flow ----------------------------------
 
 const CREATOR = 'GCREATOREXAMPLEEXAMPLEEXAMPLEEXAMPLEEXAMPLEEXAMPLEEXAMPX';
+const PROGRAMME_ID = `C${'A'.repeat(55)}`;
 
 const mocks = vi.hoisted(() => ({ address: null as string | null }));
 
@@ -125,13 +127,22 @@ function makeProgramme() {
 let programme = makeProgramme();
 
 vi.mock('../context/useSoroban', () => ({
-  useSoroban: () => ({ programmeAt: () => programme }),
+  useSoroban: () => ({
+    programmeAt: () => programme,
+    registry: { is_programme: vi.fn(async () => ({ result: true })) },
+  }),
 }));
 
 vi.mock('../fixtures/payeeFixtures', () => ({ FIXTURE_PAYEES: {} }));
 
-function renderPage() {
-  return render(<PayeeManagement />);
+async function renderPage() {
+  const view = render(
+    <MemoryRouter initialEntries={[`/admin/payees?programme=${PROGRAMME_ID}`]}>
+      <PayeeManagement />
+    </MemoryRouter>,
+  );
+  await screen.findByLabelText('Payee addresses');
+  return view;
 }
 
 describe('PayeeManagement bulk verify/remove', () => {
@@ -141,8 +152,27 @@ describe('PayeeManagement bulk verify/remove', () => {
     window.localStorage.clear();
   });
 
+  it('starts empty when the URL does not name a programme', () => {
+    mocks.address = CREATOR;
+    render(
+      <MemoryRouter initialEntries={['/admin/payees']}>
+        <PayeeManagement />
+      </MemoryRouter>,
+    );
+    expect((screen.getByLabelText('Programme address') as HTMLInputElement).value).toBe('');
+    expect(screen.getByText('Choose a programme')).toBeTruthy();
+    expect(programme.get_config).not.toHaveBeenCalled();
+  });
+
+  it('takes the programme from the URL', async () => {
+    await renderPage();
+    expect((screen.getByLabelText('Programme address') as HTMLInputElement).value).toBe(
+      PROGRAMME_ID,
+    );
+  });
+
   it('checks pasted addresses and shows one classified per line', async () => {
-    renderPage();
+    await renderPage();
     const textarea = screen.getByLabelText('Payee addresses');
     fireEvent.change(textarea, { target: { value: `${VALID_A}\n${VALID_C}\nnot-valid` } });
     fireEvent.click(screen.getByRole('button', { name: 'Check addresses' }));
@@ -154,7 +184,7 @@ describe('PayeeManagement bulk verify/remove', () => {
   });
 
   it('sends only the eligible addresses via allow_payees, then clears the form', async () => {
-    renderPage();
+    await renderPage();
     fireEvent.change(screen.getByLabelText('Payee addresses'), {
       target: { value: `${VALID_A}\n${VALID_C}` },
     });
@@ -168,7 +198,7 @@ describe('PayeeManagement bulk verify/remove', () => {
   }, 15000);
 
   it('switches to remove mode and calls deny_payees', async () => {
-    renderPage();
+    await renderPage();
     fireEvent.click(screen.getByRole('radio', { name: /Remove/ }));
     fireEvent.change(screen.getByLabelText('Payee addresses'), { target: { value: VALID_C } });
     fireEvent.click(screen.getByRole('button', { name: 'Check addresses' }));
@@ -184,7 +214,7 @@ describe('PayeeManagement bulk verify/remove', () => {
     const many = Array.from({ length: 60 }, (_, i) =>
       ('G' + alphabet[i % 32] + alphabet[Math.floor(i / 32) % 32] + 'A'.repeat(53)).slice(0, 56),
     );
-    renderPage();
+    await renderPage();
     fireEvent.change(screen.getByLabelText('Payee addresses'), { target: { value: many.join('\n') } });
     fireEvent.click(screen.getByRole('button', { name: 'Check addresses' }));
     await screen.findByText(/sent as 2 batches/);
@@ -196,7 +226,7 @@ describe('PayeeManagement bulk verify/remove', () => {
   }, 15000);
 
   it('disables the send button when nothing is eligible', async () => {
-    renderPage();
+    await renderPage();
     fireEvent.change(screen.getByLabelText('Payee addresses'), { target: { value: 'not-valid' } });
     fireEvent.click(screen.getByRole('button', { name: 'Check addresses' }));
     await screen.findByText('Not a valid address');
@@ -205,7 +235,7 @@ describe('PayeeManagement bulk verify/remove', () => {
 
   it('hides bulk controls behind the creator gate for a non-creator wallet', async () => {
     mocks.address = 'GNOTCREATOREXAMPLEEXAMPLEEXAMPLEEXAMPLEEXAMPLEEXAMPLEEXA';
-    renderPage();
+    await renderPage();
     await screen.findByText(/Only the programme.s creator can verify or remove payees/);
     fireEvent.change(screen.getByLabelText('Payee addresses'), { target: { value: VALID_A } });
     fireEvent.click(screen.getByRole('button', { name: 'Check addresses' }));
