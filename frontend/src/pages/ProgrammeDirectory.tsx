@@ -4,7 +4,7 @@ import { MoneyRow } from '../components/programme/MoneyRow';
 import '../components/programme/phasePill.css';
 import { Skeleton, Empty } from '../components/state/AsyncStates';
 import { describeAmount } from '../lib/amount';
-import { useIndexedList } from '../hooks';
+import { useIndexedList, useProgrammeChainReads, useRegistryProgrammes } from '../hooks';
 import { useWallet } from '../context/useWallet';
 import { fetchMeta, fetchProgrammes, isStale } from '../lib/indexer';
 import { FIXTURE_USER_ROLES, ROLE_LABELS } from '../fixtures/userRoles';
@@ -16,9 +16,11 @@ import {
   sortProgrammes,
   formatAgo,
   formatUsdc,
+  hydrateRealProgrammes,
   mergeProgrammes,
   phaseCounts,
   programmeCta,
+  programmeSourceTag,
   programmeStatus,
   shortId,
   type DirectoryPhase,
@@ -38,10 +40,17 @@ const asSort = (value: string | null): DirectorySort =>
 /**
  * `/directory` — every programme, narrowed by a search box and phase pills.
  *
- * The list comes from the public index and is advisory; the chain values shown
- * on each card are stand-ins (`FIXTURE_CHAIN`) until the per-programme reads
- * are wired, and every card says so. Filter and sort state live in the URL so a
- * narrowed view can be linked and survives a reload.
+ * The list starts at the public index and is advisory. It is also walked from
+ * the registry itself (`nonce()` and `programme_address(n)`, every address
+ * re-checked with `is_programme`), so a programme the index is missing —
+ * because it is down, or because a just-deployed programme has not been
+ * indexed yet — still appears, showing only what the chain will vouch for:
+ * its id and its live figures. Names live in the index alone.
+ *
+ * Every real card's figures are read through the shared per-programme reader;
+ * a card still reading says so, and the sample programmes keep their "Sample
+ * data" tag. Filter and sort state live in the URL so a narrowed view can be
+ * linked and survives a reload.
  */
 export const ProgrammeDirectory = () => {
   const [params, setParams] = useSearchParams();
@@ -54,6 +63,7 @@ export const ProgrammeDirectory = () => {
 
   const metaRead = useIndexedList(async () => ({ meta: await fetchMeta(), readAt: Date.now() }), []);
   const listRead = useIndexedList(() => fetchProgrammes(), []);
+  const registryRead = useRegistryProgrammes();
 
   const userRoles = isSignedIn ? FIXTURE_USER_ROLES : undefined;
 
@@ -102,11 +112,23 @@ export const ProgrammeDirectory = () => {
     setParams(next, { replace: true });
   }, [params, setParams]);
 
-  const all = useMemo(() => mergeProgrammes(listRead.data, userRoles), [listRead.data, userRoles]);
-  const counts = useMemo(() => phaseCounts(all, query), [all, query]);
+  const all = useMemo(
+    () => mergeProgrammes(listRead.data, userRoles, registryRead.ids ?? undefined),
+    [listRead.data, userRoles, registryRead.ids],
+  );
+  const realIds = useMemo(() => all.filter((p) => !p.sample).map((p) => p.id), [all]);
+  const reads = useProgrammeChainReads(realIds);
+  // Real cards swap their stand-in chain for the read the moment it lands.
+  const hydrated = useMemo(() => hydrateRealProgrammes(all, reads.reads), [all, reads.reads]);
+  const readsByError = useMemo(
+    () => new Map(Object.entries(reads.errors).map(([id, error]) => [id, error])),
+    [reads.errors],
+  );
+
+  const counts = useMemo(() => phaseCounts(hydrated, query), [hydrated, query]);
   const shown = useMemo(
-    () => sortProgrammes(filterProgrammes(all, query, phase, yoursOnly), sort),
-    [all, query, phase, sort, yoursOnly],
+    () => sortProgrammes(filterProgrammes(hydrated, query, phase, yoursOnly), sort),
+    [hydrated, query, phase, sort, yoursOnly],
   );
 
   const loading = listRead.loading || metaRead.loading;
@@ -208,7 +230,9 @@ export const ProgrammeDirectory = () => {
           <div role="alert" className="directory-banner directory-banner--error">
             <span className="directory-banner__title">Couldn&apos;t load the public index.</span>
             <span className="directory-banner__body">
-              The list below is the sample set only.
+              {registryRead.ids && registryRead.ids.length > 0
+                ? "The registry's programmes are listed instead, read straight from the chain; names, which only the index stores, return when it does."
+                : 'The list below is the sample set only.'}
             </span>
             <button
               type="button"
@@ -216,6 +240,7 @@ export const ProgrammeDirectory = () => {
               onClick={() => {
                 listRead.refetch();
                 metaRead.refetch();
+                registryRead.refetch();
               }}
             >
               Try again
@@ -247,25 +272,43 @@ export const ProgrammeDirectory = () => {
           {!loading && shown.length > 0 && (
             <div className="directory-grid">
               {shown.map((programme) => (
-                <ProgrammeCard key={programme.id} programme={programme} />
+                <ProgrammeCard
+                  key={programme.id}
+                  programme={programme}
+                  readError={readsByError.get(programme.id)}
+                />
               ))}
             </div>
           )}
         </div>
 
         <p className="directory-footnote">
-          This list comes from the public index, which is advisory. The chain values shown on
-          each card are samples until the per-programme reads are wired.
+          This list comes from the public index, which is advisory, and is walked from the
+          registry for anything the index has not caught up with. Cards tagged “Live on
+          chain” show what the chain says; sample programmes keep their sample tag.
         </p>
       </section>
     </div>
   );
 };
 
-function ProgrammeCard({ programme }: { programme: DirectoryProgramme }) {
+function ProgrammeCard({
+  programme,
+  readError,
+}: {
+  programme: DirectoryProgramme;
+  readError?: unknown;
+}) {
   const { chain } = programme;
   const budget = BigInt(chain.contributed) - BigInt(chain.fee);
   const href = `/programme/${encodeURIComponent(programme.id)}`;
+
+  const tag = readError !== undefined
+    ? 'Chain read failed'
+    : programmeSourceTag(programme);
+  // A real programme whose read has not settled yet shows no figures at all:
+  // its stand-in `chain` must never be mistaken for chain state.
+  const reading = !programme.sample && !programme.real;
 
   return (
     <Link to={href} className="directory-card-link">
@@ -273,9 +316,14 @@ function ProgrammeCard({ programme }: { programme: DirectoryProgramme }) {
         <div className="directory-card-new__head">
           <span className="directory-card-new__title">
             <span className="directory-card-new__name">{programme.name}</span>
-            <span className="directory-card-new__id numeric">{shortId(programme.id)}</span>
+            {/* A registry-only entry is named by its id already. */}
+            {programme.name !== programme.id && (
+              <span className="directory-card-new__id numeric">{shortId(programme.id)}</span>
+            )}
           </span>
-          <span className={`phase-pill phase-pill--${chain.phase.toLowerCase()}`}>{chain.phase}</span>
+          <span className={`phase-pill${reading ? '' : ` phase-pill--${chain.phase.toLowerCase()}`}`}>
+            {reading ? 'Reading' : chain.phase}
+          </span>
         </div>
 
         {programme.userRoles && programme.userRoles.length > 0 && (
@@ -290,18 +338,28 @@ function ProgrammeCard({ programme }: { programme: DirectoryProgramme }) {
 
         <span className="directory-card-new__status">{programmeStatus(chain)}</span>
 
-        <MoneyRow chain={chain} count={20} variant="card" />
+        {reading ? (
+          <span
+            role="status"
+            aria-busy="true"
+            className="directory-card-new__status"
+          >
+            Reading this programme on the chain…
+          </span>
+        ) : (
+          <>
+            <MoneyRow chain={chain} count={20} variant="card" />
 
-        <div className="directory-card-new__figures">
-          <Figure label="Budget" value={formatUsdc(budget)} amount={budget} />
-          <Figure label="Awarded" value={formatUsdc(chain.awarded)} amount={chain.awarded} />
-          <Figure label="Released" value={formatUsdc(chain.released)} amount={chain.released} />
-        </div>
+            <div className="directory-card-new__figures">
+              <Figure label="Budget" value={formatUsdc(budget)} amount={budget} />
+              <Figure label="Awarded" value={formatUsdc(chain.awarded)} amount={chain.awarded} />
+              <Figure label="Released" value={formatUsdc(chain.released)} amount={chain.released} />
+            </div>
+          </>
+        )}
 
         <div className="directory-card-new__foot">
-          <span className="directory-card-new__sample">
-            {programme.sample ? 'Sample data' : 'Sample chain read'}
-          </span>
+          <span className="directory-card-new__sample">{tag}</span>
           <span className="directory-card-new__cta">{programmeCta(chain.phase)} →</span>
         </div>
       </article>

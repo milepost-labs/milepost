@@ -29,17 +29,24 @@ export interface FixtureProgramme {
   createdLedger: number | null;
 }
 
-/** Shaped like a programme contract read. Amounts are stroop strings. */
+/**
+ * Shaped like a programme contract read. Amounts are stroop strings.
+ *
+ * `mode` and `applicants` are knowable only from ledger data the contracts
+ * deliberately keep no list of, so a real chain read maps onto this shape
+ * without them — they stay optional rather than being invented for real
+ * programmes, and copy that mentions them degrades honestly.
+ */
 export interface FixtureChainRead {
   phase: FixturePhase;
-  mode: FixtureMode;
+  mode?: FixtureMode;
   contributed: string;
   fee: string;
   awarded: string;
   released: string;
   refundable: string;
   quorum: number;
-  applicants: number;
+  applicants?: number;
   closesInDays?: number;
 }
 

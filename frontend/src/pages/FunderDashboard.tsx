@@ -60,6 +60,10 @@ export const FunderDashboard = () => {
           Put money into a programme and follow it. It only moves when a verifier confirms a condition, and
           whatever isn’t awarded comes back to you.
         </p>
+        <p className="funding__lede">
+          Looking for a receipt from a past contribution?{' '}
+          <Link to="/funders/receipt">Rebuild it from its transaction hash</Link>.
+        </p>
       </header>
 
       {!address ? (
