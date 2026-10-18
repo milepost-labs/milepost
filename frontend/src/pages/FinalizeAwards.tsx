@@ -2,9 +2,7 @@ import { useMemo, useState, type FormEvent } from 'react';
 import {
   AlertTriangle,
   ArrowRight,
-  Award as AwardIcon,
   CheckCircle,
-  Coins,
   Globe,
   Landmark,
   Lock,
@@ -26,7 +24,7 @@ import { useWallet } from '../context/useWallet';
 import { useAnnouncer } from '../context/useAnnouncer';
 import { AsyncView, Loading } from '../components/state/AsyncStates';
 import { PausedBanner } from '../components/programme/PausedBanner';
-import { Badge, Button, Card, Field, PhaseBadge, Select } from '../components/ui';
+import { Badge, Button, Card, Field, PhaseBadge, Select, Stat } from '../components/ui';
 import { formatAmount } from '../lib/amount';
 import { explainCode } from '../lib/errors';
 import { FIXTURE_PROGRAMMES, chainFor } from '../fixtures/programmes';
@@ -390,10 +388,10 @@ export const FinalizeAwards = () => {
   };
 
   return (
-    <div className="dashboard-container finalize-page">
+    <div className="finalize-page">
       <PausedBanner client={programme} />
 
-      <header className="dashboard-header animate-fade-up">
+      <header className="finalize-header animate-fade-up">
         <h1>Finalize Awards</h1>
         <p className="typo-text text-muted">
           Settle applications with enough reviewer votes into awards. The payment mode you pick decides whether released money can reach an unverified destination.
@@ -402,45 +400,47 @@ export const FinalizeAwards = () => {
 
       <FinalizeBoard />
 
-      <section className="stats-grid animate-fade-up" style={{ animationDelay: '100ms' }}>
-        <div className="stat-card">
-          <div className="stat-icon"><Coins size={24} /></div>
-          <div className="stat-content">
-            <span className="stat-label">Remaining Budget</span>
-            <span className="stat-value">
+      <section
+        className="finalize-stats animate-fade-up"
+        style={{ animationDelay: '100ms' }}
+        aria-label="Programme figures"
+      >
+        <Card>
+          <Stat
+            label="Remaining budget"
+            value={
               <AsyncView {...budget} onRetry={budget.refetch}>
                 {(value) => formatAmount(value, { asset: 'XLM' })}
               </AsyncView>
-            </span>
-          </div>
-        </div>
-        <div className="stat-card">
-          <div className="stat-icon"><AwardIcon size={24} /></div>
-          <div className="stat-content">
-            <span className="stat-label">Programme Phase</span>
-            <span className="stat-value">
+            }
+            numeric
+          />
+        </Card>
+        <Card>
+          <Stat
+            label="Programme phase"
+            value={
               <AsyncView {...phase} onRetry={phase.refetch}>
                 {(value) => <PhaseBadge phase={value.tag} />}
               </AsyncView>
-            </span>
-          </div>
-        </div>
-        <div className="stat-card">
-          <div className="stat-icon"><CheckCircle size={24} /></div>
-          <div className="stat-content">
-            <span className="stat-label">Reviewer votes needed</span>
-            <span className="stat-value">
+            }
+          />
+        </Card>
+        <Card>
+          <Stat
+            label="Reviewer votes needed"
+            value={
               <AsyncView {...config} onRetry={config.refetch}>
                 {(value) => `${value.quorum} votes`}
               </AsyncView>
-            </span>
-          </div>
-        </div>
-        <div className="stat-card">
-          <div className="stat-icon"><Coins size={24} /></div>
-          <div className="stat-content">
-            <span className="stat-label">Minimum Award</span>
-            <span className="stat-value">
+            }
+            numeric
+          />
+        </Card>
+        <Card>
+          <Stat
+            label="Minimum award"
+            value={
               <AsyncView {...config} onRetry={config.refetch}>
                 {(value) =>
                   value.minimum_award > 0n
@@ -448,9 +448,10 @@ export const FinalizeAwards = () => {
                     : 'None'
                 }
               </AsyncView>
-            </span>
-          </div>
-        </div>
+            }
+            numeric
+          />
+        </Card>
       </section>
 
       <section className="finalize-panel animate-fade-up" style={{ animationDelay: '200ms' }}>
