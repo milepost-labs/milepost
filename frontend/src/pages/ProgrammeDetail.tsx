@@ -16,7 +16,7 @@ import { ProgrammeHeader } from "../components/programme/ProgrammeHeader";
 import { WhereTheMoneyIs } from "../components/programme/WhereTheMoneyIs";
 import { ProgrammeTabs } from "../components/programme/ProgrammeTabs";
 import { ProgrammeActions } from "../components/programme/ProgrammeActions";
-import { Badge, Button, Card, Deadline, Field, PhaseBadge, Stat, Table } from "../components/ui";
+import { Badge, Button, Card, Deadline, Field, List, ListRow, PhaseBadge, Stat } from "../components/ui";
 import { useSoroban } from "../context/useSoroban";
 import { useContractRead, useContractResult, useIndexedList, useProgramme } from "../hooks";
 import { fetchProgrammes } from "../lib/indexer";
@@ -253,18 +253,16 @@ function MetadataCard({ committedHash }: { committedHash: string }) {
   };
 
   return (
-    <div style={{ display: "flex", flexDirection: "column", gap: "1.25rem" }}>
-      <p className="typo-text text-muted" style={{ margin: 0 }}>
+    <div className="metadata-card">
+      <p className="typo-text text-muted metadata-card__intro">
         The programme commits to a metadata document by hash. Paste the URL
         where the document lives — IPFS gateway, Arweave, or the funder&rsquo;s
         own site. The document is hashed and compared against the on-chain
         commitment before anything is displayed; a mismatch is refused.
       </p>
 
-      <div
-        style={{ display: "flex", alignItems: "flex-end", gap: "var(--space-3)" }}
-      >
-        <div style={{ flex: 1 }}>
+      <div className="metadata-card__fetch">
+        <div className="metadata-card__field">
           <Field
             label="Metadata document URL"
             placeholder="https://…"
@@ -295,7 +293,7 @@ function MetadataCard({ committedHash }: { committedHash: string }) {
           <AlertTriangle size={18} aria-hidden="true" />
           <div>
             <strong>Metadata unavailable.</strong>
-            <p className="typo-text text-muted" style={{ margin: "0.25rem 0 0" }}>
+            <p className="typo-text text-muted metadata-state__text">
               {state.reason} The on-chain commitment is{" "}
               <code className="numeric">{committedHash}</code>. The programme is
               fully functional — only the human-readable description is missing.
@@ -313,7 +311,7 @@ function MetadataCard({ committedHash }: { committedHash: string }) {
           <AlertTriangle size={18} aria-hidden="true" />
           <div>
             <strong>Document is malformed.</strong>
-            <p className="typo-text text-muted" style={{ margin: "0.25rem 0 0" }}>
+            <p className="typo-text text-muted metadata-state__text">
               {state.reason} A malformed document cannot be displayed as the
               programme&rsquo;s description.
             </p>
@@ -330,47 +328,18 @@ function MetadataCard({ committedHash }: { committedHash: string }) {
           <AlertTriangle size={18} aria-hidden="true" />
           <div>
             <strong>Hash mismatch — document refused.</strong>
-            <p className="typo-text text-muted" style={{ margin: "0.25rem 0 0" }}>
+            <p className="typo-text text-muted metadata-state__text">
               The fetched document does not hash to the value the programme
               committed to. It is not being displayed.
             </p>
-            <dl
-              style={{
-                margin: "0.75rem 0 0",
-                display: "flex",
-                flexDirection: "column",
-                gap: "0.5rem",
-              }}
-            >
-              <div>
-                <dt
-                  style={{
-                    fontSize: "var(--text-xs)",
-                    textTransform: "uppercase",
-                    letterSpacing: "0.05em",
-                    color: "var(--text-muted)",
-                  }}
-                >
-                  Fetched document hash
-                </dt>
-                <dd className="numeric" style={{ margin: 0, fontSize: "var(--text-sm)", overflowWrap: "anywhere" }}>
-                  {state.fetchedHash}
-                </dd>
+            <dl className="metadata-doc metadata-doc--spaced">
+              <div className="metadata-doc__field">
+                <dt>Fetched document hash</dt>
+                <dd className="numeric">{state.fetchedHash}</dd>
               </div>
-              <div>
-                <dt
-                  style={{
-                    fontSize: "var(--text-xs)",
-                    textTransform: "uppercase",
-                    letterSpacing: "0.05em",
-                    color: "var(--text-muted)",
-                  }}
-                >
-                  On-chain commitment
-                </dt>
-                <dd className="numeric" style={{ margin: 0, fontSize: "var(--text-sm)", overflowWrap: "anywhere" }}>
-                  {state.committedHash}
-                </dd>
+              <div className="metadata-doc__field">
+                <dt>On-chain commitment</dt>
+                <dd className="numeric">{state.committedHash}</dd>
               </div>
             </dl>
           </div>
@@ -384,7 +353,7 @@ function MetadataCard({ committedHash }: { committedHash: string }) {
           aria-live="polite"
         >
           <CheckCircle2 size={18} aria-hidden="true" />
-          <div style={{ flex: 1 }}>
+          <div className="metadata-state__body">
             <strong>Verified against on-chain commitment.</strong>
 
             <dl className="metadata-doc">
@@ -601,6 +570,28 @@ export const ProgrammeDetail = () => {
         phaseError={Boolean(phase.error)}
         verified={isRegistered.data ?? undefined}
       />
+      <AsyncView
+        {...isRegistered}
+        onRetry={isRegistered.refetch}
+        contract="registry"
+      >
+        {(deployedByRegistry) => {
+          const copy = registryVerificationCopy(deployedByRegistry);
+          return (
+            <p className="programme-verification">
+              {deployedByRegistry ? (
+                <ShieldCheck aria-hidden="true" />
+              ) : (
+                <ShieldAlert aria-hidden="true" />
+              )}
+              <Badge tone={copy.tone}>{copy.label}</Badge>
+              <span className="programme-verification__text">
+                {copy.description}
+              </span>
+            </p>
+          );
+        }}
+      </AsyncView>
       {isDefault && (
         <p className="programme-hero__hint">
           Showing the seeded demo programme. Add a contract id after{" "}
@@ -664,31 +655,6 @@ export const ProgrammeDetail = () => {
       </section>
 
       <section className="programme-grid animate-fade-up">
-        <Card title="Registry verification">
-          <AsyncView
-            {...isRegistered}
-            onRetry={isRegistered.refetch}
-            contract="registry"
-          >
-            {(deployedByRegistry) => {
-              const copy = registryVerificationCopy(deployedByRegistry);
-              return (
-                <div className="verification-panel">
-                  {deployedByRegistry ? (
-                    <ShieldCheck aria-hidden="true" />
-                  ) : (
-                    <ShieldAlert aria-hidden="true" />
-                  )}
-                  <div>
-                    <Badge tone={copy.tone}>{copy.label}</Badge>
-                    <p className="typo-text text-muted">{copy.description}</p>
-                  </div>
-                </div>
-              );
-            }}
-          </AsyncView>
-        </Card>
-
         <div className="programme-main">
           <div className="programme-section--center">
             <AsyncView
@@ -732,6 +698,7 @@ export const ProgrammeDetail = () => {
         </div>
 
         <Card
+          className="programme-grid__wide"
           title="Timeline and phase"
           aside={phase.data ? <PhaseBadge phase={phaseName} /> : null}
         >
@@ -752,36 +719,22 @@ export const ProgrammeDetail = () => {
                     All configured deadlines have passed.
                   </p>
                 )}
-                <Table
-                  caption="Programme timeline"
-                  rows={timelineRows}
-                  keyOf={(row) => row.key}
-                  columns={[
-                    {
-                      key: "milestone",
-                      header: "Milestone",
-                      render: (row) => row.label,
-                    },
-                    {
-                      key: "date",
-                      header: "Date",
-                      render: (row) => (
-                        <Deadline unixSeconds={row.deadline} />
-                      ),
-                    },
-                    {
-                      key: "status",
-                      header: "Status",
-                      render: (row) => (
+                <List label="Programme timeline">
+                  {timelineRows.map((row) => (
+                    <ListRow
+                      key={row.key}
+                      title={row.label}
+                      meta={<Deadline unixSeconds={row.deadline} />}
+                      trailing={
                         <Badge
                           tone={row.status === "Passed" ? "neutral" : "accent"}
                         >
                           {row.status}
                         </Badge>
-                      ),
-                    },
-                  ]}
-                />
+                      }
+                    />
+                  ))}
+                </List>
               </div>
             )}
           </AsyncView>
@@ -790,40 +743,50 @@ export const ProgrammeDetail = () => {
         <Card title="Programme rules">
           <AsyncView {...config} onRetry={config.refetch} contract="program">
             {(value) => (
-              <dl className="config-list">
-                <div>
-                  <dt>Creator</dt>
-                  <dd className="numeric" title={value.creator}>
-                    {formatAddress(value.creator)}
-                  </dd>
-                </div>
-                <div>
-                  <dt>Treasury</dt>
-                  <dd className="numeric" title={value.treasury}>
-                    {formatAddress(value.treasury)}
-                  </dd>
-                </div>
-                <div>
-                  <dt>Asset contract</dt>
-                  <dd className="numeric" title={value.token}>
-                    {formatAddress(value.token)}
-                  </dd>
-                </div>
-                <div>
-                  <dt>Reviewer votes needed</dt>
-                  <dd className="numeric">{value.quorum} reviewer votes</dd>
-                </div>
-                <div>
-                  <dt>Tranches</dt>
-                  <dd className="numeric">{value.tranches}</dd>
-                </div>
-                <div>
-                  <dt>Metadata hash</dt>
-                  <dd className="numeric">
-                    {value.metadata_hash.toString("hex")}
-                  </dd>
-                </div>
-              </dl>
+              <List label="Programme rules">
+                <ListRow
+                  title="Creator"
+                  trailing={
+                    <span className="numeric" title={value.creator}>
+                      {formatAddress(value.creator)}
+                    </span>
+                  }
+                />
+                <ListRow
+                  title="Treasury"
+                  trailing={
+                    <span className="numeric" title={value.treasury}>
+                      {formatAddress(value.treasury)}
+                    </span>
+                  }
+                />
+                <ListRow
+                  title="Asset contract"
+                  trailing={
+                    <span className="numeric" title={value.token}>
+                      {formatAddress(value.token)}
+                    </span>
+                  }
+                />
+                <ListRow
+                  title="Reviewer votes needed"
+                  trailing={
+                    <span className="numeric">{value.quorum} reviewer votes</span>
+                  }
+                />
+                <ListRow
+                  title="Tranches"
+                  trailing={<span className="numeric">{value.tranches}</span>}
+                />
+                <ListRow
+                  title="Metadata hash"
+                  meta={
+                    <span className="numeric programme-wrap">
+                      {value.metadata_hash.toString("hex")}
+                    </span>
+                  }
+                />
+              </List>
             )}
           </AsyncView>
         </Card>
@@ -836,127 +799,68 @@ export const ProgrammeDetail = () => {
           </AsyncView>
         </Card>
 
-        <Card title="Reviewer and verifier access">
+        <Card className="programme-grid__wide" title="Reviewers, verifiers and schema">
           <AsyncView {...config} onRetry={config.refetch} contract="program">
             {(value) => (
-              <div className="membership-grid">
-                <div className="membership-card">
-                  <UsersRound aria-hidden="true" />
-                  <div>
-                    <h3>Reviewers</h3>
-                    <p>
+              <List className="programme-access" label="Reviewers, verifiers and schema">
+                <ListRow
+                  leading={<UsersRound aria-hidden="true" />}
+                  title="Reviewers"
+                  meta={
+                    <>
                       The programme checks reviewer membership by address with{" "}
                       <span className="numeric">is_reviewer(addr)</span>. The app cannot list every reviewer yet, so this page shows the live reviewer-vote requirement instead.
-                    </p>
-                    <Badge tone="accent">{value.quorum} votes required</Badge>
-                  </div>
-                </div>
-                <div className="membership-card">
-                  <ShieldCheck aria-hidden="true" />
-                  <div>
-                    <h3>Verifiers</h3>
-                    <p>
+                    </>
+                  }
+                  trailing={<Badge tone="accent">{value.quorum} votes required</Badge>}
+                />
+                <ListRow
+                  leading={<ShieldCheck aria-hidden="true" />}
+                  title="Verifiers"
+                  meta={
+                    <>
                       The programme checks verifier membership by address with{" "}
                       <span className="numeric">is_verifier(addr)</span>. The current app can confirm one verifier address at a time but does not list every verifier yet.
-                    </p>
-                    <Badge tone="neutral">
-                      {value.tranches} tranches
-                    </Badge>
-                  </div>
-                </div>
-                <div className="membership-card membership-card--wide">
-                  <Landmark aria-hidden="true" />
-                  <div>
-                    <h3>Linked infrastructure</h3>
-                    <p>
-                      Attestations, standing records, spending rules, and treasury addresses are read from programme configuration.
-                    </p>
+                    </>
+                  }
+                  trailing={<Badge tone="neutral">{value.tranches} tranches</Badge>}
+                />
+                <ListRow
+                  leading={<UsersRound aria-hidden="true" />}
+                  title="Verifier roster"
+                  meta={
+                    <>
+                      Only confirmations signed by these trusted verifiers can release funds. Recipients should know whose signature they need to obtain. The app cannot list verifier addresses from this programme yet; this roster will come from deployment records or the public index. For now, verifier checking is available via{" "}
+                      <span className="numeric">is_verifier(addr)</span>.
+                    </>
+                  }
+                />
+                <ListRow
+                  leading={<FileText aria-hidden="true" />}
+                  title="Schema"
+                  meta={
+                    <>
+                      A schema defines what verifiers are allowed to confirm. Attestations must match this template before a tranche can release.
+                      <span className="numeric programme-wrap">
+                        {value.schema.toString("hex")}
+                      </span>
+                    </>
+                  }
+                />
+                <ListRow
+                  leading={<Landmark aria-hidden="true" />}
+                  title="Linked infrastructure"
+                  meta="Attestations, standing records, spending rules, and treasury addresses are read from programme configuration."
+                  trailing={
                     <Link
                       to={`/funders?programme=${encodeURIComponent(programmeId)}`}
                       className="programme-link"
                     >
                       Back to funder dashboard
                     </Link>
-                  </div>
-                </div>
-              </div>
-            )}
-          </AsyncView>
-        </Card>
-
-        <Card title="Trusted verifiers and schema">
-          <AsyncView {...config} onRetry={config.refetch} contract="program">
-            {(value) => (
-              <div
-                style={{
-                  display: "flex",
-                  flexDirection: "column",
-                  gap: "1.5rem",
-                }}
-              >
-                <div>
-                  <h3
-                    style={{
-                      fontSize: "1rem",
-                      fontWeight: 600,
-                      marginBottom: "0.5rem",
-                    }}
-                  >
-                    Schema
-                  </h3>
-                  <p
-                    style={{
-                      fontSize: "0.875rem",
-                      color: "var(--color-muted)",
-                      marginBottom: "0.75rem",
-                    }}
-                  >
-                    A schema defines what verifiers are allowed to confirm. Attestations must match this template before a tranche can release.
-                  </p>
-                  <div
-                    style={{
-                      padding: "0.75rem",
-                      backgroundColor: "var(--color-surface)",
-                      borderRadius: "var(--radius-md)",
-                      fontFamily: "monospace",
-                      fontSize: "0.875rem",
-                      wordBreak: "break-all",
-                    }}
-                  >
-                    {value.schema.toString("hex")}
-                  </div>
-                </div>
-                <div>
-                  <h3
-                    style={{
-                      fontSize: "1rem",
-                      fontWeight: 600,
-                      marginBottom: "0.5rem",
-                    }}
-                  >
-                    Verifier roster
-                  </h3>
-                  <p
-                    style={{
-                      fontSize: "0.875rem",
-                      color: "var(--color-muted)",
-                      marginBottom: "0.75rem",
-                    }}
-                  >
-                    Only confirmations signed by these trusted verifiers can release funds. Recipients should know whose signature they need to obtain.
-                  </p>
-                  <p
-                    style={{
-                      fontSize: "0.875rem",
-                      fontStyle: "italic",
-                      color: "var(--color-muted)",
-                    }}
-                  >
-                    Note: the app cannot list verifier addresses from this programme yet. This roster will come from deployment records or the public index. For now, verifier checking is available via{" "}
-                    <span className="numeric">is_verifier(addr)</span>.
-                  </p>
-                </div>
-              </div>
+                  }
+                />
+              </List>
             )}
           </AsyncView>
         </Card>
