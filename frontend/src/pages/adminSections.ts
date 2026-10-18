@@ -1,7 +1,7 @@
 /**
- * The admin area's section nav, shared by every admin page so the pill bar
- * is identical (and gains a section in one place) regardless of which one
- * is currently rendered.
+ * The admin area's section nav, rendered once by `AdminLayout` above whichever
+ * screen is current, so the pill bar is identical (and gains a section in one
+ * place) on every admin screen.
  */
 export interface AdminSection {
   to: string;
@@ -13,4 +13,5 @@ export const ADMIN_SECTIONS: AdminSection[] = [
   { to: '/admin', label: 'Deploy programme' },
   { to: '/schemas/register', label: 'Schemas' },
   { to: '/admin/standing', label: 'Standing writers' },
+  { to: '/keepalive', label: 'Keepalive' },
 ];

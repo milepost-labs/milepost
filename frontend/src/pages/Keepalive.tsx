@@ -243,7 +243,7 @@ export const Keepalive = () => {
   return (
     <div className="keepalive-page">
       <header className="keepalive-page__header">
-        <h1>Keepalive</h1>
+        <h2>Keepalive</h2>
         <p className="typo-text text-muted">
           Entry lifetimes for one programme. Anything close to expiry can be extended before the
           network archives it.

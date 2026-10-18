@@ -390,11 +390,11 @@ export const FinalizeAwards = () => {
   };
 
   return (
-    <div className="dashboard-container finalize-page">
+    <div className="finalize-page">
       <PausedBanner client={programme} />
 
-      <header className="dashboard-header animate-fade-up">
-        <h1>Finalize Awards</h1>
+      <header className="finalize-header animate-fade-up">
+        <h2>Finalize awards</h2>
         <p className="typo-text text-muted">
           Settle applications with enough reviewer votes into awards. The payment mode you pick decides whether released money can reach an unverified destination.
         </p>
