@@ -9,6 +9,12 @@ import { TermsTab } from './TermsTab';
 import { ProgrammeTabs } from './ProgrammeTabs';
 import { FIXTURE_AWARDS, FIXTURE_VERIFIERS } from '../../fixtures/programmeFixtures';
 
+// VerifiersTab reads reviewer/verifier/payee flags through the programme
+// client, so it needs a Soroban context; the checks stay disabled here.
+vi.mock('../../context/useSoroban', () => ({
+  useSoroban: () => ({ programmeAt: vi.fn() }),
+}));
+
 // Mock useIndexedList so AwardsTab tests can test loaded, loading, and error states
 vi.mock('../../hooks/useIndexedList', () => ({
   useIndexedList: vi.fn((_loadFn, _deps, options) => {
@@ -169,10 +175,10 @@ describe('Issue #265 - AwardsTab component', () => {
 
 describe('Issue #266 - VerifiersTab component', () => {
   it('displays the stand-in verifier roster with future source and reviewer distinction', () => {
-    render(<VerifiersTab verifiers={FIXTURE_VERIFIERS} />);
+    render(<VerifiersTab verifiers={FIXTURE_VERIFIERS} isSample />);
 
     // Tag and future source
-    expect(screen.getByText('Stand-in data')).toBeDefined();
+    expect(screen.getByText('Sample data')).toBeDefined();
     expect(
       screen.getByText(/The roster is not published by the indexer yet/),
     ).toBeDefined();
@@ -253,13 +259,14 @@ describe('ProgrammeTabs wrapper component', () => {
           phase="Settled"
           quorum={3}
           asset="USDC"
+          isSample
         />
       </MemoryRouter>,
     );
 
     // Starts on Awards tab
     expect(screen.getByRole('tab', { name: 'Awards' }).getAttribute('aria-selected')).toBe('true');
-    expect(screen.getByText(/From the public index/)).toBeDefined();
+    expect(screen.getByText(/Listed from the public index, advisory/)).toBeDefined();
 
     // Switch to Verifiers tab
     const verifiersBtn = screen.getByRole('tab', { name: 'Verifiers' });
