@@ -16,9 +16,9 @@ export interface UserProgrammeRole {
 
 /** A signed-in user's roles across programmes, keyed by programme id. */
 export const FIXTURE_USER_ROLES: Record<string, UserRole[]> = {
-  CBQ4SCHOOLBURSARY2026XK3ZP7M2QWJ5T8VN4RD6HY: ['funder'],
-  CCM2SMALLHOLDERINPUTSLR26A9FK3XU7PZ4E8QT2BN: ['applicant', 'reviewer'],
-  CA3NSMEMICROGRANTSQ2V8TX4QK7PL2RZ9MD5HW6JUB: ['verifier'],
+  CBJWECZ3EUVNAE73YIMT2KWWNRHRF7NNWVKOLQRVOHSKYRYE32XBRPW7: ['funder'],
+  CB7WB66VLFJUD2WHZYHQF7PHM72THVJYMLZ7YPW2XQKUOUUGKVTWVDXI: ['applicant', 'reviewer'],
+  CBAVXWACVVQIBYAZ2YCSIPWXA24E3NZ3CIRAWJ2UHEQUQP67POYS6GFM: ['verifier'],
 };
 
 /** Human label for each role, used on the card pill. */

@@ -98,7 +98,7 @@ describe('Funding dashboard', () => {
   it('shows each contribution with its programme, phase, amount and a status note', async () => {
     renderPage();
     const sme = await screen.findByRole('link', { name: 'SME supplier microgrants Q2' });
-    expect(sme.getAttribute('href')).toBe('/programme/CA3NSMEMICROGRANTSQ2V8TX4QK7PL2RZ9MD5HW6JUB');
+    expect(sme.getAttribute('href')).toBe('/programme/CBAVXWACVVQIBYAZ2YCSIPWXA24E3NZ3CIRAWJ2UHEQUQP67POYS6GFM');
     const item = card('SME supplier microgrants Q2');
     expect(within(item).getByText('Settled')).toBeTruthy();
     expect(within(item).getByText('2,000 USDC')).toBeTruthy();

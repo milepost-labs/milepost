@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { programmeActions, type ActionInput, type ActionKey } from './programmeActions';
 
-const ID = 'CDV7VOCATIONALCOHORT3PL5QZ2WM8RT4HX6KJ9A3FC';
+const ID = 'CCOIACASOVO3ZQLXWWJFGZAU3Y545AGPXLBP4NYHYD77RDCBPXRVZ37C';
 
 const input = (overrides: Partial<ActionInput> = {}): ActionInput => ({
   programmeId: ID,

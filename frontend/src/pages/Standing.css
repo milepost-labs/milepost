@@ -155,13 +155,72 @@
   flex-basis: 100%;
 }
 
-.standing-sample {
-  align-self: flex-start;
-  padding: var(--space-1) var(--space-2);
-  border: 1px dashed var(--locked);
-  border-radius: var(--radius-full);
-  font-size: var(--text-xs);
+/* ── Subject viewer ─────────────────────────────────────────────────────── */
+
+.standing-viewer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: var(--space-3) var(--space-4);
+}
+
+.standing-viewer__who {
+  display: inline-flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+  min-height: var(--tap-min);
+}
+
+.standing-viewer__label {
+  font-size: var(--text-sm);
+  font-weight: var(--weight-bold);
   color: var(--text-muted);
+}
+
+/* ── Address lookup ─────────────────────────────────────────────────────── */
+
+.standing-lookup {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+  padding: var(--space-5);
+  background: var(--surface);
+  border-radius: var(--radius-card);
+}
+
+.standing-lookup__copy {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+}
+
+.standing-lookup__title {
+  margin: 0;
+  font-size: var(--text-lg);
+  font-weight: var(--weight-bold);
+}
+
+.standing-lookup__desc {
+  margin: 0;
+  max-width: 66ch;
+  font-size: var(--text-sm);
+  line-height: var(--leading-body);
+  color: var(--text-muted);
+}
+
+.standing-lookup__row {
+  display: flex;
+  align-items: flex-end;
+  flex-wrap: wrap;
+  gap: var(--space-3);
+}
+
+/* Grows to fill the row, and never narrower than a card column. */
+.standing-lookup__field {
+  flex: 1;
+  min-width: var(--grid-min-card);
 }
 
 /* ── Signed out ─────────────────────────────────────────────────────────── */

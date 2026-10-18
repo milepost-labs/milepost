@@ -4,6 +4,10 @@ import { useAnnouncer } from '../../context/useAnnouncer';
 import { useSoroban } from '../../context/useSoroban';
 import { useWallet } from '../../context/useWallet';
 import { phaseLabel, useTransaction } from '../../hooks/useTransaction';
+import {
+  useProgrammeBalance,
+  type ProgrammeBalanceStatus,
+} from '../../hooks/useProgrammeBalance';
 import { validateAmount } from '../../lib/amount';
 import { explain, explainCode, isFailure, type Explained } from '../../lib/errors';
 import { contributeBlockedReason, feeBpsOf, formatBps, splitContribution } from '../../lib/funding';
@@ -37,8 +41,6 @@ export interface ContributeFlowProps {
   programmes: DirectoryProgramme[];
   /** From `?programme=`: preselected, or shown as unavailable when not Open. */
   linkedProgrammeId?: string | null;
-  /** Wallet balance in stroops. */
-  balance: bigint;
   /** Stand-in transaction duration, overridable for tests. */
   sampleDelayMs?: number;
 }
@@ -49,18 +51,27 @@ function failureAnnouncement(error: Explained): string {
   return `Contribution didn't go through. ${error.message}${transfer}`;
 }
 
+/** What to say about the balance while it is not known. `undefined` lets `AmountField` show the figure. */
+function balanceHint(status: ProgrammeBalanceStatus): string | undefined {
+  if (status === 'unavailable') return 'Balance unavailable';
+  if (status === 'reading') return 'Checking your balance…';
+  return undefined;
+}
+
 /**
  * Contribute: amount, confirm, then the receipt or the failure.
  *
  * An amount above the balance is refused inline and Continue stays disabled,
- * so it never reaches a signature. The phase is read again on entering
- * Confirm and once more immediately before signing: a programme that has left
- * Open is refused with `WrongPhase` rather than sent to fail on-chain.
+ * so it never reaches a signature. The balance is read from the chosen
+ * programme's token contract; when that read fails the amount is not capped
+ * and the field says the balance is unavailable. The phase is read again on
+ * entering Confirm and once more immediately before signing: a programme that
+ * has left Open is refused with `WrongPhase` rather than sent to fail
+ * on-chain.
  */
 export function ContributeFlow({
   programmes,
   linkedProgrammeId = null,
-  balance,
   sampleDelayMs = SAMPLE_TX_DELAY_MS,
 }: ContributeFlowProps) {
   const { address } = useWallet();
@@ -82,7 +93,12 @@ export function ContributeFlow({
   const programme = programmes.find((p) => p.id === selectedId);
   const blocked = programme ? contributeBlockedReason(programme.chain.phase) : null;
 
-  const parsed = validateAmount(amount, { balance, asset: 'USDC' });
+  // Read from the chosen programme's token contract. `undefined` while it is
+  // unknown, so an amount is never refused against a balance we do not have.
+  const balanceRead = useProgrammeBalance(programme);
+  const walletBalance = balanceRead.balance ?? undefined;
+
+  const parsed = validateAmount(amount, { balance: walletBalance, asset: 'USDC' });
   const value = parsed.ok ? parsed.value : null;
   const feeBps = programme ? feeBpsOf(programme.chain) : 0n;
   const split = value !== null ? splitContribution(value, feeBps) : null;
@@ -227,7 +243,8 @@ export function ContributeFlow({
             onChange={setAmount}
             asset="USDC"
             presets={PRESETS}
-            balance={balance}
+            balance={walletBalance}
+            hint={balanceHint(balanceRead.status)}
           />
 
           <dl className="fund-breakdown">

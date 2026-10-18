@@ -1,4 +1,8 @@
 import { useState, type ChangeEvent, type FormEvent } from 'react';
+import { Buffer } from 'buffer';
+import type { Attestation } from '@milepost/attest';
+import { useSoroban } from '../context/useSoroban';
+import { useContractResult } from '../hooks/useContractRead';
 import { Badge, Field } from '../components/ui';
 import { FIXTURE_ATTESTATIONS, type AttestationFixture } from '../fixtures/attestationFixtures';
 import {
@@ -39,17 +43,14 @@ const EMPTY_CLAIM_FORM = { uid: '', subject: '', schema: '', attester: '' };
 /**
  * Attestation lookup.
  *
- * Two modes. "Look up by id" answers what an attestation says — search by
- * id, recipient or verifier. "Check a claim" answers the narrower question
- * anything gating value should actually ask: does this subject hold a valid
- * claim under this schema from this attester (`attest.verify`, not just
- * `is_valid`). The `attest` contract has no way to enumerate by subject or
- * attester — only to fetch one uid at a time — so both modes stay
- * fixture-backed (see `attestationFixtures.ts` and `attestationVerify.ts`)
- * until an indexer handler publishes a searchable list. No sign-in needed:
- * anyone can check what a verifier signed.
+ * Two modes. "Look up by id" answers what an attestation says — reading on-chain
+ * via `attest.get` for real 32-byte UIDs. For address queries, explains the
+ * contract's search limitations and keeps sample results behind the sample label.
+ * "Check a claim" answers the narrower question: does this subject hold a valid
+ * claim under this schema from this attester.
  */
 export const AttestationLookup = () => {
+  const { attest } = useSoroban();
   const [mode, setMode] = useState<LookupMode>('id');
 
   const [query, setQuery] = useState('');
@@ -66,17 +67,31 @@ export const AttestationLookup = () => {
     setSearched(uid);
   };
 
-  const trimmed = searched.trim().toLowerCase();
+  const trimmed = searched.trim();
+  const cleanHex = trimmed.toLowerCase();
+  const isHex64 = /^[0-9a-fA-F]{64}$/.test(cleanHex);
+  const isAddress = /^[GC][A-Z2-7]{55}$/.test(trimmed);
   const searchedYet = trimmed.length > 0;
-  const hits = searchedYet
+
+  const chainRead = useContractResult<Attestation>(
+    () => attest.get({ uid: Buffer.from(cleanHex, 'hex') }),
+    [attest, cleanHex],
+    { enabled: isHex64 },
+  );
+
+  const chainAttestation = isHex64 ? chainRead.data : null;
+  const chainLoading = isHex64 && chainRead.loading;
+  const chainNotFound = isHex64 && !chainRead.loading && Boolean(chainRead.error);
+
+  const hits = searchedYet && !isHex64
     ? FIXTURE_ATTESTATIONS.filter(
         (a) =>
-          a.uid.toLowerCase() === trimmed ||
-          a.subject.toLowerCase().includes(trimmed) ||
-          a.attester.toLowerCase().includes(trimmed),
+          a.uid.toLowerCase() === cleanHex ||
+          a.subject.toLowerCase() === cleanHex ||
+          a.attester.toLowerCase() === cleanHex ||
+          (isAddress && (a.subject === trimmed || a.attester === trimmed)),
       )
     : [];
-  const noneFound = searchedYet && hits.length === 0;
 
   const [claimForm, setClaimForm] = useState(EMPTY_CLAIM_FORM);
   const [claimErrors, setClaimErrors] = useState<VerifyClaimFieldErrors>({});
@@ -169,8 +184,71 @@ export const AttestationLookup = () => {
           </div>
 
           <div aria-live="polite" className="attest-lookup__results">
-            {noneFound && (
-              <div className="attest-not-found">
+            {chainLoading && (
+              <div className="attest-lookup__status" role="status">
+                <span>Reading attestation from chain…</span>
+              </div>
+            )}
+
+            {chainAttestation && (
+              <article key={cleanHex} className="attest-result-card">
+                <div className="attest-result-card__head">
+                  <span className="attest-result-card__uid">
+                    {chainAttestation.uid ? Buffer.from(chainAttestation.uid).toString('hex') : cleanHex}
+                  </span>
+                  <Badge tone={chainAttestation.revoked_at ? 'danger' : 'success'}>
+                    {chainAttestation.revoked_at ? 'Revoked' : 'Valid on-chain'}
+                  </Badge>
+                </div>
+                <div className="attest-result-row">
+                  <span className="attest-result-row__key">Schema</span>
+                  <span className="attest-result-row__value numeric">
+                    {Buffer.from(chainAttestation.schema).toString('hex')}
+                  </span>
+                </div>
+                <div className="attest-result-row">
+                  <span className="attest-result-row__key">Attester</span>
+                  <span className="attest-result-row__value numeric">{chainAttestation.attester}</span>
+                </div>
+                <div className="attest-result-row">
+                  <span className="attest-result-row__key">Subject</span>
+                  <span className="attest-result-row__value numeric">{chainAttestation.subject}</span>
+                </div>
+                <div className="attest-result-row">
+                  <span className="attest-result-row__key">Payload hash</span>
+                  <span className="attest-result-row__value numeric">
+                    {Buffer.from(chainAttestation.data_hash).toString('hex')}
+                  </span>
+                </div>
+                <div className="attest-result-row">
+                  <span className="attest-result-row__key">Signed at ledger</span>
+                  <span className="attest-result-row__value">
+                    {String(chainAttestation.created_at)}
+                  </span>
+                </div>
+              </article>
+            )}
+
+            {isHex64 && chainNotFound && (
+              <div className="attest-not-found" role="alert">
+                <span className="attest-not-found__title">Nothing found for &ldquo;{searched.trim()}&rdquo;</span>
+                <span className="attest-not-found__detail">
+                  Check the id. Attestations are read on-chain; archived ones need a keepalive
+                  before they can be read.
+                </span>
+              </div>
+            )}
+
+            {isAddress && (
+              <div className="attest-lookup__limitation" role="note">
+                <p>
+                  The on-chain attestation contract cannot search by subject or attester address; it only supports lookup by 32-byte UID.
+                </p>
+              </div>
+            )}
+
+            {!isHex64 && !isAddress && searchedYet && hits.length === 0 && (
+              <div className="attest-not-found" role="alert">
                 <span className="attest-not-found__title">Nothing found for &ldquo;{searched.trim()}&rdquo;</span>
                 <span className="attest-not-found__detail">
                   Check the id. Attestations are read on-chain; archived ones need a keepalive
@@ -185,6 +263,7 @@ export const AttestationLookup = () => {
                 <article key={attestation.uid} className="attest-result-card">
                   <div className="attest-result-card__head">
                     <span className="attest-result-card__uid">{attestation.uid}</span>
+                    <Badge tone="warning">Sample data</Badge>
                     <Badge tone={status.tone}>{status.label}</Badge>
                   </div>
                   {rowsFor(attestation).map((row) => (
@@ -197,7 +276,7 @@ export const AttestationLookup = () => {
               );
             })}
 
-            {searchedYet && (
+            {hits.length > 0 && (
               <span className="attest-lookup__sample-note">
                 Sample attestations for the design phase.
               </span>

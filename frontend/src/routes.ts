@@ -15,6 +15,7 @@ export const APP_ROUTES: AppRoute[] = [
   { path: '/directory', label: 'Programme directory', title: 'Programme Directory' },
   { path: '/programme', label: 'Programme detail', title: 'Programme Detail' },
   { path: '/funders', label: 'Funders', title: 'Funder Dashboard' },
+  { path: '/funders/receipt', label: 'Receipt lookup', title: 'Contribution Receipt' },
   { path: '/recipients', label: 'Recipients', title: 'Recipient Dashboard' },
   { path: '/recipients/standing', label: 'Standing', title: 'Recipient Standing' },
   { path: '/recipients/award-progress', label: 'Award progress', title: 'Award Progress' },

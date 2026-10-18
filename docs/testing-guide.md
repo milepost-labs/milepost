@@ -150,18 +150,18 @@ Two traps that cost an afternoon each if you do not know them:
 
 ## Mutation testing
 
-Line coverage on the programme is about 98%, and that figure says only that the
-tests *ran* each line. Mutation testing asks the question that matters for the
-contract holding the money: if this line were wrong, would a test fail?
+Line coverage on the load-bearing contracts is about 98%, and that figure says
+only that the tests *ran* each line. Mutation testing asks the question that
+matters for those contracts: if this line were wrong, would a test fail?
 [cargo-mutants](https://mutants.rs) makes one small change at a time — `>`
 becomes `>=`, `-` becomes `+`, a function returns `Ok(0)` — rebuilds, and runs
 the programme's suite. A mutant the suite fails on is **caught**. One the suite
 still passes on has **survived**, and each survivor is a specific change to the
 contract that no test would notice.
 
-Scope is `contracts/program` only, configured in
-[`.cargo/mutants.toml`](../.cargo/mutants.toml), so a bare `cargo mutants` at the
-repository root targets nothing else.
+Scope is `contracts/program`, `contracts/record`, and `contracts/policy-spend`,
+configured in [`.cargo/mutants.toml`](../.cargo/mutants.toml), so a bare `cargo
+mutants` at the repository root targets those contracts and nothing else.
 
 ### Running it
 
@@ -203,13 +203,13 @@ changed.
 
 The [`mutants`](../.github/workflows/mutants.yml) workflow runs two ways:
 
-- **On every pull request**, it mutates only the lines the PR changed in the
-  programme, against the merge base, and **fails if any of those mutants
-  survives**. A PR that touches no programme code finds nothing to mutate and
-  passes in seconds.
-- **Weekly (Mondays), and on demand** from the Actions tab, it mutates the whole
-  programme across eight shards and writes one survivors-by-function report to
-  the run summary. It fails if anything survived anywhere. This is what catches a
+- **On every pull request**, it mutates only the lines the PR changed in these
+  contracts, against the merge base, and **fails if any of those mutants
+  survives**. A PR that touches none of these contracts finds nothing to mutate
+  and passes in seconds.
+- **Weekly (Mondays), and on demand** from the Actions tab, it mutates all three
+  contracts across eight shards and writes one survivors-by-function report to
+  the run summary. It fails if anything survived anywhere. This is what catches
   test being weakened or deleted, which a changed-lines run never mutates.
 
 The unmutated suite has to pass first; if it does not, the run fails rather than

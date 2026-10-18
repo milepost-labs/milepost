@@ -1,13 +1,17 @@
 import type { FC } from 'react';
-import { useCallback, useMemo } from 'react';
+import { useCallback, useContext, useMemo } from 'react';
 import { Download } from 'lucide-react';
+import type { Award } from '@milepost/program';
 import type { IndexedAward } from '../../lib/indexer';
 import { fetchAwards } from '../../lib/indexer';
 import { useIndexedList } from '../../hooks/useIndexedList';
+import { useContractResult } from '../../hooks/useContractRead';
+import { SorobanContext } from '../../context/sorobanStore';
 import { formatAmount, parseAmount, describeAmount } from '../../lib/amount';
 import { awardsToCsv, downloadFile } from '../../lib/csv';
+import { isSampleProgrammeId } from '../../lib/programmeView';
 import { FIXTURE_AWARDS } from '../../fixtures/programmeFixtures';
-import { Button } from '../ui';
+import { Badge, Button } from '../ui';
 import './AwardsTab.css';
 
 export interface AwardsTabProps {
@@ -39,12 +43,143 @@ function shortAddress(addr: string): string {
   return `${addr.slice(0, 6)}…${addr.slice(-4)}`;
 }
 
+export interface AwardRowItemProps {
+  award: IndexedAward;
+  programmeId: string;
+  isSample: boolean;
+  asset: string;
+}
+
+export const AwardRowItem: FC<AwardRowItemProps> = ({
+  award,
+  programmeId,
+  isSample,
+  asset,
+}) => {
+  const soroban = useContext(SorobanContext);
+  const programme = useMemo(() => {
+    if (!soroban || !programmeId || isSample) return null;
+    try {
+      return soroban.programmeAt(programmeId);
+    } catch {
+      return null;
+    }
+  }, [soroban, programmeId, isSample]);
+
+  const chainAward = useContractResult<Award>(
+    () => programme!.get_award({ recipient: award.recipient }),
+    [programme, award.recipient],
+    { enabled: Boolean(programme && award.recipient) },
+  );
+
+  const indexGranted = parseAwardStroops(award.granted);
+  const indexReleased = parseAwardStroops(award.released);
+  const indexTranches = Number(award.tranches ?? 0);
+  const indexTranchesReleased = Number(award.tranchesReleased ?? 0);
+
+  const chainSuccess = Boolean(!chainAward.loading && !chainAward.error && chainAward.data);
+  const chainFailed = Boolean(!chainAward.loading && chainAward.error);
+
+  const granted = chainSuccess ? BigInt(chainAward.data!.granted) : indexGranted;
+  const released = chainSuccess ? BigInt(chainAward.data!.released) : indexReleased;
+  const tranches = chainSuccess ? Number(chainAward.data!.tranches) : indexTranches;
+  const tranchesReleased = chainSuccess ? Number(chainAward.data!.tranches_released) : indexTranchesReleased;
+  const hasTranches = tranches > 0;
+
+  const trancheLabel = `${tranchesReleased} of ${tranches} tranches released`;
+
+  const differs = chainSuccess && (
+    granted !== indexGranted ||
+    released !== indexReleased ||
+    tranches !== indexTranches ||
+    tranchesReleased !== indexTranchesReleased
+  );
+
+  let mismatchText = '';
+  if (differs) {
+    if (released !== indexReleased) {
+      mismatchText = `Index behind: shows ${formatAmount(indexReleased, { asset })}`;
+    } else if (granted !== indexGranted) {
+      mismatchText = `Index behind: shows ${formatAmount(indexGranted, { asset })}`;
+    } else if (tranchesReleased !== indexTranchesReleased || tranches !== indexTranches) {
+      mismatchText = `Index behind: shows ${indexTranchesReleased} of ${indexTranches} tranches`;
+    }
+  }
+
+  return (
+    <div className="awards-tab__row">
+      <div className="awards-tab__row-info">
+        <div className="awards-tab__recipient-line">
+          <span
+            className="awards-tab__recipient numeric"
+            title={award.recipient}
+          >
+            {shortAddress(award.recipient)}
+          </span>
+          {chainFailed && (
+            <Badge tone="neutral">Advisory</Badge>
+          )}
+        </div>
+        <span className="awards-tab__subtitle">
+          {hasTranches
+            ? `${tranchesReleased} of ${tranches} tranches · ${formatAmount(
+                released,
+                { asset },
+              )} released`
+            : 'Tranche status read on-chain'}
+        </span>
+        {differs && (
+          <span className="awards-tab__diff" role="status">
+            {mismatchText}
+          </span>
+        )}
+      </div>
+
+      <div
+        className="awards-tab__row-amount numeric"
+        aria-label={describeAmount(granted, asset)}
+      >
+        {formatAmount(granted, { asset })}
+      </div>
+
+      {hasTranches && (
+        <div
+          className="awards-tab__tranches"
+          role="img"
+          aria-label={trancheLabel}
+        >
+          {Array.from({ length: tranches }, (_, i) => {
+            const isReleased = i < tranchesReleased;
+            return (
+              <span
+                key={i}
+                className="awards-tab__tranche-bar"
+                data-money-state={isReleased ? 'released' : 'locked'}
+                style={{
+                  backgroundColor: isReleased
+                    ? 'var(--accent)'
+                    : 'var(--locked)',
+                }}
+              />
+            );
+          })}
+        </div>
+      )}
+    </div>
+  );
+};
+
 export const AwardsTab: FC<AwardsTabProps> = ({
   programmeId,
   phase = 'Open',
   isSample = false,
   asset = 'USDC',
 }) => {
+  // A caller may only relax this to a sample when the id really is a fixture id;
+  // a contract-shaped id can never be a sample, so its awards always come from
+  // the index.
+  const sample = isSample && isSampleProgrammeId(programmeId);
+
   const {
     data: fetchedAwards,
     loading,
@@ -52,13 +187,13 @@ export const AwardsTab: FC<AwardsTabProps> = ({
   } = useIndexedList<IndexedAward[]>(
     () => fetchAwards(programmeId),
     [programmeId],
-    { enabled: Boolean(programmeId) && !isSample },
+    { enabled: Boolean(programmeId) && !sample },
   );
 
   const awards = useMemo(() => {
-    if (isSample) return phase === 'Settled' ? FIXTURE_AWARDS : [];
+    if (sample) return phase === 'Settled' ? FIXTURE_AWARDS : [];
     return fetchedAwards ?? [];
-  }, [isSample, phase, fetchedAwards]);
+  }, [sample, phase, fetchedAwards]);
 
   const advisoryNote = isSample
     ? 'Awards use the middle reviewer vote after enough reviewers have voted. Listed from the public index, advisory.'
@@ -93,7 +228,6 @@ export const AwardsTab: FC<AwardsTabProps> = ({
         <div className="awards-tab__actions">
           <Button
             variant="secondary"
-            size="sm"
             icon={<Download size={14} aria-hidden="true" />}
             onClick={handleDownloadCsv}
           >
@@ -125,70 +259,15 @@ export const AwardsTab: FC<AwardsTabProps> = ({
 
       {!loading && !error && awards.length > 0 && (
         <div className="awards-tab__list">
-          {awards.map((award, idx) => {
-            const granted = parseAwardStroops(award.granted);
-            const released = parseAwardStroops(award.released);
-            const tranches = Number(award.tranches ?? 0);
-            const tranchesReleased = Number(award.tranchesReleased ?? 0);
-            const hasTranches = tranches > 0;
-
-            const trancheLabel = `${tranchesReleased} of ${tranches} tranches released`;
-
-            return (
-              <div
-                key={`${award.recipient}-${idx}`}
-                className="awards-tab__row"
-              >
-                <div className="awards-tab__row-info">
-                  <span
-                    className="awards-tab__recipient numeric"
-                    title={award.recipient}
-                  >
-                    {shortAddress(award.recipient)}
-                  </span>
-                  <span className="awards-tab__subtitle">
-                    {hasTranches
-                      ? `${tranchesReleased} of ${tranches} tranches · ${formatAmount(
-                          released,
-                          { asset },
-                        )} released`
-                      : 'Tranche status read on-chain'}
-                  </span>
-                </div>
-
-                <div
-                  className="awards-tab__row-amount numeric"
-                  aria-label={describeAmount(granted, asset)}
-                >
-                  {formatAmount(granted, { asset })}
-                </div>
-
-                {hasTranches && (
-                  <div
-                    className="awards-tab__tranches"
-                    role="img"
-                    aria-label={trancheLabel}
-                  >
-                    {Array.from({ length: tranches }, (_, i) => {
-                      const released = i < tranchesReleased;
-                      return (
-                        <span
-                          key={i}
-                          className="awards-tab__tranche-bar"
-                          data-money-state={released ? 'released' : 'locked'}
-                          style={{
-                            backgroundColor: released
-                              ? 'var(--accent)'
-                              : 'var(--locked)',
-                          }}
-                        />
-                      );
-                    })}
-                  </div>
-                )}
-              </div>
-            );
-          })}
+          {awards.map((award, idx) => (
+            <AwardRowItem
+              key={`${award.recipient}-${idx}`}
+              award={award}
+              programmeId={programmeId}
+              isSample={isSample}
+              asset={asset}
+            />
+          ))}
         </div>
       )}
     </div>

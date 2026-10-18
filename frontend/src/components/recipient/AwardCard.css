@@ -213,13 +213,6 @@
   color: var(--text);
 }
 
-.award-card__escrow-amount {
-  font-family: var(--font-numeric);
-  font-size: var(--text-md);
-  font-weight: var(--weight-semibold);
-  color: var(--text);
-}
-
 .award-card__spending-note {
   font-size: var(--text-caption);
   color: var(--text-muted);
@@ -236,80 +229,4 @@
   outline: 2px solid var(--accent);
   outline-offset: var(--focus-offset);
   border-radius: var(--radius-sm);
-}
-
-.award-card__payees-grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(min(100%, 220px), 1fr));
-  gap: var(--space-2);
-}
-
-.payee-option {
-  cursor: pointer;
-  border: 0;
-  text-align: left;
-  border-radius: var(--radius-input);
-  padding: 12px 14px;
-  background: var(--surface-raised);
-  color: var(--text);
-  display: flex;
-  flex-direction: column;
-  gap: var(--space-1);
-  min-height: var(--tap-min);
-  box-sizing: border-box;
-  transition: box-shadow 0.2s ease, background 0.2s ease;
-}
-
-.payee-option:focus-visible {
-  outline: 2px solid var(--accent);
-  outline-offset: var(--focus-offset);
-}
-
-.payee-option--selected {
-  background: var(--accent-soft);
-  box-shadow: var(--shadow-selected);
-}
-
-.payee-option__label {
-  font-size: var(--text-sm);
-  font-weight: var(--weight-bold);
-}
-
-.payee-option__address {
-  font-family: var(--font-numeric);
-  font-size: var(--text-xs);
-  color: var(--text-muted);
-}
-
-.award-card__send-btn {
-  align-self: flex-start;
-  cursor: pointer;
-  border: 0;
-  border-radius: var(--radius-full);
-  padding: 11px 20px;
-  font-size: var(--text-sm);
-  font-weight: var(--weight-bold);
-  background: var(--text);
-  color: var(--bg);
-  min-height: var(--tap-min);
-  box-sizing: border-box;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  transition: opacity 0.2s ease;
-}
-
-.award-card__send-btn:hover {
-  opacity: 0.9;
-}
-
-.award-card__send-btn:focus-visible {
-  outline: 2px solid var(--accent);
-  outline-offset: var(--focus-offset);
-}
-
-.award-card__success-msg {
-  font-size: var(--text-sm);
-  color: var(--success);
-  font-weight: var(--weight-bold);
 }

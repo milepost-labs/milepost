@@ -96,6 +96,7 @@
   --grid-min-row: 10rem; /* compact finalize row column */
   /* Narrow single-column pages (keepalive). */
   --page-measure-narrow: 51.25rem; /* 820px */
+  --field-min-width: 16rem; /* inline lookup fields wrap below this */
   --grid-min-stat: 12.5rem;            /* 200px — stat tiles */
   --grid-min-explainer: 18.75rem;      /* 300px — signed-out explainer columns */
   --grid-min-funding: 23.75rem;        /* 380px — contributions beside the contribute panel */

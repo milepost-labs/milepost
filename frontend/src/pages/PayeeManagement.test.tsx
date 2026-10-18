@@ -100,7 +100,12 @@ const CREATOR = 'GCREATOREXAMPLEEXAMPLEEXAMPLEEXAMPLEEXAMPLEEXAMPLEEXAMPX';
 const mocks = vi.hoisted(() => ({ address: null as string | null }));
 
 vi.mock('../context/useWallet', () => ({
-  useWallet: () => ({ address: mocks.address, status: mocks.address ? 'connected' : 'disconnected', connect: vi.fn() }),
+  useWallet: () => ({
+    address: mocks.address,
+    status: mocks.address ? 'connected' : 'disconnected',
+    connect: vi.fn(),
+    signTransaction: vi.fn().mockResolvedValue({ signedTxXdr: '', signerAddress: mocks.address }),
+  }),
 }));
 
 function unwrap<T>(value: T) {
@@ -128,7 +133,16 @@ vi.mock('../context/useSoroban', () => ({
   useSoroban: () => ({ programmeAt: () => programme }),
 }));
 
-vi.mock('../fixtures/payeeFixtures', () => ({ FIXTURE_PAYEES: {} }));
+vi.mock('../fixtures/payeeFixtures', () => ({
+  FIXTURE_PAYEES: {
+    CBQ4SCHOOLBURSARY2026XK3ZP7M2QWJ5T8VN4RD6HY: [
+      { address: 'GAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA', label: 'Sample Payee Clinic' },
+    ],
+    CD6X33SKLUEMANS67ID3LJL572FFGERMMJCIFRW7P7EKZQLH35XT67C6: [
+      { address: 'GBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB', label: 'Real Programme Fixture' },
+    ],
+  },
+}));
 
 function renderPage() {
   return render(<PayeeManagement />);
@@ -211,5 +225,63 @@ describe('PayeeManagement bulk verify/remove', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Check addresses' }));
     await screen.findByText('Will be verified');
     expect(screen.getByRole('button', { name: 'Verify 1 payee' }).hasAttribute('disabled')).toBe(true);
+  });
+});
+
+describe('Issue #439 - Real vs Sample programmes payee management', () => {
+  beforeEach(() => {
+    mocks.address = CREATOR;
+    programme = makeProgramme();
+    window.localStorage.clear();
+  });
+
+  it('shows no fixture payees on real programmes and checks any address with is_payee', async () => {
+    renderPage();
+
+    // Must not show invented fixture payees
+    expect(screen.queryByText('Real Programme Fixture')).toBeNull();
+    expect(screen.getByText('No payees changed this session')).toBeDefined();
+
+    // Check single address
+    const checkInput = screen.getByLabelText('Check payee address');
+    fireEvent.change(checkInput, { target: { value: VALID_C } });
+    fireEvent.click(screen.getByRole('button', { name: 'Check address' }));
+
+    await waitFor(() => {
+      expect(programme.is_payee).toHaveBeenCalledWith({ payee: VALID_C });
+    });
+    expect(screen.getByText('Verified on-chain')).toBeDefined();
+  });
+
+  it('labels addresses added or removed this session as session-only', async () => {
+    renderPage();
+
+    // Add address in this session
+    fireEvent.change(screen.getByLabelText('Payee address'), { target: { value: VALID_A } });
+    fireEvent.change(screen.getByLabelText('Label'), { target: { value: 'Session Clinic' } });
+    const verifyButton = screen.getByRole('button', { name: 'Verify payee' });
+    fireEvent.submit(verifyButton.closest('form')!);
+
+    await waitFor(() => {
+      expect(programme.allow_payee).toHaveBeenCalledWith({ payee: VALID_A });
+    });
+
+    await waitFor(() => {
+      expect(screen.getByText('Session Clinic')).toBeDefined();
+      expect(screen.getByText('Session-only')).toBeDefined();
+    });
+  });
+
+  it('shows fixture payees with sample data tag on a sample programme', async () => {
+    renderPage();
+
+    const progInput = screen.getByLabelText('Programme address');
+    fireEvent.change(progInput, { target: { value: 'CBQ4SCHOOLBURSARY2026XK3ZP7M2QWJ5T8VN4RD6HY' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Look up' }));
+
+    await waitFor(() => {
+      expect(screen.getByText('Sample Payee Clinic')).toBeDefined();
+      expect(screen.getByText('Sample data')).toBeDefined();
+    });
   });
 });

@@ -1,7 +1,6 @@
 import { useState } from 'react';
 import { Link } from 'react-router-dom';
-import type { RecipientAwardFixture, VerifiedPayeeFixture } from '../../fixtures/recipientFixtures';
-import { FIXTURE_PAYEES } from '../../fixtures/recipientFixtures';
+import type { RecipientAwardFixture } from '../../fixtures/recipientFixtures';
 import { formatAmount, describeAmount } from '../../lib/amount';
 import { explain } from '../../lib/errors';
 import { useAnnouncer } from '../../context/useAnnouncer';
@@ -11,30 +10,19 @@ import './AwardCard.css';
 
 interface AwardCardProps {
   award: RecipientAwardFixture;
-  payees?: VerifiedPayeeFixture[];
   simulateAlreadyUsedError?: boolean;
-  simulateUnverifiedPayeeError?: boolean;
 }
 
 export function AwardCard({
   award,
-  payees = FIXTURE_PAYEES,
   simulateAlreadyUsedError = false,
-  simulateUnverifiedPayeeError = false,
 }: AwardCardProps) {
   const announce = useAnnouncer();
 
-  // Local state for release lifecycle and payee sending
+  // Local state for release lifecycle
   const [releasedCount, setReleasedCount] = useState(award.tranchesReleased);
   const [releaseStatus, setReleaseStatus] = useState<'idle' | 'pending' | 'error'>('idle');
   const [releaseErrorMessage, setReleaseErrorMessage] = useState<string | null>(null);
-
-  // Escrow & payee state for Allocated mode
-  const initialEscrow = award.escrow ? BigInt(award.escrow) : 0n;
-  const [escrowAmount, setEscrowAmount] = useState<bigint>(initialEscrow);
-  const [selectedPayeeIndex, setSelectedPayeeIndex] = useState<number>(0);
-  const [payeeErrorMessage, setPayeeErrorMessage] = useState<string | null>(null);
-  const [sentMessage, setSentMessage] = useState<string | null>(null);
 
   const grantedBigInt = BigInt(award.granted);
   const trancheBase = award.tranches > 0 ? grantedBigInt / BigInt(award.tranches) : 0n;
@@ -90,38 +78,9 @@ export function AwardCard({
         setReleasedCount(nextCount);
         setReleaseStatus('idle');
 
-        // If allocated mode, add released tranche amount to escrow
-        if (award.mode === 'Allocated') {
-          setEscrowAmount((prev) => prev + trancheBase);
-        }
-
         announce(`Tranche ${nextCount} released.`);
       }
     }, 1200);
-  };
-
-  const handleSendToPayee = () => {
-    if (simulateUnverifiedPayeeError) {
-      const err = explain(30, 'program');
-      setPayeeErrorMessage(err.message);
-      announce('Payment failed: ' + err.message, 'alert');
-      return;
-    }
-
-    const chosenPayee = payees[selectedPayeeIndex];
-    if (!chosenPayee) {
-      const err = explain(30, 'program');
-      setPayeeErrorMessage(err.message);
-      announce('Payment failed: ' + err.message, 'alert');
-      return;
-    }
-
-    setPayeeErrorMessage(null);
-    setEscrowAmount(0n);
-    const labelClean = chosenPayee.label.replace('Verified payee · ', '');
-    const msg = `Sent to ${labelClean}.`;
-    setSentMessage(msg);
-    announce('Payment sent from escrow to the verified payee.');
   };
 
   return (
@@ -203,62 +162,7 @@ export function AwardCard({
       {/* Mode-specific spending actions (#273) */}
       <div className="award-card__mode-spending">
         {award.mode === 'Allocated' && (
-          <>
-            <div className="award-card__spending-header">
-              <span className="award-card__spending-title">Held for you in escrow</span>
-              <span className="award-card__escrow-amount">
-                {formatAmount(escrowAmount, { asset: 'USDC' })}
-              </span>
-            </div>
-            {escrowAmount > 0n && !sentMessage && (
-              <>
-                <span className="award-card__spending-note">
-                  Choose which verified payee receives it.
-                </span>
-                <div
-                  className="award-card__payees-grid"
-                  role="radiogroup"
-                  aria-label="Verified payee"
-                >
-                  {payees.map((py, idx) => {
-                    const isChecked = idx === selectedPayeeIndex;
-                    return (
-                      <button
-                        key={py.address}
-                        type="button"
-                        role="radio"
-                        aria-checked={isChecked}
-                        className={`payee-option ${isChecked ? 'payee-option--selected' : ''}`}
-                        onClick={() => setSelectedPayeeIndex(idx)}
-                      >
-                        <span className="payee-option__label">{py.label}</span>
-                        <span className="payee-option__address">{py.address}</span>
-                      </button>
-                    );
-                  })}
-                </div>
-                <button
-                  type="button"
-                  className="award-card__send-btn"
-                  onClick={handleSendToPayee}
-                >
-                  Send to payee
-                </button>
-              </>
-            )}
-            {payeeErrorMessage && (
-              <div className="award-card__error-panel" role="alert">
-                <span className="award-card__error-title">Payee not verified</span>
-                <span>{payeeErrorMessage}</span>
-                <span className="award-card__error-technical">Only verified payees can receive escrowed funds · program error 30</span>
-              </div>
-            )}
-            {sentMessage && (
-              <span className="award-card__success-msg" role="status">
-                ✓ {sentMessage}
-              </span>
-            )}
-          </>
+          <AllocatedSpending award={award} />
         )}
 
         {award.mode === 'Restricted' && (

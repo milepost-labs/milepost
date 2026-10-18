@@ -1,0 +1,43 @@
+/* Withdraw application section. Every value comes from a design token. */
+
+.app-withdraw {
+  border-top: 1px solid var(--surface-raised);
+  padding-top: var(--space-4);
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+}
+
+.app-withdraw__gate {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+  align-items: flex-start;
+}
+
+.app-withdraw__gate-reason {
+  margin: 0;
+  font-size: var(--text-sm);
+  line-height: var(--leading-body);
+  color: var(--text-muted);
+}
+
+/* The trigger sits left-aligned at its natural width; the 44px tap target is
+   guaranteed by the ui-button base. */
+.app-withdraw__trigger {
+  align-self: flex-start;
+}
+
+.app-withdraw__warning {
+  margin: 0 0 var(--space-4);
+  font-size: var(--text-md);
+  line-height: var(--leading-body);
+  color: var(--text);
+}
+
+.app-withdraw__modal-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: var(--space-3);
+  flex-wrap: wrap;
+}
