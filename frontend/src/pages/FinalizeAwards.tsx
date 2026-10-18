@@ -78,7 +78,7 @@ const MODE_OPTIONS: ModeOption[] = [
 const truncate = (addr: string) => `${addr.slice(0, 5)}…${addr.slice(-4)}`;
 
 /** Programme whose review applications stand in for the unwired list. */
-const REVIEW_PROGRAMME_ID = 'CDV7VOCATIONALCOHORT3PL5QZ2WM8RT4HX6KJ9A3FC';
+const REVIEW_PROGRAMME_ID = 'CCOIACASOVO3ZQLXWWJFGZAU3Y545AGPXLBP4NYHYD77RDCBPXRVZ37C';
 
 /**
  * Finalize board (Screen 10, Finalize).

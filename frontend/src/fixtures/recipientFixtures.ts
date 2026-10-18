@@ -50,7 +50,7 @@ export interface RecipientStandingFixture {
  */
 export const FIXTURE_MY_AWARDS: RecipientAwardFixture[] = [
   {
-    programmeId: 'CA3NSMEMICROGRANTSQ2V8TX4QK7PL2RZ9MD5HW6JUB',
+    programmeId: 'CBAVXWACVVQIBYAZ2YCSIPWXA24E3NZ3CIRAWJ2UHEQUQP67POYS6GFM',
     programmeName: 'SME Microgrants Cohort 2',
     recipient: 'GD4KQ2…2QXW',
     granted: '40000000000', // 4,000 USDC
@@ -64,7 +64,7 @@ export const FIXTURE_MY_AWARDS: RecipientAwardFixture[] = [
     condition: 'Supplier invoice for milestone 2 approved',
   },
   {
-    programmeId: 'CBQ4SCHOOLBURSARY2026XK3ZP7M2QWJ5T8VN4RD6HY',
+    programmeId: 'CBJWECZ3EUVNAE73YIMT2KWWNRHRF7NNWVKOLQRVOHSKYRYE32XBRPW7',
     programmeName: 'Secondary School Bursaries 2026',
     recipient: 'GD4KQ2…2QXW',
     granted: '30000000000', // 3,000 USDC
@@ -79,7 +79,7 @@ export const FIXTURE_MY_AWARDS: RecipientAwardFixture[] = [
     escrow: '10000000000', // 1,000 USDC held in escrow
   },
   {
-    programmeId: 'CDV7VOCATIONALCOHORT3PL5QZ2WM8RT4HX6KJ9A3FC',
+    programmeId: 'CCOIACASOVO3ZQLXWWJFGZAU3Y545AGPXLBP4NYHYD77RDCBPXRVZ37C',
     programmeName: 'Vocational Training Stipends Q3',
     recipient: 'GD4KQ2…2QXW',
     granted: '20000000000', // 2,000 USDC
@@ -127,7 +127,7 @@ export const FIXTURE_PAYEES: VerifiedPayeeFixture[] = [
  */
 export const FIXTURE_APPLICATIONS: RecipientApplicationFixture[] = [
   {
-    programmeId: 'CDV7VOCATIONALCOHORT3PL5QZ2WM8RT4HX6KJ9A3FC',
+    programmeId: 'CCOIACASOVO3ZQLXWWJFGZAU3Y545AGPXLBP4NYHYD77RDCBPXRVZ37C',
     programmeName: 'Vocational Training Stipends Q3',
     phase: 'Review',
     requested: '12000000000', // 1,200 USDC
@@ -136,7 +136,7 @@ export const FIXTURE_APPLICATIONS: RecipientApplicationFixture[] = [
     quorum: 5,
   },
   {
-    programmeId: 'CBQ4SCHOOLBURSARY2026XK3ZP7M2QWJ5T8VN4RD6HY',
+    programmeId: 'CBJWECZ3EUVNAE73YIMT2KWWNRHRF7NNWVKOLQRVOHSKYRYE32XBRPW7',
     programmeName: 'Secondary School Bursaries 2026',
     phase: 'Open',
     requested: '5000000000', // 500 USDC

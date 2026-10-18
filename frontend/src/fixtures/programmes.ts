@@ -13,7 +13,25 @@
  *
  * Anything rendered from these is tagged in the UI as "Sample data" /
  * "Sample chain read" so it is never mistaken for a live figure.
+ *
+ * Sample ids are real-format contract addresses (56 characters, `C` plus
+ * base32, valid StrKey checksum) so every id check treats samples exactly like
+ * real programmes. Each is derived from a fixed seed and cannot collide with a
+ * deployed contract, whose id comes from a deployer address and salt:
+ *
+ *   StrKey.encodeContract(sha256(`milepost-sample:${seed}`))
+ *
+ * `SAMPLE_PROGRAMME_SEEDS` lists the seeds; a test recomputes every id.
  */
+
+/** Seed behind each sample programme id (see the derivation above). */
+export const SAMPLE_PROGRAMME_SEEDS: Record<string, string> = {
+  CBJWECZ3EUVNAE73YIMT2KWWNRHRF7NNWVKOLQRVOHSKYRYE32XBRPW7: 'community-resilience-2026',
+  CB7WB66VLFJUD2WHZYHQF7PHM72THVJYMLZ7YPW2XQKUOUUGKVTWVDXI: 'smallholder-inputs-long-rains',
+  CCOIACASOVO3ZQLXWWJFGZAU3Y545AGPXLBP4NYHYD77RDCBPXRVZ37C: 'workforce-skills-cohort-3',
+  CBAVXWACVVQIBYAZ2YCSIPWXA24E3NZ3CIRAWJ2UHEQUQP67POYS6GFM: 'sme-supplier-microgrants-q2',
+  CBUESJW3MUDDN2NVG7RPQK7N2JSJMSKHDQMIQZMDXZMR6GNNZWX46LNU: 'flood-response-cash-transfers',
+};
 
 /** Phase a programme can be in, mirrored from `@milepost/program`. */
 export type FixturePhase = 'Open' | 'Review' | 'Settled' | 'Cancelled';
@@ -45,31 +63,31 @@ export interface FixtureChainRead {
 
 export const FIXTURE_PROGRAMMES: FixtureProgramme[] = [
   {
-    id: 'CBQ4SCHOOLBURSARY2026XK3ZP7M2QWJ5T8VN4RD6HY',
+    id: 'CBJWECZ3EUVNAE73YIMT2KWWNRHRF7NNWVKOLQRVOHSKYRYE32XBRPW7',
     name: 'Community resilience grants 2026',
     creator: 'GAKR7W…D2QX',
     createdLedger: 4811204,
   },
   {
-    id: 'CCM2SMALLHOLDERINPUTSLR26A9FK3XU7PZ4E8QT2BN',
+    id: 'CB7WB66VLFJUD2WHZYHQF7PHM72THVJYMLZ7YPW2XQKUOUUGKVTWVDXI',
     name: 'Smallholder inputs, long rains',
     creator: 'GD5TQ4…9LKA',
     createdLedger: 4798551,
   },
   {
-    id: 'CDV7VOCATIONALCOHORT3PL5QZ2WM8RT4HX6KJ9A3FC',
+    id: 'CCOIACASOVO3ZQLXWWJFGZAU3Y545AGPXLBP4NYHYD77RDCBPXRVZ37C',
     name: 'Workforce skills grants, cohort 3',
     creator: 'GB2ZHM…Q7RP',
     createdLedger: 4702316,
   },
   {
-    id: 'CA3NSMEMICROGRANTSQ2V8TX4QK7PL2RZ9MD5HW6JUB',
+    id: 'CBAVXWACVVQIBYAZ2YCSIPWXA24E3NZ3CIRAWJ2UHEQUQP67POYS6GFM',
     name: 'SME supplier microgrants Q2',
     creator: 'GCX8NE…4FTM',
     createdLedger: 4611087,
   },
   {
-    id: 'CBF9FLOODRESPONSETANA6QW2XM4RP7KZ3HT8LN5DVA',
+    id: 'CBUESJW3MUDDN2NVG7RPQK7N2JSJMSKHDQMIQZMDXZMR6GNNZWX46LNU',
     name: 'Flood response cash transfers',
     creator: 'GAKR7W…D2QX',
     createdLedger: 4655420,
@@ -77,7 +95,7 @@ export const FIXTURE_PROGRAMMES: FixtureProgramme[] = [
 ];
 
 export const FIXTURE_CHAIN: Record<string, FixtureChainRead> = {
-  CBQ4SCHOOLBURSARY2026XK3ZP7M2QWJ5T8VN4RD6HY: {
+  CBJWECZ3EUVNAE73YIMT2KWWNRHRF7NNWVKOLQRVOHSKYRYE32XBRPW7: {
     phase: 'Open',
     mode: 'Direct',
     contributed: '126000000000',
@@ -89,7 +107,7 @@ export const FIXTURE_CHAIN: Record<string, FixtureChainRead> = {
     applicants: 41,
     closesInDays: 9,
   },
-  CCM2SMALLHOLDERINPUTSLR26A9FK3XU7PZ4E8QT2BN: {
+  CB7WB66VLFJUD2WHZYHQF7PHM72THVJYMLZ7YPW2XQKUOUUGKVTWVDXI: {
     phase: 'Open',
     mode: 'Allocated',
     contributed: '48500000000',
@@ -101,7 +119,7 @@ export const FIXTURE_CHAIN: Record<string, FixtureChainRead> = {
     applicants: 12,
     closesInDays: 21,
   },
-  CDV7VOCATIONALCOHORT3PL5QZ2WM8RT4HX6KJ9A3FC: {
+  CCOIACASOVO3ZQLXWWJFGZAU3Y545AGPXLBP4NYHYD77RDCBPXRVZ37C: {
     phase: 'Review',
     mode: 'Direct',
     contributed: '80000000000',
@@ -112,7 +130,7 @@ export const FIXTURE_CHAIN: Record<string, FixtureChainRead> = {
     quorum: 5,
     applicants: 64,
   },
-  CA3NSMEMICROGRANTSQ2V8TX4QK7PL2RZ9MD5HW6JUB: {
+  CBAVXWACVVQIBYAZ2YCSIPWXA24E3NZ3CIRAWJ2UHEQUQP67POYS6GFM: {
     phase: 'Settled',
     mode: 'Restricted',
     contributed: '150000000000',
@@ -123,7 +141,7 @@ export const FIXTURE_CHAIN: Record<string, FixtureChainRead> = {
     quorum: 3,
     applicants: 38,
   },
-  CBF9FLOODRESPONSETANA6QW2XM4RP7KZ3HT8LN5DVA: {
+  CBUESJW3MUDDN2NVG7RPQK7N2JSJMSKHDQMIQZMDXZMR6GNNZWX46LNU: {
     phase: 'Cancelled',
     mode: 'Direct',
     contributed: '22000000000',
