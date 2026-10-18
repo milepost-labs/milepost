@@ -212,7 +212,11 @@ describe('status and call to action', () => {
     expect(programmeStatus({ ...FIXTURE_CHAIN_DEFAULT, phase: 'Open', applicants: 3, closesInDays: 5 })).toContain('closes in 5 days');
     expect(programmeStatus({ ...FIXTURE_CHAIN_DEFAULT, phase: 'Review' })).toContain('Reviewers are voting');
     expect(programmeStatus({ ...FIXTURE_CHAIN_DEFAULT, phase: 'Settled' })).toContain('Awards are final');
-    expect(programmeStatus({ ...FIXTURE_CHAIN_DEFAULT, phase: 'Cancelled' })).toContain('full refund');
+
+    const cancelled = programmeStatus({ ...FIXTURE_CHAIN_DEFAULT, phase: 'Cancelled' });
+    expect(cancelled).toMatch(/share of what was not paid out/i);
+    expect(cancelled).toMatch(/in proportion to their contribution/i);
+    expect(cancelled).not.toMatch(/full refund/i);
   });
 
   it('gives every phase an action', () => {

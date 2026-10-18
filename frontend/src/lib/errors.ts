@@ -7,9 +7,10 @@
  * and what to do about it.
  *
  * Several of these are not faults at all. `NothingToRefund` usually means a
- * programme paid out in full, and `NotFound` for standing simply means someone
- * has no track record yet. Presenting those as failures would be wrong, so
- * every entry carries a kind that decides how it should be shown.
+ * programme has paid out everything it holds, and `NotFound` for standing
+ * simply means someone has no track record yet. Presenting those as failures
+ * would be wrong, so every entry carries a kind that decides how it should be
+ * shown.
  */
 
 export type ErrorKind =
@@ -67,7 +68,7 @@ const PROGRAM: Table = {
   24: { kind: 'conflict', message: 'The protocol fee has already been sent to the treasury.' },
   25: { kind: 'blocked', message: 'Refunds are not open yet.', action: 'They open once the release window closes.' },
   26: { kind: 'conflict', message: 'You have already claimed your refund.' },
-  27: { kind: 'none', message: 'There is nothing to refund.', action: 'This usually means the programme paid out in full.' },
+  27: { kind: 'none', message: 'There is nothing to refund.', action: 'Either this address never contributed, or everything the programme still held has been paid out.' },
   28: { kind: 'blocked', message: 'Unclaimed funds cannot be swept yet.', action: 'Donors still have time to claim their refunds.' },
   29: { kind: 'none', message: 'There is nothing left to sweep.' },
   30: { kind: 'denied', message: 'That address is not a verified payee for this programme.', action: 'Only the programme creator can verify a payee.' },

@@ -173,7 +173,7 @@ export function programmeStatus(chain: FixtureChainRead): string {
     case 'Settled':
       return 'Awards are final. Tranches release as verifiers confirm conditions.';
     case 'Cancelled':
-      return 'Cancelled. Contributors can claim a full refund.';
+      return 'Cancelled. Contributors can claim their share of what was not paid out, in proportion to their contribution and after the protocol fee.';
   }
 }
 
