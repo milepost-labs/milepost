@@ -86,6 +86,19 @@
   flex-wrap: wrap;
 }
 
+/* Why the register action is unavailable. Neutral, not an error: nothing has
+   gone wrong, the action just needs a signed-in address. */
+.register-schema__requirement {
+  flex: 1 1 auto;
+  align-self: center;
+  margin: 0;
+  padding: var(--space-3) var(--space-4);
+  border-radius: var(--radius-row);
+  background: var(--accent-soft);
+  font-size: var(--text-sm);
+  line-height: var(--leading-body);
+}
+
 .schema-success {
   padding: var(--space-4);
   border-radius: var(--radius-row);
