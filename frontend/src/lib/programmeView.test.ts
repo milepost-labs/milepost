@@ -1,11 +1,14 @@
 import { describe, expect, it } from 'vitest';
 
+import { DEMO_PROGRAMME_ID } from '../context/sorobanStore';
 import { FIXTURE_CHAIN_DEFAULT, FIXTURE_PROGRAMMES } from '../fixtures/programmes';
 import { FIXTURE_USER_ROLES } from '../fixtures/userRoles';
+import { isProgrammeContractId } from './registryVerification';
 import {
   filterProgrammes,
   formatAgo,
   formatUsdc,
+  isSampleProgrammeId,
   mergeProgrammes,
   moneySquares,
   phaseCounts,
@@ -81,6 +84,27 @@ describe('mergeProgrammes', () => {
     const matches = merged.filter((p) => p.id === real.id);
     expect(matches).toHaveLength(1);
     expect(matches[0].sample).toBe(false);
+  });
+});
+
+describe('isSampleProgrammeId', () => {
+  it('treats every fixture id as a sample', () => {
+    for (const programme of FIXTURE_PROGRAMMES) {
+      expect(isSampleProgrammeId(programme.id)).toBe(true);
+    }
+  });
+
+  it('never treats a real contract id as a sample, even the seeded demo programme', () => {
+    expect(isProgrammeContractId(DEMO_PROGRAMME_ID)).toBe(true);
+    expect(isSampleProgrammeId(DEMO_PROGRAMME_ID)).toBe(false);
+    expect(isSampleProgrammeId(`C${'A'.repeat(55)}`)).toBe(false);
+    expect(isSampleProgrammeId('')).toBe(false);
+  });
+
+  it('guards the fixture set: no fixture id is a deployed contract', () => {
+    for (const programme of FIXTURE_PROGRAMMES) {
+      expect(isProgrammeContractId(programme.id)).toBe(false);
+    }
   });
 });
 
@@ -255,7 +279,7 @@ describe('formatting helpers', () => {
   });
 
   it('shortens long ids', () => {
-    expect(shortId('CBQ4SCHOOLBURSARY2026XK3ZP7M2QWJ5T8VN4RD6HY')).toBe('CBQ4SC…4RD6HY');
+    expect(shortId('CBJWECZ3EUVNAE73YIMT2KWWNRHRF7NNWVKOLQRVOHSKYRYE32XBRPW7')).toBe('CBJWEC…XBRPW7');
     expect(shortId('CSHORT')).toBe('CSHORT');
   });
 });

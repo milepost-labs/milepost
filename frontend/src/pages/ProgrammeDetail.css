@@ -369,3 +369,25 @@
 .metadata-doc__links a:hover {
   text-decoration: underline;
 }
+
+.programme-asset-display {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-2);
+}
+
+.programme-asset-code {
+  font-weight: var(--weight-bold);
+  font-family: var(--font-numeric);
+}
+
+.programme-asset-issuer {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-1);
+}
+
+.programme-asset-issuer-label {
+  font-size: var(--text-xs);
+}

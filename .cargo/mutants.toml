@@ -1,12 +1,22 @@
 # cargo-mutants configuration. How to run it, and how to read the report, is in
 # docs/testing-guide.md#mutation-testing.
 #
-# Scope is the programme contract only: it is the one that holds the money.
-# Extending this to another contract means adding its sources here and running
-# the full sweep once to see what survives before CI starts enforcing it.
-examine_globs = ["contracts/program/src/**/*.rs"]
-exclude_globs = ["contracts/program/src/test.rs", "contracts/program/src/*_test.rs"]
-test_package = ["milepost-program"]
+# Scope the contracts whose state directly controls funding, standing, or
+# restricted spending. Add another contract only with its own survivor review.
+examine_globs = [
+  "contracts/program/src/**/*.rs",
+  "contracts/record/src/**/*.rs",
+  "contracts/policy-spend/src/**/*.rs",
+]
+exclude_globs = [
+  "contracts/program/src/test.rs",
+  "contracts/program/src/*_test.rs",
+  "contracts/record/src/test.rs",
+  "contracts/record/src/*_test.rs",
+  "contracts/policy-spend/src/test.rs",
+  "contracts/policy-spend/src/*_test.rs",
+]
+test_package = ["milepost-program", "milepost-record", "milepost-policy-spend"]
 
 # The proptests are skipped. With random inputs a mutant can be caught on one run
 # and survive the next, so the verdict — and the build — would flap. A mutant

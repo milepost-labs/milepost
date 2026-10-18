@@ -93,6 +93,15 @@ export function looksLikeAddress(value: string): boolean {
 }
 
 /**
+ * Whether a string is shaped like a Soroban contract address — a `C` followed
+ * by 55 base-32 characters. Used to tell a real programme (which has chain
+ * reads behind it) from a short sample id that only stands in for one.
+ */
+export function looksLikeContractId(value: string): boolean {
+  return /^C[A-Z2-7]{55}$/.test(value);
+}
+
+/**
  * Build a Stellar Expert URL for a transaction hash.
  *
  * `network` is whatever Freighter's `getNetwork()` returns — typically

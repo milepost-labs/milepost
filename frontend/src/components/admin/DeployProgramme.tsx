@@ -160,7 +160,7 @@ export function DeployProgramme() {
   const allValid = stepValid.every(Boolean);
 
   const hint = !wallet.address
-    ? 'Sign in with the registry admin account to deploy.'
+    ? 'Sign in to deploy. Your address becomes the programme creator — who can pause, cancel, and manage payees and verifiers.'
     : name.trim() === ''
       ? 'Give the programme a name.'
       : 'The registry deploys it and becomes its admin of record. Terms can\u2019t be changed afterwards.';

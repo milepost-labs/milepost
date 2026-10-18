@@ -70,8 +70,8 @@ describe('contributionCard', () => {
   });
 
   it('falls back to the short id when the programme is not in the index', () => {
-    const card = contributionCard(contribution({ programmeId: 'CBQ4SCHOOLBURSARY2026XK3ZP7M2QWJ5T8VN4RD6HY' }), undefined);
-    expect(card.name).toBe('CBQ4SC…4RD6HY');
+    const card = contributionCard(contribution({ programmeId: 'CBJWECZ3EUVNAE73YIMT2KWWNRHRF7NNWVKOLQRVOHSKYRYE32XBRPW7' }), undefined);
+    expect(card.name).toBe('CBJWEC…XBRPW7');
     expect(card.claimable).toBe(false);
   });
 });

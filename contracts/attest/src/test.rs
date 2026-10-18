@@ -360,6 +360,66 @@ fn verify_rejects_an_unknown_id() {
         .verify(&hash(&f.env, 9), &f.subject, &schema, &f.authority));
 }
 
+mod proptests {
+    extern crate std;
+
+    use super::*;
+    use proptest::prelude::*;
+
+    proptest! {
+        #[test]
+        fn verify_is_true_exactly_for_matching_live_attestations(
+            subject_matches in any::<bool>(),
+            schema_matches in any::<bool>(),
+            attester_matches in any::<bool>(),
+            revoked in any::<bool>(),
+            expired in any::<bool>(),
+        ) {
+            let f = setup();
+            let schema = open_schema(&f);
+            let other_subject = Address::generate(&f.env);
+            let other_attester = Address::generate(&f.env);
+            let other_schema = f.client.register_schema(
+                &f.authority,
+                &String::from_str(&f.env, "other:v1"),
+                &true,
+                &false,
+                &None,
+            );
+            let uid = f.client.attest(
+                &f.authority,
+                &schema,
+                &f.subject,
+                &hash(&f.env, 1),
+                &Some(1),
+            );
+
+            if revoked {
+                f.client.revoke(&f.authority, &uid);
+            }
+            if expired {
+                f.env.ledger().set_timestamp(2);
+            }
+
+            let expected = subject_matches
+                && schema_matches
+                && attester_matches
+                && !revoked
+                && !expired;
+            assert_eq!(
+                f.client.verify(
+                    &uid,
+                    if subject_matches { &f.subject } else { &other_subject },
+                    if schema_matches { &schema } else { &other_schema },
+                    if attester_matches { &f.authority } else { &other_attester },
+                ),
+                expected,
+            );
+            assert_eq!(f.client.is_valid(&uid), !revoked && !expired);
+        }
+    }
+}
+
 // ---- archival simulation ----
 //
 // Attestations and schemas are persistent entries with a TTL. Since protocol 23

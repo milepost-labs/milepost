@@ -6,6 +6,7 @@ import { useContractResult, useTransaction } from '../hooks';
 import { AddressChip, Badge, Button, Card, Field, RadioGroup, TextArea } from '../components/ui';
 import { Empty, TransactionOutcome } from '../components/state/AsyncStates';
 import { DEMO_PROGRAMME_ID } from '../context/sorobanStore';
+import { FIXTURE_PROGRAMMES } from '../fixtures/programmes';
 import { FIXTURE_PAYEES, type PayeeFixture } from '../fixtures/payeeFixtures';
 import {
   chunkAddresses,
@@ -22,9 +23,22 @@ const PAYEE_ADDRESS = /^G[A-Z2-7]{55}$/;
 
 type PayeeStatus = 'checking' | 'verified' | 'unverified' | 'error';
 
+function isSampleProgramme(programmeId: string): boolean {
+  return FIXTURE_PROGRAMMES.some((p) => p.id === programmeId);
+}
+
+interface SessionChange {
+  address: string;
+  label: string;
+  action: 'added' | 'removed';
+}
+
 const storageKey = (programmeId: string) => `milepost:programme-payees:${programmeId}`;
 
 function loadCandidates(programmeId: string): PayeeFixture[] {
+  if (!isSampleProgramme(programmeId)) {
+    return [];
+  }
   try {
     const stored = window.localStorage.getItem(storageKey(programmeId));
     if (stored) return JSON.parse(stored) as PayeeFixture[];
@@ -61,7 +75,34 @@ export const PayeeManagement = () => {
     [programme],
     { contract: 'program' },
   );
+  const isSample = isSampleProgramme(programmeId);
   const isCreator = Boolean(wallet.address && config.data && config.data.creator === wallet.address);
+
+  const [sessionChanges, setSessionChanges] = useState<Record<string, SessionChange[]>>({});
+  const currentSessionChanges = sessionChanges[programmeId] ?? [];
+
+  const [checkInput, setCheckInput] = useState('');
+  const [checkError, setCheckError] = useState<string | null>(null);
+  const [checkResult, setCheckResult] = useState<{ address: string; verified: boolean } | null>(null);
+  const [checkLoading, setCheckLoading] = useState(false);
+
+  const handleCheckAddress = async () => {
+    const addr = checkInput.trim();
+    if (!PAYEE_ADDRESS.test(addr)) {
+      setCheckError('Enter a valid Stellar address.');
+      return;
+    }
+    setCheckError(null);
+    setCheckLoading(true);
+    try {
+      const { result } = await programme.is_payee({ payee: addr });
+      setCheckResult({ address: addr, verified: Boolean(result) });
+    } catch {
+      setCheckError('Could not check address on-chain.');
+    } finally {
+      setCheckLoading(false);
+    }
+  };
 
   const [sessionAdds, setSessionAdds] = useState<Record<string, PayeeFixture[]>>({});
   const candidates = useMemo(() => {
@@ -110,7 +151,7 @@ export const PayeeManagement = () => {
 
   const handleLookupProgramme = () => {
     const value = programmeInput.trim();
-    if (!PROGRAMME_ADDRESS.test(value)) {
+    if (!isSampleProgramme(value) && !PROGRAMME_ADDRESS.test(value)) {
       setProgrammeError('Enter a valid programme contract address.');
       return;
     }
@@ -125,7 +166,16 @@ export const PayeeManagement = () => {
   const tx = useTransaction({
     contract: 'program',
     onSuccess: () => {
-      remember({ address: addressInput.trim(), label: labelInput.trim() || 'Verified payee' });
+      const addr = addressInput.trim();
+      const lbl = labelInput.trim() || 'Verified payee';
+      remember({ address: addr, label: lbl });
+      setSessionChanges((prev) => ({
+        ...prev,
+        [programmeId]: [
+          { address: addr, label: lbl, action: 'added' },
+          ...(prev[programmeId] ?? []).filter((c) => c.address !== addr),
+        ],
+      }));
       setAddressInput('');
       setLabelInput('');
     },
@@ -143,7 +193,17 @@ export const PayeeManagement = () => {
   };
 
   const handleRevoke = (address: string) => {
-    void tx.send(() => programme.deny_payee({ payee: address }));
+    void tx.send(() => programme.deny_payee({ payee: address })).then((res) => {
+      if (res !== null) {
+        setSessionChanges((prev) => ({
+          ...prev,
+          [programmeId]: [
+            { address, label: 'Removed payee', action: 'removed' },
+            ...(prev[programmeId] ?? []).filter((c) => c.address !== address),
+          ],
+        }));
+      }
+    });
   };
 
   const canSubmit = isCreator && PAYEE_ADDRESS.test(addressInput.trim());
@@ -203,6 +263,24 @@ export const PayeeManagement = () => {
     for (const address of verifiedInThisRun) {
       remember({ address, label: 'Bulk verified' });
     }
+    if (verifiedInThisRun.length > 0) {
+      setSessionChanges((prev) => ({
+        ...prev,
+        [programmeId]: [
+          ...verifiedInThisRun.map((address) => ({ address, label: 'Bulk verified', action: 'added' as const })),
+          ...(prev[programmeId] ?? []).filter((c) => !verifiedInThisRun.includes(c.address)),
+        ],
+      }));
+    }
+    if (bulkMode === 'remove' && eligibleAddresses.length > 0) {
+      setSessionChanges((prev) => ({
+        ...prev,
+        [programmeId]: [
+          ...eligibleAddresses.map((address) => ({ address, label: 'Bulk removed', action: 'removed' as const })),
+          ...(prev[programmeId] ?? []).filter((c) => !eligibleAddresses.includes(c.address)),
+        ],
+      }));
+    }
     setBulkText('');
     setBulkResults(null);
     setBulkProgress(null);
@@ -260,6 +338,40 @@ export const PayeeManagement = () => {
           action={<Button onClick={() => void wallet.connect()}>Sign in</Button>}
         />
       )}
+
+      <Card title="Check a payee address">
+        <p className="payee-mgmt__consequence">
+          Any address can be checked with <span className="numeric">is_payee</span> to confirm whether it is currently verified on-chain.
+        </p>
+        <div className="payee-mgmt__check-form">
+          <Field
+            label="Check payee address"
+            placeholder="G..."
+            value={checkInput}
+            onChange={(event) => {
+              setCheckInput(event.target.value);
+              setCheckError(null);
+            }}
+            error={checkError}
+          />
+          <Button
+            variant="secondary"
+            onClick={() => void handleCheckAddress()}
+            loading={checkLoading}
+            disabled={!checkInput.trim()}
+          >
+            Check address
+          </Button>
+        </div>
+        {checkResult && (
+          <div className="payee-mgmt__check-result" role="status">
+            <AddressChip address={checkResult.address} copyLabel="Copy checked address" />
+            <Badge tone={checkResult.verified ? 'success' : 'danger'}>
+              {checkResult.verified ? 'Verified on-chain' : 'Not verified'}
+            </Badge>
+          </div>
+        )}
+      </Card>
 
       <Card title="Verify a payee">
         <p className="payee-mgmt__consequence">
@@ -413,38 +525,74 @@ export const PayeeManagement = () => {
         </div>
       </Card>
 
-      <Card title="Verified payees">
-        {candidates.length === 0 ? (
-          <Empty
-            title="No payees checked yet"
-            description="Verifying a payee is what makes Direct and Allocated payments possible — until at least one address is verified, no tranche in those modes can be paid out."
-          />
+      <Card title={isSample ? 'Verified payees (Sample data)' : 'Payees changed this session'}>
+        {isSample ? (
+          candidates.length === 0 ? (
+            <Empty
+              title="No payees checked yet"
+              description="Verifying a payee is what makes Direct and Allocated payments possible — until at least one address is verified, no tranche in those modes can be paid out."
+            />
+          ) : (
+            <ul className="payee-mgmt__list">
+              {candidates.map((candidate) => {
+                const status = statusByAddress[candidate.address] ?? 'checking';
+                const tone =
+                  status === 'verified' ? 'success' : status === 'error' ? 'warning' : status === 'checking' ? 'neutral' : 'danger';
+                const label =
+                  status === 'verified'
+                    ? 'Verified'
+                    : status === 'checking'
+                    ? 'Checking…'
+                    : status === 'error'
+                    ? 'Could not check'
+                    : 'Not verified';
+                return (
+                  <li key={candidate.address} className="payee-mgmt__row">
+                    <div className="payee-mgmt__row-info">
+                      <span className="payee-mgmt__row-label">{candidate.label}</span>
+                      <AddressChip address={candidate.address} copyLabel="Copy payee address" />
+                    </div>
+                    <div className="payee-mgmt__row-actions">
+                      <Badge tone="warning">Sample data</Badge>
+                      <Badge tone={tone}>{label}</Badge>
+                      {isCreator && status === 'verified' && (
+                        <Button
+                          variant="secondary"
+                          onClick={() => handleRevoke(candidate.address)}
+                          loading={tx.busy}
+                        >
+                          Remove
+                        </Button>
+                      )}
+                    </div>
+                  </li>
+                );
+              })}
+            </ul>
+          )
         ) : (
-          <ul className="payee-mgmt__list">
-            {candidates.map((candidate) => {
-              const status = statusByAddress[candidate.address] ?? 'checking';
-              const tone =
-                status === 'verified' ? 'success' : status === 'error' ? 'warning' : status === 'checking' ? 'neutral' : 'danger';
-              const label =
-                status === 'verified'
-                  ? 'Verified'
-                  : status === 'checking'
-                  ? 'Checking…'
-                  : status === 'error'
-                  ? 'Could not check'
-                  : 'Not verified';
-              return (
-                <li key={candidate.address} className="payee-mgmt__row">
+          currentSessionChanges.length === 0 ? (
+            <Empty
+              title="No payees changed this session"
+              description="Real programmes show no fixture payees. Addresses added or removed this session in this browser are listed here and labelled as session-only."
+            />
+          ) : (
+            <ul className="payee-mgmt__list">
+              {currentSessionChanges.map((entry) => (
+                <li key={entry.address} className="payee-mgmt__row">
                   <div className="payee-mgmt__row-info">
-                    <span className="payee-mgmt__row-label">{candidate.label}</span>
-                    <AddressChip address={candidate.address} copyLabel="Copy payee address" />
+                    <span className="payee-mgmt__row-label">{entry.label}</span>
+                    <AddressChip address={entry.address} copyLabel="Copy payee address" />
                   </div>
                   <div className="payee-mgmt__row-actions">
-                    <Badge tone={tone}>{label}</Badge>
-                    {isCreator && status === 'verified' && (
+                    <Badge tone="neutral">Session-only</Badge>
+                    <Badge tone={entry.action === 'added' ? 'success' : 'danger'}>
+                      {entry.action === 'added' ? 'Verified' : 'Removed'}
+                    </Badge>
+                    {isCreator && entry.action === 'added' && (
                       <Button
                         variant="secondary"
-                        onClick={() => handleRevoke(candidate.address)}
+                        onClick={() => handleRevoke(entry.address)}
                         loading={tx.busy}
                       >
                         Remove
@@ -452,9 +600,9 @@ export const PayeeManagement = () => {
                     )}
                   </div>
                 </li>
-              );
-            })}
-          </ul>
+              ))}
+            </ul>
+          )
         )}
       </Card>
     </div>

@@ -287,6 +287,88 @@ fn total_received_cannot_be_overflowed() {
     assert_eq!(f.client.get(&f.subject).total_received, i128::MAX);
 }
 
+mod proptests {
+    extern crate std;
+
+    use super::*;
+    use proptest::prelude::*;
+
+    proptest! {
+        #[test]
+        fn arbitrary_credit_sequences_preserve_aggregates_and_root(
+            credits in prop::collection::vec(
+                (1i128..=1_000, 0u64..=10_000, any::<bool>(), any::<u8>()),
+                1..=16,
+            ),
+        ) {
+            let f = setup();
+            let programme_a = f.programme.clone();
+            let programme_b = Address::generate(&f.env);
+            let mut expected_root = BytesN::from_array(&f.env, &GENESIS);
+            let mut expected_total = 0i128;
+
+            for (index, (amount, timestamp, second_programme, attestation_byte)) in credits.iter().copied().enumerate() {
+                let programme = if second_programme { &programme_b } else { &programme_a };
+                let attestation = hash(&f.env, attestation_byte);
+                f.env.ledger().set_timestamp(timestamp);
+                expected_root = f.client.next_root(
+                    &expected_root,
+                    programme,
+                    &amount,
+                    &attestation,
+                    &timestamp,
+                );
+                expected_total += amount;
+                let standing = f.client.credit(
+                    &f.writer,
+                    &f.subject,
+                    programme,
+                    &amount,
+                    &attestation,
+                );
+
+                assert_eq!(standing.total_received, expected_total);
+                assert_eq!(standing.tranches, index as u32 + 1);
+                assert_eq!(standing.history_root, expected_root);
+            }
+
+            let standing = f.client.get(&f.subject);
+            assert_eq!(standing.total_received, expected_total);
+            assert_eq!(standing.tranches, credits.len() as u32);
+            assert_eq!(standing.history_root, expected_root);
+        }
+
+        #[test]
+        fn overflow_is_refused_without_changing_standing(
+            first in 1i128..=i128::MAX,
+        ) {
+            let f = setup();
+            let second = i128::MAX - first + 1;
+            f.client.credit(
+                &f.writer,
+                &f.subject,
+                &f.programme,
+                &first,
+                &hash(&f.env, 1),
+            );
+
+            assert_eq!(
+                f.client.try_credit(
+                    &f.writer,
+                    &f.subject,
+                    &f.programme,
+                    &second,
+                    &hash(&f.env, 2),
+                ),
+                Err(Ok(Error::Overflow)),
+            );
+            let standing = f.client.get(&f.subject);
+            assert_eq!(standing.total_received, first);
+            assert_eq!(standing.tranches, 1);
+        }
+    }
+}
+
 #[test]
 fn unknown_subjects_report_not_found() {
     let f = setup();

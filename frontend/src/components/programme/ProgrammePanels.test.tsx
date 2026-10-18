@@ -8,6 +8,8 @@ import { VerifiersTab } from './VerifiersTab';
 import { TermsTab } from './TermsTab';
 import { ProgrammeTabs } from './ProgrammeTabs';
 import { FIXTURE_AWARDS, FIXTURE_VERIFIERS } from '../../fixtures/programmeFixtures';
+import { FIXTURE_PROGRAMMES } from '../../fixtures/programmes';
+import { DEMO_PROGRAMME_ID } from '../../context/sorobanStore';
 
 // Mock useIndexedList so AwardsTab tests can test loaded, loading, and error states
 vi.mock('../../hooks/useIndexedList', () => ({
@@ -164,6 +166,70 @@ describe('Issue #265 - AwardsTab component', () => {
     );
 
     expect(screen.getByText('No awards yet. Applications are still open.')).toBeDefined();
+  });
+
+  it('reads the index for the seeded demo programme even when a caller marks it a sample', async () => {
+    const { useIndexedList } = await import('../../hooks/useIndexedList');
+    const indexAwards = [
+      {
+        recipient: 'GDEMORECIPIENTAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA',
+        granted: '20000000000',
+        released: '10000000000',
+        tranches: 2,
+        tranchesReleased: 1,
+        payee: 'GPAYEE1',
+        mode: 'Direct',
+        updatedLedger: 101,
+      },
+      {
+        recipient: 'GSECONDRECIPIENTBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB',
+        granted: '18000000000',
+        released: '0',
+        tranches: 2,
+        tranchesReleased: 0,
+        payee: 'GPAYEE2',
+        mode: 'Allocated',
+        updatedLedger: 102,
+      },
+    ];
+    vi.mocked(useIndexedList).mockReturnValueOnce({
+      data: indexAwards,
+      loading: false,
+      error: null,
+      fetching: false,
+      refetch: vi.fn(),
+    });
+
+    render(
+      <AwardsTab
+        programmeId={DEMO_PROGRAMME_ID}
+        phase="Settled"
+        isSample
+      />,
+    );
+
+    // The index version of the advisory note, and the index's own awards.
+    expect(
+      screen.getByText(/From the public index \(awards\.json\), advisory/),
+    ).toBeDefined();
+    expect(screen.getByText('2,000.00 USDC')).toBeDefined();
+    expect(screen.getByText('1,800.00 USDC')).toBeDefined();
+    // The fixture awards must not appear.
+    expect(screen.queryByText(/GBB4Q2…8T19/)).toBeNull();
+    expect(screen.queryByText(/Awards are the median of reviewer votes/)).toBeNull();
+  });
+
+  it('keeps fixture awards and the sample note for a true sample programme', () => {
+    render(
+      <AwardsTab
+        programmeId={FIXTURE_PROGRAMMES[0].id}
+        phase="Settled"
+        isSample
+      />,
+    );
+
+    expect(screen.getByText(/Awards are the median of reviewer votes/)).toBeDefined();
+    expect(screen.getByText(/GBB4Q2…8T19/)).toBeDefined();
   });
 });
 

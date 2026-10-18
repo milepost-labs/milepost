@@ -29,7 +29,7 @@ export interface FixtureReviewApplication {
 
 /**
  * Applications in review for the Review-phase sample programme
- * (`CDV7VOCATIONALCOHORT3PL5QZ2WM8RT4HX6KJ9A3FC`). Shaped like
+ * (`CCOIACASOVO3ZQLXWWJFGZAU3Y545AGPXLBP4NYHYD77RDCBPXRVZ37C`). Shaped like
  * `program.get_application` + votes.
  */
 export const FIXTURE_REVIEW_APPLICATIONS: FixtureReviewApplication[] = [

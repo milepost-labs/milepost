@@ -127,14 +127,14 @@ describe('ProgrammeDirectory', () => {
   });
 
   it('updates the URL while preserving search and phase filters', async () => {
-    renderDirectory('/directory?phase=Open&q=school');
+    renderDirectory('/directory?phase=Open&q=community');
     await screen.findAllByRole('link');
 
     fireEvent.change(screen.getByLabelText(/sort/i), { target: { value: 'largest-budget' } });
 
     await waitFor(() => {
       expect(screen.getByLabelText(/current location/i).textContent).toBe(
-        '/directory?phase=Open&q=school&sort=largest-budget',
+        '/directory?phase=Open&q=community&sort=largest-budget',
       );
     });
   });

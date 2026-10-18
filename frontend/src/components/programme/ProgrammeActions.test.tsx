@@ -9,7 +9,7 @@ vi.mock('../../context/useWallet', () => ({
   useWallet: () => ({ address: wallet.address, status: 'disconnected', connect: vi.fn() }),
 }));
 
-const ID = 'CDV7VOCATIONALCOHORT3PL5QZ2WM8RT4HX6KJ9A3FC';
+const ID = 'CCOIACASOVO3ZQLXWWJFGZAU3Y545AGPXLBP4NYHYD77RDCBPXRVZ37C';
 
 function renderPanel(props: Partial<Parameters<typeof ProgrammeActions>[0]> = {}) {
   return render(

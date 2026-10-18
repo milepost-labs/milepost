@@ -27,19 +27,19 @@ export interface FixtureContribution {
 
 export const FIXTURE_CONTRIBUTIONS: FixtureContribution[] = [
   {
-    programmeId: 'CBQ4SCHOOLBURSARY2026XK3ZP7M2QWJ5T8VN4RD6HY',
+    programmeId: 'CBJWECZ3EUVNAE73YIMT2KWWNRHRF7NNWVKOLQRVOHSKYRYE32XBRPW7',
     amount: '10000000000',
     ledger: 4815532,
     refunded: false,
   },
   {
-    programmeId: 'CA3NSMEMICROGRANTSQ2V8TX4QK7PL2RZ9MD5HW6JUB',
+    programmeId: 'CBAVXWACVVQIBYAZ2YCSIPWXA24E3NZ3CIRAWJ2UHEQUQP67POYS6GFM',
     amount: '20000000000',
     ledger: 4613904,
     refunded: false,
   },
   {
-    programmeId: 'CBF9FLOODRESPONSETANA6QW2XM4RP7KZ3HT8LN5DVA',
+    programmeId: 'CBUESJW3MUDDN2NVG7RPQK7N2JSJMSKHDQMIQZMDXZMR6GNNZWX46LNU',
     amount: '5000000000',
     ledger: 4656011,
     refunded: false,
@@ -64,5 +64,5 @@ export const FIXTURE_TX: FixtureTx = {
  * (program error 2). Lets the failure state be seen without a real failure.
  */
 export const FIXTURE_TX_FAILURES: Record<string, string> = {
-  CCM2SMALLHOLDERINPUTSLR26A9FK3XU7PZ4E8QT2BN: 'HostError: Error(Contract, #2)',
+  CB7WB66VLFJUD2WHZYHQF7PHM72THVJYMLZ7YPW2XQKUOUUGKVTWVDXI: 'HostError: Error(Contract, #2)',
 };

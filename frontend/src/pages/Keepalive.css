@@ -120,3 +120,10 @@
   font-size: var(--text-xs);
   color: var(--text-muted);
 }
+
+.keepalive-page__unchecked {
+  margin: 0;
+  font-size: var(--text-sm);
+  line-height: var(--leading-body);
+  color: var(--text-muted);
+}

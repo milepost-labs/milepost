@@ -64,15 +64,14 @@ describe('useProgrammeParam', () => {
     expect(registry.is_programme).not.toHaveBeenCalled();
   });
 
-  it('accepts a sample programme id without asking the registry', () => {
+  it('checks a sample programme id with the registry like any other id', async () => {
     const sample = FIXTURE_PROGRAMMES[0].id;
-    const { wrapper, registry } = setup(`/keepalive?programme=${sample}`);
+    const { wrapper, registry } = setup(`/keepalive?programme=${sample}`, false);
 
     const { result } = renderHook(() => useProgrammeParam(), { wrapper });
 
-    expect(result.current.status).toBe('valid');
-    expect(result.current.programmeId).toBe(sample);
-    expect(registry.is_programme).not.toHaveBeenCalled();
+    await waitFor(() => expect(result.current.status).toBe('unknown'));
+    expect(registry.is_programme).toHaveBeenCalledWith({ addr: sample });
   });
 
   it('blocks well-formed ids that are not registry programmes', async () => {

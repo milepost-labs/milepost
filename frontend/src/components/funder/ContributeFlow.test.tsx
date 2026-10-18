@@ -11,6 +11,9 @@ const mocks = vi.hoisted(() => ({
   getPhase: vi.fn(),
   contribute: vi.fn(),
   signTransaction: vi.fn(),
+  // The balance the contribute flow is told about. `ready` with the figure is
+  // the normal case; tests switch it to fail or to load.
+  balance: { value: 52_500_000_000n as bigint | null, status: 'ready' as string, refetch: () => {} },
 }));
 
 vi.mock('../../context/useAnnouncer', () => ({ useAnnouncer: () => mocks.announce }));
@@ -26,12 +29,15 @@ vi.mock('../../context/useSoroban', () => ({
     programmeAt: () => ({ get_phase: mocks.getPhase, contribute: mocks.contribute }),
   }),
 }));
+// The token-contract read has its own tests; here the flow only needs the result.
+vi.mock('../../hooks/useProgrammeBalance', () => ({
+  useProgrammeBalance: () => mocks.balance,
+}));
 
-const SCHOOL = 'CBQ4SCHOOLBURSARY2026XK3ZP7M2QWJ5T8VN4RD6HY';
-const SMALLHOLDER = 'CCM2SMALLHOLDERINPUTSLR26A9FK3XU7PZ4E8QT2BN';
-const VOCATIONAL = 'CDV7VOCATIONALCOHORT3PL5QZ2WM8RT4HX6KJ9A3FC';
+const SCHOOL = 'CBJWECZ3EUVNAE73YIMT2KWWNRHRF7NNWVKOLQRVOHSKYRYE32XBRPW7';
+const SMALLHOLDER = 'CB7WB66VLFJUD2WHZYHQF7PHM72THVJYMLZ7YPW2XQKUOUUGKVTWVDXI';
+const VOCATIONAL = 'CCOIACASOVO3ZQLXWWJFGZAU3Y545AGPXLBP4NYHYD77RDCBPXRVZ37C';
 const REAL = 'CREALPROGRAMMEONTESTNET';
-const BALANCE = 52_500_000_000n; // 5,250 USDC
 
 const real: DirectoryProgramme = {
   id: REAL,
@@ -51,12 +57,17 @@ function renderFlow(options: { linked?: string; withReal?: boolean } = {}) {
       <ContributeFlow
         programmes={programmes}
         linkedProgrammeId={options.linked ?? null}
-        balance={BALANCE}
         sampleDelayMs={0}
       />
     </MemoryRouter>,
   );
 }
+
+// Each test starts from a read balance; a test that needs otherwise sets it itself.
+beforeEach(() => {
+  mocks.balance.value = 52_500_000_000n;
+  mocks.balance.status = 'ready';
+});
 
 const amountInput = () => screen.getByLabelText('Amount');
 
@@ -90,6 +101,21 @@ describe('ContributeFlow — amount step', () => {
     expect(screen.getByRole('alert').textContent).toMatch(/More than your balance of 5,250/);
     expect(continueButton().disabled).toBe(true);
     expect(mocks.signTransaction).not.toHaveBeenCalled();
+  });
+
+  it('shows the balance read from the programme asset', () => {
+    renderFlow();
+    expect(screen.getByText('Balance 5,250.00 USDC')).toBeTruthy();
+  });
+
+  it('says the balance is unavailable and does not cap an amount when the read fails', () => {
+    mocks.balance.value = null;
+    mocks.balance.status = 'unavailable';
+    renderFlow();
+    enterAmount('6,000');
+    expect(screen.getByText('Balance unavailable')).toBeTruthy();
+    expect(screen.queryByRole('alert')).toBeNull();
+    expect(continueButton().disabled).toBe(false);
   });
 
   it('shows the fee as deducted from the contribution, not added to it', () => {

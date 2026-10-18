@@ -1,15 +1,19 @@
-import { useState } from 'react';
+import { useState, type FormEvent } from 'react';
+import { Link, useSearchParams } from 'react-router-dom';
 import { Buffer } from 'buffer';
 import { ShieldCheck } from 'lucide-react';
 import { useSoroban } from '../context/useSoroban';
+import { useIndexedList } from '../hooks';
 import { useWallet } from '../context/useWallet';
 import { useAnnouncer } from '../context/useAnnouncer';
 import { useTransaction, phaseLabel } from '../hooks/useTransaction';
 import { explain } from '../lib/errors';
 import { Card, Button, Field, TextArea, Badge } from '../components/ui';
 import { CopyButton } from '../components/ui/CopyButton';
+import { AddressChip } from '../components/ui/AddressChip';
+import { Empty, ErrorState, Loading } from '../components/state/AsyncStates';
+import { lookupSchemaChain, parseSchemaUid, type SchemaRecord } from '../lib/schemaLookup';
 import {
-  FIXTURE_SCHEMAS,
   SCHEMA_NAME_ERROR,
   buildSchemaDefinition,
   isValidSchemaName,
@@ -28,11 +32,11 @@ const HEX_32_BYTES = /^(0x)?[0-9a-fA-F]{64}$/;
  * string the contract stores — the registry never parses it, so being precise
  * here is what lets a verifier years later agree on what a claim meant.
  *
- * Registered schemas are listed with their UID because the UID is what a
- * programme is configured with at deploy time. The list is `FIXTURE_SCHEMAS`
- * plus anything registered this session: the contract keeps no "all schemas"
- * list, so a real list would come from an indexer handler that does not exist
- * yet.
+ * Any schema can be looked up on-chain by UID (`attest.get_schema`), with its
+ * predecessor history; the UID lives in `?schema=` so each lookup has a link.
+ * Schemas registered from this page are listed as "registered in this
+ * browser": the contract keeps no "all schemas" list, so a full list would
+ * need an indexer handler that does not exist yet.
  */
 export const RegisterSchema = () => {
   const { address } = useWallet();
@@ -46,6 +50,29 @@ export const RegisterSchema = () => {
   const [sessionSchemas, setSessionSchemas] = useState<FixtureSchema[]>([]);
 
   const tx = useTransaction<Buffer>({ contract: 'attest' });
+
+  const [searchParams, setSearchParams] = useSearchParams();
+  const lookupUid = parseSchemaUid(searchParams.get('schema') ?? '');
+  const [lookupInput, setLookupInput] = useState(lookupUid ?? '');
+  const [lookupError, setLookupError] = useState<string | null>(null);
+  const lookup = useIndexedList(
+    () => lookupSchemaChain((args) => attest.get_schema(args), lookupUid ?? ''),
+    [attest, lookupUid],
+    { enabled: lookupUid !== null },
+  );
+
+  const handleLookup = (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    const parsed = parseSchemaUid(lookupInput);
+    if (!parsed) {
+      setLookupError('Enter a 32-byte hex UID (64 hex characters).');
+      return;
+    }
+    setLookupError(null);
+    const next = new URLSearchParams(searchParams);
+    next.set('schema', parsed);
+    setSearchParams(next);
+  };
 
   const trimmedName = name.trim();
   const nameError =
@@ -111,7 +138,7 @@ export const RegisterSchema = () => {
   const explained = tx.error ? explain(tx.error, 'attest') : null;
   const isCycle = tx.error?.code === 9;
   const successUidHex = tx.result ? (tx.result as Buffer).toString('hex') : null;
-  const schemas = [...sessionSchemas, ...FIXTURE_SCHEMAS];
+  const schemas = sessionSchemas;
 
   return (
     <div className="register-schema">
@@ -234,10 +261,12 @@ export const RegisterSchema = () => {
           </div>
         </Card>
 
-        <section className="register-schema__list" aria-label="Registered schemas">
-          <h2 className="register-schema__list-title">Registered schemas</h2>
+        <section className="register-schema__list" aria-label="Registered in this browser">
+          <h2 className="register-schema__list-title">Registered in this browser</h2>
           {schemas.length === 0 ? (
-            <p className="typo-text text-muted">No schemas registered yet.</p>
+            <p className="typo-text text-muted">
+              Nothing registered from this browser yet. Look up any schema by UID below.
+            </p>
           ) : (
             <ul className="schema-list">
               {schemas.map((schema) => (
@@ -249,16 +278,125 @@ export const RegisterSchema = () => {
                     </Badge>
                   </div>
                   <span className="numeric schema-list__fields">{schema.fields}</span>
-                  <span className="numeric schema-list__uid" title={schema.uid}>
+                  <Link className="numeric schema-list__uid" title={schema.uid} to={`?schema=${schema.uid}`}>
                     uid {schema.uid}
-                  </span>
+                  </Link>
                 </li>
               ))}
             </ul>
           )}
-          <p className="register-schema__sample-note">Sample schemas for the design phase.</p>
+          <p className="register-schema__sample-note">
+            Kept in this tab only. The network keeps no list of every schema.
+          </p>
         </section>
       </div>
+
+      <Card title="Look up a schema" className="register-schema__lookup">
+        <form className="register-schema__lookup-form" onSubmit={handleLookup} noValidate>
+          <Field
+            label="Schema UID"
+            placeholder="32-byte hex"
+            value={lookupInput}
+            onChange={(e) => setLookupInput(e.target.value)}
+            error={lookupError ?? undefined}
+            autoComplete="off"
+            spellCheck={false}
+          />
+          <Button type="submit" variant="secondary">
+            Look up
+          </Button>
+        </form>
+
+        {lookupUid && lookup.loading && <Loading label="Reading the schema" rows={2} />}
+        {lookupUid && Boolean(lookup.error) && !lookup.loading && (
+          <ErrorState error={lookup.error} contract="attest" onRetry={lookup.refetch} />
+        )}
+        {lookupUid && !lookup.loading && !lookup.error && lookup.data === null && (
+          <Empty
+            title="No schema with that UID"
+            description="Nothing is registered under it on this network. Check the UID."
+          />
+        )}
+        {lookupUid && lookup.data && (
+          <SchemaDetails
+            schema={lookup.data.chain[0]}
+            history={lookup.data.chain.slice(1)}
+            missingPredecessor={lookup.data.missingPredecessor}
+            truncated={lookup.data.truncated}
+          />
+        )}
+      </Card>
     </div>
   );
 };
+
+function SchemaDetails({
+  schema,
+  history,
+  missingPredecessor,
+  truncated,
+}: {
+  schema: SchemaRecord;
+  history: SchemaRecord[];
+  missingPredecessor: string | null;
+  truncated: boolean;
+}) {
+  return (
+    <div className="schema-details" role="status">
+      <dl className="schema-details__fields">
+        <dt>UID</dt>
+        <dd className="numeric schema-details__uid">
+          {schema.uid} <CopyButton value={schema.uid} label="Copy schema UID" />
+        </dd>
+        <dt>Definition</dt>
+        <dd className="numeric">{schema.definition}</dd>
+        <dt>Authority</dt>
+        <dd>
+          <AddressChip address={schema.authority} />
+        </dd>
+        <dt>Revocation</dt>
+        <dd>
+          <Badge tone={schema.revocable ? 'warning' : 'neutral'}>
+            {schema.revocable ? 'Revocable' : 'Not revocable'}
+          </Badge>{' '}
+          {schema.revocable
+            ? 'Attesters can revoke attestations under this schema.'
+            : 'Attestations under this schema can never be revoked.'}
+        </dd>
+        <dt>Who may attest</dt>
+        <dd>{schema.restricted ? 'Only the authority' : 'Any verifier'}</dd>
+        <dt>Supersedes</dt>
+        <dd className="numeric">
+          {schema.predecessorUid ? (
+            <Link to={`?schema=${schema.predecessorUid}`}>{schema.predecessorUid}</Link>
+          ) : (
+            'Nothing, this is an original schema'
+          )}
+        </dd>
+      </dl>
+
+      {(history.length > 0 || missingPredecessor) && (
+        <>
+          <h3 className="schema-details__history-title">Replacement history</h3>
+          <ol className="schema-details__history">
+            {history.map((earlier) => (
+              <li key={earlier.uid}>
+                <Link className="numeric" to={`?schema=${earlier.uid}`}>
+                  {earlier.uid}
+                </Link>
+                <span className="numeric schema-details__history-definition">{earlier.definition}</span>
+              </li>
+            ))}
+            {missingPredecessor && (
+              <li>
+                <span className="numeric">{missingPredecessor}</span>
+                <span className="schema-details__history-definition">Not registered on this network</span>
+              </li>
+            )}
+          </ol>
+          {truncated && <p className="typo-text text-muted">Older schemas are not shown.</p>}
+        </>
+      )}
+    </div>
+  );
+}
