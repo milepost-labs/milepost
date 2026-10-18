@@ -88,12 +88,12 @@ export const VerifierDashboard = () => {
   // each on-chain, and keep only the ones where this address actually holds
   // a role — the index is never trusted on its own for this.
   type MyProgramme = { id: string; name: string | null; isVerifier: boolean; isReviewer: boolean; phase: string | null };
-  const [myProgrammes, setMyProgrammes] = useState<MyProgramme[] | null>(null);
+  // The address is stored beside the list, so a signed-out reader never sees
+  // the previous account's roles: only a list read for the current address
+  // counts. Resetting state inside the effect would cascade a render instead.
+  const [loaded, setLoaded] = useState<{ address: string; list: MyProgramme[] } | null>(null);
   useEffect(() => {
-    if (!address) {
-      setMyProgrammes(null);
-      return;
-    }
+    if (!address) return;
     let cancelled = false;
     (async () => {
       const indexed = await fetchProgrammes().catch(() => []);
@@ -108,12 +108,13 @@ export const VerifierDashboard = () => {
           return { id: p.id, name: p.name, isVerifier: ver, isReviewer: rev, phase: phase != null ? String(phase) : null };
         }),
       );
-      if (!cancelled) setMyProgrammes(checked.filter((p) => p.isVerifier || p.isReviewer));
+      if (!cancelled) setLoaded({ address, list: checked.filter((p) => p.isVerifier || p.isReviewer) });
     })();
     return () => {
       cancelled = true;
     };
   }, [address, programmeAt]);
+  const myProgrammes = loaded && loaded.address === address ? loaded.list : null;
   const verifierProgrammes = myProgrammes?.filter((p) => p.isVerifier) ?? [];
   const reviewerProgrammes = useMemo(
     () => (myProgrammes ?? []).filter((p) => p.isReviewer).sort((a, b) => (a.phase === 'Review' ? -1 : b.phase === 'Review' ? 1 : 0)),
