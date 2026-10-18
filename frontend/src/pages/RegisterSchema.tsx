@@ -116,7 +116,7 @@ export const RegisterSchema = () => {
   return (
     <div className="register-schema">
       <header className="register-schema__header">
-        <h1>Register a schema</h1>
+        <h2>Register a schema</h2>
         <p className="typo-text text-muted">
           A programme cannot be deployed without a schema: the short checklist a verifier signs against. Register it first so every attestation uses the same words.
         </p>

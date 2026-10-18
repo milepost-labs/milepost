@@ -11,12 +11,8 @@
   gap: var(--space-2);
 }
 
-.keepalive-page__header h1 {
+.keepalive-page__header h2 {
   margin: 0;
-  font-size: var(--text-h1);
-  font-weight: var(--weight-extrabold);
-  letter-spacing: var(--tracking-heading);
-  line-height: var(--leading-heading);
 }
 
 .keepalive-page__header p {

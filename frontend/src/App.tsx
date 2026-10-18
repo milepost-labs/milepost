@@ -7,6 +7,8 @@ import { WalletProvider } from "./context/WalletContext";
 import { Layout } from "./components/layout/Layout";
 import { Skeleton } from "./components/state/AsyncStates";
 import { Home } from "./pages/Home";
+import { AdminLayout } from "./pages/AdminLayout";
+import { ADMIN_SECTIONS } from "./pages/adminSections";
 import { ErrorBoundary } from "./components/ErrorBoundary";
 import { APP_ROUTES } from "./routes";
 import { lazyWithRetry } from "./lib/lazyWithRetry";
@@ -105,6 +107,8 @@ const ROUTE_ELEMENTS: Record<string, ReactElement> = {
   "/about": <AboutDeployment />,
 };
 
+const ADMIN_PATHS: ReadonlySet<string> = new Set(ADMIN_SECTIONS.map(({ to }) => to));
+
 /**
  * What a route chunk shows while it loads: the same card-shaped skeleton
  * the screens use for reads, not a bare spinner — so navigating feels like
@@ -129,13 +133,20 @@ function App() {
                 <Routes>
                   <Route path="/" element={<Layout />}>
                     <Route index element={<Home />} />
-                    {APP_ROUTES.map(({ path }) => (
+                    {APP_ROUTES.filter(({ path }) => !ADMIN_PATHS.has(path)).map(({ path }) => (
                       <Route
                         key={path}
                         path={path.slice(1)}
                         element={ROUTE_ELEMENTS[path]}
                       />
                     ))}
+                    {/* One shell (heading + tabs) for every admin screen; each
+                        keeps its own URL. */}
+                    <Route element={<AdminLayout />}>
+                      {ADMIN_SECTIONS.map(({ to }) => (
+                        <Route key={to} path={to.slice(1)} element={ROUTE_ELEMENTS[to]} />
+                      ))}
+                    </Route>
                     <Route
                       path="programme/:programmeId"
                       element={<ProgrammeDetail />}

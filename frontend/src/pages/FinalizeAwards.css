@@ -4,7 +4,7 @@
   gap: var(--space-7);
 }
 
-.finalize-header h1 {
+.finalize-header h2 {
   margin-bottom: var(--space-2);
 }
 
