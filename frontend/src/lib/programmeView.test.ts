@@ -3,6 +3,8 @@ import { describe, expect, it } from 'vitest';
 import { FIXTURE_CHAIN_DEFAULT, FIXTURE_PROGRAMMES } from '../fixtures/programmes';
 import { FIXTURE_USER_ROLES } from '../fixtures/userRoles';
 import {
+  directoryHref,
+  directorySearch,
   filterProgrammes,
   formatAgo,
   formatUsdc,
@@ -261,5 +263,25 @@ describe('formatting helpers', () => {
   it('shortens long ids', () => {
     expect(shortId('CBQ4SCHOOLBURSARY2026XK3ZP7M2QWJ5T8VN4RD6HY')).toBe('CBQ4SC…4RD6HY');
     expect(shortId('CSHORT')).toBe('CSHORT');
+  });
+});
+
+describe('directory links', () => {
+  it('carries the directory filters into a programme link, and back out again', () => {
+    const carried = directorySearch('?q=flood&phase=Cancelled&sort=newest&yours=1');
+    expect(carried).toBe('q=flood&phase=Cancelled&sort=newest&yours=1');
+    expect(directoryHref(`?${carried}`)).toBe(
+      '/directory?q=flood&phase=Cancelled&sort=newest&yours=1',
+    );
+  });
+
+  it('drops parameters the directory does not own', () => {
+    expect(directorySearch('?q=school&unrelated=1')).toBe('q=school');
+    expect(directoryHref('?unrelated=1')).toBe('/directory');
+  });
+
+  it('links to the plain directory when no filters were carried', () => {
+    expect(directorySearch('')).toBe('');
+    expect(directoryHref('')).toBe('/directory');
   });
 });

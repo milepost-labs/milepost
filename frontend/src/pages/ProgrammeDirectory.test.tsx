@@ -118,6 +118,15 @@ describe('ProgrammeDirectory', () => {
     expect(screen.getAllByRole('link')).toHaveLength(1);
   });
 
+  it('carries the current filters into the programme links', async () => {
+    renderDirectory('/directory?q=flood&phase=Cancelled&sort=newest');
+    const name = await screen.findByText(/Flood response cash transfers/i);
+
+    expect(name.closest('a')?.getAttribute('href')).toBe(
+      '/programme/CBF9FLOODRESPONSETANA6QW2XM4RP7KZ3HT8LN5DVA?q=flood&phase=Cancelled&sort=newest',
+    );
+  });
+
   it('restores sort from the URL', async () => {
     renderDirectory('/directory?sort=largest-budget');
     const links = await screen.findAllByRole('link');

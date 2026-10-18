@@ -33,6 +33,33 @@ export type DirectorySort = (typeof DIRECTORY_SORTS)[number]['value'];
 
 export const DEFAULT_DIRECTORY_SORT: DirectorySort = 'newest';
 
+/**
+ * The directory's own query keys, in the order they are rebuilt.
+ *
+ * A programme link carries these through from the directory, so the header's
+ * "All programmes" link can hand the reader back the filtered list they came
+ * from. Anything else in the URL did not come from the directory and is
+ * dropped rather than replayed.
+ */
+const DIRECTORY_PARAM_KEYS = ['q', 'phase', 'sort', 'yours'] as const;
+
+/** The directory filter query a programme link carries, without the leading "?". */
+export function directorySearch(search: string): string {
+  const input = new URLSearchParams(search);
+  const carried = new URLSearchParams();
+  for (const key of DIRECTORY_PARAM_KEYS) {
+    const value = input.get(key);
+    if (value) carried.set(key, value);
+  }
+  return carried.toString();
+}
+
+/** "/directory", with whatever filters the current URL carried from it. */
+export function directoryHref(search: string): string {
+  const carried = directorySearch(search);
+  return carried ? `/directory?${carried}` : '/directory';
+}
+
 export interface DirectoryProgramme {
   id: string;
   name: string;

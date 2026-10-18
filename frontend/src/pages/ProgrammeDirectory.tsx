@@ -12,6 +12,7 @@ import {
   DEFAULT_DIRECTORY_SORT,
   DIRECTORY_PHASES,
   DIRECTORY_SORTS,
+  directorySearch,
   filterProgrammes,
   sortProgrammes,
   formatAgo,
@@ -127,6 +128,9 @@ export const ProgrammeDirectory = () => {
       : '';
 
   const showEmpty = !loading && shown.length === 0;
+  // Carried into every programme link, so "All programmes" can come back to
+  // this filtered view rather than an empty directory.
+  const carriedSearch = directorySearch(params.toString());
 
   return (
     <div className="directory-container">
@@ -247,7 +251,7 @@ export const ProgrammeDirectory = () => {
           {!loading && shown.length > 0 && (
             <div className="directory-grid">
               {shown.map((programme) => (
-                <ProgrammeCard key={programme.id} programme={programme} />
+                <ProgrammeCard key={programme.id} programme={programme} carriedSearch={carriedSearch} />
               ))}
             </div>
           )}
@@ -262,10 +266,17 @@ export const ProgrammeDirectory = () => {
   );
 };
 
-function ProgrammeCard({ programme }: { programme: DirectoryProgramme }) {
+function ProgrammeCard({
+  programme,
+  carriedSearch,
+}: {
+  programme: DirectoryProgramme;
+  /** The directory's filters, carried through so the programme can link back. */
+  carriedSearch: string;
+}) {
   const { chain } = programme;
   const budget = BigInt(chain.contributed) - BigInt(chain.fee);
-  const href = `/programme/${encodeURIComponent(programme.id)}`;
+  const href = `/programme/${encodeURIComponent(programme.id)}${carriedSearch ? `?${carriedSearch}` : ''}`;
 
   return (
     <Link to={href} className="directory-card-link">
