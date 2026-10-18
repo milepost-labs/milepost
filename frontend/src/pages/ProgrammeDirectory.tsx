@@ -1,6 +1,7 @@
 import { useCallback, useMemo } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
 import { MoneyRow } from '../components/programme/MoneyRow';
+import { ModePill } from '../components/ui';
 import '../components/programme/phasePill.css';
 import { Skeleton, Empty } from '../components/state/AsyncStates';
 import { describeAmount } from '../lib/amount';
@@ -301,6 +302,10 @@ function ProgrammeCard({ programme }: { programme: DirectoryProgramme }) {
         <div className="directory-card-new__foot">
           <span className="directory-card-new__sample">
             {programme.sample ? 'Sample data' : 'Sample chain read'}
+          </span>
+          <span className="directory-card-new__mode">
+            <span className="directory-card-new__mode-label">Planned default</span>
+            <ModePill mode={chain.mode} />
           </span>
           <span className="directory-card-new__cta">{programmeCta(chain.phase)} →</span>
         </div>

@@ -170,4 +170,13 @@ describe('ProgrammeDirectory', () => {
       expect(screen.getAllByRole('link')).toHaveLength(FIXTURE_PROGRAMMES.length);
     });
   });
+
+  it('shows each card\'s planned mode, worded as a default', async () => {
+    mockIndex();
+    renderDirectory();
+    await waitFor(() => {
+      expect(screen.getAllByText('Planned default')).toHaveLength(FIXTURE_PROGRAMMES.length);
+    });
+    expect(screen.getAllByText(/ mode$/)).toHaveLength(FIXTURE_PROGRAMMES.length);
+  });
 });
