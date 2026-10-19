@@ -236,3 +236,25 @@ jobs:
       # is the only place that needs to change when the policy changes.
       - name: Check npm dependencies for known advisories
         run: ./scripts/check-npm-advisories.sh
+
+      # The examples/ scripts show integrators how to call the published
+      # packages. Build the local bindings into them and typecheck so a
+      # binding change that would break the examples fails here rather than
+      # after an integrator tries to run them.
+      - name: Typecheck examples against local bindings
+        run: |
+          # The binding packages are already built by the step above.
+          # Pack them into tarballs, install into examples/ alongside
+          # TypeScript and @types/node, then typecheck.
+          PKGS=(attest policy-spend program record registry)
+          TMP="$(mktemp -d)"
+          for pkg in "${PKGS[@]}"; do
+            (cd "packages/$pkg" && npm pack --pack-destination "$TMP" --ignore-scripts --loglevel=error >/dev/null)
+          done
+          # Install dev deps (typescript, @types/node) then overlay the local
+          # binding tarballs so @milepost/* resolve to this checkout's builds.
+          npm install --prefix examples --no-save --no-audit --no-fund \
+            --loglevel=error typescript @types/node
+          npm install --prefix examples --no-save --no-audit --no-fund \
+            --loglevel=error "$TMP"/*.tgz
+          npx --prefix examples tsc --noEmit -p examples/tsconfig.json

@@ -1,8 +1,8 @@
 /**
  * Read a recipient's standing from the record contract.
  *
- * Usage: npx tsx read-standing.ts [recipient] [key]
- * Defaults to a testnet address and key "credits".
+ * Usage: npx tsx read-standing.ts [subject]
+ * Defaults to a testnet address placeholder.
  * No funded keys needed — read-only against testnet.
  */
 
@@ -11,8 +11,7 @@ import { Client as RecordClient, networks } from "@milepost/record";
 const { contractId, networkPassphrase } = networks.testnet;
 
 async function main() {
-  const recipient = process.argv[2] || "GABC...";
-  const key = process.argv[3] || "credits";
+  const subject = process.argv[2] || "GABC...";
 
   const client = new RecordClient({
     contractId,
@@ -21,14 +20,15 @@ async function main() {
   });
 
   try {
-    const result = await client.read_standing({
-      recipient,
-      key,
-    });
+    const result = await client.get({ subject });
+    const standing = result.result.unwrap();
 
-    console.log(`Standing for ${recipient}:`);
-    console.log(`  Key: ${key}`);
-    console.log(`  Value: ${result.result}`);
+    console.log(`Standing for ${subject}:`);
+    console.log(`  Total received: ${standing.total_received}`);
+    console.log(`  Tranches: ${standing.tranches}`);
+    console.log(`  Programmes: ${standing.programmes}`);
+    console.log(`  First seen: ${standing.first_seen}`);
+    console.log(`  Last seen: ${standing.last_seen}`);
   } catch (err) {
     console.error("Read failed:", err);
   }
