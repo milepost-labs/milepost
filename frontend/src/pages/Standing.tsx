@@ -349,7 +349,7 @@ function StandingPanel({ standing, subject }: { standing: OnChainStanding; subje
 
       <StandingTtlRow liveForDays={FIXTURE_STANDING.liveForDays} subject={subject} />
       <span className="standing-sample">
-        Sample lifetime for the design phase. Reading the real TTL is a separate change.
+        <Badge tone="neutral">Sample data</Badge> Sample lifetime for the design phase. Reading the real TTL is a separate change.
       </span>
 
       <Card title="Verify a shared history">

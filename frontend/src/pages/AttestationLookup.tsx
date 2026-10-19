@@ -365,7 +365,7 @@ export const AttestationLookup = () => {
 
             {hits.length > 0 && (
               <span className="attest-lookup__sample-note">
-                Sample attestations for the design phase.
+                <Badge tone="neutral">Sample data</Badge> Sample attestations for the design phase.
               </span>
             )}
           </div>

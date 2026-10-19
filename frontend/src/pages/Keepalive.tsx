@@ -7,7 +7,7 @@ import { useWallet } from '../context/useWallet';
 import { useContractResult, useProgrammeParam, useTransaction } from '../hooks';
 import { ProgrammeParamNotice } from '../components/programme/ProgrammeParamNotice';
 import { ErrorPanel, PendingState, TransactionOutcome } from '../components/state/AsyncStates';
-import { Button, Field, Select } from '../components/ui';
+import { Badge, Button, Field, Select } from '../components/ui';
 import { DEMO_PROGRAMME_ID } from '../context/sorobanStore';
 import { FIXTURE_PROGRAMMES } from '../fixtures/programmes';
 import { fetchAwards, fetchProgrammes } from '../lib/indexer';
@@ -375,7 +375,9 @@ export const Keepalive = () => {
         />
       )}
 
-      <p className="keepalive-page__sample">Sample lifetimes for the design phase.</p>
+      <p className="keepalive-page__sample">
+        <Badge tone="neutral">Sample data</Badge> Sample lifetimes for the design phase.
+      </p>
 
       <p className="typo-text text-muted">
         Extending a single attestation also works from its <Link to="/attestations">lookup page</Link>.

@@ -86,6 +86,11 @@ tests decode events through the bindings' own specs, so they fail on it.
 
 CI does the same on every PR, in the `bindings` job.
 
+The same job fails if a component shows a `FIXTURE_*` stand-in without its
+"Sample data" tag. See [Sample data](frontend/CONTRIBUTING.md#sample-data) in
+the frontend guide for the rule, the allowlist and how to run the check
+locally (`npm run check:sample-tags --prefix frontend`).
+
 ### Local Development Modes
 - **Fixture Mode:** Run `VITE_FIXTURES=1 npm --prefix frontend run dev` to run and inspect UI screens locally without requiring an active wallet connection or testnet funds.
 - **Component Gallery:** In dev mode, open `/dev/ui` in the browser to inspect all components from `src/components/ui/` and `src/components/state/`. It is left out of production builds, and CI fails if it ever reaches one (`frontend/scripts/check-no-dev-pages.sh`).

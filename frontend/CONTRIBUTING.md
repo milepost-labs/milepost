@@ -85,6 +85,43 @@ node scripts/coverage-summary.mjs    # the Markdown tables CI shows
 
 `npm run test:coverage` writes its report to `coverage/`, which git ignores.
 
+### Sample data
+
+Every stand-in value on screen carries a "Sample data" tag, so a fixture is
+never mistaken for a live figure. Stand-ins are `FIXTURE_*` exports, mostly in
+`src/fixtures/`. CI fails if a component (any `.tsx` under `src/` other than
+tests) imports a `FIXTURE_*` export and does not render the tag itself:
+
+```tsx
+<Badge tone="neutral">Sample data</Badge> Sample awards for the design phase.
+```
+
+The tag counts as JSX text or a string literal, not as a comment. Type-only
+imports do not count as reads.
+
+A few components may skip the tag, such as the landing page illustrations,
+which never claim to show real figures. They are listed in
+`scripts/sample-tag-allowlist.json`, and each entry needs a `reason`:
+
+```json
+{ "file": "src/components/landing/HeroDemo.tsx", "reason": "Landing illustration: ..." }
+```
+
+The check fails on an entry with no reason, and on one that is no longer
+needed because the file now renders the tag, reads no fixture, or is gone.
+Fix the component before you reach for the allowlist.
+
+To run it locally:
+
+```sh
+npm run check:sample-tags   # the check CI runs
+npm run test:sample-tags    # the check's own tests
+```
+
+The check only looks at the component that imports the fixture. A component
+that gets fixture values through a hook or a prop has to tag them by hand,
+and review is still what catches that.
+
 The [testing guide](docs/testing-guide.md) covers mocking a contract client,
 the no-network rule, and what the reachability check means when it fires.
 

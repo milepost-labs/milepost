@@ -4,6 +4,7 @@ import { ContributeFlow } from '../components/funder/ContributeFlow';
 import { ContributionList } from '../components/funder/ContributionList';
 import { SeededProgrammeTools } from '../components/funder/SeededProgrammeTools';
 import { SignInSheet } from '../components/layout/SignInSheet';
+import { Badge } from '../components/ui';
 import { useWallet } from '../context/useWallet';
 import { FIXTURE_CONTRIBUTIONS } from '../fixtures/funding';
 import { useIndexedList, useProgrammeParam } from '../hooks';
@@ -140,6 +141,10 @@ export const FunderDashboard = () => {
               linkedProgrammeId={programmeParam.status === 'valid' ? programmeParam.programmeId : null}
             />
           </div>
+
+          <p className="funding-sample-note">
+            <Badge tone="neutral">Sample data</Badge> Sample contributions for the design phase.
+          </p>
 
           <SeededProgrammeTools />
         </>

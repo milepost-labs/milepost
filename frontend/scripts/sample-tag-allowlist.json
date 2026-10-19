@@ -1,0 +1,14 @@
+[
+  {
+    "file": "src/components/home/MoneyPath.tsx",
+    "reason": "Landing illustration: the example budget explains the money path and is introduced in its own copy as \"an example budget\". It never claims to be a programme's figure."
+  },
+  {
+    "file": "src/components/landing/HeroDemo.tsx",
+    "reason": "Landing illustration: the hero animation walks through one made-up award to show the mechanism. Nothing in it claims to be chain state."
+  },
+  {
+    "file": "src/pages/ProgrammeDetail.tsx",
+    "reason": "Reads FIXTURE_CHAIN only for a sample programme's planned mode, which it hands to ProgrammeHeader together with sample={isSample}; ProgrammeHeader renders the \"Sample data\" tag beside that mode."
+  }
+]

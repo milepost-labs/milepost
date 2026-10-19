@@ -222,7 +222,10 @@ export const AwardsTab: FC<AwardsTabProps> = ({
       aria-labelledby="tab-awards"
       tabIndex={0}
     >
-      <p className="awards-tab__note">{advisoryNote}</p>
+      <p className="awards-tab__note">
+        {sample && <><Badge tone="neutral">Sample data</Badge>{' '}</>}
+        {advisoryNote}
+      </p>
 
       {!loading && !error && awards.length > 0 && (
         <div className="awards-tab__actions">

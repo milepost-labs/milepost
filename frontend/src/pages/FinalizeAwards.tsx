@@ -298,7 +298,9 @@ function FinalizeBoard({
               })}
             </ul>
           )}
-          <p className="finalize-board__sample">Sample applications for the design phase.</p>
+          <p className="finalize-board__sample">
+            <Badge tone="neutral">Sample data</Badge> Sample applications for the design phase.
+          </p>
         </>
       )}
     </section>

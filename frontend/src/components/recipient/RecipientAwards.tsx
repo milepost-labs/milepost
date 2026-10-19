@@ -1,4 +1,5 @@
 import { AwardCard } from './AwardCard';
+import { Badge } from '../ui';
 import { FIXTURE_MY_AWARDS } from '../../fixtures/recipientFixtures';
 import './RecipientAwards.css';
 
@@ -26,7 +27,7 @@ export function RecipientAwards({
         />
       ))}
       <span className="recipient-awards__note">
-        Sample awards for the design phase.
+        <Badge tone="neutral">Sample data</Badge> Sample awards for the design phase.
       </span>
     </div>
   );

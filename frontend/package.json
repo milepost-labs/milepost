@@ -8,6 +8,8 @@
     "build": "tsc -b && vite build",
     "lint": "eslint .",
     "test:design-system": "node --test scripts/check-design-system.test.mjs",
+    "check:sample-tags": "node scripts/check-sample-tags.mjs",
+    "test:sample-tags": "node --test scripts/check-sample-tags.test.mjs",
     "test": "vitest run",
     "test:coverage": "vitest run --coverage",
     "preview": "vite preview",

@@ -179,6 +179,15 @@ jobs:
       - name: Test the design-system guard
         run: npm run test:design-system --prefix frontend
 
+      # Every stand-in value on screen carries a "Sample data" tag. A component
+      # that reads a FIXTURE_* export without rendering the tag fails here,
+      # unless frontend/scripts/sample-tag-allowlist.json says why it may.
+      - name: Check fixtures are rendered with the sample tag
+        run: npm run check:sample-tags --prefix frontend
+
+      - name: Test the sample-tag check
+        run: npm run test:sample-tags --prefix frontend
+
       # Not cosmetic. The React Compiler rules here catch render-purity and
       # cascading-setState bugs that type-check cleanly and misbehave at runtime.
       - name: Lint the app
