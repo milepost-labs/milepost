@@ -70,8 +70,9 @@ export function useProgrammeChainReads(programmeIds: readonly string[]): Program
             setReads((current) => ({ ...current, [id]: read }));
             setErrors((current) => {
               if (current[id] === undefined) return current;
-              const { [id]: _dropped, ...rest } = current;
-              return rest;
+              const next = { ...current };
+              delete next[id];
+              return next;
             });
             dropLoading(setLoading, id);
           },
@@ -126,6 +127,9 @@ export function useRegistryProgrammes(
   useEffect(() => {
     if (!enabled || !soroban) return;
     let cancelled = false;
+    // This hook intentionally drives a fetch lifecycle from effect state to keep
+    // the read status in sync with the async provider result.
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     setLoading(true);
     setError(null);
     void readRegistryProgrammes(soroban.registry).then(
@@ -172,21 +176,25 @@ export function useChainRead<T>(
 
   useEffect(() => {
     if (!key || !soroban) return;
-    let cancelled = false;
+    const cancelled = { current: false };
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     setLoading(true);
     setError(null);
     void sessionRead(key, () => run(soroban)).then(
       (value) => {
-        if (cancelled) return;
+        if (cancelled.current) return;
         setData(value);
         setLoading(false);
       },
       (caught) => {
-        if (cancelled) return;
+        if (cancelled.current) return;
         setError(caught);
         setLoading(false);
       },
     );
+    return () => {
+      cancelled.current = true;
+    };
     // `run` is an inline closure by convention; the keyed cache decides what
     // is re-read, the same way `useContractRead` relies on its deps list.
     // eslint-disable-next-line react-hooks/exhaustive-deps

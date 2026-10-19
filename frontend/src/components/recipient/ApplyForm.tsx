@@ -1,9 +1,10 @@
 import { useState, useId } from 'react';
 import { Link } from 'react-router-dom';
-import { FIXTURE_PROGRAMMES, FIXTURE_CHAIN } from '../../fixtures/programmes';
+import { useOpenProgrammes } from '../../hooks/useOpenProgrammes';
 import { explain } from '../../lib/errors';
 import { formatAmount } from '../../lib/amount';
 import { useAnnouncer } from '../../context/useAnnouncer';
+import { Loading, ErrorState } from '../state/AsyncStates';
 import { PendingPulse } from '../state/AsyncStates';
 import './ApplyForm.css';
 
@@ -17,21 +18,29 @@ export function ApplyForm({ preselectedProgrammeId, onSubmitted }: ApplyFormProp
   const amountFieldId = useId();
   const helpId = useId();
 
-  // Filter ONLY Open programmes
-  const openProgrammes = FIXTURE_PROGRAMMES.filter(
-    (p) => FIXTURE_CHAIN[p.id]?.phase === 'Open'
-  );
+  const { real, samples, loading, error, refetch } = useOpenProgrammes();
 
-  const queryProgId = preselectedProgrammeId || '';
+  // All Open programmes in display order: real first, then samples.
+  const allOpen = [...real, ...samples];
+
+  const queryProgId = preselectedProgrammeId ?? '';
   const initialProgId =
-    openProgrammes.some((p) => p.id === queryProgId)
+    allOpen.some((p) => p.id === queryProgId)
       ? queryProgId
-      : openProgrammes[0]?.id || '';
+      : allOpen[0]?.id ?? '';
 
   const [selectedProgrammeId, setSelectedProgrammeId] = useState<string>(initialProgId);
   const [amountInput, setAmountInput] = useState<string>('');
   const [step, setStep] = useState<'form' | 'pending' | 'done'>('form');
-  const [submittedData, setSubmittedData] = useState<{ progName: string; amountFormatted: string } | null>(null);
+  const [submittedData, setSubmittedData] = useState<{
+    progName: string;
+    amountFormatted: string;
+  } | null>(null);
+
+  // Keep the selection valid if the programme list changes while the form is
+  // open (e.g. a programme closes between renders).
+  const effectiveSelection =
+    allOpen.some((p) => p.id === selectedProgrammeId) ? selectedProgrammeId : allOpen[0]?.id ?? '';
 
   // Validate amount
   const cleanedAmount = amountInput.replace(/,/g, '').trim();
@@ -39,7 +48,7 @@ export function ApplyForm({ preselectedProgrammeId, onSubmitted }: ApplyFormProp
   const hasTyped = amountInput.length > 0;
   const isPositive = !Number.isNaN(parsedNum) && parsedNum > 0;
   const amountError = hasTyped && !isPositive ? explain(3, 'program').message : '';
-  const isValid = isPositive && Boolean(selectedProgrammeId);
+  const isValid = isPositive && Boolean(effectiveSelection);
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -48,8 +57,8 @@ export function ApplyForm({ preselectedProgrammeId, onSubmitted }: ApplyFormProp
     setStep('pending');
     announce('Submitting your application…');
 
-    const selectedProg = openProgrammes.find((p) => p.id === selectedProgrammeId);
-    const progName = selectedProg?.name || 'Selected Programme';
+    const selectedProg = allOpen.find((p) => p.id === effectiveSelection);
+    const progName = selectedProg?.name ?? 'Selected Programme';
     const stroops = BigInt(Math.floor(parsedNum * 10_000_000));
     const amountFormatted = formatAmount(stroops, { asset: 'USDC' });
 
@@ -57,7 +66,7 @@ export function ApplyForm({ preselectedProgrammeId, onSubmitted }: ApplyFormProp
       setSubmittedData({ progName, amountFormatted });
       setStep('done');
       announce('Application submitted.');
-      onSubmitted?.(selectedProgrammeId, cleanedAmount);
+      onSubmitted?.(effectiveSelection, cleanedAmount);
     }, 1200);
   };
 
@@ -78,23 +87,70 @@ export function ApplyForm({ preselectedProgrammeId, onSubmitted }: ApplyFormProp
             <legend className="apply-form__legend">
               Programme · applications are only accepted while Open
             </legend>
-            <div className="apply-form__programmes" role="radiogroup" aria-label="Open programmes">
-              {openProgrammes.map((p) => {
-                const isSelected = p.id === selectedProgrammeId;
-                return (
-                  <button
-                    key={p.id}
-                    type="button"
-                    role="radio"
-                    aria-checked={isSelected}
-                    className={`programme-option ${isSelected ? 'programme-option--selected' : ''}`}
-                    onClick={() => setSelectedProgrammeId(p.id)}
-                  >
-                    {p.name}
-                  </button>
-                );
-              })}
-            </div>
+
+            {loading && <Loading label="Reading open programmes" rows={2} />}
+
+            {!loading && error && (
+              <ErrorState error={error} contract="program" onRetry={refetch} />
+            )}
+
+            {!loading && !error && allOpen.length === 0 && (
+              <p className="apply-form__empty">
+                No programmes are currently accepting applications.
+              </p>
+            )}
+
+            {!loading && !error && allOpen.length > 0 && (
+              <div className="apply-form__programmes" role="radiogroup" aria-label="Open programmes">
+                {/* Real programmes from the index */}
+                {real.length > 0 && (
+                  <div className="apply-form__prog-group">
+                    {real.map((p) => {
+                      const isSelected = p.id === effectiveSelection;
+                      return (
+                        <button
+                          key={p.id}
+                          type="button"
+                          role="radio"
+                          aria-checked={isSelected}
+                          className={`programme-option${isSelected ? ' programme-option--selected' : ''}`}
+                          onClick={() => setSelectedProgrammeId(p.id)}
+                        >
+                          {p.name}
+                        </button>
+                      );
+                    })}
+                  </div>
+                )}
+
+                {/* Sample programmes — always labelled as sample data */}
+                {samples.length > 0 && (
+                  <div className="apply-form__prog-group apply-form__prog-group--samples">
+                    <span
+                      className="apply-form__sample-label"
+                      aria-label="Sample programmes for demonstration"
+                    >
+                      Sample data
+                    </span>
+                    {samples.map((p) => {
+                      const isSelected = p.id === effectiveSelection;
+                      return (
+                        <button
+                          key={p.id}
+                          type="button"
+                          role="radio"
+                          aria-checked={isSelected}
+                          className={`programme-option${isSelected ? ' programme-option--selected' : ''}`}
+                          onClick={() => setSelectedProgrammeId(p.id)}
+                        >
+                          {p.name}
+                        </button>
+                      );
+                    })}
+                  </div>
+                )}
+              </div>
+            )}
           </fieldset>
 
           {/* Amount input & explanation */}
@@ -103,7 +159,7 @@ export function ApplyForm({ preselectedProgrammeId, onSubmitted }: ApplyFormProp
               How much do you need?
             </label>
             <div
-              className={`apply-form__input-wrap ${amountError ? 'apply-form__input-wrap--invalid' : ''}`}
+              className={`apply-form__input-wrap${amountError ? ' apply-form__input-wrap--invalid' : ''}`}
             >
               <input
                 id={amountFieldId}

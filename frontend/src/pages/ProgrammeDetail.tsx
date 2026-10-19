@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import { Link } from "react-router-dom";
+import { Link, useLocation } from "react-router-dom";
 import type { ProgrammeConfig } from "@milepost/program";
 import {
   AlertTriangle,
@@ -20,10 +20,11 @@ import { AddressChip, Badge, Button, Card, Deadline, Field, PhaseBadge, Stat, Ta
 import { useSoroban } from "../context/useSoroban";
 import { useContractRead, useContractResult, useIndexedList, useProgramme } from "../hooks";
 import { fetchProgrammes } from "../lib/indexer";
+import { directoryHref } from "../lib/programmeView";
 import { formatAmount } from "../lib/amount";
 import { isSampleProgrammeId } from "../lib/programmeView";
 import { registryVerificationCopy } from "../lib/registryVerification";
-import { fetchTokenName, parseTokenName } from "../lib/token";
+import { FIXTURE_CHAIN, isSampleProgrammeId } from "../fixtures/programmes";
 import "./ProgrammeDetail.css";
 
 const ZERO = 0n;
@@ -521,6 +522,7 @@ function MetadataCard({ committedHash }: { committedHash: string }) {
 export const ProgrammeDetail = () => {
   const { id: programmeId, client: programme, isDefault } = useProgramme();
   const { registry } = useSoroban();
+  const location = useLocation();
   const [nowMs, setNowMs] = useState(() => Date.now());
 
   const isRegistered = useContractRead(
@@ -611,6 +613,12 @@ export const ProgrammeDetail = () => {
     () => (indexRead.data ?? []).find((entry) => entry.id === programmeId) ?? null,
     [indexRead.data, programmeId],
   );
+  // Sample programmes live only in the fixtures: their planned mode is the
+  // stand-in chain read, and the header tags it as sample data. A deployed
+  // programme has no programme-level mode on-chain — the contracts pick one
+  // per award at `finalize` — so it shows none rather than a guess.
+  const isSample = isSampleProgrammeId(programmeId);
+  const plannedMode = isSample ? (FIXTURE_CHAIN[programmeId]?.mode ?? null) : null;
   // The contract opens refunds on cancellation or once the release deadline
   // has passed; the money panel shows refundable funds only from then.
   const refundsOpen =
@@ -657,6 +665,9 @@ export const ProgrammeDetail = () => {
         phase={phase.data?.tag ?? null}
         phaseError={Boolean(phase.error)}
         verified={isRegistered.data ?? undefined}
+        backTo={directoryHref(location.search)}
+        mode={plannedMode}
+        sample={isSample}
       />
       {isDefault && (
         <p className="programme-hero__hint">

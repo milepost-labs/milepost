@@ -469,7 +469,61 @@ fn applications_close_on_deadline() {
     );
 }
 
+#[test]
+fn contribute_and_apply_follow_the_open_deadline_boundaries() {
+    let cases = [
+        (APPLY_DEADLINE - 1, true),
+        (APPLY_DEADLINE, false),
+        (APPLY_DEADLINE + 1, false),
+    ];
+
+    for (when, should_succeed) in cases {
+        let f = setup(2, 3);
+        let donor = funded_donor(&f, 1_000);
+        let applicant = Address::generate(&f.env);
+        f.env.ledger().set_timestamp(when);
+
+        let contribute = f.client.try_contribute(&donor, &1_000);
+        if should_succeed {
+            assert_eq!(contribute, Ok(Ok(())));
+        } else {
+            assert_eq!(contribute, Err(Ok(Error::WrongPhase)));
+        }
+
+        let apply = f.client.try_apply(&applicant, &500, &hash(&f.env, 1));
+        if should_succeed {
+            assert_eq!(apply, Ok(Ok(())));
+        } else {
+            assert_eq!(apply, Err(Ok(Error::WrongPhase)));
+        }
+    }
+}
+
 // ---- review ----
+
+#[test]
+fn review_follows_the_review_deadline_boundaries() {
+    let cases = [
+        (REVIEW_DEADLINE - 1, true),
+        (REVIEW_DEADLINE, false),
+        (REVIEW_DEADLINE + 1, false),
+    ];
+
+    for (when, should_succeed) in cases {
+        let f = setup(2, 3);
+        let applicant = Address::generate(&f.env);
+        f.client.apply(&applicant, &5_000, &hash(&f.env, 1));
+        f.env.ledger().set_timestamp(when);
+
+        let reviewer = f.reviewers.get(0).unwrap();
+        let result = f.client.try_review(&reviewer, &applicant, &1_000);
+        if should_succeed {
+            assert_eq!(result, Ok(Ok(())));
+        } else {
+            assert_eq!(result, Err(Ok(Error::WrongPhase)));
+        }
+    }
+}
 
 #[test]
 fn reviewers_approve_up_to_the_requested_amount() {
@@ -1103,6 +1157,33 @@ fn finalize_carries_the_payee_and_mode() {
     assert_eq!(award.tranches, 3);
     assert_eq!(award.tranches_released, 0);
     assert_eq!(award.released, 0);
+}
+
+#[test]
+fn finalize_is_rejected_before_review_and_works_at_review_start() {
+    let f = setup(2, 3);
+    let applicant = Address::generate(&f.env);
+    let donor = funded_donor(&f, 10_000);
+    let payee = Address::generate(&f.env);
+    f.client.contribute(&donor, &10_000);
+    f.client.apply(&applicant, &1_000, &hash(&f.env, 1));
+
+    f.env.ledger().set_timestamp(APPLY_DEADLINE - 1);
+    assert_eq!(
+        f.client.try_finalize(&applicant, &payee, &Mode::Direct),
+        Err(Ok(Error::WrongPhase))
+    );
+
+    f.env.ledger().set_timestamp(APPLY_DEADLINE);
+    for i in 0..2u32 {
+        f.client
+            .review(&f.reviewers.get(i).unwrap(), &applicant, &1_000);
+    }
+    f.client.allow_payee(&payee);
+    assert_eq!(
+        f.client.finalize(&applicant, &payee, &Mode::Direct).granted,
+        1_000
+    );
 }
 
 #[test]
@@ -1908,6 +1989,22 @@ fn creator_can_extend_release_deadline() {
     if new_release > f.client.get_config().sweep_deadline {
         assert_eq!(config.sweep_deadline, new_release);
     }
+}
+
+#[test]
+fn extending_to_the_current_sweep_deadline_is_equivalent() {
+    let f = setup(2, 3);
+    let config = f.client.get_config();
+
+    assert_eq!(
+        f.client
+            .try_extend_release_deadline(&config.sweep_deadline),
+        Ok(Ok(()))
+    );
+
+    let updated = f.client.get_config();
+    assert_eq!(updated.release_deadline, config.sweep_deadline);
+    assert_eq!(updated.sweep_deadline, config.sweep_deadline);
 }
 
 #[test]

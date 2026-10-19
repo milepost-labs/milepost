@@ -13,4 +13,6 @@ export {
   type ProgrammeReads,
   type KeyedRead,
 } from './useProgrammeReads';
+export { useRecipientApplications } from './useRecipientApplications';
+export { useStanding } from './useStanding';
 

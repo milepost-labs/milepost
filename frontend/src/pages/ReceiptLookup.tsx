@@ -44,7 +44,7 @@ type LookupState =
 export const ReceiptLookup = () => {
   usePageTitle('Receipt');
   const [params] = useSearchParams();
-  const { rpcUrl, programmeAt } = useSoroban();
+  const { rpcUrl } = useSoroban();
   const announce = useAnnouncer();
   const listRead = useIndexedList(() => fetchProgrammes(), []);
 
@@ -81,7 +81,12 @@ export const ReceiptLookup = () => {
   // per distinct hash.
   const seeded = params.get('hash');
   useEffect(() => {
-    if (seeded && isValidTxHash(seeded)) void run(seeded);
+    if (seeded && isValidTxHash(seeded)) {
+      // This intentionally starts the lookup once from a URL seed so a copied
+      // receipt link opens with the right result automatically.
+      // eslint-disable-next-line react-hooks/set-state-in-effect
+      void run(seeded);
+    }
   }, [seeded, run]);
 
   const onSubmit = (event: FormEvent) => {
@@ -114,7 +119,7 @@ export const ReceiptLookup = () => {
             label="Transaction hash"
             hint="64 hexadecimal characters — from your wallet's activity, or the explorer."
             error={invalid ? 'That does not look like a transaction hash: 64 hex characters.' : null}
-            inputMode="verbatim"
+            inputMode="text"
             autoComplete="off"
             spellCheck={false}
             placeholder="e.g. 7c1e9a4b…"

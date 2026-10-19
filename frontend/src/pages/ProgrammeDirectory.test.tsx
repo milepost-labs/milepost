@@ -118,6 +118,15 @@ describe('ProgrammeDirectory', () => {
     expect(screen.getAllByRole('link')).toHaveLength(1);
   });
 
+  it('carries the current filters into the programme links', async () => {
+    renderDirectory('/directory?q=flood&phase=Cancelled&sort=newest');
+    const name = await screen.findByText(/Flood response cash transfers/i);
+
+    expect(name.closest('a')?.getAttribute('href')).toBe(
+      '/programme/CBF9FLOODRESPONSETANA6QW2XM4RP7KZ3HT8LN5DVA?q=flood&phase=Cancelled&sort=newest',
+    );
+  });
+
   it('restores sort from the URL', async () => {
     renderDirectory('/directory?sort=largest-budget');
     const links = await screen.findAllByRole('link');
@@ -168,6 +177,64 @@ describe('ProgrammeDirectory', () => {
     fireEvent.click(screen.getByRole('button', { name: /clear filters/i }));
     await waitFor(() => {
       expect(screen.getAllByRole('link')).toHaveLength(FIXTURE_PROGRAMMES.length);
+    });
+  });
+
+  it('shows an explanation note when no real programmes exist in the index', async () => {
+    mockIndex({ programmes: [] });
+    renderDirectory();
+
+    expect(await screen.findByText(/Showing sample programmes/i)).toBeTruthy();
+    expect(await screen.findByText(/No real programmes have been published to the index yet/i)).toBeTruthy();
+    expect(screen.queryByRole('button', { name: /Show sample programmes/i })).toBeNull();
+  });
+
+  it('hides sample programmes by default when real programmes exist, and toggles via URL', async () => {
+    const realProgramme = {
+      id: 'CREALGRANTPROGRAMME1234567890ABCDEF',
+      name: 'Stellar Real Community Grant',
+      creator: 'GCREATOR123',
+      createdLedger: 5000000,
+    };
+    mockIndex({ programmes: [realProgramme] });
+
+    renderDirectory();
+
+    // With real programmes present, samples are hidden by default: only 1 card
+    await waitFor(() => {
+      expect(screen.getByText('Stellar Real Community Grant')).toBeTruthy();
+      expect(screen.queryByText(/Showing sample programmes/i)).toBeNull();
+      expect(screen.getAllByRole('link')).toHaveLength(1);
+    });
+
+    const toggleButton = screen.getByRole('button', { name: 'Show sample programmes' });
+    expect(toggleButton.getAttribute('aria-pressed')).toBe('false');
+
+    // Click toggle to show samples
+    fireEvent.click(toggleButton);
+
+    await waitFor(() => {
+      expect(screen.getByLabelText(/current location/i).textContent).toContain('samples=1');
+      expect(screen.getByRole('button', { name: 'Hide sample programmes' })).toBeTruthy();
+      expect(screen.getAllByRole('link')).toHaveLength(FIXTURE_PROGRAMMES.length + 1);
+    });
+  });
+
+  it('restores sample toggle state from the URL when real programmes exist', async () => {
+    const realProgramme = {
+      id: 'CREALGRANTPROGRAMME1234567890ABCDEF',
+      name: 'Stellar Real Community Grant',
+      creator: 'GCREATOR123',
+      createdLedger: 5000000,
+    };
+    mockIndex({ programmes: [realProgramme] });
+
+    renderDirectory('/directory?samples=1');
+
+    await waitFor(() => {
+      expect(screen.getByText('Stellar Real Community Grant')).toBeTruthy();
+      expect(screen.getByRole('button', { name: 'Hide sample programmes' }).getAttribute('aria-pressed')).toBe('true');
+      expect(screen.getAllByRole('link')).toHaveLength(FIXTURE_PROGRAMMES.length + 1);
     });
   });
 });

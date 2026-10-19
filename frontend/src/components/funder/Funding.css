@@ -139,6 +139,48 @@
   color: var(--text-muted);
 }
 
+/* "Refunds open after <date>" — shown while the release window is still running */
+.fund-card__refund-hint {
+  display: block;
+  font-size: var(--text-caption);
+  line-height: var(--leading-body);
+  color: var(--text-muted);
+}
+
+.fund-card__refund-hint-date {
+  font-family: var(--font-numeric);
+  font-variant-numeric: tabular-nums;
+}
+
+/*
+ * "Refunded so far" — on-chain value from refunded_to(donor).
+ * Shown as a pill so it reads as a secondary status alongside the main note,
+ * not a second primary figure. Uses --refund-soft so it picks up the correct
+ * tint in both light and dark themes.
+ */
+.fund-card__refunded-so-far {
+  display: inline-flex;
+  align-items: baseline;
+  gap: var(--space-2);
+  margin-top: var(--space-1);
+  padding: var(--space-1) var(--space-3);
+  border-radius: var(--radius-full);
+  background: var(--refund-soft);
+  font-size: var(--text-caption);
+  line-height: var(--leading-body);
+}
+
+.fund-card__refunded-so-far-label {
+  color: var(--refund-strong);
+  font-weight: var(--weight-medium);
+  white-space: nowrap;
+}
+
+.fund-card__refunded-so-far-value {
+  color: var(--refund-strong);
+  font-weight: var(--weight-semibold);
+}
+
 /* Contribute panel */
 .fund-panel {
   background: var(--surface);

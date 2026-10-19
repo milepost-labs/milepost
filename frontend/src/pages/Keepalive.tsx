@@ -125,8 +125,8 @@ export const Keepalive = () => {
 
       <p className="keepalive-page__note">
         The network archives stored entries that nobody extends. Anyone can extend them, and
-        network fees are covered. An archived award or contribution can&rsquo;t be released or
-        refunded until it&rsquo;s restored.
+        the network fee for the extension is paid from your own wallet. An archived award or
+        contribution can&rsquo;t be released or refunded until it&rsquo;s restored.
       </p>
 
       <Select

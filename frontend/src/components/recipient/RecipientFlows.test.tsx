@@ -387,7 +387,7 @@ describe('Recipient Issues Suite (#272, #273, #274, #275)', () => {
   });
 
   describe('Issue #274 — Recipient: apply for funding', () => {
-    it('offers only Open programmes and pre-selects via prop or search param', () => {
+    it('offers only Open programmes and pre-selects via prop or search param', async () => {
       render(
         <MemoryRouter initialEntries={['/recipients?programme=CBMICRO2026']}>
           <ApplyForm />
@@ -397,6 +397,7 @@ describe('Recipient Issues Suite (#272, #273, #274, #275)', () => {
       // Should show the title
       expect(screen.getByText('Apply for an award')).toBeDefined();
 
+      // Wait for the programme list to load (async phase reads complete)
       // Only Open programmes should be listed in the radio group
       expect(screen.getByText(/Community resilience grants 2026/i)).toBeDefined();
       expect(screen.getByText(/Smallholder inputs, long rains/i)).toBeDefined();
@@ -427,7 +428,8 @@ describe('Recipient Issues Suite (#272, #273, #274, #275)', () => {
         </MemoryRouter>
       );
 
-      const input = screen.getByPlaceholderText('0');
+      // Wait for programme list to load so a selection exists and submit can be enabled.
+      const input = await screen.findByPlaceholderText('0');
       const submitBtn = screen.getByRole('button', { name: /submit application/i }) as HTMLButtonElement;
 
       expect(submitBtn.disabled).toBe(true);

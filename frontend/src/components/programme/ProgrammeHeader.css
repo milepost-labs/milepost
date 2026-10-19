@@ -4,11 +4,31 @@
   gap: var(--space-3);
 }
 
+.programme-header__back {
+  align-self: flex-start;
+  display: inline-flex;
+  align-items: center;
+  min-height: var(--tap-min);
+  font-size: var(--text-sm);
+  font-weight: var(--weight-semibold);
+}
+
 .programme-header__badges {
   display: flex;
   align-items: center;
   gap: var(--space-3);
   flex-wrap: wrap;
+}
+
+/* A stand-in programme's header, tagged the same way the directory tags its
+   sample cards. Dashed, so it reads as a label rather than a status. */
+.programme-header__sample {
+  border-radius: var(--radius-full);
+  padding: var(--space-1) var(--space-2);
+  border: 1px dashed var(--locked);
+  color: var(--text-muted);
+  font-size: var(--text-xs);
+  white-space: nowrap;
 }
 
 /* Phase pill colours live in phasePill.css, shared with the directory. */

@@ -31,6 +31,10 @@ describe('extractCode', () => {
   it('handles a raw string', () => {
     expect(extractCode('Error(Contract, #22)')).toBe(22);
   });
+
+  it('handles an object with a message field', () => {
+    expect(extractCode({ code: 9, message: 'Error(Contract, #9)' })).toBe(9);
+  });
 });
 
 // ── explainCode ──────────────────────────────────────────────────────────────
@@ -55,6 +59,13 @@ describe('explainCode', () => {
     const result = explainCode('registry', 1);
     expect(result.kind).toBe('denied');
     expect(result.contract).toBe('registry');
+  });
+
+  it('translates the registry setup error', () => {
+    const result = explainCode('registry', 3);
+    expect(result.kind).toBe('fault');
+    expect(result.contract).toBe('registry');
+    expect(result.message).toMatch(/set up/i);
   });
 });
 

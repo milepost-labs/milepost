@@ -19,6 +19,8 @@ export interface RecipientAwardFixture {
   attestationReady: boolean;
   condition: string;
   escrow?: string; // stroops as decimal string for Allocated mode
+  /** True for a stand-in entry belonging to a sample programme. */
+  sample?: boolean;
 }
 
 export interface VerifiedPayeeFixture {

@@ -199,22 +199,25 @@ export const RegisterSchema = () => {
               The name and fields are stored as one text description. Write them for the humans who will verify later, because the network cannot tell whether a vague checklist is useful.
             </p>
 
-            {!address && (
-              <p className="ui-field__message ui-field__message--error" role="alert">
-                Sign in — the connected address becomes the schema owner.
-              </p>
-            )}
-
             <div className="register-schema__actions">
               <Button
                 onClick={() => void handleRegister()}
                 loading={tx.busy}
                 loadingLabel={phaseLabel(tx.phase) || 'Registering…'}
                 disabled={!valid || tx.busy}
+                aria-describedby={!address ? 'register-schema-requirement' : undefined}
                 icon={<ShieldCheck size={16} aria-hidden="true" />}
               >
                 Register schema
               </Button>
+              {/* Not an error: nothing has gone wrong, the action just needs an
+                  address. A neutral note beside the disabled button says so
+                  without announcing itself as an alert. */}
+              {!address && (
+                <p id="register-schema-requirement" className="register-schema__requirement">
+                  Sign in — the connected address becomes the schema owner.
+                </p>
+              )}
               {tx.result && (
                 <Button
                   variant="secondary"

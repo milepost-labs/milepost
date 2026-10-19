@@ -2,11 +2,6 @@
 @import './styles/print.css';
 
 :root {
-  /* Color mappings to design tokens */
-  --hue-primary: 215;
-  --color-primary-light: hsl(215, 80%, 40%);
-  --color-primary-dark: hsl(215, 90%, 65%);
-
   /* Surface and Background (Light Mode) */
   --bg-color: #f8fafc;
   --surface-color: #ffffff;

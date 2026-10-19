@@ -47,6 +47,33 @@ export type DirectorySort = (typeof DIRECTORY_SORTS)[number]['value'];
 
 export const DEFAULT_DIRECTORY_SORT: DirectorySort = 'newest';
 
+/**
+ * The directory's own query keys, in the order they are rebuilt.
+ *
+ * A programme link carries these through from the directory, so the header's
+ * "All programmes" link can hand the reader back the filtered list they came
+ * from. Anything else in the URL did not come from the directory and is
+ * dropped rather than replayed.
+ */
+const DIRECTORY_PARAM_KEYS = ['q', 'phase', 'sort', 'yours'] as const;
+
+/** The directory filter query a programme link carries, without the leading "?". */
+export function directorySearch(search: string): string {
+  const input = new URLSearchParams(search);
+  const carried = new URLSearchParams();
+  for (const key of DIRECTORY_PARAM_KEYS) {
+    const value = input.get(key);
+    if (value) carried.set(key, value);
+  }
+  return carried.toString();
+}
+
+/** "/directory", with whatever filters the current URL carried from it. */
+export function directoryHref(search: string): string {
+  const carried = directorySearch(search);
+  return carried ? `/directory?${carried}` : '/directory';
+}
+
 export interface DirectoryProgramme {
   id: string;
   name: string;
@@ -85,6 +112,7 @@ export interface DirectoryProgramme {
 export function mergeProgrammes(
   index: IndexedProgramme[] | null | undefined,
   userRoles?: Record<string, UserRole[]>,
+  options?: { showSamples?: boolean },
   registryOnlyIds?: readonly string[],
 ): DirectoryProgramme[] {
   const seen = new Set<string>();
@@ -120,6 +148,21 @@ export function mergeProgrammes(
     });
   }
 
+  const includeSamples = options?.showSamples ?? true;
+  if (includeSamples) {
+    for (const entry of FIXTURE_PROGRAMMES) {
+      if (seen.has(entry.id)) continue;
+      seen.add(entry.id);
+      out.push({
+        id: entry.id,
+        name: entry.name ?? 'Unnamed programme',
+        creator: entry.creator,
+        createdLedger: entry.createdLedger,
+        sample: true,
+        chain: FIXTURE_CHAIN[entry.id] ?? chainFor(entry.id),
+        userRoles: userRoles?.[entry.id],
+      });
+    }
   for (const entry of FIXTURE_PROGRAMMES) {
     if (seen.has(entry.id)) continue;
     seen.add(entry.id);
@@ -311,7 +354,7 @@ export function programmeStatus(chain: FixtureChainRead): string {
     case 'Settled':
       return 'Awards are final. Tranches release as verifiers confirm conditions.';
     case 'Cancelled':
-      return 'Cancelled. Contributors can claim a full refund.';
+      return 'Cancelled. Contributors can claim their share of what was not paid out, in proportion to their contribution and after the protocol fee.';
   }
 }
 

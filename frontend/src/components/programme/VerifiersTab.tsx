@@ -1,6 +1,6 @@
 import { useState, type FC } from 'react';
 import { FIXTURE_VERIFIERS, type VerifierFixture } from '../../fixtures/programmeFixtures';
-import { useSoroban } from '../../context/useSoroban';
+import { useOptionalSoroban } from '../../context/useSoroban';
 import { useContractRead } from '../../hooks/useContractRead';
 import { Button, Field } from '../ui';
 import './VerifiersTab.css';
@@ -17,10 +17,10 @@ export const VerifiersTab: FC<VerifiersTabProps> = ({
   programmeId,
   isSample = false,
 }) => {
-  const { programmeAt } = useSoroban();
+  const soroban = useOptionalSoroban();
   const [addrInput, setAddrInput] = useState('');
   const [checkAddr, setCheckAddr] = useState('');
-  const programme = programmeId ? programmeAt(programmeId) : null;
+  const programme = programmeId && soroban ? soroban.programmeAt(programmeId) : null;
   const enabled = checkAddr !== '' && programme !== null;
   const reviewer = useContractRead(() => programme!.is_reviewer({ addr: checkAddr }), [programme, checkAddr], { enabled });
   const verifier = useContractRead(() => programme!.is_verifier({ addr: checkAddr }), [programme, checkAddr], { enabled });

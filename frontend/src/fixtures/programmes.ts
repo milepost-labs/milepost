@@ -178,3 +178,8 @@ export const FIXTURE_CHAIN_DEFAULT: FixtureChainRead = {
 export function chainFor(id: string): FixtureChainRead {
   return FIXTURE_CHAIN[id] ?? FIXTURE_CHAIN_DEFAULT;
 }
+
+/** True when `id` names one of the stand-in programmes, not a deployed contract. */
+export function isSampleProgrammeId(id: string): boolean {
+  return FIXTURE_PROGRAMMES.some((programme) => programme.id === id);
+}

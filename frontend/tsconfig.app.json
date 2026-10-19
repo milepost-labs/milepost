@@ -25,5 +25,5 @@
   "include": ["src"],
   // Reads the filesystem, so it is compiled by tsconfig.node.json instead —
   // app code has no business with node builtins in scope.
-  "exclude": ["src/test/reachable.test.ts"]
+  "exclude": ["src/test/reachable.test.ts", "src/test/copy-claims.test.ts"]
 }

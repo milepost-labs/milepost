@@ -7,6 +7,7 @@ import { SignInSheet } from '../components/layout/SignInSheet';
 import { useWallet } from '../context/useWallet';
 import { FIXTURE_CONTRIBUTIONS } from '../fixtures/funding';
 import { useIndexedList, useProgrammeParam } from '../hooks';
+import { useReleaseDeadlines } from '../hooks/useReleaseDeadlines';
 import { ProgrammeParamNotice } from '../components/programme/ProgrammeParamNotice';
 import { contributionCard, fundingTotals } from '../lib/funding';
 import { fetchProgrammes } from '../lib/indexer';
@@ -49,6 +50,14 @@ export const FunderDashboard = () => {
   }, [programmes, refunded]);
   const totals = fundingTotals(cards);
   const sampleIds = useMemo(() => new Set(programmes.filter((p) => p.sample).map((p) => p.id)), [programmes]);
+
+  // Read release_deadline from each real programme's config so contribution
+  // cards can show "Refunds open after <date>" while the window is still open.
+  const contributionProgrammeIds = useMemo(
+    () => FIXTURE_CONTRIBUTIONS.map((c) => c.programmeId),
+    [],
+  );
+  const releaseDeadlines = useReleaseDeadlines(contributionProgrammeIds, sampleIds);
 
   const markRefunded = (programmeId: string) =>
     setRefunded((current) => new Set(current).add(programmeId));
@@ -125,7 +134,7 @@ export const FunderDashboard = () => {
           <ProgrammeParamNotice state={programmeParam} />
 
           <div className="funding-grid">
-            <ContributionList cards={cards} sampleIds={sampleIds} onRefunded={markRefunded} />
+            <ContributionList cards={cards} sampleIds={sampleIds} onRefunded={markRefunded} releaseDeadlines={releaseDeadlines} />
             <ContributeFlow
               programmes={programmes}
               linkedProgrammeId={programmeParam.status === 'valid' ? programmeParam.programmeId : null}

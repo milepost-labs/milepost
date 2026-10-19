@@ -9,8 +9,8 @@ type StellarFeature = {
 
 const STELLAR_FEATURES: StellarFeature[] = [
   { t: 'Cash out locally', d: 'Anchors turn stablecoins into local money through bank and mobile-money off-ramps. Without them, the rest is theatre.', tech: 'SEP-24 · SEP-31' },
-  { t: 'Designed for no gas to buy', d: 'The protocol is designed around sponsored fees, so recipients need not hold XLM. The app does not sponsor fees yet.', tech: 'Fee-bump / sponsored transactions' },
-  { t: 'Designed for passkey sign-in', d: 'Designed around smart wallets, where Face ID or a fingerprint replaces a seed phrase. Sign-in today is with Freighter.', tech: 'Passkey smart wallets (secp256r1)' },
+  { t: 'Designed for no gas to buy', d: 'Stellar can sponsor transaction fees, so a recipient does not have to hold XLM. This app does not sponsor fees yet: you pay your own network fees.', tech: 'Fee-bump / sponsored transactions' },
+  { t: 'Designed for smart wallets', d: 'Stellar smart wallets can replace a seed phrase with Face ID or a fingerprint. The app does not offer passkey sign-in yet: sign-in today is with the Freighter extension.', tech: 'Smart wallets (secp256r1)' },
   { t: 'Spending rules in the wallet', d: 'A policy can limit grant money to one asset, verified payees and a cap.', tech: 'policy_spend signer' },
 ];
 

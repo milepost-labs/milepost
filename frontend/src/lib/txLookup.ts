@@ -120,7 +120,7 @@ function operationsOf(envelope: xdr.TransactionEnvelope): xdr.Operation[] {
       case xdr.EnvelopeType.envelopeTypeTx().value:
         return envelope.v1().tx().operations();
       case xdr.EnvelopeType.envelopeTypeTxFeeBump().value:
-        return operationsOf(envelope.feeBump().tx().innerTx());
+        return operationsOf(envelope.feeBump().tx().innerTx() as unknown as xdr.TransactionEnvelope);
       default:
         return [];
     }
