@@ -20,7 +20,7 @@
   max-width: 600px;
   max-height: 600px;
   border-radius: 50%;
-  background: radial-gradient(circle, var(--color-primary-light) 0%, transparent 60%);
+  background: radial-gradient(circle, var(--accent) 0%, transparent 60%);
   opacity: 0.05;
   z-index: -1;
   filter: blur(80px);
@@ -38,7 +38,7 @@
 
 [data-theme='dark'] .bg-shape {
   opacity: 0.08;
-  background: radial-gradient(circle, var(--color-primary-dark) 0%, transparent 60%);
+  background: radial-gradient(circle, var(--accent) 0%, transparent 60%);
 }
 
 /* Scroll Animation */

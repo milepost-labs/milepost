@@ -112,6 +112,23 @@ export const ProgrammeDirectory = () => {
     setParams(next, { replace: true });
   }, [params, setParams]);
 
+  const realCount = listRead.data?.filter((p) => Boolean(p?.id)).length ?? 0;
+  const hasReal = realCount > 0;
+  const samplesParam = params.get('samples');
+  const showSamples = hasReal ? samplesParam === '1' : true;
+
+  const toggleSamples = useCallback(() => {
+    const next = new URLSearchParams(params);
+    if (showSamples) next.delete('samples');
+    else next.set('samples', '1');
+    setParams(next, { replace: true });
+  }, [params, setParams, showSamples]);
+
+  const all = useMemo(
+    () => mergeProgrammes(listRead.data, userRoles, { showSamples }),
+    [listRead.data, userRoles, showSamples],
+  );
+  const counts = useMemo(() => phaseCounts(all, query), [all, query]);
   const all = useMemo(
     () => mergeProgrammes(listRead.data, userRoles, registryRead.ids ?? undefined),
     [listRead.data, userRoles, registryRead.ids],
@@ -199,6 +216,16 @@ export const ProgrammeDirectory = () => {
                 Yours
               </button>
             )}
+            {hasReal && (
+              <button
+                type="button"
+                className={`directory-filter${showSamples ? ' directory-filter--on' : ''}`}
+                aria-pressed={showSamples}
+                onClick={toggleSamples}
+              >
+                {showSamples ? 'Hide sample programmes' : 'Show sample programmes'}
+              </button>
+            )}
           </div>
           <label className="directory-sort">
             <span className="directory-sort__label">Sort</span>
@@ -215,6 +242,15 @@ export const ProgrammeDirectory = () => {
           </label>
           <span className="directory-indexline">{indexLine}</span>
         </div>
+
+        {!hasReal && !loading && error == null && (
+          <div role="note" className="directory-banner directory-banner--samples">
+            <span className="directory-banner__title">Showing sample programmes.</span>
+            <span className="directory-banner__body">
+              No real programmes have been published to the index yet. These samples demonstrate layout and milestone workflows.
+            </span>
+          </div>
+        )}
 
         {stale && (
           <div role="status" className="directory-banner directory-banner--stale">

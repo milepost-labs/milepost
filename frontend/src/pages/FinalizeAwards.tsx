@@ -17,19 +17,21 @@ import {
   useAnnounceTransaction,
   useContractRead,
   useContractResult,
-  useProgramme,
+  useIndexedList,
   useProgrammeParam,
   useTransaction,
 } from '../hooks';
 import { ProgrammeParamNotice } from '../components/programme/ProgrammeParamNotice';
 import { useWallet } from '../context/useWallet';
 import { useAnnouncer } from '../context/useAnnouncer';
+import { useSoroban } from '../context/useSoroban';
+import { fetchProgrammes } from '../lib/indexer';
 import { AsyncView, Loading } from '../components/state/AsyncStates';
 import { PausedBanner } from '../components/programme/PausedBanner';
 import { Badge, Button, Card, Field, PhaseBadge, Select } from '../components/ui';
 import { formatAmount } from '../lib/amount';
 import { explainCode } from '../lib/errors';
-import { FIXTURE_PROGRAMMES, chainFor } from '../fixtures/programmes';
+import { FIXTURE_CHAIN, FIXTURE_PROGRAMMES, chainFor } from '../fixtures/programmes';
 import { FIXTURE_REVIEW_APPLICATIONS, medianForQuorum } from '../fixtures/finalizeFixtures';
 import './FinalizeAwards.css';
 
@@ -80,6 +82,12 @@ const truncate = (addr: string) => `${addr.slice(0, 5)}…${addr.slice(-4)}`;
 /** Programme whose review applications stand in for the unwired list. */
 const REVIEW_PROGRAMME_ID = 'CCOIACASOVO3ZQLXWWJFGZAU3Y545AGPXLBP4NYHYD77RDCBPXRVZ37C';
 
+export interface FinalizeProgrammeOption {
+  id: string;
+  name: string | null;
+  sample?: boolean;
+}
+
 /**
  * Finalize board (Screen 10, Finalize).
  *
@@ -96,26 +104,26 @@ const REVIEW_PROGRAMME_ID = 'CCOIACASOVO3ZQLXWWJFGZAU3Y545AGPXLBP4NYHYD77RDCBPXR
  * the lower middle for an even count). The single-applicant flow further down
  * this page performs the real on-chain finalization with mode and payee choice.
  */
-function FinalizeBoard() {
+function FinalizeBoard({
+  selectedId,
+  onSelectProgramme,
+  programmes,
+}: {
+  selectedId: string;
+  onSelectProgramme: (id: string) => void;
+  programmes: FinalizeProgrammeOption[];
+}) {
   const { address } = useWallet();
   const announce = useAnnouncer();
-
-  // Review-phase programmes first: only they can be finalized.
-  const ordered = useMemo(
-    () =>
-      [...FIXTURE_PROGRAMMES].sort((a, b) => {
-        const rank = (id: string) => (chainFor(id).phase === 'Review' ? 0 : 1);
-        return rank(a.id) - rank(b.id);
-      }),
-    [],
-  );
   const programmeParam = useProgrammeParam();
-  const [finPid, setFinPid] = useState<string>(() =>
-    programmeParam.status === 'valid' && programmeParam.programmeId ? programmeParam.programmeId : REVIEW_PROGRAMME_ID,
-  );
   const [finState, setFinState] = useState<Record<string, 'pending' | 'done' | 'error'>>({});
 
-  const selected = ordered.find((p) => p.id === finPid) ?? ordered[0];
+  const selected = programmes.find((p) => p.id === selectedId) ?? programmes[0] ?? {
+    id: selectedId,
+    name: selectedId,
+    sample: true,
+  };
+  const isSample = selected.sample ?? Boolean(FIXTURE_CHAIN[selected.id]);
   const chain = chainFor(selected.id);
   const quorum = chain.quorum;
   const isReview = chain.phase === 'Review';
@@ -172,14 +180,18 @@ function FinalizeBoard() {
       <Select
         label="Programme"
         value={selected.id}
-        onChange={(event) => setFinPid(event.target.value)}
-        options={ordered.map((p) => ({
+        onChange={(event) => onSelectProgramme(event.target.value)}
+        options={programmes.map((p) => ({
           value: p.id,
-          label: `${p.name ?? p.id} · ${chainFor(p.id).phase}`,
+          label: `${p.name ?? p.id}${p.sample ? ` · ${chainFor(p.id).phase}` : ''}`,
         }))}
       />
 
-      {!isReview ? (
+      {!isSample ? (
+        <p className="finalize-board__phase" role="status">
+          Real programme awards are finalized by loading an applicant below.
+        </p>
+      ) : !isReview ? (
         <p className="finalize-board__phase" role="status">
           Finalizing is available only during Review. This programme is {chain.phase}.
         </p>
@@ -296,13 +308,77 @@ function FinalizeBoard() {
 }
 
 export const FinalizeAwards = () => {
-  const { client: programme } = useProgramme();
+  const programmeParam = useProgrammeParam();
+  const { programmeAt } = useSoroban();
   const wallet = useWallet();
+  const listRead = useIndexedList(() => fetchProgrammes(), []);
 
-  // Overview reads — always enabled, so `loading` covers the initial fetch.
-  const budget = useContractResult(() => programme.budget(), [programme]);
-  const config = useContractResult(() => programme.get_config(), [programme]);
-  const phase = useContractResult(() => programme.get_phase(), [programme]);
+  // Review-phase programmes first: only they can be finalized.
+  const programmes: FinalizeProgrammeOption[] = useMemo(() => {
+    const list: FinalizeProgrammeOption[] = [];
+    const seen = new Set<string>();
+
+    // Real indexed programmes
+    if (listRead.data) {
+      for (const p of listRead.data) {
+        if (p?.id && !seen.has(p.id)) {
+          seen.add(p.id);
+          list.push({ id: p.id, name: p.name ?? p.id, sample: false });
+        }
+      }
+    }
+
+    // Parameter programme if provided
+    if (programmeParam.status === 'valid' && programmeParam.programmeId && !seen.has(programmeParam.programmeId)) {
+      seen.add(programmeParam.programmeId);
+      list.push({
+        id: programmeParam.programmeId,
+        name: programmeParam.programmeId,
+        sample: Boolean(FIXTURE_CHAIN[programmeParam.programmeId]),
+      });
+    }
+
+    // Fixtures
+    for (const f of FIXTURE_PROGRAMMES) {
+      if (!seen.has(f.id)) {
+        seen.add(f.id);
+        list.push({ id: f.id, name: f.name, sample: true });
+      }
+    }
+
+    return list.sort((a, b) => {
+      const aPhase = FIXTURE_CHAIN[a.id]?.phase ?? 'Open';
+      const bPhase = FIXTURE_CHAIN[b.id]?.phase ?? 'Open';
+      const rank = (ph: string) => (ph === 'Review' ? 0 : 1);
+      return rank(aPhase) - rank(bPhase);
+    });
+  }, [listRead.data, programmeParam]);
+
+  const [userSelectedId, setUserSelectedId] = useState<string | null>(null);
+  const selectedId =
+    userSelectedId ??
+    (programmeParam.status === 'valid' && programmeParam.programmeId
+      ? programmeParam.programmeId
+      : REVIEW_PROGRAMME_ID);
+
+  const selected = programmes.find((p) => p.id === selectedId) ?? programmes[0] ?? {
+    id: selectedId,
+    name: selectedId,
+    sample: Boolean(FIXTURE_CHAIN[selectedId]),
+  };
+
+  const isSample = selected.sample ?? Boolean(FIXTURE_CHAIN[selected.id]);
+  const sampleChain = chainFor(selected.id);
+  const sampleBudget = BigInt(sampleChain.contributed) - BigInt(sampleChain.fee);
+  const sampleAwarded = BigInt(sampleChain.awarded);
+  const sampleRemaining = sampleBudget - sampleAwarded;
+
+  const programme = useMemo(() => programmeAt(selected.id), [programmeAt, selected.id]);
+
+  // Overview reads — enabled only for real on-chain programmes
+  const budget = useContractResult(() => programme.budget(), [programme], { enabled: !isSample });
+  const config = useContractResult(() => programme.get_config(), [programme], { enabled: !isSample });
+  const phase = useContractResult(() => programme.get_phase(), [programme], { enabled: !isSample });
 
   // Application and its award, keyed on the address the user submitted. Both
   // start disabled, so their first load is driven by `applicant` becoming
@@ -349,15 +425,16 @@ export const FinalizeAwards = () => {
       : 'Award finalized.',
   });
 
-  const quorum = config.data?.quorum ?? 0;
+  const quorum = isSample ? sampleChain.quorum : (config.data?.quorum ?? 0);
   const votes = application.data?.votes ?? [];
   const quorumReached = application.data != null && votes.length >= quorum;
   const granted = quorumReached ? votes[Math.floor((quorum - 1) / 2)] : null;
-  const remainingAfter = budget.data != null && granted != null ? budget.data - granted : null;
+  const currentBudget = isSample ? sampleBudget : budget.data;
+  const remainingAfter = currentBudget != null && granted != null ? currentBudget - granted : null;
   const insufficient = remainingAfter != null && remainingAfter < 0n;
 
   // Minimum award from config — 0n means no minimum is set.
-  const minimumAward = config.data?.minimum_award ?? 0n;
+  const minimumAward = isSample ? 0n : (config.data?.minimum_award ?? 0n);
   const belowMinimum =
     minimumAward > 0n && granted !== null && granted < minimumAward;
 
@@ -400,7 +477,11 @@ export const FinalizeAwards = () => {
         </p>
       </header>
 
-      <FinalizeBoard />
+      <FinalizeBoard
+        selectedId={selected.id}
+        onSelectProgramme={setUserSelectedId}
+        programmes={programmes}
+      />
 
       <section className="stats-grid animate-fade-up" style={{ animationDelay: '100ms' }}>
         <div className="stat-card">
@@ -408,9 +489,13 @@ export const FinalizeAwards = () => {
           <div className="stat-content">
             <span className="stat-label">Remaining Budget</span>
             <span className="stat-value">
-              <AsyncView {...budget} onRetry={budget.refetch}>
-                {(value) => formatAmount(value, { asset: 'XLM' })}
-              </AsyncView>
+              {isSample ? (
+                formatAmount(sampleRemaining, { asset: 'XLM' })
+              ) : (
+                <AsyncView {...budget} onRetry={budget.refetch}>
+                  {(value) => formatAmount(value, { asset: 'XLM' })}
+                </AsyncView>
+              )}
             </span>
           </div>
         </div>
@@ -419,9 +504,13 @@ export const FinalizeAwards = () => {
           <div className="stat-content">
             <span className="stat-label">Programme Phase</span>
             <span className="stat-value">
-              <AsyncView {...phase} onRetry={phase.refetch}>
-                {(value) => <PhaseBadge phase={value.tag} />}
-              </AsyncView>
+              {isSample ? (
+                <PhaseBadge phase={sampleChain.phase} />
+              ) : (
+                <AsyncView {...phase} onRetry={phase.refetch}>
+                  {(value) => <PhaseBadge phase={value.tag} />}
+                </AsyncView>
+              )}
             </span>
           </div>
         </div>
@@ -430,9 +519,13 @@ export const FinalizeAwards = () => {
           <div className="stat-content">
             <span className="stat-label">Reviewer votes needed</span>
             <span className="stat-value">
-              <AsyncView {...config} onRetry={config.refetch}>
-                {(value) => `${value.quorum} votes`}
-              </AsyncView>
+              {isSample ? (
+                `${sampleChain.quorum} votes`
+              ) : (
+                <AsyncView {...config} onRetry={config.refetch}>
+                  {(value) => `${value.quorum} votes`}
+                </AsyncView>
+              )}
             </span>
           </div>
         </div>
@@ -441,13 +534,17 @@ export const FinalizeAwards = () => {
           <div className="stat-content">
             <span className="stat-label">Minimum Award</span>
             <span className="stat-value">
-              <AsyncView {...config} onRetry={config.refetch}>
-                {(value) =>
-                  value.minimum_award > 0n
-                    ? formatAmount(value.minimum_award, { asset: 'XLM' })
-                    : 'None'
-                }
-              </AsyncView>
+              {isSample ? (
+                'None'
+              ) : (
+                <AsyncView {...config} onRetry={config.refetch}>
+                  {(value) =>
+                    value.minimum_award > 0n
+                      ? formatAmount(value.minimum_award, { asset: 'XLM' })
+                      : 'None'
+                  }
+                </AsyncView>
+              )}
             </span>
           </div>
         </div>

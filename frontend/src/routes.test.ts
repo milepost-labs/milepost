@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { APP_ROUTES } from './routes';
+import { APP_ROUTES, getSectionForPath } from './routes';
 import { ROLES, ROLE_ENTRIES } from './pages/homeContent';
 
 describe('APP_ROUTES', () => {
@@ -19,6 +19,14 @@ describe('APP_ROUTES', () => {
     for (const route of APP_ROUTES) {
       expect(route.title).toBeTruthy();
       expect(typeof route.title).toBe('string');
+    }
+  });
+
+  it('every route belongs to exactly one section, matching getSectionForPath', () => {
+    const validSections = new Set<string>(['programmes', 'fund', 'get-funded', 'verify', 'admin']);
+    for (const route of APP_ROUTES) {
+      expect(validSections.has(route.section)).toBe(true);
+      expect(getSectionForPath(route.path)).toBe(route.section);
     }
   });
 });

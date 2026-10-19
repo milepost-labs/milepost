@@ -85,6 +85,7 @@ export interface DirectoryProgramme {
 export function mergeProgrammes(
   index: IndexedProgramme[] | null | undefined,
   userRoles?: Record<string, UserRole[]>,
+  options?: { showSamples?: boolean },
   registryOnlyIds?: readonly string[],
 ): DirectoryProgramme[] {
   const seen = new Set<string>();
@@ -120,6 +121,21 @@ export function mergeProgrammes(
     });
   }
 
+  const includeSamples = options?.showSamples ?? true;
+  if (includeSamples) {
+    for (const entry of FIXTURE_PROGRAMMES) {
+      if (seen.has(entry.id)) continue;
+      seen.add(entry.id);
+      out.push({
+        id: entry.id,
+        name: entry.name ?? 'Unnamed programme',
+        creator: entry.creator,
+        createdLedger: entry.createdLedger,
+        sample: true,
+        chain: FIXTURE_CHAIN[entry.id] ?? chainFor(entry.id),
+        userRoles: userRoles?.[entry.id],
+      });
+    }
   for (const entry of FIXTURE_PROGRAMMES) {
     if (seen.has(entry.id)) continue;
     seen.add(entry.id);

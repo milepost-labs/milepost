@@ -148,6 +148,19 @@
   font-weight: var(--weight-semibold);
 }
 
+.directory-banner--samples {
+  background: var(--surface-raised);
+  color: var(--text-muted);
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+}
+
+.directory-banner--samples .directory-banner__title {
+  font-weight: var(--weight-bold);
+  color: var(--text);
+}
+
 .directory-banner__link {
   color: var(--warning-strong);
   text-decoration: underline;

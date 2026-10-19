@@ -132,8 +132,9 @@
 
   /* Semantic aliases. Components reference intent, so a palette change lands
      in one place. */
-  --accent: var(--color-primary-light);
-  --accent-contrast: hsl(0 0% 100%);
+  --accent: #4f55dc;
+  --accent-contrast: #ffffff;
+  --accent-soft: #e6e7fc;
   --danger: var(--color-error);
   --success: var(--color-success);
   --warning: var(--color-warning);
@@ -195,12 +196,11 @@
 
   /* Eyebrow/label text and hover links — a step darker than --accent so it
      holds up as small, non-bold text. Used first by the landing sections. */
-  --accent-strong: hsl(215, 80%, 32%);
+  --accent-strong: #3a40c4;
   /* --success is 3.96:1 on white, under AA for small text. Use this for
      text; keep --success for fills and icons. */
   --success-strong: hsl(158, 73%, 27%);
-  /* Tinted fill for info notes. Derived from --accent so it follows the theme. */
-  --accent-soft: color-mix(in srgb, var(--accent) 10%, transparent);
+  /* Tinted fills for info notes. */
   --warning-soft: color-mix(in srgb, var(--warning) 14%, transparent);
   --danger-soft: color-mix(in srgb, var(--danger) 10%, transparent);
   /* --warning (amber) is ~2:1 on white, unreadable as text. */
@@ -217,9 +217,9 @@
 }
 
 [data-theme='dark'] {
-  --accent: var(--color-primary-dark);
-  --accent-contrast: hsl(222 47% 11%);
-  --accent-strong: hsl(215, 90%, 75%);
+  --accent: #7c82f7;
+  --accent-contrast: #0d0f13;
+  --accent-strong: #9ba1ff;
   --bg: var(--bg-color);
   --text: var(--text-main);
   --surface: #1f242b;

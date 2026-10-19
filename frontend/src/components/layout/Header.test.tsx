@@ -9,6 +9,7 @@ import { TransactionOutcome } from '../state/AsyncStates';
 import { AccountMenu } from './AccountMenu';
 import { SignInSheet } from './SignInSheet';
 import { ThemeToggle } from './ThemeToggle';
+import { Navbar } from './Navbar';
 
 const ADDRESS = 'GAH3D4RM45ETE4W7VDRCWZBPRPT63CJXAGXFYVBC2FGANBZTS4OTKXCA';
 
@@ -143,5 +144,63 @@ describe('transaction announcements', () => {
     expect(region.textContent).toBe('Contribution confirmed');
     expect(container.querySelectorAll('[aria-live]').length).toBe(1);
     vi.useRealTimers();
+  });
+});
+
+describe('navbar section navigation', () => {
+  it('renders "Launch app" on the landing page instead of section pills', () => {
+    render(
+      <MemoryRouter initialEntries={['/']}>
+        <ThemeProvider>
+          <WalletContext.Provider value={wallet()}>
+            <Navbar />
+          </WalletContext.Provider>
+        </ThemeProvider>
+      </MemoryRouter>,
+    );
+
+    expect(screen.getByRole('link', { name: 'Launch app' })).toBeTruthy();
+    expect(screen.queryByRole('link', { name: 'Programmes' })).toBeNull();
+  });
+
+  it('renders five section pills with the active one highlighted', () => {
+    const { unmount } = render(
+      <MemoryRouter initialEntries={['/directory']}>
+        <ThemeProvider>
+          <WalletContext.Provider value={wallet()}>
+            <Navbar />
+          </WalletContext.Provider>
+        </ThemeProvider>
+      </MemoryRouter>,
+    );
+
+    const programmesLink = screen.getByRole('link', { name: 'Programmes' });
+    expect(programmesLink.getAttribute('aria-current')).toBe('page');
+    expect(programmesLink.className).toContain('nav-pill--active');
+
+    const fundLink = screen.getByRole('link', { name: 'Fund' });
+    expect(fundLink.getAttribute('aria-current')).toBeNull();
+    expect(fundLink.className).not.toContain('nav-pill--active');
+
+    expect(screen.getByRole('link', { name: 'Get funded' })).toBeTruthy();
+    expect(screen.getByRole('link', { name: 'Verify' })).toBeTruthy();
+    expect(screen.getByRole('link', { name: 'Admin' })).toBeTruthy();
+
+    unmount();
+
+    // Route under Get funded (/recipients/standing)
+    render(
+      <MemoryRouter initialEntries={['/recipients/standing']}>
+        <ThemeProvider>
+          <WalletContext.Provider value={wallet()}>
+            <Navbar />
+          </WalletContext.Provider>
+        </ThemeProvider>
+      </MemoryRouter>,
+    );
+
+    const getFundedLink = screen.getByRole('link', { name: 'Get funded' });
+    expect(getFundedLink.getAttribute('aria-current')).toBe('page');
+    expect(getFundedLink.className).toContain('nav-pill--active');
   });
 });
