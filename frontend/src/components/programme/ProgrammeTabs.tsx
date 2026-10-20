@@ -11,6 +11,8 @@ export interface ProgrammeTabsProps {
   programmeId: string;
   phase?: string;
   quorum?: number;
+  /** The programme's minimum award in stroops; 0n means none. */
+  minimumAward?: bigint;
   isSample?: boolean;
   asset?: string;
   verifiers?: VerifierFixture[];
@@ -21,6 +23,7 @@ export const ProgrammeTabs: FC<ProgrammeTabsProps> = ({
   programmeId,
   phase = 'Open',
   quorum = 1,
+  minimumAward = 0n,
   isSample = false,
   asset = 'USDC',
   verifiers,
@@ -123,6 +126,7 @@ export const ProgrammeTabs: FC<ProgrammeTabsProps> = ({
             programmeId={programmeId}
             quorum={quorum}
             asset={asset}
+            minimumAward={minimumAward}
           />
         )}
       </div>

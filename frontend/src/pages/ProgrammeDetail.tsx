@@ -19,6 +19,7 @@ import { ProgrammeActions } from "../components/programme/ProgrammeActions";
 import { AddressChip, Badge, Button, Card, Deadline, Field, List, ListRow, PhaseBadge, Stat } from "../components/ui";
 import { useSoroban } from "../context/useSoroban";
 import { useContractRead, useContractResult, useIndexedList, useProgramme } from "../hooks";
+import { useLedgerTime } from "../hooks/useLedgerTime";
 import { fetchProgrammes } from "../lib/indexer";
 import { directoryHref } from "../lib/programmeView";
 import { formatAmount } from "../lib/amount";
@@ -491,7 +492,7 @@ function MetadataCard({ committedHash }: { committedHash: string }) {
 
 export const ProgrammeDetail = () => {
   const { id: programmeId, client: programme, isDefault } = useProgramme();
-  const { registry } = useSoroban();
+  const { registry, rpcUrl } = useSoroban();
   const location = useLocation();
   const [nowMs, setNowMs] = useState(() => Date.now());
 
@@ -589,6 +590,11 @@ export const ProgrammeDetail = () => {
   // per award at `finalize` — so it shows none rather than a guess.
   const isSample = isSampleProgrammeId(programmeId);
   const plannedMode = isSample ? (FIXTURE_CHAIN[programmeId]?.mode ?? null) : null;
+  // The ledger's close time turns the ledger number into a date. Sample
+  // programmes have no real ledger to read, and their fixture ledger must not
+  // be presented as a live date.
+  const createdLedger = indexEntry?.createdLedger ?? null;
+  const createdAt = useLedgerTime(isSample ? null : createdLedger, rpcUrl);
   // The contract opens refunds on cancellation or once the release deadline
   // has passed; the money panel shows refundable funds only from then.
   const refundsOpen =
@@ -632,6 +638,7 @@ export const ProgrammeDetail = () => {
         name={indexEntry?.name ?? "Programme detail"}
         creator={config.data?.creator ?? null}
         createdLedger={indexEntry?.createdLedger ?? null}
+        createdAt={createdAt.data}
         phase={phase.data?.tag ?? null}
         phaseError={Boolean(phase.error)}
         verified={isRegistered.data ?? undefined}
@@ -753,6 +760,7 @@ export const ProgrammeDetail = () => {
               programmeId={programmeId}
               phase={phaseName}
               quorum={config.data?.quorum ?? 1}
+              minimumAward={config.data?.minimum_award ?? 0n}
               isSample={isSampleProgrammeId(programmeId)}
               asset={ASSET_LABEL}
             />

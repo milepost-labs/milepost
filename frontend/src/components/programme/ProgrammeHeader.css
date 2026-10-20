@@ -57,6 +57,16 @@
   color: var(--text);
 }
 
+/* The creation date sits beside the ledger. It may wrap independently on a
+   narrow screen, so the ledger number stays readable at 360px. */
+.programme-header__created {
+  margin-left: var(--space-1);
+}
+
+.programme-header__created time {
+  font-variant-numeric: tabular-nums;
+}
+
 .programme-header__read {
   display: inline-flex;
   align-items: center;

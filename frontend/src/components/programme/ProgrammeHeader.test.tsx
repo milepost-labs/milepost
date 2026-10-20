@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { render, screen, within } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
 
+import { formatDate } from '../../lib/format';
 import { ProgrammeHeader } from './ProgrammeHeader';
 
 const baseProps = {
@@ -43,6 +44,45 @@ describe('ProgrammeHeader', () => {
     expect(within(badges).getByText('Review')).toBeTruthy();
     expect(within(badges).getByText('Direct mode')).toBeTruthy();
     expect(within(badges).getByText('Sample data')).toBeTruthy();
+  });
+
+  it('shows an exact creation date beside the ledger when the RPC retains it', () => {
+    const seconds = Math.floor(Date.parse('2026-03-12T10:00:00Z') / 1000);
+    renderHeader({
+      ...baseProps,
+      phase: 'Open',
+      createdAt: { seconds, estimated: false },
+    });
+
+    const date = screen.getByText(formatDate(seconds));
+    const time = date.closest('time');
+    expect(time?.getAttribute('datetime')).toBe(new Date(seconds * 1000).toISOString());
+    expect(time?.getAttribute('title')).toMatch(/read from the ledger/i);
+    expect(time?.parentElement?.textContent).not.toContain('about');
+
+    // The ledger number stays visible alongside the date.
+    expect(screen.getByText(/4,811,204/)).toBeTruthy();
+  });
+
+  it('marks an estimated creation date as "about" beside the ledger', () => {
+    const seconds = Math.floor(Date.parse('2026-03-12T10:00:00Z') / 1000);
+    renderHeader({
+      ...baseProps,
+      phase: 'Open',
+      createdAt: { seconds, estimated: true },
+    });
+
+    const time = screen.getByText(formatDate(seconds)).closest('time');
+    expect(time?.parentElement?.textContent).toContain('about');
+    expect(time?.getAttribute('title')).toMatch(/estimated from the latest ledger/i);
+    expect(screen.getByText(/4,811,204/)).toBeTruthy();
+  });
+
+  it('shows only the ledger when no creation date can be resolved', () => {
+    renderHeader({ ...baseProps, phase: 'Open', createdAt: null });
+
+    expect(screen.getByText(/4,811,204/)).toBeTruthy();
+    expect(document.querySelector('time')).toBeNull();
   });
 
   it('returns to the directory the reader came from, filters included', () => {
