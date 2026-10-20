@@ -91,6 +91,12 @@ The same job fails if a component shows a `FIXTURE_*` stand-in without its
 the frontend guide for the rule, the allowlist and how to run the check
 locally (`npm run check:sample-tags --prefix frontend`).
 
+CI also checks that every page and component CSS file uses design tokens
+(`frontend/scripts/check-design-system.mjs`), failing on hard-coded colours or
+spacing off the 4px scale. See [Design-system guard](frontend/CONTRIBUTING.md#design-system-guard)
+for details and how to run it locally (`npm run check:design-system --prefix frontend`
+or with `--diff-base <commit>` for diff mode).
+
 ### Local Development Modes
 - **Fixture Mode:** Run `VITE_FIXTURES=1 npm --prefix frontend run dev` to run and inspect UI screens locally without requiring an active wallet connection or testnet funds.
 - **Component Gallery:** In dev mode, open `/dev/ui` in the browser to inspect all components from `src/components/ui/` and `src/components/state/`. It is left out of production builds, and CI fails if it ever reaches one (`frontend/scripts/check-no-dev-pages.sh`).

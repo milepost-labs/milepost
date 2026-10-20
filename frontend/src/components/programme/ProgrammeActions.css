@@ -143,6 +143,7 @@
 
 .programme-actions__verify-icon {
   flex: none;
+  /* design-system-guard: allow spacing */
   margin-top: 2px;
 }
 

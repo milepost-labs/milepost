@@ -134,9 +134,33 @@ writing a second version; `src/pages/ProgrammeDetail.tsx` shows the pattern end
 to end.
 
 ## Styling
-
+ 
 Use the tokens in `src/styles/tokens.css` for colour, spacing, type, radius and
 elevation. No literal hex values or pixel spacing in new CSS.
+
+### Design-system guard
+
+CI scans every page and component CSS file (`src/pages/` and `src/components/`)
+over whole files to prevent hard-coded colours or off-scale spacing from slipping in.
+Colours must use design tokens from `src/styles/tokens.css` (or semantic variables
+from `index.css`), and spacing properties must sit on the 4px scale.
+
+If a genuine one-off value is strictly necessary (e.g. alignment centering or
+visually-hidden clip margins), use the documented escape hatch above the declaration:
+
+```css
+/* design-system-guard: allow spacing */
+margin: -1px;
+```
+
+To run the check locally:
+
+```sh
+npm run check:design-system                          # scans all page and component CSS files
+node scripts/check-design-system.mjs --diff-base dev # scans only lines changed against dev
+npm run test:design-system                           # runs the guard's own test suite
+```
+
 
 ## Contract changes
 

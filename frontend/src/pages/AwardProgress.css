@@ -41,6 +41,7 @@
 
 .tranche-progress__bar {
   display: flex;
+  /* design-system-guard: allow spacing */
   gap: 2px;
   height: 20px;
   border-radius: var(--radius-full);

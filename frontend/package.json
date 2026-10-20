@@ -7,6 +7,7 @@
     "dev": "vite",
     "build": "tsc -b && vite build",
     "lint": "eslint .",
+    "check:design-system": "node scripts/check-design-system.mjs",
     "test:design-system": "node --test scripts/check-design-system.test.mjs",
     "check:sample-tags": "node scripts/check-sample-tags.mjs",
     "test:sample-tags": "node --test scripts/check-sample-tags.test.mjs",
