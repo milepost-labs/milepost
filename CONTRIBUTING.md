@@ -96,6 +96,26 @@ CI also checks that every page and component CSS file uses design tokens
 spacing off the 4px scale. See [Design-system guard](frontend/CONTRIBUTING.md#design-system-guard)
 for details and how to run it locally (`npm run check:design-system --prefix frontend`
 or with `--diff-base <commit>` for diff mode).
+### Automated accessibility checks
+
+Every route in `frontend/src/routes.ts` is rendered in jsdom, in both the light
+and dark themes, and checked with [axe-core](https://github.com/dequelabs/axe-core).
+A serious or critical violation fails the build. The contracts, the wallet and
+the index are mocked, so the check never touches the network.
+
+Run it locally from `frontend/`:
+
+```bash
+cd frontend
+npm ci            # first time, or after a dependency change
+npm run test:a11y # every route, both themes
+```
+
+The `accessibility` job in `.github/workflows/ci.yml` runs the same command on
+every pull request to `dev` and on pushes to `dev` and `main`. To silence a
+rule, add an entry to `ACCESSIBILITY_EXCEPTIONS` in
+`frontend/src/test/accessibility.test.tsx` with a `reason`; the suite fails on
+an entry with no reason. Fixing the page is always preferred.
 
 ### Local Development Modes
 - **Fixture Mode:** Run `VITE_FIXTURES=1 npm --prefix frontend run dev` to run and inspect UI screens locally without requiring an active wallet connection or testnet funds.

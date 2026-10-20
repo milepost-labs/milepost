@@ -17,6 +17,8 @@ import type { ContractName } from '../lib/errors';
 export interface ContractRead<T> {
   data: T | null;
   error: unknown;
+  /** True when the entry is archived (entry TTL expired). Distinct from error. */
+  archived: boolean;
   /** True only on the first load. A refetch keeps existing data visible. */
   loading: boolean;
   /** True while any request is in flight, including a background refresh. */
@@ -36,6 +38,18 @@ export interface ContractReadOptions {
  * promise being ignored if a newer call started. Keep `deps` accurate: it is
  * what decides when to refetch.
  */
+function isArchivedError(caught: unknown): boolean {
+  if (caught instanceof Error) {
+    const msg = caught.message.toLowerCase();
+    if (msg.includes('expiredstate') || msg.includes('expired state')) return true;
+    if (msg.includes('restore') && msg.includes('preamble')) return true;
+  }
+  const obj = caught as Record<string, unknown>;
+  if (obj?.name === 'ExpiredState') return true;
+  if (obj?.kind === 'expiredstate' || obj?.kind === 'expired') return true;
+  return false;
+}
+
 export function useContractRead<T>(
   call: () => Promise<{ result: T }>,
   deps: unknown[],
@@ -45,6 +59,7 @@ export function useContractRead<T>(
 
   const [data, setData] = useState<T | null>(null);
   const [error, setError] = useState<unknown>(null);
+  const [archived, setArchived] = useState(false);
   // Starts true when a request will be made, so the first render already shows
   // loading. Setting it inside the effect instead would cascade an extra
   // render on every mount.
@@ -78,9 +93,16 @@ export function useContractRead<T>(
       const response = await callRef.current();
       if (!mounted.current || current !== generation.current) return;
       setData(response.result);
+      setArchived(false);
     } catch (caught) {
       if (!mounted.current || current !== generation.current) return;
-      setError(caught);
+      if (isArchivedError(caught)) {
+        setArchived(true);
+        setError(null);
+      } else {
+        setArchived(false);
+        setError(caught);
+      }
     } finally {
       if (mounted.current && current === generation.current) {
         setFetching(false);
@@ -100,12 +122,14 @@ export function useContractRead<T>(
   const refetch = useCallback(() => {
     setFetching(true);
     setError(null);
+    setArchived(false);
     void run();
   }, [run]);
 
   return {
     data,
     error,
+    archived,
     loading: enabled && !loaded && fetching,
     fetching,
     refetch,

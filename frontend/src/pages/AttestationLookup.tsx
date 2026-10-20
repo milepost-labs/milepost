@@ -1,10 +1,21 @@
 import { useMemo, useState, type ChangeEvent, type FormEvent } from 'react';
 import { Buffer } from 'buffer';
 import type { Client as ProgrammeClient } from '@milepost/program';
+import type { Attestation } from '@milepost/attest';
 import { Badge, Field } from '../components/ui';
-import { useContractRead } from '../hooks';
+import { useContractRead, useContractResult } from '../hooks';
 import { useSoroban } from '../context/useSoroban';
-import { looksLikeAddress } from '../lib/format';
+import { explain } from '../lib/errors';
+import { formatDateTime, looksLikeAddress } from '../lib/format';
+import { rpcServer } from '../lib/txLookup';
+import { describeWindow } from '../lib/contractEvents';
+import {
+  attestationStatus,
+  isSearchableAddress,
+  searchAttestations,
+  type AttestationMatch,
+  type AttestationSearch,
+} from '../lib/attestationSearch';
 import { FIXTURE_ATTESTATIONS, type AttestationFixture } from '../fixtures/attestationFixtures';
 import {
   validateVerifyClaimInput,
@@ -27,16 +38,10 @@ interface ResultRow {
  * read scoped to one attestation and lets each result carry its own status
  * (issue #408).
  */
-function SpentStatus({
-  programme,
-  attestation,
-}: {
-  programme: ProgrammeClient | null;
-  attestation: AttestationFixture;
-}) {
+function SpentStatus({ programme, uid }: { programme: ProgrammeClient | null; uid: string }) {
   const read = useContractRead<boolean>(
-    () => programme!.is_spent({ attestation: Buffer.from(attestation.uid, 'hex') }),
-    [programme, attestation.uid],
+    () => programme!.is_spent({ attestation: Buffer.from(uid, 'hex') }),
+    [programme, uid],
     { enabled: programme !== null, contract: 'program' },
   );
 
@@ -62,19 +67,112 @@ function rowsFor(attestation: AttestationFixture): ResultRow[] {
   );
 }
 
+const ROLE_LABEL: Record<AttestationMatch['role'], string> = {
+  subject: 'About this address',
+  attester: 'Signed by this address',
+  both: 'Signed by and about this address',
+};
+
+/**
+ * One attestation found by address. Revoked and expired come from the fresh
+ * `attest.get` read; "used" is per programme, so a valid one defers to
+ * `SpentStatus` for the selected programme.
+ */
+function MatchCard({
+  match,
+  programme,
+  programmeId,
+  nowSeconds,
+  onOpen,
+}: {
+  match: AttestationMatch;
+  programme: ProgrammeClient | null;
+  programmeId: string | null;
+  nowSeconds: number;
+  onOpen: (uid: string) => void;
+}) {
+  const { attestation } = match;
+  const status = attestation ? attestationStatus(attestation, nowSeconds) : null;
+
+  return (
+    <article className="attest-result-card">
+      <div className="attest-result-card__head">
+        <span className="attest-result-card__uid">{match.uid}</span>
+        {status === null && <Badge tone="warning">Could not read on-chain</Badge>}
+        {status === 'revoked' && <Badge tone="danger">Revoked</Badge>}
+        {status === 'expired' && <Badge tone="warning">Expired</Badge>}
+        {status === 'valid' && (
+          <>
+            <Badge tone="success">Valid</Badge>
+            <SpentStatus programme={programme} uid={match.uid} />
+          </>
+        )}
+      </div>
+      <span className="attest-result-card__programme">{ROLE_LABEL[match.role]}</span>
+      {status === 'valid' && programmeId && (
+        <span className="attest-result-card__programme">
+          Usage checked against <span className="numeric">{programmeId}</span>
+        </span>
+      )}
+      {attestation ? (
+        <>
+          <div className="attest-result-row">
+            <span className="attest-result-row__key">Schema</span>
+            <span className="attest-result-row__value numeric">
+              {Buffer.from(attestation.schema).toString('hex')}
+            </span>
+          </div>
+          <div className="attest-result-row">
+            <span className="attest-result-row__key">Attester</span>
+            <span className="attest-result-row__value numeric">{attestation.attester}</span>
+          </div>
+          <div className="attest-result-row">
+            <span className="attest-result-row__key">Subject</span>
+            <span className="attest-result-row__value numeric">{attestation.subject}</span>
+          </div>
+          <div className="attest-result-row">
+            <span className="attest-result-row__key">Signed</span>
+            <span className="attest-result-row__value">{formatDateTime(attestation.created_at)}</span>
+          </div>
+          {attestation.expires_at !== undefined && attestation.expires_at !== null && (
+            <div className="attest-result-row">
+              <span className="attest-result-row__key">Expires</span>
+              <span className="attest-result-row__value">{formatDateTime(attestation.expires_at)}</span>
+            </div>
+          )}
+        </>
+      ) : (
+        <span className="attest-not-found__detail">
+          The event shows this attestation was made, but its entry could not be read now.
+          Archived entries need a keepalive before they can be read.
+        </span>
+      )}
+      <div className="attest-result-row">
+        <span className="attest-result-row__key">Event ledger</span>
+        <span className="attest-result-row__value">{match.ledger.toLocaleString()}</span>
+      </div>
+      <button type="button" className="attest-lookup__sample" onClick={() => onOpen(match.uid)}>
+        Look up this id
+      </button>
+    </article>
+  );
+}
+
 const EMPTY_CLAIM_FORM = { uid: '', subject: '', schema: '', attester: '' };
 
 /**
  * Attestation lookup.
  *
  * Two modes. "Look up by id" answers what an attestation says — reading on-chain
- * via `attest.get` for real 32-byte UIDs. For address queries, explains the
- * contract's search limitations and keeps sample results behind the sample label.
+ * via `attest.get` for real 32-byte UIDs. A G… or C… address is searched in the
+ * attest contract's recent `Attested` events as subject or attester, and each
+ * hit is re-read so its status is current (issue #536). Sample ids stay behind
+ * the sample label.
  * "Check a claim" answers the narrower question: does this subject hold a valid
  * claim under this schema from this attester.
  */
 export const AttestationLookup = () => {
-  const { programmeAt } = useSoroban();
+  const { programmeAt, attest, rpcUrl } = useSoroban();
   const [mode, setMode] = useState<LookupMode>('id');
 
   // Whether a proof was used is answered by one programme, not by the
@@ -120,7 +218,7 @@ export const AttestationLookup = () => {
   const trimmed = searched.trim();
   const cleanHex = trimmed.toLowerCase();
   const isHex64 = /^[0-9a-fA-F]{64}$/.test(cleanHex);
-  const isAddress = /^[GC][A-Z2-7]{55}$/.test(trimmed);
+  const isAddress = isSearchableAddress(trimmed);
   const searchedYet = trimmed.length > 0;
 
   const chainRead = useContractResult<Attestation>(
@@ -133,13 +231,31 @@ export const AttestationLookup = () => {
   const chainLoading = isHex64 && chainRead.loading;
   const chainNotFound = isHex64 && !chainRead.loading && Boolean(chainRead.error);
 
-  const hits = searchedYet && !isHex64
+  // A real address is searched on-chain only, so sample attestations never
+  // mix into what the chain says about it.
+  const addressRead = useContractRead<AttestationSearch>(
+    async () => ({ result: await searchAttestations(rpcServer(rpcUrl), attest, trimmed) }),
+    [attest, rpcUrl, trimmed],
+    { enabled: isAddress, contract: 'attest' },
+  );
+  // A new search keeps the previous result in `data` until it lands, so only
+  // a result for the address on screen counts.
+  const addressSearch =
+    isAddress && addressRead.data?.address === trimmed ? addressRead.data : null;
+  const addressError = isAddress && !addressSearch && addressRead.error
+    ? explain(addressRead.error, 'attest').message
+    : null;
+  const addressLoading = isAddress && !addressSearch && !addressError;
+  // Read once when the page opens; React render must stay pure, so expiry is
+  // judged against that moment rather than a clock read on every render.
+  const [nowSeconds] = useState(() => Math.floor(Date.now() / 1000));
+
+  const hits = searchedYet && !isHex64 && !isAddress
     ? FIXTURE_ATTESTATIONS.filter(
         (a) =>
           a.uid.toLowerCase() === cleanHex ||
           a.subject.toLowerCase() === cleanHex ||
-          a.attester.toLowerCase() === cleanHex ||
-          (isAddress && (a.subject === trimmed || a.attester === trimmed)),
+          a.attester.toLowerCase() === cleanHex,
       )
     : [];
 
@@ -328,13 +444,50 @@ export const AttestationLookup = () => {
               </div>
             )}
 
-            {isAddress && (
+            {addressLoading && (
+              <div className="attest-lookup__status" role="status">
+                <span>Searching recent attestations for this address…</span>
+              </div>
+            )}
+
+            {addressError && (
+              <div className="attest-not-found" role="alert">
+                <span className="attest-not-found__title">Could not search attestations</span>
+                <span className="attest-not-found__detail">{addressError}</span>
+                <button type="button" className="attest-lookup__sample" onClick={addressRead.refetch}>
+                  Try again
+                </button>
+              </div>
+            )}
+
+            {addressSearch && (
               <div className="attest-lookup__limitation" role="note">
                 <p>
-                  The on-chain attestation contract cannot search by subject or attester address; it only supports lookup by 32-byte UID.
+                  {addressSearch.matches.length === 0
+                    ? 'No attestations name this address as recipient or verifier'
+                    : `${addressSearch.matches.length} attestation${addressSearch.matches.length === 1 ? '' : 's'} name this address`}{' '}
+                  in ledgers{' '}
+                  <span className="numeric">
+                    {addressSearch.window.fromLedger.toLocaleString()}–
+                    {addressSearch.window.toLedger.toLocaleString()}
+                  </span>{' '}
+                  ({describeWindow(addressSearch.window)}, the network&rsquo;s event history).
+                  Older attestations are not listed here; look them up by id.
+                  {addressSearch.truncated && ' This contract was busy, so only the oldest part of that window was searched.'}
                 </p>
               </div>
             )}
+
+            {addressSearch?.matches.map((match) => (
+              <MatchCard
+                key={match.uid}
+                match={match}
+                programme={programme}
+                programmeId={programmeId}
+                nowSeconds={nowSeconds}
+                onOpen={pick}
+              />
+            ))}
 
             {!isHex64 && !isAddress && searchedYet && hits.length === 0 && (
               <div className="attest-not-found" role="alert">
@@ -354,7 +507,7 @@ export const AttestationLookup = () => {
                     {attestation.revoked ? (
                       <Badge tone="danger">Revoked</Badge>
                     ) : (
-                      <SpentStatus programme={programme} attestation={attestation} />
+                      <SpentStatus programme={programme} uid={attestation.uid} />
                     )}
                   </div>
                   {programmeId && (

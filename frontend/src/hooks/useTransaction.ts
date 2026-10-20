@@ -20,6 +20,7 @@ export type TransactionPhase =
   | 'building'
   | 'signing'
   | 'submitting'
+  | 'restoring'
   | 'success'
   | 'error';
 
@@ -28,6 +29,8 @@ export interface Sendable<T> {
   signAndSend: (options: {
     signTransaction: (xdr: string) => Promise<{ signedTxXdr: string; signerAddress: string }>;
   }) => Promise<{ result: T }>;
+  restorePreamble?: Array<{ type: string }>;
+  restoreFootprint?: () => Promise<void>;
 }
 
 export interface TransactionState<T> {
@@ -103,7 +106,18 @@ export function useTransaction<T = unknown>(
         // Building also simulates, so most contract errors surface here —
         // before anything is signed, which is the good place for them.
         setPhase('building');
-        const transaction = await build();
+        let transaction = await build();
+
+        // If simulation detected archived entries, restore them first.
+        if (transaction.restorePreamble && transaction.restorePreamble.length > 0) {
+          setPhase('restoring');
+
+          if (transaction.restoreFootprint) {
+            await transaction.restoreFootprint();
+            // After restore preamble is prepared, rebuild and re-simulate to get the real transaction.
+            transaction = await build();
+          }
+        }
 
         setPhase('signing');
         const sent = await transaction.signAndSend({ signTransaction: wallet.signTransaction });
@@ -133,7 +147,7 @@ export function useTransaction<T = unknown>(
 
   return {
     phase,
-    busy: phase === 'building' || phase === 'signing' || phase === 'submitting',
+    busy: phase === 'building' || phase === 'signing' || phase === 'submitting' || phase === 'restoring',
     error,
     result,
     send,
@@ -146,6 +160,8 @@ export function phaseLabel(phase: string): string {
   switch (phase) {
     case 'building':
       return 'Preparing…';
+    case 'restoring':
+      return 'Restoring archived data…';
     case 'signing':
       return 'Waiting for your signature…';
     case 'submitting':

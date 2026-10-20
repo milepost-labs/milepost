@@ -63,6 +63,26 @@ the bundle baseline only once growth is confirmed to be intentional, and record
 an advisory exception only with a stated reason, in
 `.github/npm-audit-exceptions.json`.
 
+### Accessibility checks
+
+Every route in `src/routes.ts` is rendered in jsdom, in both themes, and checked
+with [axe-core](https://github.com/dequelabs/axe-core). A serious or critical
+violation fails the suite, and therefore CI. The contract clients, the wallet
+and the index are mocked, so the check never touches the network.
+
+```sh
+npm run test:a11y   # every route, light and dark
+```
+
+The `accessibility` job in the repository's `.github/workflows/ci.yml` runs this
+on every pull request to `dev` and on pushes to `dev` and `main`.
+
+A rule that genuinely cannot be fixed is recorded in
+`ACCESSIBILITY_EXCEPTIONS` in `src/test/accessibility.test.tsx`, with a `route`
+(optional), the `rule` id and a `reason`. The suite fails on an entry with no
+reason, and review treats the list as something that should stay empty. Prefer
+fixing the page.
+
 ### Test coverage
 
 CI runs the suite with coverage and writes the totals and the ten

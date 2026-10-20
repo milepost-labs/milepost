@@ -1,7 +1,9 @@
+import { useEffect, useRef } from 'react';
 import { useIndexedList } from '../hooks/useIndexedList';
 import { fetchMeta, isStale } from '../lib/indexer';
 import type { IndexerMeta } from '../lib/indexer';
 import { Skeleton } from '../components/state/AsyncStates';
+import { useAnnouncer } from '../context/useAnnouncer';
 import './IndexStatus.css';
 
 export interface StatusEntry {
@@ -14,6 +16,12 @@ export const IndexStatus = () => {
     async () => ({ meta: await fetchMeta(), fetchedAt: Date.now() }),
     [],
   );
+
+  const announce = useAnnouncer();
+  // Only announce a freshness transition once. The meta object is replaced on
+  // every refetch, so without this the same status would be announced again
+  // even when nothing changed.
+  const announcedFreshness = useRef<'fresh' | 'stale' | null>(null);
 
   const meta = data?.meta ?? null;
   const fetchedAt = data?.fetchedAt ?? null;
@@ -34,6 +42,18 @@ export const IndexStatus = () => {
   const unhandledEntries = meta
     ? Object.entries(meta.unhandledEvents).filter(([, count]) => count > 0)
     : [];
+
+  useEffect(() => {
+    if (!meta) return;
+    const freshness = stale ? 'stale' : 'fresh';
+    if (announcedFreshness.current === freshness) return;
+    announcedFreshness.current = freshness;
+    announce(
+      stale
+        ? 'Index status is stale. Older than 12 hours, so new data may be missing.'
+        : 'Index status is fresh. Updated within the last 12 hours.',
+    );
+  }, [meta, stale, announce]);
 
   return (
     <div className="status-container">
@@ -64,25 +84,22 @@ export const IndexStatus = () => {
         )}
 
         {!loading && !error && meta && (
-          <div className="status-grid">
+          // A description list, not a grid of spans: each figure is bound to
+          // its label in the accessibility tree, so it is read as
+          // "Last indexed at, 5 Oct 2026…" rather than as loose text.
+          <dl className="status-grid">
             <div className="status-card">
               <dt className="status-card__label">Last indexed at</dt>
-              <dd className="status-card__value numeric">
-                {meta.indexedAt}
-              </dd>
+              <dd className="status-card__value numeric">{meta.indexedAt}</dd>
               <dd className="status-card__hint">
-                {ageText ? `${ageText}` : 'Unknown age'}
+                {ageText ?? 'Unknown age'}
               </dd>
             </div>
 
             <div className="status-card">
               <dt className="status-card__label">Indexed to ledger</dt>
-              <dd className="status-card__value numeric">
-                {meta.indexedToLedger}
-              </dd>
-              <dd className="status-card__hint">
-                From ledger {meta.fromLedger}
-              </dd>
+              <dd className="status-card__value numeric">{meta.indexedToLedger}</dd>
+              <dd className="status-card__hint">From ledger {meta.fromLedger}</dd>
             </div>
 
             <div className="status-card">
@@ -120,7 +137,7 @@ export const IndexStatus = () => {
                   : 'No gaps detected.'}
               </dd>
             </div>
-          </div>
+          </dl>
         )}
 
         {!loading && !error && meta && unhandledEntries.length > 0 && (
@@ -131,7 +148,7 @@ export const IndexStatus = () => {
               Counts show how many events of each type were seen but not
               processed.
             </p>
-            <table className="status-table" role="table">
+            <table className="status-table">
               <thead>
                 <tr>
                   <th scope="col">Event type</th>

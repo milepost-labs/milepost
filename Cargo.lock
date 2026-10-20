@@ -1241,6 +1241,7 @@ dependencies = [
  "milepost-record",
  "milepost-test-utils",
  "milepost-types",
+ "proptest",
  "soroban-sdk",
 ]
 

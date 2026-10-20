@@ -1,5 +1,5 @@
 import type { FC } from 'react';
-import { formatDate, timeUntil, hasPassed } from '../../lib/format';
+import { formatDateTime, timeUntil, hasPassed } from '../../lib/format';
 import './Deadline.css';
 
 export interface DeadlineProps {
@@ -10,9 +10,13 @@ export interface DeadlineProps {
 }
 
 /**
- * Shared deadline display: local date and time, relative time, and UTC on
- * hover or focus. Past and future deadlines read differently so the user
- * does not have to do the arithmetic.
+ * Shared deadline display: local date and time, relative time, then UTC.
+ *
+ * All three are plain text in that order, so a screen reader reads
+ * "Applications close, 22 Oct 2026, 10:00, in 3 days, 22 Oct 2026, 08:00 UTC"
+ * without the reader having to stitch together an `aria-label` that most
+ * ignore. Nothing here is focusable: a timeline stops on its actions, not on
+ * every date.
  */
 export const Deadline: FC<DeadlineProps> = ({ unixSeconds, label }) => {
   const date = new Date(Number(unixSeconds) * 1000);
@@ -29,20 +33,14 @@ export const Deadline: FC<DeadlineProps> = ({ unixSeconds, label }) => {
     timeZoneName: 'short',
   });
 
-  const localString = formatDate(unixSeconds);
+  const localString = formatDateTime(unixSeconds);
 
   return (
     <span className="deadline" data-past={past || undefined}>
       {label && <span className="deadline__label">{label} </span>}
-      <span className="deadline__local" title={utcString}>
-        {localString}
-      </span>
-      <span className="deadline__relative" aria-label={`${label ? `${label}: ` : ''}${relative}`}>
-        {relative}
-      </span>
-      <span className="deadline__utc" tabIndex={0} role="note" aria-label={`UTC: ${utcString}`}>
-        {utcString}
-      </span>
+      <span className="deadline__local">{localString}</span>
+      <span className="deadline__relative">{relative}</span>
+      <span className="deadline__utc">{utcString}</span>
     </span>
   );
 };

@@ -1,7 +1,12 @@
 import { render, screen, waitFor } from '@testing-library/react';
-import { describe, expect, it, vi, afterEach } from 'vitest';
+import { describe, expect, it, vi, afterEach, beforeEach } from 'vitest';
 import { MemoryRouter } from 'react-router-dom';
 import { IndexStatus } from './IndexStatus';
+
+// Issue #480: the freshness change reaches the shared announcer once, instead
+// of a per-page live region or a repeated announcement on every refetch.
+const announce = vi.hoisted(() => vi.fn());
+vi.mock('../context/useAnnouncer', () => ({ useAnnouncer: () => announce }));
 
 function stubFetch(body: unknown, ok = true) {
   vi.stubGlobal(
@@ -33,6 +38,10 @@ function meta(overrides: Record<string, unknown> = {}) {
 }
 
 describe('IndexStatus', () => {
+  beforeEach(() => {
+    announce.mockClear();
+  });
+
   afterEach(() => {
     vi.unstubAllGlobals();
   });
@@ -70,6 +79,63 @@ describe('IndexStatus', () => {
     );
     await waitFor(() => {
       expect(screen.getByText('Stale')).toBeTruthy();
+    });
+  });
+
+  it('binds every figure to its label inside one description list', async () => {
+    stubFetch(meta());
+    render(
+      <MemoryRouter>
+        <IndexStatus />
+      </MemoryRouter>,
+    );
+    await waitFor(() => {
+      expect(screen.getByText('Fresh')).toBeTruthy();
+    });
+
+    const list = document.querySelector('dl.status-grid');
+    expect(list).toBeTruthy();
+    const terms = list?.querySelectorAll('dt') ?? [];
+    const definitions = list?.querySelectorAll('dd') ?? [];
+    // Five cards, each with a term; each term and definition belongs to the
+    // same list, so a screen reader reads them as label/value pairs.
+    expect(terms).toHaveLength(5);
+    expect(definitions.length).toBeGreaterThanOrEqual(5);
+    for (const term of terms) expect(term.closest('dl')).toBe(list);
+    for (const definition of definitions) expect(definition.closest('dl')).toBe(list);
+    expect(screen.getByText('Last indexed at').tagName).toBe('DT');
+  });
+
+  it('announces a change of freshness once, not on every render', async () => {
+    stubFetch(meta());
+    const view = render(
+      <MemoryRouter>
+        <IndexStatus />
+      </MemoryRouter>,
+    );
+    await waitFor(() => {
+      expect(announce).toHaveBeenCalledTimes(1);
+    });
+    expect(announce).toHaveBeenCalledWith(expect.stringContaining('fresh'));
+
+    view.rerender(
+      <MemoryRouter>
+        <IndexStatus />
+      </MemoryRouter>,
+    );
+    expect(announce).toHaveBeenCalledTimes(1);
+  });
+
+  it('announces a stale index', async () => {
+    stubFetch(meta({ indexedAt: hoursAgo(24 * 8) }));
+    render(
+      <MemoryRouter>
+        <IndexStatus />
+      </MemoryRouter>,
+    );
+    await waitFor(() => {
+      expect(screen.getByText('Stale')).toBeTruthy();
+      expect(announce).toHaveBeenCalledWith(expect.stringContaining('stale'));
     });
   });
 
