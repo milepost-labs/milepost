@@ -1,0 +1,6 @@
+# Diff images written by Playwright on a mismatch — never commit these.
+*-diff.png
+# "Actual" images from a failed run.
+*-actual.png
+# Playwright's own retry snapshots.
+*-retry*.png

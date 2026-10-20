@@ -1,5 +1,5 @@
 /**
- * Stand-in data for recipient awards, payees, applications, and standing.
+ * Stand-in data for recipient awards, payees, and applications.
  *
  * Shaped like the reads they stand in for, so swapping to live on-chain
  * reads or index data is a change of source.
@@ -19,6 +19,8 @@ export interface RecipientAwardFixture {
   attestationReady: boolean;
   condition: string;
   escrow?: string; // stroops as decimal string for Allocated mode
+  /** True for a stand-in entry belonging to a sample programme. */
+  sample?: boolean;
 }
 
 export interface VerifiedPayeeFixture {
@@ -31,17 +33,16 @@ export interface RecipientApplicationFixture {
   programmeName: string;
   phase: 'Open' | 'Review' | 'Settled' | 'Cancelled';
   requested: string; // stroops as decimal string
-  submittedLedger: number;
+  /** When the application was submitted, as `Application.submitted_at` returns it: Unix seconds. */
+  submittedAt: number;
   votes: string[]; // stroops as decimal strings
   quorum: number; // reviewer quorum, capped at 16
-}
-
-export interface RecipientStandingFixture {
-  programmes: number;
-  received: string; // stroops as decimal string
-  tranchesReleased: number;
-  tranchesAwarded: number;
-  liveForDays: number;
+  /** Whether the application has been finalised into an award. Mirrors the contract field. */
+  finalized?: boolean;
+  /** Whether the application has been withdrawn. Mirrors the contract field. */
+  withdrawn?: boolean;
+  /** True for a stand-in entry belonging to a sample programme, so the card can tag it. */
+  sample?: boolean;
 }
 
 /**
@@ -50,7 +51,7 @@ export interface RecipientStandingFixture {
  */
 export const FIXTURE_MY_AWARDS: RecipientAwardFixture[] = [
   {
-    programmeId: 'CA3NSMEMICROGRANTSQ2V8TX4QK7PL2RZ9MD5HW6JUB',
+    programmeId: 'CBAVXWACVVQIBYAZ2YCSIPWXA24E3NZ3CIRAWJ2UHEQUQP67POYS6GFM',
     programmeName: 'SME Microgrants Cohort 2',
     recipient: 'GD4KQ2…2QXW',
     granted: '40000000000', // 4,000 USDC
@@ -64,7 +65,7 @@ export const FIXTURE_MY_AWARDS: RecipientAwardFixture[] = [
     condition: 'Supplier invoice for milestone 2 approved',
   },
   {
-    programmeId: 'CBQ4SCHOOLBURSARY2026XK3ZP7M2QWJ5T8VN4RD6HY',
+    programmeId: 'CBJWECZ3EUVNAE73YIMT2KWWNRHRF7NNWVKOLQRVOHSKYRYE32XBRPW7',
     programmeName: 'Secondary School Bursaries 2026',
     recipient: 'GD4KQ2…2QXW',
     granted: '30000000000', // 3,000 USDC
@@ -79,7 +80,7 @@ export const FIXTURE_MY_AWARDS: RecipientAwardFixture[] = [
     escrow: '10000000000', // 1,000 USDC held in escrow
   },
   {
-    programmeId: 'CDV7VOCATIONALCOHORT3PL5QZ2WM8RT4HX6KJ9A3FC',
+    programmeId: 'CCOIACASOVO3ZQLXWWJFGZAU3Y545AGPXLBP4NYHYD77RDCBPXRVZ37C',
     programmeName: 'Vocational Training Stipends Q3',
     recipient: 'GD4KQ2…2QXW',
     granted: '20000000000', // 2,000 USDC
@@ -127,32 +128,21 @@ export const FIXTURE_PAYEES: VerifiedPayeeFixture[] = [
  */
 export const FIXTURE_APPLICATIONS: RecipientApplicationFixture[] = [
   {
-    programmeId: 'CDV7VOCATIONALCOHORT3PL5QZ2WM8RT4HX6KJ9A3FC',
+    programmeId: 'CCOIACASOVO3ZQLXWWJFGZAU3Y545AGPXLBP4NYHYD77RDCBPXRVZ37C',
     programmeName: 'Vocational Training Stipends Q3',
     phase: 'Review',
     requested: '12000000000', // 1,200 USDC
-    submittedLedger: 4704410,
+    submittedAt: 1774000000, // 20 March 2026
     votes: ['12000000000', '9000000000'],
     quorum: 5,
   },
   {
-    programmeId: 'CBQ4SCHOOLBURSARY2026XK3ZP7M2QWJ5T8VN4RD6HY',
+    programmeId: 'CBJWECZ3EUVNAE73YIMT2KWWNRHRF7NNWVKOLQRVOHSKYRYE32XBRPW7',
     programmeName: 'Secondary School Bursaries 2026',
     phase: 'Open',
     requested: '5000000000', // 500 USDC
-    submittedLedger: 4818330,
+    submittedAt: 1778000000, // 5 May 2026
     votes: [],
     quorum: 3,
   },
 ];
-
-/**
- * Recipient standing aggregate stand-in.
- */
-export const FIXTURE_STANDING: RecipientStandingFixture = {
-  programmes: 3,
-  received: '46300000000',
-  tranchesReleased: 5,
-  tranchesAwarded: 9,
-  liveForDays: 23,
-};

@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { FIXTURE_CONTRIBUTIONS, type FixtureContribution } from '../fixtures/funding';
 import { chainFor, type FixtureChainRead } from '../fixtures/programmes';
 import {
+  claimableRefund,
   contributeBlockedReason,
   contributionCard,
   feeBpsOf,
@@ -70,8 +71,8 @@ describe('contributionCard', () => {
   });
 
   it('falls back to the short id when the programme is not in the index', () => {
-    const card = contributionCard(contribution({ programmeId: 'CBQ4SCHOOLBURSARY2026XK3ZP7M2QWJ5T8VN4RD6HY' }), undefined);
-    expect(card.name).toBe('CBQ4SC…4RD6HY');
+    const card = contributionCard(contribution({ programmeId: 'CBJWECZ3EUVNAE73YIMT2KWWNRHRF7NNWVKOLQRVOHSKYRYE32XBRPW7' }), undefined);
+    expect(card.name).toBe('CBJWEC…XBRPW7');
     expect(card.claimable).toBe(false);
   });
 });
@@ -122,5 +123,77 @@ describe('contributeBlockedReason', () => {
     expect(contributeBlockedReason('Settled')).toBe(
       'Available only while the programme is Open. This programme is Settled.',
     );
+  });
+});
+
+/**
+ * claimableRefund — exact contract formula.
+ *
+ * Test values are taken directly from the Rust contract tests in
+ * contracts/program/src/test.rs, which use FEE_BPS = 1_000 (10%).
+ *
+ * Key identity: a sole donor who put in 10_000 stroops has:
+ *   budget = 10_000 - (10_000 * 1_000 / 10_000) = 9_000
+ *   share  = (10_000 * 9_000) / 10_000 = 9_000
+ */
+describe('claimableRefund', () => {
+  // Shared constants that mirror the Rust test setup.
+  const FEE_BPS = 1_000n;        // 10%
+  const DONATED  = 10_000n;
+  const TOTAL    = 10_000n;      // sole donor
+  const RELEASED = 0n;           // nothing released
+
+  it('returns 0 before the refund window opens', () => {
+    expect(claimableRefund(DONATED, TOTAL, FEE_BPS, RELEASED, 0n, false)).toBe(0n);
+  });
+
+  it('returns the full share when refunds open and nothing has been claimed yet', () => {
+    // Contract test: refund(&donor) == 9_000 when sole donor contributed 10_000 at 10% fee
+    expect(claimableRefund(DONATED, TOTAL, FEE_BPS, RELEASED, 0n, true)).toBe(9_000n);
+  });
+
+  it('returns the remainder after a partial claim', () => {
+    // First partial of 3_000 → remaining = 9_000 - 3_000 = 6_000
+    expect(claimableRefund(DONATED, TOTAL, FEE_BPS, RELEASED, 3_000n, true)).toBe(6_000n);
+    // Second partial of 4_000 → remaining = 9_000 - 7_000 = 2_000
+    expect(claimableRefund(DONATED, TOTAL, FEE_BPS, RELEASED, 7_000n, true)).toBe(2_000n);
+  });
+
+  it('returns 0 when the full share has already been claimed (AlreadyRefunded)', () => {
+    expect(claimableRefund(DONATED, TOTAL, FEE_BPS, RELEASED, 9_000n, true)).toBe(0n);
+    // Over-refunded guard: more claimed than share → also 0, never negative
+    expect(claimableRefund(DONATED, TOTAL, FEE_BPS, RELEASED, 10_000n, true)).toBe(0n);
+  });
+
+  it('returns 0 when everything was released (no unpaid budget)', () => {
+    // budget = 9_000; if released == 9_000 then unpaid = 0
+    expect(claimableRefund(DONATED, TOTAL, FEE_BPS, 9_000n, 0n, true)).toBe(0n);
+  });
+
+  it('gives proportional shares to two donors — 60 / 40 split', () => {
+    // Two donors: 6_000 and 4_000, total 10_000 at 10% fee.
+    // budget = 9_000 (nothing released).
+    // donor-a share = (6_000 * 9_000) / 10_000 = 5_400
+    // donor-b share = (4_000 * 9_000) / 10_000 = 3_600
+    // Matches the contract test assertion in test.rs.
+    const total = 10_000n;
+    expect(claimableRefund(6_000n, total, FEE_BPS, 0n, 0n, true)).toBe(5_400n);
+    expect(claimableRefund(4_000n, total, FEE_BPS, 0n, 0n, true)).toBe(3_600n);
+  });
+
+  it('accounts for partial releases reducing the refundable pool', () => {
+    // Sole donor 10_000, 10% fee, 300 released (matching the "refund after release" test).
+    // budget = 9_000; unpaid = 9_000 - 300 = 8_700
+    // share  = (10_000 * 8_700) / 10_000 = 8_700
+    expect(claimableRefund(10_000n, 10_000n, FEE_BPS, 300n, 0n, true)).toBe(8_700n);
+  });
+
+  it('returns 0 when the donor never contributed', () => {
+    expect(claimableRefund(0n, TOTAL, FEE_BPS, RELEASED, 0n, true)).toBe(0n);
+  });
+
+  it('works at zero fee (fee_bps = 0)', () => {
+    // budget = totalContributed; share = donorContributed (sole donor)
+    expect(claimableRefund(10_000n, 10_000n, 0n, 0n, 0n, true)).toBe(10_000n);
   });
 });

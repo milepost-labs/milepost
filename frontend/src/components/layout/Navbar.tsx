@@ -2,8 +2,9 @@ import { useState } from 'react';
 import { ChevronDown, Menu as MenuIcon } from 'lucide-react';
 import { Link, useLocation } from 'react-router-dom';
 import { useWallet } from '../../context/useWallet';
-import { APP_ROUTES, HOME_ANCHORS } from '../../routes';
+import { APP_ROUTES, HOME_ANCHORS, NAV_SECTIONS, getSectionForPath } from '../../routes';
 import { AccountMenu } from './AccountMenu';
+import { LogoMark } from './LogoMark';
 import { SignInSheet } from './SignInSheet';
 import { ThemeToggle } from './ThemeToggle';
 import { useDetailsMenu } from './useDetailsMenu';
@@ -57,6 +58,9 @@ const HeaderMenu = () => {
 
 export const Navbar = () => {
   const [signInOpen, setSignInOpen] = useState(false);
+  const location = useLocation();
+  const isHome = location.pathname === '/';
+  const currentSection = getSectionForPath(location.pathname);
   const {
     address,
     status,
@@ -72,23 +76,36 @@ export const Navbar = () => {
       <div className="navbar-container">
         <div className="navbar-brand">
           <Link to="/" className="brand-logo">
-            <span className="brand-icon" aria-hidden="true">M</span>
+            <LogoMark />
             Milepost
           </Link>
         </div>
 
         <HeaderMenu />
 
-        <nav className="navbar-links" aria-label="Primary">
-          <Link to="/directory" className="nav-link">Directory</Link>
-          <Link to="/programme" className="nav-link">Programme</Link>
-          <Link to="/funders" className="nav-link">Funders</Link>
-          <Link to="/recipients" className="nav-link">Recipients</Link>
-          <Link to="/verifiers" className="nav-link">Verifiers</Link>
-          <Link to="/finalize" className="nav-link">Finalize</Link>
-          <Link to="/policy" className="nav-link">Policy</Link>
-          <Link to="/admin" className="nav-link">Admin</Link>
-        </nav>
+        {isHome ? (
+          <div className="navbar-links">
+            <Link to="/directory" className="nav-launch-btn">
+              Launch app
+            </Link>
+          </div>
+        ) : (
+          <nav className="navbar-links" aria-label="Primary">
+            {NAV_SECTIONS.map((sec) => {
+              const isCurrent = currentSection === sec.key;
+              return (
+                <Link
+                  key={sec.key}
+                  to={sec.path}
+                  className={`nav-pill${isCurrent ? ' nav-pill--active' : ''}`}
+                  aria-current={isCurrent ? 'page' : undefined}
+                >
+                  {sec.label}
+                </Link>
+              );
+            })}
+          </nav>
+        )}
 
         <div className="navbar-actions">
           <span

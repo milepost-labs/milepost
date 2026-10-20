@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import { Link } from "react-router-dom";
+import { Link, useLocation } from "react-router-dom";
 import type { ProgrammeConfig } from "@milepost/program";
 import {
   AlertTriangle,
@@ -16,12 +16,15 @@ import { ProgrammeHeader } from "../components/programme/ProgrammeHeader";
 import { WhereTheMoneyIs } from "../components/programme/WhereTheMoneyIs";
 import { ProgrammeTabs } from "../components/programme/ProgrammeTabs";
 import { ProgrammeActions } from "../components/programme/ProgrammeActions";
-import { Badge, Button, Card, Deadline, Field, PhaseBadge, Stat, Table } from "../components/ui";
+import { Badge, Button, Card, Deadline, Field, List, ListRow, PhaseBadge, Stat } from "../components/ui";
 import { useSoroban } from "../context/useSoroban";
 import { useContractRead, useContractResult, useIndexedList, useProgramme } from "../hooks";
 import { fetchProgrammes } from "../lib/indexer";
+import { directoryHref } from "../lib/programmeView";
 import { formatAmount } from "../lib/amount";
+import { isSampleProgrammeId } from "../lib/programmeView";
 import { registryVerificationCopy } from "../lib/registryVerification";
+import { FIXTURE_CHAIN, isSampleProgrammeId } from "../fixtures/programmes";
 import "./ProgrammeDetail.css";
 
 const ZERO = 0n;
@@ -77,6 +80,61 @@ const ASSET_LABEL = "XLM";
 const formatXlm = (amount: bigint) => formatAmount(amount, { asset: ASSET_LABEL });
 const formatAddress = (address: string) =>
   `${address.slice(0, 8)}...${address.slice(-8)}`;
+
+export function ProgrammeAssetRules({ tokenAddress }: { tokenAddress: string }) {
+  const { rpcUrl } = useSoroban();
+  const tokenRead = useContractRead(
+    () => fetchTokenName(tokenAddress, rpcUrl),
+    [tokenAddress, rpcUrl],
+    { enabled: Boolean(tokenAddress) },
+  );
+
+  const assetInfo = useMemo(() => {
+    if (!tokenRead.data) return null;
+    return parseTokenName(tokenRead.data);
+  }, [tokenRead.data]);
+
+  return (
+    <>
+      <div>
+        <dt>Asset</dt>
+        <dd>
+          {tokenRead.loading && <span className="text-muted">Reading asset…</span>}
+          {Boolean(tokenRead.error) && (
+            <span className="text-muted">
+              {formatAddress(tokenAddress)}
+            </span>
+          )}
+          {assetInfo && (
+            <div className="programme-asset-display">
+              <span className="programme-asset-code">{assetInfo.code}</span>
+              {assetInfo.issuer && (
+                <span className="programme-asset-issuer">
+                  <span className="programme-asset-issuer-label text-muted">Issuer:</span>
+                  <AddressChip
+                    address={assetInfo.issuer}
+                    showExplorerLink
+                    copyLabel="Copy issuer address"
+                  />
+                </span>
+              )}
+            </div>
+          )}
+        </dd>
+      </div>
+      <div>
+        <dt>Asset contract</dt>
+        <dd className="numeric" title={tokenAddress}>
+          <AddressChip
+            address={tokenAddress}
+            showExplorerLink
+            copyLabel="Copy asset contract address"
+          />
+        </dd>
+      </div>
+    </>
+  );
+}
 
 function deadlineToMs(deadline: bigint | number): number {
   return Number(deadline) * 1000;
@@ -253,18 +311,16 @@ function MetadataCard({ committedHash }: { committedHash: string }) {
   };
 
   return (
-    <div style={{ display: "flex", flexDirection: "column", gap: "1.25rem" }}>
-      <p className="typo-text text-muted" style={{ margin: 0 }}>
+    <div className="metadata-card">
+      <p className="typo-text text-muted metadata-card__intro">
         The programme commits to a metadata document by hash. Paste the URL
         where the document lives — IPFS gateway, Arweave, or the funder&rsquo;s
         own site. The document is hashed and compared against the on-chain
         commitment before anything is displayed; a mismatch is refused.
       </p>
 
-      <div
-        style={{ display: "flex", alignItems: "flex-end", gap: "var(--space-3)" }}
-      >
-        <div style={{ flex: 1 }}>
+      <div className="metadata-card__fetch">
+        <div className="metadata-card__field">
           <Field
             label="Metadata document URL"
             placeholder="https://…"
@@ -295,7 +351,7 @@ function MetadataCard({ committedHash }: { committedHash: string }) {
           <AlertTriangle size={18} aria-hidden="true" />
           <div>
             <strong>Metadata unavailable.</strong>
-            <p className="typo-text text-muted" style={{ margin: "0.25rem 0 0" }}>
+            <p className="typo-text text-muted metadata-state__text">
               {state.reason} The on-chain commitment is{" "}
               <code className="numeric">{committedHash}</code>. The programme is
               fully functional — only the human-readable description is missing.
@@ -313,7 +369,7 @@ function MetadataCard({ committedHash }: { committedHash: string }) {
           <AlertTriangle size={18} aria-hidden="true" />
           <div>
             <strong>Document is malformed.</strong>
-            <p className="typo-text text-muted" style={{ margin: "0.25rem 0 0" }}>
+            <p className="typo-text text-muted metadata-state__text">
               {state.reason} A malformed document cannot be displayed as the
               programme&rsquo;s description.
             </p>
@@ -330,47 +386,18 @@ function MetadataCard({ committedHash }: { committedHash: string }) {
           <AlertTriangle size={18} aria-hidden="true" />
           <div>
             <strong>Hash mismatch — document refused.</strong>
-            <p className="typo-text text-muted" style={{ margin: "0.25rem 0 0" }}>
+            <p className="typo-text text-muted metadata-state__text">
               The fetched document does not hash to the value the programme
               committed to. It is not being displayed.
             </p>
-            <dl
-              style={{
-                margin: "0.75rem 0 0",
-                display: "flex",
-                flexDirection: "column",
-                gap: "0.5rem",
-              }}
-            >
-              <div>
-                <dt
-                  style={{
-                    fontSize: "var(--text-xs)",
-                    textTransform: "uppercase",
-                    letterSpacing: "0.05em",
-                    color: "var(--text-muted)",
-                  }}
-                >
-                  Fetched document hash
-                </dt>
-                <dd className="numeric" style={{ margin: 0, fontSize: "var(--text-sm)", overflowWrap: "anywhere" }}>
-                  {state.fetchedHash}
-                </dd>
+            <dl className="metadata-doc metadata-doc--spaced">
+              <div className="metadata-doc__field">
+                <dt>Fetched document hash</dt>
+                <dd className="numeric">{state.fetchedHash}</dd>
               </div>
-              <div>
-                <dt
-                  style={{
-                    fontSize: "var(--text-xs)",
-                    textTransform: "uppercase",
-                    letterSpacing: "0.05em",
-                    color: "var(--text-muted)",
-                  }}
-                >
-                  On-chain commitment
-                </dt>
-                <dd className="numeric" style={{ margin: 0, fontSize: "var(--text-sm)", overflowWrap: "anywhere" }}>
-                  {state.committedHash}
-                </dd>
+              <div className="metadata-doc__field">
+                <dt>On-chain commitment</dt>
+                <dd className="numeric">{state.committedHash}</dd>
               </div>
             </dl>
           </div>
@@ -384,7 +411,7 @@ function MetadataCard({ committedHash }: { committedHash: string }) {
           aria-live="polite"
         >
           <CheckCircle2 size={18} aria-hidden="true" />
-          <div style={{ flex: 1 }}>
+          <div className="metadata-state__body">
             <strong>Verified against on-chain commitment.</strong>
 
             <dl className="metadata-doc">
@@ -464,6 +491,7 @@ function MetadataCard({ committedHash }: { committedHash: string }) {
 export const ProgrammeDetail = () => {
   const { id: programmeId, client: programme, isDefault } = useProgramme();
   const { registry } = useSoroban();
+  const location = useLocation();
   const [nowMs, setNowMs] = useState(() => Date.now());
 
   const isRegistered = useContractRead(
@@ -554,6 +582,12 @@ export const ProgrammeDetail = () => {
     () => (indexRead.data ?? []).find((entry) => entry.id === programmeId) ?? null,
     [indexRead.data, programmeId],
   );
+  // Sample programmes live only in the fixtures: their planned mode is the
+  // stand-in chain read, and the header tags it as sample data. A deployed
+  // programme has no programme-level mode on-chain — the contracts pick one
+  // per award at `finalize` — so it shows none rather than a guess.
+  const isSample = isSampleProgrammeId(programmeId);
+  const plannedMode = isSample ? (FIXTURE_CHAIN[programmeId]?.mode ?? null) : null;
   // The contract opens refunds on cancellation or once the release deadline
   // has passed; the money panel shows refundable funds only from then.
   const refundsOpen =
@@ -600,7 +634,32 @@ export const ProgrammeDetail = () => {
         phase={phase.data?.tag ?? null}
         phaseError={Boolean(phase.error)}
         verified={isRegistered.data ?? undefined}
+        backTo={directoryHref(location.search)}
+        mode={plannedMode}
+        sample={isSample}
       />
+      <AsyncView
+        {...isRegistered}
+        onRetry={isRegistered.refetch}
+        contract="registry"
+      >
+        {(deployedByRegistry) => {
+          const copy = registryVerificationCopy(deployedByRegistry);
+          return (
+            <p className="programme-verification">
+              {deployedByRegistry ? (
+                <ShieldCheck aria-hidden="true" />
+              ) : (
+                <ShieldAlert aria-hidden="true" />
+              )}
+              <Badge tone={copy.tone}>{copy.label}</Badge>
+              <span className="programme-verification__text">
+                {copy.description}
+              </span>
+            </p>
+          );
+        }}
+      </AsyncView>
       {isDefault && (
         <p className="programme-hero__hint">
           Showing the seeded demo programme. Add a contract id after{" "}
@@ -664,31 +723,6 @@ export const ProgrammeDetail = () => {
       </section>
 
       <section className="programme-grid animate-fade-up">
-        <Card title="Registry verification">
-          <AsyncView
-            {...isRegistered}
-            onRetry={isRegistered.refetch}
-            contract="registry"
-          >
-            {(deployedByRegistry) => {
-              const copy = registryVerificationCopy(deployedByRegistry);
-              return (
-                <div className="verification-panel">
-                  {deployedByRegistry ? (
-                    <ShieldCheck aria-hidden="true" />
-                  ) : (
-                    <ShieldAlert aria-hidden="true" />
-                  )}
-                  <div>
-                    <Badge tone={copy.tone}>{copy.label}</Badge>
-                    <p className="typo-text text-muted">{copy.description}</p>
-                  </div>
-                </div>
-              );
-            }}
-          </AsyncView>
-        </Card>
-
         <div className="programme-main">
           <div className="programme-section--center">
             <AsyncView
@@ -718,7 +752,7 @@ export const ProgrammeDetail = () => {
               programmeId={programmeId}
               phase={phaseName}
               quorum={config.data?.quorum ?? 1}
-              isSample={isDefault}
+              isSample={isSampleProgrammeId(programmeId)}
               asset={ASSET_LABEL}
             />
           </div>
@@ -728,10 +762,12 @@ export const ProgrammeDetail = () => {
             phase={phase.data?.tag ?? null}
             refundsOpen={refundsOpen}
             refundable={refundable > ZERO ? formatXlm(refundable) : null}
+            verified={isRegistered.error ? false : isRegistered.data}
           />
         </div>
 
         <Card
+          className="programme-grid__wide"
           title="Timeline and phase"
           aside={phase.data ? <PhaseBadge phase={phaseName} /> : null}
         >
@@ -752,36 +788,22 @@ export const ProgrammeDetail = () => {
                     All configured deadlines have passed.
                   </p>
                 )}
-                <Table
-                  caption="Programme timeline"
-                  rows={timelineRows}
-                  keyOf={(row) => row.key}
-                  columns={[
-                    {
-                      key: "milestone",
-                      header: "Milestone",
-                      render: (row) => row.label,
-                    },
-                    {
-                      key: "date",
-                      header: "Date",
-                      render: (row) => (
-                        <Deadline unixSeconds={row.deadline} />
-                      ),
-                    },
-                    {
-                      key: "status",
-                      header: "Status",
-                      render: (row) => (
+                <List label="Programme timeline">
+                  {timelineRows.map((row) => (
+                    <ListRow
+                      key={row.key}
+                      title={row.label}
+                      meta={<Deadline unixSeconds={row.deadline} />}
+                      trailing={
                         <Badge
                           tone={row.status === "Passed" ? "neutral" : "accent"}
                         >
                           {row.status}
                         </Badge>
-                      ),
-                    },
-                  ]}
-                />
+                      }
+                    />
+                  ))}
+                </List>
               </div>
             )}
           </AsyncView>

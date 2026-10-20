@@ -89,7 +89,7 @@ function ClaimCard({
 }
 
 export const Home: React.FC = () => {
-  usePageTitle('Transparent Funding for Public Goods');
+  usePageTitle('Conditional Disbursement on Stellar');
   const observerRef = useRef<IntersectionObserver | null>(null);
 
   useEffect(() => {

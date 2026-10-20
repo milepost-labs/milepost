@@ -8,6 +8,14 @@ import { VerifiersTab } from './VerifiersTab';
 import { TermsTab } from './TermsTab';
 import { ProgrammeTabs } from './ProgrammeTabs';
 import { FIXTURE_AWARDS, FIXTURE_VERIFIERS } from '../../fixtures/programmeFixtures';
+import { FIXTURE_PROGRAMMES } from '../../fixtures/programmes';
+import { DEMO_PROGRAMME_ID } from '../../context/sorobanStore';
+
+// VerifiersTab reads reviewer/verifier/payee flags through the programme
+// client, so it needs a Soroban context; the checks stay disabled here.
+vi.mock('../../context/useSoroban', () => ({
+  useSoroban: () => ({ programmeAt: vi.fn() }),
+}));
 
 // Mock useIndexedList so AwardsTab tests can test loaded, loading, and error states
 vi.mock('../../hooks/useIndexedList', () => ({
@@ -165,14 +173,78 @@ describe('Issue #265 - AwardsTab component', () => {
 
     expect(screen.getByText('No awards yet. Applications are still open.')).toBeDefined();
   });
+
+  it('reads the index for the seeded demo programme even when a caller marks it a sample', async () => {
+    const { useIndexedList } = await import('../../hooks/useIndexedList');
+    const indexAwards = [
+      {
+        recipient: 'GDEMORECIPIENTAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA',
+        granted: '20000000000',
+        released: '10000000000',
+        tranches: 2,
+        tranchesReleased: 1,
+        payee: 'GPAYEE1',
+        mode: 'Direct',
+        updatedLedger: 101,
+      },
+      {
+        recipient: 'GSECONDRECIPIENTBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB',
+        granted: '18000000000',
+        released: '0',
+        tranches: 2,
+        tranchesReleased: 0,
+        payee: 'GPAYEE2',
+        mode: 'Allocated',
+        updatedLedger: 102,
+      },
+    ];
+    vi.mocked(useIndexedList).mockReturnValueOnce({
+      data: indexAwards,
+      loading: false,
+      error: null,
+      fetching: false,
+      refetch: vi.fn(),
+    });
+
+    render(
+      <AwardsTab
+        programmeId={DEMO_PROGRAMME_ID}
+        phase="Settled"
+        isSample
+      />,
+    );
+
+    // The index version of the advisory note, and the index's own awards.
+    expect(
+      screen.getByText(/From the public index \(awards\.json\), advisory/),
+    ).toBeDefined();
+    expect(screen.getByText('2,000.00 USDC')).toBeDefined();
+    expect(screen.getByText('1,800.00 USDC')).toBeDefined();
+    // The fixture awards must not appear.
+    expect(screen.queryByText(/GBB4Q2…8T19/)).toBeNull();
+    expect(screen.queryByText(/Awards use the middle reviewer vote after enough reviewers have voted/)).toBeNull();
+  });
+
+  it('keeps fixture awards and the sample note for a true sample programme', () => {
+    render(
+      <AwardsTab
+        programmeId={FIXTURE_PROGRAMMES[0].id}
+        phase="Settled"
+        isSample
+      />,
+    );
+
+    expect(screen.getByText(/Awards use the middle reviewer vote after enough reviewers have voted/)).toBeDefined();
+    expect(screen.getByText(/GBB4Q2…8T19/)).toBeDefined();
+  });
 });
 
 describe('Issue #266 - VerifiersTab component', () => {
   it('displays the stand-in verifier roster with future source and reviewer distinction', () => {
-    render(<VerifiersTab verifiers={FIXTURE_VERIFIERS} />);
+    render(<VerifiersTab verifiers={FIXTURE_VERIFIERS} isSample />);
 
     // Tag and future source
-    expect(screen.getByText('Stand-in data')).toBeDefined();
+    expect(screen.getByText('Sample data')).toBeDefined();
     expect(
       screen.getByText(/The roster is not published by the indexer yet/),
     ).toBeDefined();
@@ -253,13 +325,14 @@ describe('ProgrammeTabs wrapper component', () => {
           phase="Settled"
           quorum={3}
           asset="USDC"
+          isSample
         />
       </MemoryRouter>,
     );
 
     // Starts on Awards tab
     expect(screen.getByRole('tab', { name: 'Awards' }).getAttribute('aria-selected')).toBe('true');
-    expect(screen.getByText(/From the public index/)).toBeDefined();
+    expect(screen.getByText(/Listed from the public index, advisory/)).toBeDefined();
 
     // Switch to Verifiers tab
     const verifiersBtn = screen.getByRole('tab', { name: 'Verifiers' });

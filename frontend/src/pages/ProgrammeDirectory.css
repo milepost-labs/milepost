@@ -148,6 +148,19 @@
   font-weight: var(--weight-semibold);
 }
 
+.directory-banner--samples {
+  background: var(--surface-raised);
+  color: var(--text-muted);
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+}
+
+.directory-banner--samples .directory-banner__title {
+  font-weight: var(--weight-bold);
+  color: var(--text);
+}
+
 .directory-banner__link {
   color: var(--warning-strong);
   text-decoration: underline;
@@ -305,6 +318,13 @@
   border-radius: var(--radius-full);
   padding: var(--space-1) var(--space-2);
   border: 1px dashed var(--locked);
+}
+
+.directory-card-new__mode {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+  flex-wrap: wrap;
 }
 
 .directory-card-new__cta {

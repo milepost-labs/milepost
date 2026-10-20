@@ -6,8 +6,7 @@ import { useWallet } from '../../context/useWallet';
 import { useTransaction } from '../../hooks/useTransaction';
 import { looksLikeAddress, truncateAddress } from '../../lib/format';
 import { AddressChip, Badge, Button, Field, Modal } from '../ui';
-import { Loading, TransactionOutcome } from '../state/AsyncStates';
-import { FIXTURE_PROTOCOL_CONFIG } from '../../fixtures/adminFixtures';
+import { ErrorState, Loading, TransactionOutcome } from '../state/AsyncStates';
 import './ProtocolConfigCard.css';
 
 /** Refused above this cap; matches `MAX_FEE_BPS` in `contracts/registry/src/lib.rs`. */
@@ -35,15 +34,17 @@ export function ProtocolConfigCard() {
   });
 
   const live = configRead.data;
-  const feeBps = live?.fee_bps ?? FIXTURE_PROTOCOL_CONFIG.feeBps;
-  const treasury = live?.treasury ?? FIXTURE_PROTOCOL_CONFIG.treasury;
-  const attest = live?.attest ?? FIXTURE_PROTOCOL_CONFIG.attest;
-  const record = live?.record ?? FIXTURE_PROTOCOL_CONFIG.record;
-  const policy = live?.policy ?? FIXTURE_PROTOCOL_CONFIG.policy;
-  const admin = live?.admin ?? FIXTURE_PROTOCOL_CONFIG.admin;
-  const sample = !live;
 
-  const isAdmin = Boolean(wallet.address && live && wallet.address.toLowerCase() === admin.toLowerCase());
+  // Issue #428: the registry is the only source of truth for these values —
+  // no fixture fallback. A failed read is its own state, not an invented row.
+  if (!live) {
+    if (configRead.loading) return <Loading label="Loading protocol config" rows={3} />;
+    if (configRead.error) return <ErrorState error={configRead.error} contract="registry" onRetry={configRead.refetch} />;
+    return null;
+  }
+
+  const { fee_bps: feeBps, treasury, attest, record, policy, admin } = live;
+  const isAdmin = Boolean(wallet.address && wallet.address.toLowerCase() === admin.toLowerCase());
 
   const rows: { k: string; v: ReactNode }[] = [
     { k: 'Protocol fee', v: <span className="numeric">{feeBps / 100}%</span> },
@@ -58,28 +59,22 @@ export function ProtocolConfigCard() {
     <section className="protocol-config" aria-labelledby="protocol-config">
       <div className="protocol-config__head">
         <h2 id="protocol-config">Protocol config</h2>
-        {sample && <Badge tone="neutral">Sample data</Badge>}
-        {!sample && <Badge tone={isAdmin ? 'accent' : 'neutral'}>{isAdmin ? 'Registry admin' : 'Read-only'}</Badge>}
+        <Badge tone={isAdmin ? 'accent' : 'neutral'}>{isAdmin ? 'Registry admin' : 'Read-only'}</Badge>
       </div>
-      {configRead.loading && !live ? (
-        <Loading label="Loading protocol config" rows={3} />
-      ) : (
-        <dl className="protocol-config__rows">
-          {rows.map((row) => (
-            <div key={row.k} className="protocol-config__row">
-              <dt>{row.k}</dt>
-              <dd>{row.v}</dd>
-            </div>
-          ))}
-        </dl>
-      )}
+      <dl className="protocol-config__rows">
+        {rows.map((row) => (
+          <div key={row.k} className="protocol-config__row">
+            <dt>{row.k}</dt>
+            <dd>{row.v}</dd>
+          </div>
+        ))}
+      </dl>
       <p className="protocol-config__foot">
         Read from the registry. Treasury and fee come from configuration rather than the
         caller, so a creator cannot pay a fee to themselves.
-        {sample && ' Sample values for the design phase.'}
       </p>
 
-      {!sample && !isAdmin && wallet.address && (
+      {!isAdmin && wallet.address && (
         <p className="protocol-config__note" role="note">
           You are viewing in read-only mode. Connected wallet (
           <AddressChip address={wallet.address} copyLabel="Copy your address" />) is not the

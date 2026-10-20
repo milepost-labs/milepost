@@ -24,17 +24,73 @@ export interface ContributionCard {
   claimable: boolean;
   refunded: boolean;
   note: string;
+  /**
+   * How much this donor has already received back, in stroops.
+   * Read from `refunded_to(donor)` on the contract; 0n when not yet known or
+   * on sample programmes.
+   */
+  refundedSoFar: bigint;
+}
+
+/**
+ * The donor's claimable refund, matching the contract's `execute_refund` formula
+ * exactly, so the UI never shows a figure that disagrees with what the chain
+ * would return.
+ *
+ * Formula:
+ *   budget  = totalContributed * (1 - feeBps / 10_000)
+ *   unpaid  = budget - totalReleased
+ *   share   = (donorContributed * unpaid) / totalContributed
+ *   claimable = max(0, share - alreadyRefunded)
+ *
+ * Returns 0n when refunds are not yet open, when the donor never contributed,
+ * or when the full share has already been claimed.
+ *
+ * @param donorContributed  stroops this donor put in
+ * @param totalContributed  stroops all donors put in
+ * @param feeBps            protocol fee in basis points (e.g. 1000 = 10%)
+ * @param totalReleased     stroops paid out to recipients so far
+ * @param alreadyRefunded   stroops this donor has already claimed back
+ * @param refundsOpen       whether the refund window is open
+ */
+export function claimableRefund(
+  donorContributed: bigint,
+  totalContributed: bigint,
+  feeBps: bigint,
+  totalReleased: bigint,
+  alreadyRefunded: bigint,
+  refundsOpen: boolean,
+): bigint {
+  if (!refundsOpen) return 0n;
+  if (totalContributed <= 0n || donorContributed <= 0n) return 0n;
+
+  const fee = (totalContributed * feeBps) / BPS_DENOMINATOR;
+  const budget = totalContributed - fee;
+  const unpaid = budget - totalReleased;
+  if (unpaid <= 0n) return 0n;
+
+  const share = (donorContributed * unpaid) / totalContributed;
+  if (share <= 0n) return 0n;
+
+  const remaining = share - alreadyRefunded;
+  return remaining > 0n ? remaining : 0n;
 }
 
 /**
  * One contribution as the funder sees it. The refundable share is the
  * contract's proportional rule: what this funder put in, over everything
  * contributed, times what is refundable.
+ *
+ * `refundedSoFar` is the on-chain `refunded_to(donor)` value for real
+ * programmes, 0n for samples. It is purely for display; `claimable` is still
+ * computed from the chain figures so it always matches what the contract would
+ * return.
  */
 export function contributionCard(
   contribution: FixtureContribution,
   programme: DirectoryProgramme | undefined,
   refundedHere = false,
+  refundedSoFar = 0n,
 ): ContributionCard {
   const chain = programme?.chain;
   const amount = BigInt(contribution.amount);
@@ -61,6 +117,7 @@ export function contributionCard(
     claimable,
     refunded,
     note,
+    refundedSoFar,
   };
 }
 

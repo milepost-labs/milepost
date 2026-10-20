@@ -1,3 +1,4 @@
+import { Buffer } from 'buffer';
 import type { AttestationFixture } from '../fixtures/attestationFixtures';
 import type { Buffer } from 'buffer';
 import { extractCode } from './errors';
@@ -77,9 +78,13 @@ export async function readAttestationStatus(
 /** A Stellar account address (`G...`), the shape `subject` and `attester` take. */
 export const STELLAR_ADDRESS = /^G[A-Z2-7]{55}$/;
 
+/** 64-char lowercase hex — a 32-byte on-chain uid. */
+export const HEX_UID = /^[0-9a-fA-F]{64}$/;
+
 export interface VerifyClaimInput {
   uid: string;
   subject: string;
+  /** 64-char hex of the schema uid, as the on-chain call requires. */
   schema: string;
   attester: string;
 }
@@ -101,6 +106,8 @@ export function validateVerifyClaimInput(input: VerifyClaimInput): VerifyClaimFi
   const errors: VerifyClaimFieldErrors = {};
   if (!input.uid.trim()) {
     errors.uid = 'Enter the attestation id to check.';
+  } else if (!HEX_UID.test(input.uid.trim())) {
+    errors.uid = 'Enter the 64-character hex attestation uid.';
   }
   if (!input.subject.trim()) {
     errors.subject = 'Enter the subject address.';
@@ -108,7 +115,9 @@ export function validateVerifyClaimInput(input: VerifyClaimInput): VerifyClaimFi
     errors.subject = 'That does not look like a Stellar address.';
   }
   if (!input.schema.trim()) {
-    errors.schema = 'Enter the schema.';
+    errors.schema = 'Enter the schema uid.';
+  } else if (!HEX_UID.test(input.schema.trim())) {
+    errors.schema = 'Enter the 64-character hex schema uid.';
   }
   if (!input.attester.trim()) {
     errors.attester = 'Enter the attester address.';
@@ -119,20 +128,76 @@ export function validateVerifyClaimInput(input: VerifyClaimInput): VerifyClaimFi
 }
 
 export type VerifyClaimResult =
-  | { valid: true }
-  | { valid: false; reason: string };
+  | { valid: true; attestation?: Attestation }
+  | { valid: false; reason: string; attestation?: Attestation };
 
 /**
- * Mirrors `Attest::verify` from the attest contract: existing and unrevoked
- * is not enough (that's `is_valid`) — the claim must also be about the
- * subject given, under the schema given, from the attester given. The
- * contract answers with a bare bool; a person checking a claim needs to
- * know *which* part failed, so this walks the same checks `verify` makes,
- * in the same order, and stops at the first mismatch.
+ * Check a claim on-chain using `attest.verify`, then fetch the record with
+ * `attest.get` so that — when the check fails — the UI can explain *why*
+ * rather than just returning "No".
  *
- * Fixture-backed for the same reason the lookup above it is: `attest` has no
- * way to search by subject or attester, only to fetch one uid at a time, so
- * this stays stand-in data until it reads through the real bindings.
+ * `attest.verify` returns a bare `boolean` (no `Result` wrapper).
+ * `attest.get` returns `Result<Attestation>` and must be `.unwrap()`ed.
+ *
+ * The reason derivation mirrors what `verifyClaim` did for fixtures:
+ * we walk the same checks `verify` makes, in the same order, using the
+ * on-chain record rather than a fixture array.
+ */
+export async function verifyClaimOnChain(
+  attest: AttestClient,
+  input: VerifyClaimInput,
+): Promise<VerifyClaimResult> {
+  const uidBuf = Buffer.from(input.uid.trim(), 'hex');
+  const schemaBuf = Buffer.from(input.schema.trim(), 'hex');
+  const subject = input.subject.trim();
+  const attester = input.attester.trim();
+
+  // First fetch the record so we can explain any failure.
+  let attestation: Attestation | undefined;
+  try {
+    const getResult = await attest.get({ uid: uidBuf });
+    attestation = getResult.result.unwrap();
+  } catch {
+    // AttestationNotFound (error 3) — no record exists.
+    return { valid: false, reason: 'No attestation exists with this id.' };
+  }
+
+  // Then call verify — the authoritative boolean.
+  const verifyResult = await attest.verify({ uid: uidBuf, subject, schema: schemaBuf, attester });
+  const valid = verifyResult.result;
+
+  if (valid) return { valid: true, attestation };
+
+  // Not valid — derive the specific reason from the record.
+  if (attestation.revoked_at !== null && attestation.revoked_at !== undefined) {
+    return { valid: false, reason: 'This attestation has been revoked by its attester.', attestation };
+  }
+  if (attestation.subject.trim().toLowerCase() !== subject.toLowerCase()) {
+    return { valid: false, reason: 'This attestation is not about the subject you gave.', attestation };
+  }
+  if (attestation.schema.toString('hex').toLowerCase() !== input.schema.trim().toLowerCase()) {
+    return { valid: false, reason: 'This attestation was made under a different schema.', attestation };
+  }
+  if (attestation.attester.trim().toLowerCase() !== attester.toLowerCase()) {
+    return { valid: false, reason: 'This attestation was not made by the attester you gave.', attestation };
+  }
+  // Expired or some other reason the contract knows about but the record does
+  // not immediately surface.
+  if (attestation.expires_at !== null && attestation.expires_at !== undefined) {
+    return {
+      valid: false,
+      reason: `This attestation expired at Unix timestamp ${attestation.expires_at}.`,
+      attestation,
+    };
+  }
+  return { valid: false, reason: 'The claim does not pass verification.', attestation };
+}
+
+/**
+ * Fixture-backed fallback for sample attestations — used when no real
+ * `attest` client is available or the uid matches a known fixture.
+ *
+ * Mirrors `attest.verify` semantics: subject, schema, attester must all match.
  */
 export function verifyClaim(
   attestations: AttestationFixture[],

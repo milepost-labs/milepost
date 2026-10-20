@@ -1,4 +1,4 @@
-import { useCallback, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { useWallet } from '../context/useWallet';
 import { explain, type ContractName, type Explained } from '../lib/errors';
 
@@ -20,6 +20,7 @@ export type TransactionPhase =
   | 'building'
   | 'signing'
   | 'submitting'
+  | 'restoring'
   | 'success'
   | 'error';
 
@@ -28,6 +29,10 @@ export interface Sendable<T> {
   signAndSend: (options: {
     signTransaction: (xdr: string) => Promise<{ signedTxXdr: string; signerAddress: string }>;
   }) => Promise<{ result: T }>;
+  restorePreamble?: Array<{ type: string }>;
+  restoreFootprint?: () => Promise<void>;
+  /** Simulation fee in stroops, when the binding exposes it. */
+  estimatedFee?: bigint;
 }
 
 export interface TransactionState<T> {
@@ -36,29 +41,48 @@ export interface TransactionState<T> {
   busy: boolean;
   error: Explained | null;
   result: T | null;
+  /** Fee from the latest simulation, available before signing. */
+  estimatedFee: bigint | null;
+  /** True when confirmation has taken longer than the safe waiting threshold. */
+  slow: boolean;
   /** Resolves to the result, or null if it failed. Never throws. */
   send: (build: () => Promise<Sendable<T>>) => Promise<T | null>;
   reset: () => void;
 }
 
 export function useTransaction<T = unknown>(
-  options: { contract?: ContractName; onSuccess?: (result: T) => void } = {},
+  options: {
+    contract?: ContractName;
+    onSuccess?: (result: T) => void;
+    /** Called whenever a send fails, including before signing is attempted. */
+    onError?: (error: Explained) => void;
+  } = {},
 ): TransactionState<T> {
-  const { contract = 'program', onSuccess } = options;
+  const { contract = 'program', onSuccess, onError } = options;
   const wallet = useWallet();
 
   const [phase, setPhase] = useState<TransactionPhase>('idle');
   const [error, setError] = useState<Explained | null>(null);
   const [result, setResult] = useState<T | null>(null);
+  const [estimatedFee, setEstimatedFee] = useState<bigint | null>(null);
+  const [slow, setSlow] = useState(false);
 
   // Guards against a double-click submitting twice. A duplicated contribution
   // is real money, so this is not merely tidiness.
   const inFlight = useRef(false);
 
+  useEffect(() => {
+    if (!inFlight.current) return;
+    const timer = window.setTimeout(() => setSlow(true), 10_000);
+    return () => window.clearTimeout(timer);
+  }, [phase]);
+
   const reset = useCallback(() => {
     setPhase('idle');
     setError(null);
     setResult(null);
+    setEstimatedFee(null);
+    setSlow(false);
   }, []);
 
   const send = useCallback(
@@ -66,19 +90,27 @@ export function useTransaction<T = unknown>(
       if (inFlight.current) return null;
 
       if (!wallet.address) {
+        const blocked: Explained = {
+          kind: 'blocked',
+          message: 'Connect a wallet first.',
+          action: 'Use Connect in the header.',
+        };
         setPhase('error');
-        setError({ kind: 'blocked', message: 'Connect a wallet first.', action: 'Use Connect in the header.' });
+        setError(blocked);
+        onError?.(blocked);
         return null;
       }
       if (wallet.status === 'wrong-network') {
-        setPhase('error');
-        setError({
+        const blocked: Explained = {
           kind: 'blocked',
           message:
             wallet.networkError ??
             `Your wallet is on ${wallet.network ?? 'an unknown network'}, but these contracts are deployed on ${wallet.expectedNetwork}.`,
           action: 'Switch network in Freighter, then check again and try again.',
-        });
+        };
+        setPhase('error');
+        setError(blocked);
+        onError?.(blocked);
         return null;
       }
 
@@ -90,7 +122,28 @@ export function useTransaction<T = unknown>(
         // Building also simulates, so most contract errors surface here —
         // before anything is signed, which is the good place for them.
         setPhase('building');
-        const transaction = await build();
+        let transaction = await build();
+        const simulation = transaction as Sendable<T> & {
+          simulationResponse?: { minResourceFee?: string | number | bigint };
+        };
+        const rawFee = simulation.estimatedFee ?? simulation.simulationResponse?.minResourceFee;
+        if (rawFee !== undefined) setEstimatedFee(BigInt(rawFee));
+
+        // If simulation detected archived entries, restore them first.
+        if (transaction.restorePreamble && transaction.restorePreamble.length > 0) {
+          setPhase('restoring');
+
+          if (transaction.restoreFootprint) {
+            await transaction.restoreFootprint();
+            // After restore preamble is prepared, rebuild and re-simulate to get the real transaction.
+            transaction = await build();
+            const rebuilt = transaction as Sendable<T> & {
+              simulationResponse?: { minResourceFee?: string | number | bigint };
+            };
+            const rebuiltFee = rebuilt.estimatedFee ?? rebuilt.simulationResponse?.minResourceFee;
+            if (rebuiltFee !== undefined) setEstimatedFee(BigInt(rebuiltFee));
+          }
+        }
 
         setPhase('signing');
         const sent = await transaction.signAndSend({ signTransaction: wallet.signTransaction });
@@ -109,19 +162,22 @@ export function useTransaction<T = unknown>(
         // A declined signature is a choice, not a failure. Treating it as an
         // error leaves a red banner over a decision someone deliberately made.
         setPhase(explained.kind === 'none' ? 'idle' : 'error');
+        onError?.(explained);
         return null;
       } finally {
         inFlight.current = false;
       }
     },
-    [wallet, contract, onSuccess],
+    [wallet, contract, onSuccess, onError],
   );
 
   return {
     phase,
-    busy: phase === 'building' || phase === 'signing' || phase === 'submitting',
+    busy: phase === 'building' || phase === 'signing' || phase === 'submitting' || phase === 'restoring',
     error,
     result,
+    estimatedFee,
+    slow,
     send,
     reset,
   };
@@ -132,6 +188,8 @@ export function phaseLabel(phase: string): string {
   switch (phase) {
     case 'building':
       return 'Preparing…';
+    case 'restoring':
+      return 'Restoring archived data…';
     case 'signing':
       return 'Waiting for your signature…';
     case 'submitting':

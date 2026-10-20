@@ -30,6 +30,7 @@ export const ROLES: Role[] = [
     body: 'Contribute, follow every release, and get unawarded funds back in proportion.',
     links: [
       { label: 'Funder dashboard', path: '/funders' },
+      { label: 'Receipt lookup', path: '/funders/receipt' },
       { label: 'Browse programmes', path: '/directory' },
       { label: 'Programme detail', path: '/programme' },
     ],

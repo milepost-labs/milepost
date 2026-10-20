@@ -4,9 +4,11 @@ import { ContributeFlow } from '../components/funder/ContributeFlow';
 import { ContributionList } from '../components/funder/ContributionList';
 import { SeededProgrammeTools } from '../components/funder/SeededProgrammeTools';
 import { SignInSheet } from '../components/layout/SignInSheet';
+import { Badge } from '../components/ui';
 import { useWallet } from '../context/useWallet';
-import { FIXTURE_BALANCE, FIXTURE_CONTRIBUTIONS } from '../fixtures/funding';
+import { FIXTURE_CONTRIBUTIONS } from '../fixtures/funding';
 import { useIndexedList, useProgrammeParam } from '../hooks';
+import { useReleaseDeadlines } from '../hooks/useReleaseDeadlines';
 import { ProgrammeParamNotice } from '../components/programme/ProgrammeParamNotice';
 import { contributionCard, fundingTotals } from '../lib/funding';
 import { fetchProgrammes } from '../lib/indexer';
@@ -26,9 +28,10 @@ const SIGNED_OUT_PREVIEW = [
  * contribute. Signed out, it explains what signing in would show instead of
  * rendering empty panels.
  *
- * Contributions and the balance are stand-ins (`fixtures/funding.ts`) until
- * the per-address reads are wired; the programme list is the public index
- * merged with the sample programmes, as on the directory.
+ * Contributions are stand-ins (`fixtures/funding.ts`) until the per-address
+ * read is wired; the programme list is the public index merged with the sample
+ * programmes, as on the directory. The contribute flow reads its balance from
+ * the chosen programme's token contract itself.
  */
 export const FunderDashboard = () => {
   usePageTitle('Funder Dashboard');
@@ -49,6 +52,14 @@ export const FunderDashboard = () => {
   const totals = fundingTotals(cards);
   const sampleIds = useMemo(() => new Set(programmes.filter((p) => p.sample).map((p) => p.id)), [programmes]);
 
+  // Read release_deadline from each real programme's config so contribution
+  // cards can show "Refunds open after <date>" while the window is still open.
+  const contributionProgrammeIds = useMemo(
+    () => FIXTURE_CONTRIBUTIONS.map((c) => c.programmeId),
+    [],
+  );
+  const releaseDeadlines = useReleaseDeadlines(contributionProgrammeIds, sampleIds);
+
   const markRefunded = (programmeId: string) =>
     setRefunded((current) => new Set(current).add(programmeId));
 
@@ -59,6 +70,10 @@ export const FunderDashboard = () => {
         <p className="funding__lede">
           Put money into a programme and follow it. It only moves when a verifier confirms a condition, and
           whatever isn’t awarded comes back to you.
+        </p>
+        <p className="funding__lede">
+          Looking for a receipt from a past contribution?{' '}
+          <Link to="/funders/receipt">Rebuild it from its transaction hash</Link>.
         </p>
       </header>
 
@@ -120,13 +135,16 @@ export const FunderDashboard = () => {
           <ProgrammeParamNotice state={programmeParam} />
 
           <div className="funding-grid">
-            <ContributionList cards={cards} sampleIds={sampleIds} onRefunded={markRefunded} />
+            <ContributionList cards={cards} sampleIds={sampleIds} onRefunded={markRefunded} releaseDeadlines={releaseDeadlines} />
             <ContributeFlow
               programmes={programmes}
               linkedProgrammeId={programmeParam.status === 'valid' ? programmeParam.programmeId : null}
-              balance={BigInt(FIXTURE_BALANCE)}
             />
           </div>
+
+          <p className="funding-sample-note">
+            <Badge tone="neutral">Sample data</Badge> Sample contributions for the design phase.
+          </p>
 
           <SeededProgrammeTools />
         </>

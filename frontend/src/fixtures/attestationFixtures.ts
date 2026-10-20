@@ -1,12 +1,11 @@
 /**
  * Attestation lookup stand-in.
  *
- * Shaped like an `attest.get(uid)` read, plus the two facts the contract
- * itself cannot answer without a programme in hand (`used`) or an index
- * (`revoked` is real, but there is no `attest` call to search by subject or
- * attester — only to fetch one uid at a time). Search stays fixture-backed
- * until an indexer handler publishes a searchable list; swapping it in is a
- * change of source; the shape here already matches the real read.
+ * Shaped like an `attest.get(uid)` read. Whether a proof has been spent is a
+ * *per-programme* fact (`program.is_spent`), so there is deliberately no
+ * `used` flag here: the page reads it from the selected programme (issue
+ * #408). `revoked` is a property of the attestation itself. Search stays
+ * fixture-backed until an indexer handler publishes a searchable list.
  */
 export interface AttestationFixture {
   uid: string;
@@ -16,7 +15,6 @@ export interface AttestationFixture {
   data: Record<string, string | number>;
   ledger: number;
   revoked: boolean;
-  used: boolean;
 }
 
 export const FIXTURE_ATTESTATIONS: AttestationFixture[] = [
@@ -28,7 +26,6 @@ export const FIXTURE_ATTESTATIONS: AttestationFixture[] = [
     data: { tranche: 1 },
     ledger: 4846120,
     revoked: false,
-    used: true,
   },
   {
     uid: 'a4b7d11af82c9e03',
@@ -38,7 +35,6 @@ export const FIXTURE_ATTESTATIONS: AttestationFixture[] = [
     data: { tranche: 2, invoice_ref: 'INV-2026-0418' },
     ledger: 4838402,
     revoked: false,
-    used: false,
   },
   {
     uid: 'c15e9a2d64f0b833',
@@ -48,6 +44,5 @@ export const FIXTURE_ATTESTATIONS: AttestationFixture[] = [
     data: { tranche: 1 },
     ledger: 4801774,
     revoked: true,
-    used: false,
   },
 ];

@@ -6,6 +6,14 @@ import { FIXTURE_PROGRAMMES } from '../fixtures/programmes';
 import { WalletProvider } from '../context/WalletContext';
 import { ProgrammeDirectory } from './ProgrammeDirectory';
 
+// Issue #485: filter, search and sort changes announce the new count through
+// the shared announcer, and the card list itself is no longer a live region —
+// so the tests assert on what the announcer was told.
+const mockAnnounce = vi.hoisted(() => vi.fn());
+vi.mock('../context/useAnnouncer', () => ({
+  useAnnouncer: () => mockAnnounce,
+}));
+
 vi.mock('@stellar/freighter-api', () => ({
   isConnected: vi.fn().mockResolvedValue({ isConnected: false }),
   isAllowed: vi.fn().mockResolvedValue({ isAllowed: false }),
@@ -72,6 +80,7 @@ async function cardCount() {
 describe('ProgrammeDirectory', () => {
   beforeEach(() => {
     mockIndex();
+    mockAnnounce.mockClear();
   });
 
   afterEach(() => {
@@ -118,6 +127,15 @@ describe('ProgrammeDirectory', () => {
     expect(screen.getAllByRole('link')).toHaveLength(1);
   });
 
+  it('carries the current filters into the programme links', async () => {
+    renderDirectory('/directory?q=flood&phase=Cancelled&sort=newest');
+    const name = await screen.findByText(/Flood response cash transfers/i);
+
+    expect(name.closest('a')?.getAttribute('href')).toBe(
+      '/programme/CBF9FLOODRESPONSETANA6QW2XM4RP7KZ3HT8LN5DVA?q=flood&phase=Cancelled&sort=newest',
+    );
+  });
+
   it('restores sort from the URL', async () => {
     renderDirectory('/directory?sort=largest-budget');
     const links = await screen.findAllByRole('link');
@@ -127,14 +145,14 @@ describe('ProgrammeDirectory', () => {
   });
 
   it('updates the URL while preserving search and phase filters', async () => {
-    renderDirectory('/directory?phase=Open&q=school');
+    renderDirectory('/directory?phase=Open&q=community');
     await screen.findAllByRole('link');
 
     fireEvent.change(screen.getByLabelText(/sort/i), { target: { value: 'largest-budget' } });
 
     await waitFor(() => {
       expect(screen.getByLabelText(/current location/i).textContent).toBe(
-        '/directory?phase=Open&q=school&sort=largest-budget',
+        '/directory?phase=Open&q=community&sort=largest-budget',
       );
     });
   });
@@ -168,6 +186,133 @@ describe('ProgrammeDirectory', () => {
     fireEvent.click(screen.getByRole('button', { name: /clear filters/i }));
     await waitFor(() => {
       expect(screen.getAllByRole('link')).toHaveLength(FIXTURE_PROGRAMMES.length);
+    });
+  });
+
+  it('does not make the card list a live region', async () => {
+    const { container } = renderDirectory();
+    await screen.findAllByRole('link');
+
+    // Issue #485: replacing the cards must not be read aloud — the count is
+    // announced through the shared announcer instead.
+    const body = container.querySelector('.directory-body');
+    expect(body).toBeTruthy();
+    expect(body!.getAttribute('aria-live')).toBeNull();
+    expect(container.querySelectorAll('[aria-live]').length).toBe(0);
+  });
+
+  it('announces nothing on the first load', async () => {
+    renderDirectory();
+    await screen.findAllByRole('link');
+
+    expect(mockAnnounce).not.toHaveBeenCalled();
+  });
+
+  it('announces the count once per search change', async () => {
+    renderDirectory();
+    await screen.findAllByRole('link');
+
+    fireEvent.change(screen.getByLabelText(/search/i), { target: { value: 'flood' } });
+
+    await waitFor(() => {
+      expect(mockAnnounce).toHaveBeenCalledWith('1 programme matches');
+    });
+    expect(mockAnnounce).toHaveBeenCalledTimes(1);
+
+    fireEvent.change(screen.getByLabelText(/search/i), { target: { value: 'no-such-programme' } });
+
+    await waitFor(() => {
+      expect(mockAnnounce).toHaveBeenCalledWith('0 programmes match');
+    });
+    expect(mockAnnounce).toHaveBeenCalledTimes(2);
+  });
+
+  it('announces the count once per phase pill change', async () => {
+    renderDirectory();
+    await screen.findAllByRole('link');
+
+    fireEvent.click(screen.getByRole('button', { name: /Open/ }));
+
+    await waitFor(() => {
+      expect(mockAnnounce).toHaveBeenCalledWith('2 programmes match');
+    });
+    expect(mockAnnounce).toHaveBeenCalledTimes(1);
+  });
+
+  it('announces the count once per sort change', async () => {
+    renderDirectory();
+    await screen.findAllByRole('link');
+
+    fireEvent.change(screen.getByLabelText(/sort/i), { target: { value: 'largest-budget' } });
+
+    await waitFor(() => {
+      expect(mockAnnounce).toHaveBeenCalledWith(`${FIXTURE_PROGRAMMES.length} programmes match`);
+    });
+    expect(mockAnnounce).toHaveBeenCalledTimes(1);
+  });
+
+  it('shows each card\'s planned mode, worded as a default', async () => {
+    mockIndex();
+    renderDirectory();
+    await waitFor(() => {
+      expect(screen.getAllByText('Planned default')).toHaveLength(FIXTURE_PROGRAMMES.length);
+    });
+    expect(screen.getAllByText(/ mode$/)).toHaveLength(FIXTURE_PROGRAMMES.length);
+  it('shows an explanation note when no real programmes exist in the index', async () => {
+    mockIndex({ programmes: [] });
+    renderDirectory();
+
+    expect(await screen.findByText(/Showing sample programmes/i)).toBeTruthy();
+    expect(await screen.findByText(/No real programmes have been published to the index yet/i)).toBeTruthy();
+    expect(screen.queryByRole('button', { name: /Show sample programmes/i })).toBeNull();
+  });
+
+  it('hides sample programmes by default when real programmes exist, and toggles via URL', async () => {
+    const realProgramme = {
+      id: 'CREALGRANTPROGRAMME1234567890ABCDEF',
+      name: 'Stellar Real Community Grant',
+      creator: 'GCREATOR123',
+      createdLedger: 5000000,
+    };
+    mockIndex({ programmes: [realProgramme] });
+
+    renderDirectory();
+
+    // With real programmes present, samples are hidden by default: only 1 card
+    await waitFor(() => {
+      expect(screen.getByText('Stellar Real Community Grant')).toBeTruthy();
+      expect(screen.queryByText(/Showing sample programmes/i)).toBeNull();
+      expect(screen.getAllByRole('link')).toHaveLength(1);
+    });
+
+    const toggleButton = screen.getByRole('button', { name: 'Show sample programmes' });
+    expect(toggleButton.getAttribute('aria-pressed')).toBe('false');
+
+    // Click toggle to show samples
+    fireEvent.click(toggleButton);
+
+    await waitFor(() => {
+      expect(screen.getByLabelText(/current location/i).textContent).toContain('samples=1');
+      expect(screen.getByRole('button', { name: 'Hide sample programmes' })).toBeTruthy();
+      expect(screen.getAllByRole('link')).toHaveLength(FIXTURE_PROGRAMMES.length + 1);
+    });
+  });
+
+  it('restores sample toggle state from the URL when real programmes exist', async () => {
+    const realProgramme = {
+      id: 'CREALGRANTPROGRAMME1234567890ABCDEF',
+      name: 'Stellar Real Community Grant',
+      creator: 'GCREATOR123',
+      createdLedger: 5000000,
+    };
+    mockIndex({ programmes: [realProgramme] });
+
+    renderDirectory('/directory?samples=1');
+
+    await waitFor(() => {
+      expect(screen.getByText('Stellar Real Community Grant')).toBeTruthy();
+      expect(screen.getByRole('button', { name: 'Hide sample programmes' }).getAttribute('aria-pressed')).toBe('true');
+      expect(screen.getAllByRole('link')).toHaveLength(FIXTURE_PROGRAMMES.length + 1);
     });
   });
 });

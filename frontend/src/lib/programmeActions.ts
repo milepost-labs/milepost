@@ -34,6 +34,19 @@ export interface ActionInput {
   refundsOpen: boolean;
   /** Unawarded budget available to refund, formatted for display. Null when unknown or zero. */
   refundable: string | null;
+  /**
+   * Whether `registry.is_programme` confirmed this address was deployed by the
+   * registry.
+   *
+   * - `true`  — confirmed; phase and sign-in gating apply normally.
+   * - `false` — explicitly not registry-deployed; all writes are blocked.
+   * - `null`  — pending (the read is still in flight); all writes are blocked
+   *             until the answer arrives.
+   *
+   * A failed registry read must be mapped to `false` by the caller so that
+   * network failures never grant unverified programmes write access.
+   */
+  verified: boolean | null;
 }
 
 interface Rule {
@@ -93,6 +106,28 @@ function enabledReason(rule: Rule, input: ActionInput): string {
 export function programmeActions(input: ActionInput): ProgrammeAction[] {
   return RULES.map((rule) => {
     const base = { key: rule.key, label: rule.label, who: rule.who, button: rule.button };
+
+    // Registry verification is checked before any other gate. A pending read
+    // (null) and a failed/negative read (false) both block every write — the
+    // difference is only in the reason string the user sees.
+    if (input.verified === null) {
+      return {
+        ...base,
+        phaseAllows: false,
+        enabled: false,
+        href: null,
+        reason: 'Checking whether this programme was deployed by the registry…',
+      };
+    }
+    if (input.verified === false) {
+      return {
+        ...base,
+        phaseAllows: false,
+        enabled: false,
+        href: null,
+        reason: 'Write actions are disabled: this address was not deployed by the Milepost registry.',
+      };
+    }
 
     if (input.phase === null) {
       return { ...base, phaseAllows: false, enabled: false, href: null, reason: 'Reading the phase on-chain…' };

@@ -177,3 +177,50 @@
   color: var(--text-muted);
   overflow-wrap: anywhere;
 }
+
+/* Schema existence check (issue #411) */
+.deploy__schema {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+
+.deploy__schema-note {
+  margin: 0;
+  font-size: var(--text-caption);
+  color: var(--text-muted);
+}
+
+.deploy__schema-missing {
+  margin: 0;
+  font-size: var(--text-sm);
+  line-height: var(--leading-body);
+  color: var(--danger);
+}
+
+.deploy__schema-found {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+  background: var(--success-soft);
+  border-radius: var(--radius-row);
+  padding: var(--space-3) var(--space-4);
+}
+
+.deploy__schema-title {
+  font-size: var(--text-sm);
+  font-weight: var(--weight-bold);
+  color: var(--success);
+}
+
+.deploy__schema-row {
+  display: flex;
+  justify-content: space-between;
+  gap: var(--space-3);
+  flex-wrap: wrap;
+  font-size: var(--text-caption);
+}
+
+.deploy__schema-row > span:first-child {
+  color: var(--text-muted);
+}

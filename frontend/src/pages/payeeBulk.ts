@@ -92,3 +92,78 @@ export function chunkAddresses(addresses: string[], size = MAX_PAYEE_BATCH): str
   }
   return chunks;
 }
+
+// --- Announcement copy (issue #482) ----------------------------------------
+//
+// The sentences a bulk run says out loud, kept here next to the batching
+// logic that produces them: they are pure text in, text out, so they can be
+// asserted directly instead of only through a rendered screen. `PayeeManagement`
+// both prints and announces them, so the spoken wording can never drift from
+// the written one.
+
+export interface BulkCounts {
+  eligible: number;
+  invalid: number;
+  duplicate: number;
+  /** Already in the requested end state — skipped, not rejected. */
+  skipped: number;
+}
+
+/** Tallies a classification run, in the order the summary sentence lists them. */
+export function countBulkAddresses(results: BulkAddress[] | null): BulkCounts {
+  const counts: BulkCounts = { eligible: 0, invalid: 0, duplicate: 0, skipped: 0 };
+  for (const entry of results ?? []) {
+    if (entry.status === 'eligible') counts.eligible++;
+    else if (entry.status === 'invalid') counts.invalid++;
+    else if (entry.status === 'duplicate') counts.duplicate++;
+    else counts.skipped++; // already-verified or not-verified
+  }
+  return counts;
+}
+
+const actionNoun = (mode: BulkMode) => (mode === 'verify' ? 'verify' : 'remove');
+
+const actionDone = (mode: BulkMode) => (mode === 'verify' ? 'verified' : 'removed');
+
+/**
+ * The one sentence describing what a check found and how it will be sent.
+ * Rendered under the list and announced once when the results arrive, so
+ * nobody has to listen to every pasted address read back to them.
+ */
+export function bulkCheckSummary(counts: BulkCounts, mode: BulkMode, batchCount: number): string {
+  const parts = [`${counts.eligible} to ${actionNoun(mode)}`];
+  if (counts.invalid > 0) parts.push(`${counts.invalid} invalid`);
+  if (counts.duplicate > 0) parts.push(`${counts.duplicate} duplicate`);
+  if (counts.skipped > 0) parts.push(`${counts.skipped} already ${mode === 'verify' ? 'verified' : 'unverified'}`);
+  const summary = parts.join(', ');
+  return batchCount > 1
+    ? `${summary} — sent as ${batchCount} batches of up to ${MAX_PAYEE_BATCH}.`
+    : `${summary}.`;
+}
+
+/** Polite: a batch has begun. `index` is one-based, as shown on screen. */
+export function bulkBatchStart(index: number, total: number, size: number, mode: BulkMode): string {
+  return `Sending batch ${index} of ${total}: ${size} payees to ${actionNoun(mode)}…`;
+}
+
+/** Polite: a batch landed on chain. */
+export function bulkBatchDone(index: number, total: number, size: number, mode: BulkMode): string {
+  return `Batch ${index} of ${total} confirmed: ${size} payees ${actionDone(mode)}.`;
+}
+
+/**
+ * Assertive: a batch failed. Carries how many payees made it before the
+ * failure, because the batches that landed are real writes and the rest are
+ * simply not attempted — the reader needs both halves of that.
+ */
+export function bulkBatchFailed(
+  index: number,
+  total: number,
+  succeeded: number,
+  requested: number,
+  mode: BulkMode,
+  reason?: string | null,
+): string {
+  const progress = `${succeeded} of ${requested} payees ${actionDone(mode)} before it failed; the rest were not sent.`;
+  return reason ? `Batch ${index} of ${total} failed. ${progress} ${reason}` : `Batch ${index} of ${total} failed. ${progress}`;
+}

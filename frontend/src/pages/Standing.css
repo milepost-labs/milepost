@@ -155,13 +155,72 @@
   flex-basis: 100%;
 }
 
-.standing-sample {
-  align-self: flex-start;
-  padding: var(--space-1) var(--space-2);
-  border: 1px dashed var(--locked);
-  border-radius: var(--radius-full);
-  font-size: var(--text-xs);
+/* ── Subject viewer ─────────────────────────────────────────────────────── */
+
+.standing-viewer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: var(--space-3) var(--space-4);
+}
+
+.standing-viewer__who {
+  display: inline-flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+  min-height: var(--tap-min);
+}
+
+.standing-viewer__label {
+  font-size: var(--text-sm);
+  font-weight: var(--weight-bold);
   color: var(--text-muted);
+}
+
+/* ── Address lookup ─────────────────────────────────────────────────────── */
+
+.standing-lookup {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+  padding: var(--space-5);
+  background: var(--surface);
+  border-radius: var(--radius-card);
+}
+
+.standing-lookup__copy {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+}
+
+.standing-lookup__title {
+  margin: 0;
+  font-size: var(--text-lg);
+  font-weight: var(--weight-bold);
+}
+
+.standing-lookup__desc {
+  margin: 0;
+  max-width: 66ch;
+  font-size: var(--text-sm);
+  line-height: var(--leading-body);
+  color: var(--text-muted);
+}
+
+.standing-lookup__row {
+  display: flex;
+  align-items: flex-end;
+  flex-wrap: wrap;
+  gap: var(--space-3);
+}
+
+/* Grows to fill the row, and never narrower than a card column. */
+.standing-lookup__field {
+  flex: 1;
+  min-width: var(--grid-min-card);
 }
 
 /* ── Signed out ─────────────────────────────────────────────────────────── */
@@ -250,4 +309,78 @@
 .standing-signout__list li span:last-child {
   font-size: var(--text-caption);
   color: var(--text-muted);
+}
+
+/* ── History root and verifier ─────────────────────────────────────────── */
+
+.standing-root {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+  margin: 0;
+  padding: var(--space-3) var(--space-4);
+  border-radius: var(--radius-row);
+  background: var(--surface);
+}
+
+.standing-root__label {
+  font-size: var(--text-caption);
+  color: var(--text-muted);
+}
+
+.standing-root__value {
+  overflow-wrap: anywhere;
+  font-size: var(--text-sm);
+}
+
+.standing-history {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+}
+
+.standing-history__intro {
+  margin: 0;
+  font-size: var(--text-sm);
+  line-height: var(--leading-body);
+  color: var(--text-muted);
+}
+
+.standing-history__actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-3);
+}
+
+.standing-history__result {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  padding: var(--space-4);
+  border-radius: var(--radius-row);
+  background: var(--surface);
+}
+
+.standing-history__result p {
+  margin: 0;
+  font-size: var(--text-sm);
+  line-height: var(--leading-body);
+}
+
+.standing-history__roots {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  margin: var(--space-2) 0 0;
+}
+
+.standing-history__roots dt {
+  font-size: var(--text-caption);
+  color: var(--text-muted);
+}
+
+.standing-history__roots dd {
+  margin: 0;
+  overflow-wrap: anywhere;
+  font-size: var(--text-sm);
 }

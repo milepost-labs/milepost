@@ -31,6 +31,7 @@
   font-weight: 800;
   color: var(--text-main) !important;
   letter-spacing: -0.03em;
+  min-height: 44px;
   border-radius: var(--radius-sm);
 }
 
@@ -40,15 +41,10 @@
   justify-content: center;
   width: 32px;
   height: 32px;
-  background-color: var(--color-primary-light);
-  color: white;
+  background-color: var(--accent);
+  color: var(--accent-contrast);
   border-radius: 8px;
   font-weight: 800;
-}
-
-[data-theme='dark'] .brand-icon {
-  background-color: var(--color-primary-dark);
-  color: var(--bg-color);
 }
 
 .nav-menu {
@@ -137,24 +133,60 @@
 
 .navbar-links {
   display: flex;
-  /* Was 2rem; the Menu trigger now shares this row, and eight pills at 2rem
-     pushed Connect Wallet off-screen at 1280px. Pills carry their own padding. */
-  gap: var(--space-2);
+  gap: var(--space-1);
   align-items: center;
+  max-width: 100%;
 }
 
-.nav-link {
+.nav-pill {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: var(--tap-min);
+  padding: 0 var(--space-3);
+  border-radius: var(--radius-full);
+  font-size: var(--text-sm);
+  font-weight: var(--weight-semibold);
   color: var(--text-muted);
-  font-weight: 500;
-  font-size: 0.95rem;
-  border-radius: var(--radius-sm);
-  padding: var(--space-1) var(--space-2);
-  transition: color var(--transition-fast);
+  text-decoration: none;
+  white-space: nowrap;
+  transition: all var(--transition-fast);
 }
 
-.nav-link:hover {
+.nav-pill:hover {
   color: var(--text-main);
-  opacity: 1;
+}
+
+.nav-pill:focus-visible,
+.nav-launch-btn:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+.nav-pill--active {
+  background: var(--surface-raised);
+  color: var(--text-main);
+  font-weight: var(--weight-bold);
+}
+
+.nav-launch-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: var(--tap-min);
+  padding: 0 var(--space-4);
+  border-radius: var(--radius-full);
+  background: var(--accent);
+  color: var(--accent-contrast) !important;
+  font-size: var(--text-sm);
+  font-weight: var(--weight-bold);
+  text-decoration: none;
+  white-space: nowrap;
+  transition: opacity var(--transition-fast);
+}
+
+.nav-launch-btn:hover {
+  opacity: 0.9;
 }
 
 .navbar-actions {
@@ -256,15 +288,6 @@
 }
 
 
-/* The eight pills plus Menu, brand and wallet need about 1170px. Below that
-   they push the header off-screen, and the Menu already lists every one of
-   these routes with its path, so the Menu is the nav. */
-@media (max-width: 1199px) {
-  .navbar-links {
-    display: none;
-  }
-}
-
 @media (max-width: 768px) {
   .navbar {
     padding: 0.75rem 1rem;
@@ -276,12 +299,24 @@
     gap: 0.5rem;
   }
 
+  .navbar-links {
+    order: 3;
+    width: 100%;
+    overflow-x: auto;
+    scrollbar-width: none;
+    padding-bottom: var(--space-1);
+  }
+
+  .navbar-links::-webkit-scrollbar {
+    display: none;
+  }
+
   .navbar-actions {
     margin-left: auto;
   }
 
   .connect-wallet-btn {
-    min-height: 44px;
+    min-height: var(--tap-min);
   }
 }
 
@@ -340,7 +375,7 @@
   color: var(--text-muted);
   font-size: var(--text-xs);
   cursor: pointer;
-  min-height: 28px;
+  min-height: var(--tap-min);
 }
 
 .account-menu__refresh-btn:hover {
@@ -378,7 +413,7 @@
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  min-height: 36px;
+  min-height: var(--tap-min);
   padding: var(--space-2) var(--space-3);
   background: var(--accent);
   color: var(--accent-contrast);

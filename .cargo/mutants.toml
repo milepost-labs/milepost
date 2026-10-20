@@ -1,12 +1,34 @@
 # cargo-mutants configuration. How to run it, and how to read the report, is in
 # docs/testing-guide.md#mutation-testing.
 #
-# Scope is the programme contract only: it is the one that holds the money.
-# Extending this to another contract means adding its sources here and running
-# the full sweep once to see what survives before CI starts enforcing it.
-examine_globs = ["contracts/program/src/**/*.rs"]
-exclude_globs = ["contracts/program/src/test.rs", "contracts/program/src/*_test.rs"]
-test_package = ["milepost-program"]
+# Scope the contracts whose state directly controls funding, standing, or
+# restricted spending. Add another contract only with its own survivor review.
+examine_globs = [
+  "contracts/program/src/**/*.rs",
+  "contracts/registry/src/**/*.rs",
+  "contracts/attest/src/**/*.rs",
+  "contracts/record/src/**/*.rs",
+  "contracts/policy-spend/src/**/*.rs",
+]
+exclude_globs = [
+  "contracts/program/src/test.rs",
+  "contracts/program/src/*_test.rs",
+  "contracts/registry/src/test.rs",
+  "contracts/registry/src/*_test.rs",
+  "contracts/attest/src/test.rs",
+  "contracts/attest/src/*_test.rs",
+  "contracts/record/src/test.rs",
+  "contracts/record/src/*_test.rs",
+  "contracts/policy-spend/src/test.rs",
+  "contracts/policy-spend/src/*_test.rs",
+]
+test_package = [
+  "milepost-program",
+  "milepost-registry",
+  "milepost-attest",
+  "milepost-record",
+  "milepost-policy-spend",
+]
 
 # The proptests are skipped. With random inputs a mutant can be caught on one run
 # and survive the next, so the verdict — and the build — would flap. A mutant
@@ -33,4 +55,8 @@ exclude_re = [
   # sorted vector — and the median taken from it — is identical either way.
   'lib\.rs:865:29: replace < with <= in Programme::review$',
   'lib\.rs:892:29: replace < with <= in Programme::review$',
+  # extend_release_deadline: `new_release_deadline > config.sweep_deadline` -> `>=`.
+  # When the new deadline equals the current sweep deadline, both branches keep
+  # the same value, so the mutant is behaviour-preserving and equivalent.
+  'lib\.rs:1808:38: replace > with >= in Programme::extend_release_deadline$',
 ]

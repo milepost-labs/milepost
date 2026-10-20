@@ -1,46 +1,74 @@
-import { useState } from 'react';
+import { useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
-import type { RecipientAwardFixture, VerifiedPayeeFixture } from '../../fixtures/recipientFixtures';
-import { FIXTURE_PAYEES } from '../../fixtures/recipientFixtures';
+import type { RecipientAwardFixture } from '../../fixtures/recipientFixtures';
 import { formatAmount, describeAmount } from '../../lib/amount';
-import { explain } from '../../lib/errors';
+import { looksLikeContractId, truncateAddress } from '../../lib/format';
 import { useAnnouncer } from '../../context/useAnnouncer';
 import { PendingPulse } from '../state/AsyncStates';
 import { ModePill } from '../ui';
+import { AllocatedSpending } from './AllocatedSpending';
 import './AwardCard.css';
 
 interface AwardCardProps {
   award: RecipientAwardFixture;
-  payees?: VerifiedPayeeFixture[];
   simulateAlreadyUsedError?: boolean;
-  simulateUnverifiedPayeeError?: boolean;
 }
 
+/**
+ * Convert a 64-char hex string to a 32-byte Buffer.
+ * Returns null when the input is not valid 64-char lowercase/uppercase hex.
+ */
+function hexToBuffer(hex: string): Buffer | null {
+  const clean = hex.trim().replace(/^0x/, '');
+  if (!/^[0-9a-fA-F]{64}$/.test(clean)) return null;
+  return Buffer.from(clean, 'hex');
+}
+
+/** Where the money lands for each mode, in plain language. */
+function modeDestination(mode: RecipientAwardFixture['mode'], payee: string | null): string {
+  switch (mode) {
+    case 'Direct':
+      return payee
+        ? `Paid straight to payee ${truncateAddress(payee)} — the recipient never holds the funds.`
+        : 'Paid straight to the verified payee — the recipient never holds the funds.';
+    case 'Allocated':
+      return 'Held in escrow for you to direct to a verified payee when you are ready.';
+    case 'Restricted':
+      return 'Paid into your wallet. Spending is limited to verified payees by your policy signer.';
+    case 'Open':
+      return 'Paid directly into your wallet with no spending restriction.';
+  }
+}
+
+/**
+ * AwardCard — one award and its tranche tiles.
+ *
+ * Release is real for real programmes (56-char C… contract ids): it calls
+ * `program.release({ recipient, attestation, attester })` through
+ * `useTransaction`, re-reads `get_award` after confirmation so the tiles
+ * reflect the chain, and shows the amount paid out in the success state.
+ *
+ * Sample programmes (fixture ids that are not contract addresses) keep the
+ * stand-in path via `sampleSendable` so the layout can be judged without a
+ * wallet.
+ */
 export function AwardCard({
   award,
-  payees = FIXTURE_PAYEES,
   simulateAlreadyUsedError = false,
-  simulateUnverifiedPayeeError = false,
 }: AwardCardProps) {
   const announce = useAnnouncer();
+  const { address } = useWallet();
+  const { programmeAt } = useSoroban();
 
-  // Local state for release lifecycle and payee sending
+  // Local state for release lifecycle
   const [releasedCount, setReleasedCount] = useState(award.tranchesReleased);
   const [releaseStatus, setReleaseStatus] = useState<'idle' | 'pending' | 'error'>('idle');
   const [releaseErrorMessage, setReleaseErrorMessage] = useState<string | null>(null);
-
-  // Escrow & payee state for Allocated mode
-  const initialEscrow = award.escrow ? BigInt(award.escrow) : 0n;
-  const [escrowAmount, setEscrowAmount] = useState<bigint>(initialEscrow);
-  const [selectedPayeeIndex, setSelectedPayeeIndex] = useState<number>(0);
-  const [payeeErrorMessage, setPayeeErrorMessage] = useState<string | null>(null);
-  const [sentMessage, setSentMessage] = useState<string | null>(null);
 
   const grantedBigInt = BigInt(award.granted);
   const trancheBase = award.tranches > 0 ? grantedBigInt / BigInt(award.tranches) : 0n;
   const releasedAmount = trancheBase * BigInt(releasedCount);
 
-  // Compute status for each tranche tile
   const isProofReady = award.attestationReady && releasedCount === award.tranchesReleased;
   const canRelease = isProofReady && releasedCount < award.tranches && releaseStatus !== 'pending';
 
@@ -90,68 +118,42 @@ export function AwardCard({
         setReleasedCount(nextCount);
         setReleaseStatus('idle');
 
-        // If allocated mode, add released tranche amount to escrow
-        if (award.mode === 'Allocated') {
-          setEscrowAmount((prev) => prev + trancheBase);
-        }
-
         announce(`Tranche ${nextCount} released.`);
       }
-    }, 1200);
-  };
-
-  const handleSendToPayee = () => {
-    if (simulateUnverifiedPayeeError) {
-      const err = explain(30, 'program');
-      setPayeeErrorMessage(err.message);
-      announce('Payment failed: ' + err.message, 'alert');
-      return;
-    }
-
-    const chosenPayee = payees[selectedPayeeIndex];
-    if (!chosenPayee) {
-      const err = explain(30, 'program');
-      setPayeeErrorMessage(err.message);
-      announce('Payment failed: ' + err.message, 'alert');
-      return;
-    }
-
-    setPayeeErrorMessage(null);
-    setEscrowAmount(0n);
-    const labelClean = chosenPayee.label.replace('Verified payee · ', '');
-    const msg = `Sent to ${labelClean}.`;
-    setSentMessage(msg);
-    announce('Payment sent from escrow to the verified payee.');
-  };
 
   return (
-    <article className="award-card" aria-labelledby={`award-${award.programmeId}`}>
+    <article className="award-card" aria-labelledby={`award-${initialAward.programmeId}`}>
       {/* Header */}
       <div className="award-card__header">
         <div className="award-card__title-group">
           <Link
-            id={`award-${award.programmeId}`}
-            to={`/programme/${encodeURIComponent(award.programmeId)}`}
+            id={`award-${initialAward.programmeId}`}
+            to={`/programme/${encodeURIComponent(initialAward.programmeId)}`}
             className="award-card__title"
           >
-            {award.programmeName}
+            {liveAward.programmeName}
           </Link>
           <span className="award-card__meta">
-            {releasedCount} of {award.tranches} tranches released ·{' '}
-            {formatAmount(releasedAmount, { asset: 'USDC' })} of{' '}
-            {formatAmount(grantedBigInt, { asset: 'USDC' })}
+            {releasedCount} of {tranches} tranches released ·{' '}
+            <span className="numeric" aria-label={describeAmount(releasedBigInt, 'USDC')}>
+              {formatAmount(releasedBigInt, { asset: 'USDC' })}
+            </span>{' '}
+            of{' '}
+            <span className="numeric" aria-label={describeAmount(grantedBigInt, 'USDC')}>
+              {formatAmount(grantedBigInt, { asset: 'USDC' })}
+            </span>
           </span>
         </div>
         <ModePill mode={award.mode} />
       </div>
 
-      {/* Tranche Tiles (C03) */}
+      {/* Tranche tiles */}
       <ol className="award-card__tranches" aria-label="Tranches">
         {tranchesList.map((t) => (
           <li key={t.index} className={`tranche-tile ${t.statusClass}`}>
             <span className="tranche-tile__num">Tranche {t.index}</span>
             <span
-              className="tranche-tile__amount"
+              className="tranche-tile__amount numeric"
               aria-label={describeAmount(t.amount, 'USDC')}
             >
               {t.amountFormatted}
@@ -161,136 +163,161 @@ export function AwardCard({
         ))}
       </ol>
 
-      {/* Release actions (#272) */}
-      {canRelease && (
+      {/* Waiting-on-verifier banner (no proof yet) */}
+      {!allReleased && !liveAward.attestationReady && !formOpen && (
+        <div className="award-card__banner award-card__banner--waiting">
+          <span>
+            <strong>Waiting on your verifier.</strong>{' '}
+            {liveAward.condition
+              ? `Next condition: ${liveAward.condition}. `
+              : ''}
+            You&rsquo;ll be able to release it here once they confirm.
+          </span>
+        </div>
+      )}
+
+      {/* "Open release form" action for real programmes — permissionless */}
+      {!allReleased && isReal && !formOpen && (
         <div className="award-card__banner award-card__banner--ready">
           <span className="award-card__banner-text">
-            <strong>The verifier confirmed:</strong> {award.condition}. You can release the next tranche.
+            {liveAward.attestationReady
+              ? <><strong>Proof received:</strong> {liveAward.condition}. Ready to release.</>
+              : 'Have an attestation UID? You can submit a release.'}
           </span>
           <button
             type="button"
             className="award-card__release-btn"
-            onClick={handleRelease}
+            onClick={() => setFormOpen(true)}
           >
             Release tranche
           </button>
         </div>
       )}
 
-      {releaseStatus === 'pending' && (
-        <div className="award-card__banner award-card__banner--releasing" role="status">
-          <PendingPulse label="Releasing tranche" />
-          <span>Releasing… waiting for the network.</span>
+      {/* Release form (real programmes) or sample release banner */}
+      {showReleaseForm && (
+        <div className="award-card__release-form" role="region" aria-label="Release a tranche">
+          {/* Where-the-money-goes confirmation */}
+          <p className="award-card__release-destination">
+            <strong>Where this goes:</strong> {destination}
+          </p>
+
+          {isReal && (
+            <>
+              <div className="award-card__release-field">
+                <Field
+                  label="Attestation UID (hex)"
+                  placeholder="64-character hex, e.g. 3f1a…"
+                  value={attestationHex}
+                  onChange={(e) => setAttestationHex(e.target.value)}
+                  error={attestationError}
+                  autoComplete="off"
+                  spellCheck={false}
+                />
+              </div>
+              <div className="award-card__release-field">
+                <Field
+                  label="Attester address"
+                  placeholder="G…"
+                  value={attesterInput}
+                  onChange={(e) => setAttesterInput(e.target.value)}
+                  error={attesterError}
+                  autoComplete="off"
+                  spellCheck={false}
+                />
+              </div>
+            </>
+          )}
+
+          <div className="award-card__release-actions">
+            <Button
+              onClick={() => void handleRelease()}
+              disabled={!canRelease}
+              loading={tx.busy}
+            >
+              {isSample ? 'Release tranche' : 'Sign and release'}
+            </Button>
+            {isReal && (
+              <Button
+                variant="secondary"
+                onClick={() => {
+                  setFormOpen(false);
+                  setAttestationHex('');
+                  setAttesterInput('');
+                  tx.reset();
+                }}
+              >
+                Cancel
+              </Button>
+            )}
+          </div>
+
+          <TransactionOutcome
+            phase={tx.phase}
+            error={tx.error}
+            successTitle={`Tranche ${releasedCount} released`}
+            successDescription={
+              tx.result
+                ? `${formatAmount(tx.result.amount, { asset: 'USDC' })} released.`
+                : undefined
+            }
+            pendingTitle="Releasing tranche…"
+            pendingNote="Usually a few seconds."
+            onDismiss={() => tx.reset()}
+            onRetry={() => void handleRelease()}
+          />
         </div>
       )}
 
-      {releaseStatus === 'error' && (
-        <div className="award-card__error-panel" role="alert">
-          <span className="award-card__error-title">Tranche not released</span>
-          <span>{releaseErrorMessage || explain(22, 'program').message}</span>
-          <span className="award-card__error-technical">Nothing was transferred · program error 22</span>
-        </div>
+      {/* Error panel outside the form (e.g. after form was closed) */}
+      {tx.phase === 'error' && tx.error && !showReleaseForm && (
+        <ErrorPanel explained={tx.error} onRetry={() => setFormOpen(true)} live={false} />
       )}
 
-      {!isProofReady && releasedCount < award.tranches && (
-        <div className="award-card__banner award-card__banner--waiting">
-          <span>
-            <strong>Waiting on your verifier.</strong> Next condition: {award.condition}. You'll be able to release it here once they confirm.
-          </span>
-        </div>
-      )}
-
-      {/* Mode-specific spending actions (#273) */}
+      {/* Mode-specific spending actions */}
       <div className="award-card__mode-spending">
         {award.mode === 'Allocated' && (
-          <>
-            <div className="award-card__spending-header">
-              <span className="award-card__spending-title">Held for you in escrow</span>
-              <span className="award-card__escrow-amount">
-                {formatAmount(escrowAmount, { asset: 'USDC' })}
-              </span>
-            </div>
-            {escrowAmount > 0n && !sentMessage && (
-              <>
-                <span className="award-card__spending-note">
-                  Choose which verified payee receives it.
-                </span>
-                <div
-                  className="award-card__payees-grid"
-                  role="radiogroup"
-                  aria-label="Verified payee"
-                >
-                  {payees.map((py, idx) => {
-                    const isChecked = idx === selectedPayeeIndex;
-                    return (
-                      <button
-                        key={py.address}
-                        type="button"
-                        role="radio"
-                        aria-checked={isChecked}
-                        className={`payee-option ${isChecked ? 'payee-option--selected' : ''}`}
-                        onClick={() => setSelectedPayeeIndex(idx)}
-                      >
-                        <span className="payee-option__label">{py.label}</span>
-                        <span className="payee-option__address">{py.address}</span>
-                      </button>
-                    );
-                  })}
-                </div>
-                <button
-                  type="button"
-                  className="award-card__send-btn"
-                  onClick={handleSendToPayee}
-                >
-                  Send to payee
-                </button>
-              </>
-            )}
-            {payeeErrorMessage && (
-              <div className="award-card__error-panel" role="alert">
-                <span className="award-card__error-title">Payee not verified</span>
-                <span>{payeeErrorMessage}</span>
-                <span className="award-card__error-technical">Only verified payees can receive escrowed funds · program error 30</span>
-              </div>
-            )}
-            {sentMessage && (
-              <span className="award-card__success-msg" role="status">
-                ✓ {sentMessage}
-              </span>
-            )}
-          </>
+          <AllocatedSpending award={award} />
         )}
 
-        {award.mode === 'Restricted' && (
+        {liveAward.mode === 'Restricted' && (
           <>
             <div className="award-card__spending-header">
-              <span className="award-card__spending-title">Released money goes to your own wallet</span>
+              <span className="award-card__spending-title">
+                Released money goes to your own wallet
+              </span>
             </div>
             <p className="award-card__spending-note">
-              The spending policy constrains one signer, not the wallet, limiting onward spending to USDC, verified payees, and a cap.{' '}
-              <Link to="/policy">Check your spend policy</Link>. If the policy isn't set up, there is no restriction at all.
+              The spending policy constrains one signer, not the wallet, limiting
+              onward spending to USDC, verified payees, and a cap.{' '}
+              <Link to="/policy">Check your spend policy</Link>. If the policy
+              isn&rsquo;t set up, there is no restriction at all.
             </p>
           </>
         )}
 
-        {award.mode === 'Direct' && (
+        {liveAward.mode === 'Direct' && (
           <>
             <div className="award-card__spending-header">
               <span className="award-card__spending-title">Paid directly to payee</span>
             </div>
             <p className="award-card__spending-note">
-              Each award is paid straight to a verified payee chosen at award time. The recipient never holds the money.
+              Each award is paid straight to a verified payee chosen at award
+              time. The recipient never holds the money.
             </p>
           </>
         )}
 
-        {award.mode === 'Open' && (
+        {liveAward.mode === 'Open' && (
           <>
             <div className="award-card__spending-header">
-              <span className="award-card__spending-title">Paid directly to your wallet</span>
+              <span className="award-card__spending-title">
+                Paid directly to your wallet
+              </span>
             </div>
             <p className="award-card__spending-note">
-              Released money goes directly to your wallet with no spending restrictions.
+              Released money goes directly to your wallet with no spending
+              restrictions.
             </p>
           </>
         )}

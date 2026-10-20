@@ -1,6 +1,7 @@
 import { useEffect, useRef } from 'react';
 import { WifiOff } from 'lucide-react';
 import { useOnlineStatus } from '../../hooks/useOnlineStatus';
+import { useRpcHealth } from '../../hooks/useRpcHealth';
 import { useAnnouncer } from '../../context/useAnnouncer';
 import './OfflineBanner.css';
 
@@ -18,6 +19,7 @@ import './OfflineBanner.css';
  */
 export function OfflineBanner() {
   const online = useOnlineStatus();
+  const rpc = useRpcHealth();
   const announce = useAnnouncer();
   // Skips the "back online" announcement on first mount when the page
   // simply loaded online — there is nothing to report yet — but still
@@ -27,23 +29,28 @@ export function OfflineBanner() {
   useEffect(() => {
     const firstRun = !mounted.current;
     mounted.current = true;
-    if (firstRun && online) return;
+    if (firstRun && online && !rpc.unavailable) return;
 
     announce(
-      online ? 'Back online.' : 'You are offline. Reads and writes will fail until the connection returns.',
+      !online
+        ? 'You are offline. Reads and writes will fail until the connection returns.'
+        : rpc.unavailable
+          ? 'The network is not responding; reads may fail.'
+          : 'Back online.',
       online ? 'status' : 'alert',
     );
-  }, [online, announce]);
+  }, [online, rpc.unavailable, announce]);
 
-  if (online) return null;
+  if (online && !rpc.unavailable) return null;
 
   return (
     // Visual only — the announcement above already reaches the shared live
     // region, so this is not itself `aria-live` and would otherwise be read
     // twice.
-    <div className="offline-banner">
+    <div className="offline-banner" role="status">
       <WifiOff size={16} aria-hidden="true" />
-      <span>You&rsquo;re offline. Reads and writes will fail until the connection returns.</span>
+      <span>{online ? 'The network is not responding; reads may fail.' : 'You&rsquo;re offline. Reads and writes will fail until the connection returns.'}</span>
+      {online && rpc.unavailable && <button type="button" onClick={rpc.retry}>Try again</button>}
     </div>
   );
 }

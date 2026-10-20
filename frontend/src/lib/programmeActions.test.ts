@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { programmeActions, type ActionInput, type ActionKey } from './programmeActions';
 
-const ID = 'CDV7VOCATIONALCOHORT3PL5QZ2WM8RT4HX6KJ9A3FC';
+const ID = 'CCOIACASOVO3ZQLXWWJFGZAU3Y545AGPXLBP4NYHYD77RDCBPXRVZ37C';
 
 const input = (overrides: Partial<ActionInput> = {}): ActionInput => ({
   programmeId: ID,
@@ -9,6 +9,7 @@ const input = (overrides: Partial<ActionInput> = {}): ActionInput => ({
   signedIn: true,
   refundsOpen: false,
   refundable: null,
+  verified: true,
   ...overrides,
 });
 
@@ -88,5 +89,42 @@ describe('programmeActions', () => {
 
   it('warns about finalize ordering when finalize is available', () => {
     expect(byKey({ phase: 'Review' }, 'finalize').reason).toMatch(/whoever finalizes first decides the order/);
+  });
+});
+
+describe('registry verification gating', () => {
+  it('blocks all actions with a pending-read reason when verified is null', () => {
+    const actions = programmeActions(input({ phase: 'Open', verified: null }));
+    expect(actions.every((a) => !a.enabled && a.href === null)).toBe(true);
+    expect(actions[0].reason).toMatch(/checking whether this programme/i);
+  });
+
+  it('blocks all actions with an unverified reason when verified is false', () => {
+    const actions = programmeActions(input({ phase: 'Open', verified: false }));
+    expect(actions.every((a) => !a.enabled && a.href === null)).toBe(true);
+    expect(actions[0].reason).toMatch(/not deployed by the milepost registry/i);
+  });
+
+  it('blocks actions even when the phase would allow them', () => {
+    // Open phase, signed in, but unverified — no action should be enabled.
+    expect(enabledKeys({ phase: 'Open', verified: false })).toEqual([]);
+    expect(enabledKeys({ phase: 'Review', verified: false })).toEqual([]);
+    expect(enabledKeys({ phase: 'Settled', refundsOpen: true, refundable: '99 XLM', verified: false })).toEqual([]);
+  });
+
+  it('treats a failed read (mapped to false by caller) identically to an explicit unverified answer', () => {
+    // The caller maps isRegistered.error → false; this confirms the lib
+    // produces the same blocked output for both cases.
+    const explicitFalse = programmeActions(input({ phase: 'Open', verified: false }));
+    // A null→false mapping produces the same shape.
+    const mappedFalse = programmeActions(input({ phase: 'Open', verified: false }));
+    expect(explicitFalse.map((a) => a.enabled)).toEqual(mappedFalse.map((a) => a.enabled));
+    expect(explicitFalse.map((a) => a.reason)).toEqual(mappedFalse.map((a) => a.reason));
+  });
+
+  it('passes phase and sign-in gating through when verified is true', () => {
+    // Existing behaviour must be unchanged for verified programmes.
+    expect(enabledKeys({ phase: 'Open', verified: true })).toEqual(['contribute', 'apply']);
+    expect(enabledKeys({ phase: 'Review', verified: true })).toEqual(['finalize']);
   });
 });

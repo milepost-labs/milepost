@@ -116,7 +116,7 @@ export const ProgrammeTabs: FC<ProgrammeTabsProps> = ({
           />
         )}
         {activeTab === 'verifiers' && (
-          <VerifiersTab verifiers={verifiers} />
+          <VerifiersTab verifiers={verifiers} programmeId={programmeId} isSample={isSample} />
         )}
         {activeTab === 'terms' && (
           <TermsTab

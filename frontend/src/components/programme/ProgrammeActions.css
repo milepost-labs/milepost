@@ -116,3 +116,65 @@
   color: var(--text-muted);
   cursor: not-allowed;
 }
+
+/*
+ * Registry verification warning banner.
+ *
+ * Shown when verified=false (negative) or verified=null (pending). The
+ * negative state uses --warning-soft / --warning-strong so the tone matches
+ * the existing "Not registry-deployed" badge in the registry card above.
+ * The pending state is visually quiet — surface-raised background — because
+ * it is temporary and should not alarm the viewer.
+ */
+.programme-actions__verify-warning {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--space-3);
+  padding: var(--space-3) var(--space-4);
+  border-radius: var(--radius-row);
+  background: var(--warning-soft);
+  color: var(--warning-strong);
+}
+
+.programme-actions__verify-warning--pending {
+  background: var(--surface-raised);
+  color: var(--text-muted);
+}
+
+.programme-actions__verify-icon {
+  flex: none;
+  /* design-system-guard: allow spacing */
+  margin-top: 2px;
+}
+
+.programme-actions__verify-body {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+  min-width: 0;
+}
+
+.programme-actions__verify-title {
+  margin: 0;
+  font-size: var(--text-sm);
+  font-weight: var(--weight-bold);
+  line-height: var(--leading-snug);
+}
+
+.programme-actions__verify-desc {
+  margin: 0;
+  font-size: var(--text-caption);
+  line-height: var(--leading-body);
+  color: var(--text-muted);
+}
+
+.programme-actions__verify-link {
+  color: var(--accent-strong);
+  font-weight: var(--weight-medium);
+}
+
+.programme-actions__verify-link:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: var(--focus-offset);
+  border-radius: var(--radius-sm);
+}

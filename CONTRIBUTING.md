@@ -103,6 +103,67 @@ variant name. The bindings CI job runs it on every pull request.
 
 ---
 
+## 3a. Visual Regression Screenshots
+
+The frontend ships screenshot baselines for five key screens (landing page,
+programme directory, programme detail, funder dashboard, recipient dashboard),
+captured in light and dark themes at 360 px (mobile) and 1280 px (desktop) —
+20 images total. CI compares every PR against those baselines and fails when
+a screenshot changes.
+
+### How it works
+
+- The app is built in **fixture mode** (`VITE_FIXTURES=1`) with a local
+  indexer stub, so screenshots are fully deterministic: no testnet reads, no
+  stale-index warnings, fixed wallet address, fixed programme list.
+- [Playwright](https://playwright.dev/) drives a headless Chromium and
+  takes full-page screenshots with animations disabled.
+- Baselines are committed to `frontend/tests/screenshots/` and versioned with
+  the code, so the diff is visible in review exactly like any other file change.
+
+### Running locally
+
+```bash
+cd frontend
+
+# First time only — downloads Chromium (~150 MB):
+npx playwright install chromium --with-deps
+
+# Run the screenshot suite (builds the app, starts the fixture server,
+# compares against committed baselines):
+npm run screenshots
+```
+
+A mismatch prints the diff path and exits non-zero. Open
+`frontend/playwright-report/index.html` to see the pixel diff.
+
+### Updating baselines after an intentional styling change
+
+```bash
+cd frontend
+./scripts/update-snapshots.sh
+```
+
+This rebuilds and re-runs Playwright with `--update-snapshots`, overwrites
+the committed PNGs, and prints a `git diff --stat` reminder. Review the diff,
+confirm only the intended screens changed, then commit the new baselines in the
+same PR as the styling change.
+
+### CI behaviour
+
+The `screenshots` job in `frontend/.github/workflows/ci.yml` runs on every
+pull request. On a mismatch it:
+
+1. Fails the build.
+2. Uploads `playwright-report/` as a CI artefact (kept 14 days) so reviewers
+   can open the HTML report without re-running the job.
+3. Uploads `*-diff.png` files as a separate artefact for quick inline inspection.
+
+To fix a failing screenshot job: run `./scripts/update-snapshots.sh` locally,
+verify the diff is intentional, and push the updated PNGs.
+
+---
+
 ## 4. Running Contract Checks
 
 Milepost's Soroban contracts are structured as a workspace in the root directory (e.g., `contracts/attest`, `contracts/program`, `contracts/registry`, etc.). 
@@ -148,7 +209,7 @@ pushing:
 ```bash
 cargo install --locked cargo-mutants   # once
 
-git diff main... > /tmp/pr.diff
+git diff dev... > /tmp/pr.diff
 ./scripts/mutants.sh --in-diff /tmp/pr.diff    # what CI runs on your PR
 ./scripts/mutants.sh -F 'Programme::refund'    # or just the functions you touched
 ```
@@ -172,7 +233,8 @@ covers reading the report, the full run, and how to tell the two apart.
 **Picking up an issue**
 1. Comment on the issue to let others know you are working on it.
 2. Fork the repository and clone your fork.
-3. Create a branch from `main` using the convention below.
+3. Create a branch from `dev` using the convention below, and open your pull
+   request against `dev`. `main` only moves when `dev` is released to it.
 
 **Branch naming convention:**
 `<type>/<short-description>`

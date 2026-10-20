@@ -1,10 +1,10 @@
 name: mutants
 
-# Mutation testing for the programme contract. Coverage says a line ran; this
-# says whether a test would notice if the line were wrong. See
+# Mutation testing for the load-bearing contracts. Coverage says a line ran;
+# this says whether a test would notice if the line were wrong. See
 # docs/testing-guide.md#mutation-testing.
 #
-# A full run mutates every line of the programme and runs the whole suite once
+# A full run mutates every line of the load-bearing contracts and runs the whole suite once
 # per mutant — hours of CPU — so it is sharded and runs weekly or on demand.
 # Pull requests mutate only the lines they change, which is minutes, and fail if
 # any of those mutants survives.

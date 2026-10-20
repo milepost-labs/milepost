@@ -1,7 +1,7 @@
 .apply-form-card {
   background: var(--surface);
   border-radius: var(--radius-hero);
-  padding: clamp(18px, 3vw, 28px);
+  padding: clamp(var(--space-4-5), 3vw, var(--space-5-5));
   display: flex;
   flex-direction: column;
   gap: var(--space-4-5);
@@ -38,12 +38,46 @@
   gap: var(--space-2);
 }
 
+/* Each group within the programme list: the real group has no extra chrome;
+   the sample group gets a label and a visual separator. */
+.apply-form__prog-group {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+
+.apply-form__prog-group--samples {
+  margin-top: var(--space-3);
+  padding-top: var(--space-3);
+  border-top: 1px solid var(--border, var(--surface-raised));
+}
+
+/* "Sample data" eyebrow above the sample programme buttons. */
+.apply-form__sample-label {
+  display: block;
+  font-size: var(--text-xs);
+  font-weight: var(--weight-bold);
+  color: var(--text-muted);
+  letter-spacing: var(--tracking-label);
+  text-transform: uppercase;
+  margin-bottom: var(--space-1);
+}
+
+/* Empty state when no programmes are open yet. */
+.apply-form__empty {
+  margin: 0;
+  font-size: var(--text-sm);
+  line-height: var(--leading-body);
+  color: var(--text-muted);
+  padding: var(--space-3) 0;
+}
+
 .programme-option {
   cursor: pointer;
   border: 0;
   text-align: left;
   border-radius: var(--radius-input);
-  padding: 12px 14px;
+  padding: var(--space-3) var(--space-4);
   font-size: var(--text-md);
   font-weight: var(--weight-semibold);
   background: var(--surface-raised);
@@ -83,7 +117,7 @@
   gap: var(--space-2);
   background: var(--bg);
   border-radius: var(--radius-input);
-  padding: 0 14px;
+  padding: 0 var(--space-4);
   min-height: var(--tap-min);
   box-sizing: border-box;
 }
@@ -101,7 +135,7 @@
   font-family: var(--font-numeric);
   font-size: var(--text-amount-input);
   font-weight: var(--weight-semibold);
-  padding: 10px 0;
+  padding: var(--space-2) 0;
   min-height: var(--tap-min);
   box-sizing: border-box;
 }
@@ -138,7 +172,7 @@
   cursor: pointer;
   border: 0;
   border-radius: var(--radius-full);
-  padding: 13px 24px;
+  padding: 12px 24px;
   font-size: var(--text-md);
   font-weight: var(--weight-bold);
   min-height: var(--tap-min);
@@ -167,6 +201,51 @@
   outline-offset: var(--focus-offset);
 }
 
+/* Notes textarea */
+.apply-form__notes {
+  width: 100%;
+  box-sizing: border-box;
+  border: 0;
+  border-radius: var(--radius-input);
+  background: var(--bg);
+  color: var(--text);
+  font: inherit;
+  font-size: var(--text-md);
+  line-height: var(--leading-body);
+  padding: var(--space-3) var(--space-4);
+  resize: vertical;
+  min-height: calc(var(--tap-min) * 2);
+}
+
+.apply-form__notes:focus {
+  outline: none;
+}
+
+.apply-form__notes:focus-visible,
+.apply-form__notes:focus {
+  outline: 2px solid var(--accent);
+  outline-offset: var(--focus-offset);
+}
+
+/* Inline tx error underneath the submit button */
+.apply-form__tx-error {
+  margin-top: var(--space-3);
+}
+
+/* Pending state */
+.apply-pending {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--space-4);
+  padding: var(--space-6) 0;
+}
+
+.apply-pending__label {
+  font-size: var(--text-lg);
+  font-weight: var(--weight-bold);
+}
+
 /* Success / Done view */
 .apply-done {
   display: flex;
@@ -192,6 +271,41 @@
   margin: 0;
   font-size: var(--text-sm);
   line-height: var(--leading-relaxed);
+  color: var(--text-muted);
+}
+
+/* Transaction and hash detail list in the receipt */
+.apply-done__details {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  margin: 0;
+  background: var(--bg);
+  border-radius: var(--radius-row);
+  padding: var(--space-3) var(--space-4);
+}
+
+.apply-done__detail {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: var(--space-3);
+  flex-wrap: wrap;
+}
+
+.apply-done__detail dt {
+  font-size: var(--text-caption);
+  color: var(--text-muted);
+  white-space: nowrap;
+}
+
+.apply-done__detail dd {
+  margin: 0;
+  font-size: var(--text-caption);
+}
+
+.apply-done__hash {
+  overflow-wrap: anywhere;
   color: var(--text-muted);
 }
 

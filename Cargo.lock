@@ -1175,6 +1175,7 @@ name = "milepost-attest"
 version = "0.1.0"
 dependencies = [
  "milepost-test-utils",
+ "proptest",
  "soroban-sdk",
 ]
 
@@ -1228,6 +1229,7 @@ version = "0.1.0"
 dependencies = [
  "milepost-test-utils",
  "milepost-types",
+ "proptest",
  "soroban-sdk",
 ]
 
@@ -1239,6 +1241,7 @@ dependencies = [
  "milepost-record",
  "milepost-test-utils",
  "milepost-types",
+ "proptest",
  "soroban-sdk",
 ]
 

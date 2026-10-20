@@ -5,4 +5,15 @@ export { useProgramme } from './useProgramme';
 export { useProgrammeParam, type ProgrammeParamState } from './useProgrammeParam';
 export { useIndexedList, type IndexedRead } from './useIndexedList';
 export { useBalances, type BalancesState } from './useBalances';
+export {
+  useProgrammeChainReads,
+  useRegistryProgrammes,
+  useChainRead,
+  useDonorContribution,
+  type ProgrammeReads,
+  type KeyedRead,
+} from './useProgrammeReads';
+export { useRecipientApplications } from './useRecipientApplications';
+export { useStanding } from './useStanding';
+export { useRpcHealth } from './useRpcHealth';
 

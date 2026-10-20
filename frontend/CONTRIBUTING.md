@@ -63,6 +63,26 @@ the bundle baseline only once growth is confirmed to be intentional, and record
 an advisory exception only with a stated reason, in
 `.github/npm-audit-exceptions.json`.
 
+### Accessibility checks
+
+Every route in `src/routes.ts` is rendered in jsdom, in both themes, and checked
+with [axe-core](https://github.com/dequelabs/axe-core). A serious or critical
+violation fails the suite, and therefore CI. The contract clients, the wallet
+and the index are mocked, so the check never touches the network.
+
+```sh
+npm run test:a11y   # every route, light and dark
+```
+
+The `accessibility` job in the repository's `.github/workflows/ci.yml` runs this
+on every pull request to `dev` and on pushes to `dev` and `main`.
+
+A rule that genuinely cannot be fixed is recorded in
+`ACCESSIBILITY_EXCEPTIONS` in `src/test/accessibility.test.tsx`, with a `route`
+(optional), the `rule` id and a `reason`. The suite fails on an entry with no
+reason, and review treats the list as something that should stay empty. Prefer
+fixing the page.
+
 ### Test coverage
 
 CI runs the suite with coverage and writes the totals and the ten
@@ -85,6 +105,43 @@ node scripts/coverage-summary.mjs    # the Markdown tables CI shows
 
 `npm run test:coverage` writes its report to `coverage/`, which git ignores.
 
+### Sample data
+
+Every stand-in value on screen carries a "Sample data" tag, so a fixture is
+never mistaken for a live figure. Stand-ins are `FIXTURE_*` exports, mostly in
+`src/fixtures/`. CI fails if a component (any `.tsx` under `src/` other than
+tests) imports a `FIXTURE_*` export and does not render the tag itself:
+
+```tsx
+<Badge tone="neutral">Sample data</Badge> Sample awards for the design phase.
+```
+
+The tag counts as JSX text or a string literal, not as a comment. Type-only
+imports do not count as reads.
+
+A few components may skip the tag, such as the landing page illustrations,
+which never claim to show real figures. They are listed in
+`scripts/sample-tag-allowlist.json`, and each entry needs a `reason`:
+
+```json
+{ "file": "src/components/landing/HeroDemo.tsx", "reason": "Landing illustration: ..." }
+```
+
+The check fails on an entry with no reason, and on one that is no longer
+needed because the file now renders the tag, reads no fixture, or is gone.
+Fix the component before you reach for the allowlist.
+
+To run it locally:
+
+```sh
+npm run check:sample-tags   # the check CI runs
+npm run test:sample-tags    # the check's own tests
+```
+
+The check only looks at the component that imports the fixture. A component
+that gets fixture values through a hook or a prop has to tag them by hand,
+and review is still what catches that.
+
 The [testing guide](docs/testing-guide.md) covers mocking a contract client,
 the no-network rule, and what the reachability check means when it fires.
 
@@ -97,9 +154,33 @@ writing a second version; `src/pages/ProgrammeDetail.tsx` shows the pattern end
 to end.
 
 ## Styling
-
+ 
 Use the tokens in `src/styles/tokens.css` for colour, spacing, type, radius and
 elevation. No literal hex values or pixel spacing in new CSS.
+
+### Design-system guard
+
+CI scans every page and component CSS file (`src/pages/` and `src/components/`)
+over whole files to prevent hard-coded colours or off-scale spacing from slipping in.
+Colours must use design tokens from `src/styles/tokens.css` (or semantic variables
+from `index.css`), and spacing properties must sit on the 4px scale.
+
+If a genuine one-off value is strictly necessary (e.g. alignment centering or
+visually-hidden clip margins), use the documented escape hatch above the declaration:
+
+```css
+/* design-system-guard: allow spacing */
+margin: -1px;
+```
+
+To run the check locally:
+
+```sh
+npm run check:design-system                          # scans all page and component CSS files
+node scripts/check-design-system.mjs --diff-base dev # scans only lines changed against dev
+npm run test:design-system                           # runs the guard's own test suite
+```
+
 
 ## Contract changes
 
@@ -112,16 +193,16 @@ only uses released bindings; to try the app against an unreleased change, see
 
 1. Comment on the issue before starting, so it can be assigned and nobody
    duplicates the work.
-2. Fork the repository and branch from `main`, named
+2. Fork the repository and branch from `dev`, named
    `<type>/<short-description>` — for example `feat/contribute-flow` or
    `fix/address-truncation`.
 3. Write imperative commit subjects under 72 characters, with context in the
    body when it helps.
-4. In the PR, link the issue with `Closes #<number>`, and show the change
-   working: screenshots or a short clip for UI, test output for logic.
+4. Open the PR against `dev`, link the issue with `Closes #<number>`, and show
+   the change working: screenshots or a short clip for UI, test output for logic.
 
 PRs are squash-merged, so the PR title and description become the commit on
-`main`.
+`dev`, which is released to `main`.
 
 ## Security
 

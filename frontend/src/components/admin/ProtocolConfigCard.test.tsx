@@ -136,12 +136,14 @@ describe('ProtocolConfigCard', () => {
     await waitFor(() => expect(registry.set_admin).toHaveBeenCalledWith({ admin: NON_ADMIN }));
   });
 
-  it('shows sample data and no edit controls while the registry read has not resolved', () => {
+  it('shows a loading state and no edit controls while the registry read has not resolved', () => {
     mocks.address = ADMIN;
     registry.get_config.mockReturnValue(new Promise(() => {})); // never resolves
     renderCard();
 
-    expect(screen.getByText('Sample data')).toBeTruthy();
+    // Issue #428: the registry is the only source of truth here, so an
+    // unresolved read is a loading state — never sample rows.
+    expect(screen.getByText('Loading protocol config')).toBeTruthy();
     expect(screen.queryByRole('button', { name: 'Set fee' })).toBeNull();
   });
 });

@@ -4,7 +4,8 @@ import { Buffer } from 'buffer';
 import { useSoroban } from '../../context/useSoroban';
 import { useWallet } from '../../context/useWallet';
 import { useAnnouncer } from '../../context/useAnnouncer';
-import { useTransaction } from '../../hooks/useTransaction';
+import { useContractResult, useTransaction } from '../../hooks';
+import type { Schema } from '@milepost/attest';
 import { looksLikeAddress } from '../../lib/format';
 import { formatDateTime } from '../../lib/format';
 import { explain, extractCode } from '../../lib/errors';
@@ -13,7 +14,6 @@ import { Button, DateField, Field, RadioGroup, TextArea } from '../ui';
 import { ErrorPanel, PendingState, Success } from '../state/AsyncStates';
 import {
   DEPLOY_MODES,
-  FIXTURE_SCHEMAS,
   isHex32Bytes,
   parseProposalParam,
   quorumError,
@@ -57,7 +57,7 @@ function parseAddressList(text: string): string[] {
  * including Open — are selectable here without changing what is sent on-chain.
  */
 export function DeployProgramme() {
-  const { registry } = useSoroban();
+  const { registry, attest } = useSoroban();
   const wallet = useWallet();
   const announce = useAnnouncer();
   const [searchParams] = useSearchParams();
@@ -93,6 +93,25 @@ export function DeployProgramme() {
   const schemaError = !isHex32Bytes(schemaInput)
     ? 'Enter the schema UID as a 32-byte hex string (64 characters). It must already exist in attest.'
     : null;
+
+  // Confirm the schema exists before letting the user past this step. The
+  // programme constructor requires it, so a well-formed UID that attest has
+  // never seen must block here rather than fail at deploy time (issue #411).
+  const schemaUid = useMemo(() => {
+    if (!isHex32Bytes(schemaInput)) return null;
+    return Buffer.from(schemaInput.trim().replace(/^0x/i, ''), 'hex');
+  }, [schemaInput]);
+
+  const schemaRead = useContractResult<Schema>(
+    () => attest.get_schema({ uid: schemaUid as Buffer }),
+    [attest, schemaUid],
+    { enabled: schemaUid !== null, contract: 'attest' },
+  );
+  // Error 1 is `SchemaNotFound` — a real answer, not a lookup failure.
+  const schemaNotFound = schemaRead.error !== null && extractCode(schemaRead.error) === 1;
+  const schemaLookupError =
+    schemaRead.error !== null && !schemaNotFound ? explain(schemaRead.error, 'attest') : null;
+  const schemaConfirmed = schemaUid !== null && schemaRead.data !== null && !schemaRead.error;
 
   // Step 2 validation — where the people are entered.
   const reviewers = useMemo(() => parseAddressList(reviewersText), [reviewersText]);
@@ -152,7 +171,7 @@ export function DeployProgramme() {
       : null;
 
   const stepValid = [
-    !nameError && !schemaError,
+    !nameError && !schemaError && schemaConfirmed,
     !reviewersError && !verifiersError && !quorumFinalError && !tranchesFinalError,
     !applyError && !reviewError && !releaseError && !sweepError && !sequenceError,
     !tokenError && !minAwardError && !metadataError,
@@ -160,7 +179,7 @@ export function DeployProgramme() {
   const allValid = stepValid.every(Boolean);
 
   const hint = !wallet.address
-    ? 'Sign in with the registry admin account to deploy.'
+    ? 'Sign in to deploy. Your address becomes the programme creator — who can pause, cancel, and manage payees and verifiers.'
     : name.trim() === ''
       ? 'Give the programme a name.'
       : 'The registry deploys it and becomes its admin of record. Terms can\u2019t be changed afterwards.';
@@ -349,6 +368,46 @@ export function DeployProgramme() {
             }
             spellCheck={false}
           />
+
+          {schemaUid !== null && (
+            <div className="deploy__schema" aria-live="polite">
+              {schemaRead.loading && (
+                <p className="deploy__schema-note">Checking the schema in attest…</p>
+              )}
+              {schemaNotFound && (
+                <p className="deploy__schema-missing" role="alert">
+                  No schema with this UID exists in attest. Register the schema first, or check
+                  the UID — a programme cannot be deployed against a schema that does not exist.
+                </p>
+              )}
+              {schemaConfirmed && schemaRead.data && (
+                <div className="deploy__schema-found">
+                  <span className="deploy__schema-title">Schema found</span>
+                  <span className="deploy__schema-row">
+                    <span>Definition</span>
+                    <span>{schemaRead.data.definition}</span>
+                  </span>
+                  <span className="deploy__schema-row">
+                    <span>Revocable</span>
+                    <span>{schemaRead.data.revocable ? 'Yes' : 'No'}</span>
+                  </span>
+                  <span className="deploy__schema-row">
+                    <span>Restricted</span>
+                    <span>
+                      {schemaRead.data.restricted
+                        ? 'Yes — only its authority may sign under it'
+                        : 'No'}
+                    </span>
+                  </span>
+                </div>
+              )}
+              {schemaLookupError && (
+                <p className="deploy__schema-missing" role="alert">
+                  Could not check the schema: {schemaLookupError.message}
+                </p>
+              )}
+            </div>
+          )}
         </div>
       )}
 

@@ -391,3 +391,24 @@ For security vulnerability reporting guidelines and scope, see [SECURITY.md](SEC
 
 Apache-2.0
 
+What and why
+A recipient, their verifier and a funder all need to look at the same award. There is no page for one award: it exists only as a card in the recipient's list or a row in a programme's tab.
+
+Context
+Read the app brief first: `frontend/CLAUDE.md`. It covers the protocol, the data sources and the non-negotiables.
+This wave replaces stand-in data with real chain reads. Real programmes must show
+what the chain says. The sample programmes in src/fixtures/ stay, keep their
+"Sample data" tag, and are the only place a FIXTURE_* value may still appear.
+get_award(recipient) on the programme; the award card in src/components/recipient/AwardCard.tsx.
+Suggested approach
+Add /programme/:id/award/:recipient showing the award's tranches, mode, payee, escrow and release history from the chain, readable signed out, with actions shown only to the recipient.
+
+Acceptance criteria
+ The page reads the award on-chain and works signed out
+ Actions appear only for the recipient
+ Programme detail award rows link here
+ Tests cover an award, none and a signed-in recipient
+ Light and dark, down to 360px, no horizontal scroll
+ Keyboard reachable, visible focus, 44px minimum tap targets
+ New values go in tokens.css, never hard-coded in page CSS
+ npm run lint, npm run build and npm run test pass in frontend/

@@ -1,7 +1,8 @@
-import { useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { ChevronDown, RefreshCw, Sparkles } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import { useWallet } from '../../context/useWallet';
+import { useAnnouncer } from '../../context/useAnnouncer';
 import { truncateAddress } from '../../lib/format';
 import { formatAmount } from '../../lib/amount';
 import { useBalances } from '../../hooks/useBalances';
@@ -14,16 +15,45 @@ const ACCOUNT_LINKS = [
   { label: 'Spend policy', path: '/policy' },
 ];
 
+/** Said once on a successful Friendbot funding, and shown under the button. */
+const FUNDED_MESSAGE = 'Account funded with 10,000 testnet XLM!';
+
 /** The signed-in account: short address as the trigger, balances, Friendbot funding, and linked routes. */
 export function AccountMenu({ address }: { address: string }) {
   const { disconnect, expectedNetwork } = useWallet();
   const { ref, close } = useDetailsMenu();
   const balances = useBalances(address);
+  const announce = useAnnouncer();
 
   const [fundingState, setFundingState] = useState<'idle' | 'funding' | 'success' | 'error'>('idle');
   const [fundingError, setFundingError] = useState<string | null>(null);
 
+  // Issue #484: only a *manual* refresh announces — an automatic refresh after
+  // a transaction has its own announcement and must not speak twice here.
+  // The counter makes the effect run for this press even when the balance
+  // comes back unchanged; `announcedRefresh` keeps one press to one sentence.
+  const [refreshCount, setRefreshCount] = useState(0);
+  const announcedRefresh = useRef(0);
+
   const isTestnet = expectedNetwork.toLowerCase().includes('testnet');
+
+  const handleRefresh = () => {
+    setRefreshCount((count) => count + 1);
+    balances.refetch();
+  };
+
+  useEffect(() => {
+    if (refreshCount === 0 || announcedRefresh.current === refreshCount) return;
+    // Still in flight — wait for the read to land rather than announce a
+    // balance that is about to be replaced.
+    if (balances.loading) return;
+    announcedRefresh.current = refreshCount;
+    if (balances.error !== null || balances.xlm === null) {
+      announce("Couldn't refresh the XLM balance.", 'alert');
+    } else {
+      announce(`Balance refreshed: ${formatAmount(balances.xlm, { asset: 'XLM' })}.`);
+    }
+  }, [refreshCount, balances.loading, balances.xlm, balances.error, announce]);
 
   const handleFundFriendbot = async () => {
     setFundingState('funding');
@@ -37,10 +67,17 @@ export function AccountMenu({ address }: { address: string }) {
       }
 
       setFundingState('success');
+      // One polite announcement; the sentence rendered below stays visual, so
+      // the success is announced once rather than twice (#484).
+      announce(FUNDED_MESSAGE);
       await balances.refetch();
     } catch (err) {
+      const message = err instanceof Error ? err.message : 'Friendbot request failed';
       setFundingState('error');
-      setFundingError(err instanceof Error ? err.message : 'Friendbot request failed');
+      setFundingError(message);
+      // Funding failed: assertive, and announced by the shared region only —
+      // the on-screen message carries no `role` of its own.
+      announce(message, 'alert');
     }
   };
 
@@ -78,7 +115,7 @@ export function AccountMenu({ address }: { address: string }) {
           <button
             type="button"
             className="account-menu__refresh-btn"
-            onClick={() => void balances.refetch()}
+            onClick={handleRefresh}
             disabled={balances.loading}
             aria-label="Refresh balances"
             title="Refresh balances"
@@ -99,9 +136,8 @@ export function AccountMenu({ address }: { address: string }) {
             </p>
 
             {fundingState === 'success' ? (
-              <p className="account-menu__friendbot-success" role="status">
-                Account funded with 10,000 testnet XLM!
-              </p>
+              // No `role` here: the shared announcer already said this once.
+              <p className="account-menu__friendbot-success">{FUNDED_MESSAGE}</p>
             ) : (
               <button
                 type="button"
@@ -114,9 +150,9 @@ export function AccountMenu({ address }: { address: string }) {
             )}
 
             {fundingState === 'error' && fundingError && (
-              <p className="account-menu__friendbot-error" role="alert">
-                {fundingError}
-              </p>
+              // Announced as an alert through the shared region — a second
+              // live role here would read the failure twice.
+              <p className="account-menu__friendbot-error">{fundingError}</p>
             )}
           </div>
         )}

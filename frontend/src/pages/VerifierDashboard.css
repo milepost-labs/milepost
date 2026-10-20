@@ -446,3 +446,26 @@
     grid-template-columns: 1fr;
   }
 }
+
+.reviewer-panel__programme {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: var(--space-3);
+  align-items: end;
+}
+
+.reviewer-panel__gate {
+  margin: 0;
+  padding: var(--space-2) var(--space-3);
+  border-radius: var(--radius-row);
+  background: var(--warning-soft);
+  color: var(--warning-strong);
+  font-size: var(--text-sm);
+  line-height: var(--leading-body);
+}
+
+@media (max-width: 42rem) {
+  .reviewer-panel__programme {
+    grid-template-columns: 1fr;
+  }
+}

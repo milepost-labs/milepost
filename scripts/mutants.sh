@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 #
-# Mutation-test the programme contract and report surviving mutants by function.
+# Mutation-test the load-bearing contracts and report surviving mutants by function.
 # Scope, test arguments and the explained exclusions live in .cargo/mutants.toml;
 # see docs/testing-guide.md#mutation-testing.
 #
@@ -50,7 +50,7 @@ missed = by_status["MissedMutant"]
 timeouts = by_status["Timeout"]
 total = sum(len(v) for v in by_status.values())
 
-lines = ["### Mutation testing: programme", ""]
+lines = ["### Mutation testing: load-bearing contracts", ""]
 lines.append(
     f"{total} mutants: {len(by_status['CaughtMutant'])} caught, {len(missed)} survived, "
     f"{len(timeouts)} timed out, {len(by_status['Unviable'])} unviable."

@@ -65,6 +65,14 @@ export function ContributeReceipt({
           Contribute again
         </button>
       </div>
+
+      {!sample && receipt.hash && (
+        <p className="fund-note">
+          Keep the hash — this receipt can be rebuilt later from{' '}
+          <Link to={`/funders/receipt?hash=${receipt.hash}`}>Receipt lookup</Link>, even
+          after this tab is gone.
+        </p>
+      )}
     </>
   );
 }

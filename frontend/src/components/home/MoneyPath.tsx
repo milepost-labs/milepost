@@ -1,7 +1,8 @@
-import React, { useRef, useState, type KeyboardEvent } from 'react';
+import React, { useEffect, useRef, useState, type KeyboardEvent } from 'react';
 import './MoneyPath.css';
 import { FIXTURE_PATH_BUDGET } from '../../fixtures/homeFixtures';
 import { getMoneyState } from '../../lib/moneySquares';
+import { useAnnouncer } from '../../context/useAnnouncer';
 
 type StepData = {
   name: string;
@@ -9,18 +10,25 @@ type StepData = {
   plain: string;
   detail: string;
   tech: string;
+  /** What this step says about the money, e.g. "2,500 USDC released". */
+  say: string;
   sq: { pool?: number; locked?: number; released?: number; refund?: number };
   ring?: number;
 };
 
+/** One square of the example budget, shared by the squares and the spoken copy. */
+const UNIT = FIXTURE_PATH_BUDGET / 20;
+
+const usdc = (value: number) => `${value.toLocaleString()} USDC`;
+
 const STEPS: StepData[] = [
-  { name: 'Contribute', moves: true, plain: 'Funders put money into a programme.', detail: 'The budget is contributions less the protocol fee.', tech: 'program.contribute(from, amount)', sq: { pool: 20 } },
-  { name: 'Apply', moves: false, plain: 'Applicants ask for what they actually need.', detail: 'One person needs 200 for exam fees, another 5,000 for tuition. Equal splits are not funding.', tech: 'program.apply(applicant, requested)', sq: { pool: 20 } },
-  { name: 'Review', moves: false, plain: 'Each reviewer approves an amount, up to what was asked.', detail: 'A reviewer cannot approve more than the request.', tech: 'program.review(reviewer, applicant, amount) · ExceedsRequested (11)', sq: { pool: 20 } },
-  { name: 'Finalize', moves: false, plain: 'The award is the middle vote.', detail: 'The median, so neither one cautious reviewer nor one generous outlier decides. The award is fixed; nothing is transferred yet.', tech: 'program.finalize(applicant) · median · quorum ≤ MAX_QUORUM (16)', sq: { locked: 14, pool: 6 } },
-  { name: 'Attest', moves: false, plain: 'A trusted verifier confirms the condition was met.', detail: 'A signed claim about the recipient, under a schema the programme chose.', tech: 'attest.attest(attester, schema, subject, data)', sq: { locked: 14, pool: 6 }, ring: 5 },
-  { name: 'Release', moves: true, plain: 'One confirmation unlocks one tranche.', detail: 'This is the milepost. A proof can be used once; the rest stays locked.', tech: 'program.release(recipient, attestation) · AttestationAlreadyUsed (22)', sq: { released: 5, locked: 9, pool: 6 } },
-  { name: 'Spend', moves: true, plain: 'The money reaches a verified payee.', detail: 'Paid directly, chosen by the recipient from escrow, spent from their wallet under a policy, or paid to them with no restriction. Unawarded budget is refunded to funders in proportion once the window closes.', tech: 'Direct · Allocated · Restricted · Open · refund() · sweep()', sq: { released: 5, locked: 9, refund: 6 } },
+  { name: 'Contribute', moves: true, plain: 'Funders put money into a programme.', detail: 'The budget is contributions less the protocol fee.', tech: 'program.contribute(from, amount)', say: `${usdc(20 * UNIT)} contributed to the budget`, sq: { pool: 20 } },
+  { name: 'Apply', moves: false, plain: 'Applicants ask for what they actually need.', detail: 'One person needs 200 for exam fees, another 5,000 for tuition. Equal splits are not funding.', tech: 'program.apply(applicant, requested)', say: 'no money moves', sq: { pool: 20 } },
+  { name: 'Review', moves: false, plain: 'Each reviewer approves an amount, up to what was asked.', detail: 'A reviewer cannot approve more than the request.', tech: 'program.review(reviewer, applicant, amount) · ExceedsRequested (11)', say: 'no money moves', sq: { pool: 20 } },
+  { name: 'Finalize', moves: false, plain: 'The award is the middle vote.', detail: 'The median, so neither one cautious reviewer nor one generous outlier decides. The award is fixed; nothing is transferred yet.', tech: 'program.finalize(applicant) · median · quorum ≤ MAX_QUORUM (16)', say: 'no money moves', sq: { locked: 14, pool: 6 } },
+  { name: 'Attest', moves: false, plain: 'A trusted verifier confirms the condition was met.', detail: 'A signed claim about the recipient, under a schema the programme chose.', tech: 'attest.attest(attester, schema, subject, data)', say: 'no money moves', sq: { locked: 14, pool: 6 }, ring: 5 },
+  { name: 'Release', moves: true, plain: 'One confirmation unlocks one tranche.', detail: 'This is the milepost. A proof can be used once; the rest stays locked.', tech: 'program.release(recipient, attestation) · AttestationAlreadyUsed (22)', say: `${usdc(5 * UNIT)} released to the recipient`, sq: { released: 5, locked: 9, pool: 6 } },
+  { name: 'Spend', moves: true, plain: 'The money reaches a verified payee.', detail: 'Paid directly, chosen by the recipient from escrow, spent from their wallet under a policy, or paid to them with no restriction. Unawarded budget is refunded to funders in proportion once the window closes.', tech: 'Direct · Allocated · Restricted · Open · refund() · sweep()', say: `${usdc(5 * UNIT)} paid to a verified payee`, sq: { released: 5, locked: 9, refund: 6 } },
 ];
 
 export const MoneyPath: React.FC = () => {
@@ -28,7 +36,25 @@ export const MoneyPath: React.FC = () => {
   const tabRefs = useRef<(HTMLButtonElement | null)[]>([]);
   const cur = STEPS[stepIndex];
 
+  // Issue #483: stepping changes the step, the copy and the squares, and a
+  // screen reader heard only the press. One polite line per step change goes
+  // through the shared announcer — no live region of our own (the brief
+  // forbids a second one per screen) — and nothing is said on first render,
+  // because the step that loads is already the one on screen.
+  const announce = useAnnouncer();
+  const previousStep = useRef<number | null>(null);
+  useEffect(() => {
+    const previous = previousStep.current;
+    previousStep.current = stepIndex;
+    if (previous === null || previous === stepIndex) return;
+    announce(`Step ${stepIndex + 1}, ${cur.name}: ${cur.say}`);
+  }, [stepIndex, cur, announce]);
+
   // Roving tabindex: one tab stop for the list, arrows move between steps.
+  // Focus follows the control that was pressed — the arrow keys move to the
+  // tab they landed on, a click re-focuses the tab it selected, and Back/Next
+  // keep focus where the hand already is — so the step announcement arrives
+  // while the user is still on the control that caused it.
   const focusStep = (i: number) => {
     setStepIndex(i);
     tabRefs.current[i]?.focus();
@@ -49,9 +75,6 @@ export const MoneyPath: React.FC = () => {
     }
   };
   
-  const unit = FIXTURE_PATH_BUDGET / 20;
-  const curFormat = (n: number) => n.toLocaleString() + ' USDC';
-
   const squares: { bg: string; ring: string }[] = [];
   const order = [
     { k: 'released', col: 'var(--accent)' },
@@ -81,7 +104,7 @@ export const MoneyPath: React.FC = () => {
     return {
       bg,
       label,
-      amt: curFormat(count * unit),
+      amt: usdc(count * UNIT),
       op: count ? 1 : 0.4
     };
   });
@@ -93,7 +116,7 @@ export const MoneyPath: React.FC = () => {
       <div className="money-path-header">
         <span className="eyebrow" style={{ color: 'var(--accent-strong)' }}>How it works</span>
         <h2 id="h-how">Seven steps. Money moves at three of them.</h2>
-        <p>Step through a programme with an example budget of {curFormat(FIXTURE_PATH_BUDGET)}. Each square is {curFormat(unit)}.</p>
+        <p>Step through a programme with an example budget of {usdc(FIXTURE_PATH_BUDGET)}. Each square is {usdc(UNIT)}.</p>
       </div>
 
       <div role="tablist" aria-label="Money path steps" className="money-path-tablist">
@@ -109,7 +132,7 @@ export const MoneyPath: React.FC = () => {
             aria-selected={i === stepIndex}
             aria-controls="money-path-panel"
             tabIndex={i === stepIndex ? 0 : -1}
-            onClick={() => setStepIndex(i)}
+            onClick={() => focusStep(i)}
             onKeyDown={onTabKeyDown}
             className="money-path-tab"
           >
@@ -145,7 +168,10 @@ export const MoneyPath: React.FC = () => {
           <div className="panel-actions">
             <button 
               type="button" 
-              onClick={() => setStepIndex(Math.max(0, stepIndex - 1))} 
+              onClick={(event) => {
+                event.currentTarget.focus();
+                setStepIndex(Math.max(0, stepIndex - 1));
+              }}
               disabled={stepIndex === 0} 
               className="btn-back"
             >
@@ -153,7 +179,10 @@ export const MoneyPath: React.FC = () => {
             </button>
             <button 
               type="button" 
-              onClick={() => setStepIndex(stepIndex < STEPS.length - 1 ? stepIndex + 1 : 0)} 
+              onClick={(event) => {
+                event.currentTarget.focus();
+                setStepIndex(stepIndex < STEPS.length - 1 ? stepIndex + 1 : 0);
+              }}
               className="btn-next"
             >
               {nextLabel}

@@ -1,14 +1,31 @@
-import type { FC } from 'react';
+import { useState, type FC } from 'react';
 import { FIXTURE_VERIFIERS, type VerifierFixture } from '../../fixtures/programmeFixtures';
+import { useOptionalSoroban } from '../../context/useSoroban';
+import { useContractRead } from '../../hooks/useContractRead';
+import { Button, Field } from '../ui';
 import './VerifiersTab.css';
 
 export interface VerifiersTabProps {
   verifiers?: VerifierFixture[];
+  /** Real program contract address; omitted for sample programmes. */
+  programmeId?: string;
+  isSample?: boolean;
 }
 
 export const VerifiersTab: FC<VerifiersTabProps> = ({
   verifiers = FIXTURE_VERIFIERS,
+  programmeId,
+  isSample = false,
 }) => {
+  const soroban = useOptionalSoroban();
+  const [addrInput, setAddrInput] = useState('');
+  const [checkAddr, setCheckAddr] = useState('');
+  const programme = programmeId && soroban ? soroban.programmeAt(programmeId) : null;
+  const enabled = checkAddr !== '' && programme !== null;
+  const reviewer = useContractRead(() => programme!.is_reviewer({ addr: checkAddr }), [programme, checkAddr], { enabled });
+  const verifier = useContractRead(() => programme!.is_verifier({ addr: checkAddr }), [programme, checkAddr], { enabled });
+  const payee = useContractRead(() => programme!.is_payee({ payee: checkAddr }), [programme, checkAddr], { enabled });
+
   return (
     <div
       className="verifiers-tab"
@@ -33,17 +50,19 @@ export const VerifiersTab: FC<VerifiersTabProps> = ({
         </p>
       </div>
 
-      <div className="verifiers-tab__list">
-        {verifiers.map((vr) => (
-          <div key={vr.address} className="verifiers-tab__card">
-            <div className="verifiers-tab__card-info">
-              <span className="verifiers-tab__label">{vr.label}</span>
-              <span className="verifiers-tab__address numeric">{vr.address}</span>
+      {isSample && (
+        <div className="verifiers-tab__list">
+          {verifiers.map((vr) => (
+            <div key={vr.address} className="verifiers-tab__card">
+              <div className="verifiers-tab__card-info">
+                <span className="verifiers-tab__label">{vr.label}</span>
+                <span className="verifiers-tab__address numeric">{vr.address}</span>
+              </div>
+              <span className="verifiers-tab__schema">Schema · {vr.schema}</span>
             </div>
-            <span className="verifiers-tab__schema">Schema · {vr.schema}</span>
-          </div>
-        ))}
-      </div>
+          ))}
+        </div>
+      )}
     </div>
   );
 };

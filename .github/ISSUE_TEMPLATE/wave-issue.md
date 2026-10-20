@@ -43,8 +43,10 @@ assignees: ''
 
 ## Branch and commits
 
+Branch from `dev` and open the pull request against `dev`.
+
 ```sh
-git checkout -b feat/some-scoped-branch-name
+git checkout -b feat/some-scoped-branch-name dev
 ```
 
 ```sh

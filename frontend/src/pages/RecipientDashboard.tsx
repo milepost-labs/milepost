@@ -33,7 +33,7 @@ export function RecipientDashboard() {
           <div className="recipient-signed-out__callout">
             <h2 className="recipient-signed-out__title">Sign in to see your awards</h2>
             <p className="recipient-signed-out__text">
-              Use a passkey (Face ID or fingerprint) or the Freighter extension. No seed phrase, and you won't need XLM for fees.
+              Sign in with the Freighter extension to see your awards. You approve each transaction yourself, and its network fee is paid from your own XLM balance.
             </p>
             <div className="recipient-signed-out__actions">
               <button

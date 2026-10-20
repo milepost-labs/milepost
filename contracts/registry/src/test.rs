@@ -616,3 +616,54 @@ fn a_rejected_retune_publishes_nothing() {
     assert_eq!(result, Err(Ok(Error::FeeTooHigh)));
     assert_events(&f.env, &f.client.address, &[]);
 }
+
+// ---- property tests for programme enumeration ----
+//
+// Contracts keep no list of programmes, so a client discovers them by walking
+// `programme_address(n)` for every `n` below `nonce`. That only works if
+// deployment is exactly as dense as the nonce says. These properties pin that
+// down for a random number of deployments rather than the handful the
+// hand-written tests cover.
+
+mod enumeration_proptests {
+    extern crate std;
+    use super::*;
+    use proptest::prelude::*;
+
+    proptest! {
+        #![proptest_config(ProptestConfig::with_cases(16))]
+
+        #[test]
+        fn every_deployment_is_enumerable_from_the_nonce(count in 0usize..=8usize) {
+            let f = setup();
+            let creator = Address::generate(&f.env);
+
+            let mut deployed = std::vec::Vec::with_capacity(count);
+            for _ in 0..count {
+                deployed.push(create(&f, &creator));
+            }
+
+            // 1. The nonce is the number of programmes deployed, no more.
+            prop_assert_eq!(f.client.nonce(), count as u64);
+
+            // 2. Every address derived below the nonce is a real programme that
+            //    the registry vouches for, so nothing is skipped.
+            for (n, programme) in deployed.iter().enumerate() {
+                prop_assert_eq!(f.client.programme_address(&(n as u64)), programme.clone());
+                prop_assert!(f.client.is_programme(programme));
+            }
+
+            // 3. Addresses are distinct, so a walk cannot visit one twice.
+            for (index, programme) in deployed.iter().enumerate() {
+                for other in deployed.iter().skip(index + 1) {
+                    prop_assert_ne!(programme, other);
+                }
+            }
+
+            // 4. The next address is not a programme yet: the range is exactly
+            //    `[0, nonce)`, and nothing beyond it is vouched for.
+            let next = f.client.programme_address(&(count as u64));
+            prop_assert!(!f.client.is_programme(&next));
+        }
+    }
+}

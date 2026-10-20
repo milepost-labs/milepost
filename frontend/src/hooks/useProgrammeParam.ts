@@ -2,7 +2,6 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useLocation, useSearchParams } from 'react-router-dom';
 import { useSoroban } from '../context/useSoroban';
 import { isProgrammeContractId, verifyRegistryProgramme } from '../lib/registryVerification';
-import { FIXTURE_PROGRAMMES } from '../fixtures/programmes';
 
 export type ProgrammeParamStatus =
   | 'absent'
@@ -31,7 +30,14 @@ type VerificationState = {
   error: unknown;
 };
 
-const PROGRAMME_PARAM_ROUTES = new Set(['/funders', '/recipients', '/finalize', '/keepalive']);
+const PROGRAMME_PARAM_ROUTES = new Set([
+  '/funders',
+  '/recipients',
+  '/finalize',
+  '/keepalive',
+  '/admin/payees',
+  '/verifiers',
+]);
 
 export function consumesProgrammeParam(pathname: string): boolean {
   const normalized = pathname.length > 1 ? pathname.replace(/\/+$/, '') : pathname;
@@ -48,15 +54,6 @@ export function looksLikeContractId(value: string): boolean {
   return isProgrammeContractId(value);
 }
 
-/**
- * The sample programmes the directory shows beside the indexed ones. Their ids
- * are stand-ins, not contract addresses, so they are accepted by name rather
- * than sent to the registry. Remove with the fixtures.
- */
-function isSampleProgramme(value: string): boolean {
-  return FIXTURE_PROGRAMMES.some((p) => p.id === value);
-}
-
 export function useProgrammeParam(): ProgrammeParamState {
   const location = useLocation();
   const [searchParams, setSearchParams] = useSearchParams();
@@ -65,8 +62,7 @@ export function useProgrammeParam(): ProgrammeParamState {
   const raw = searchParams.get('programme');
   const programmeId = normalizeProgrammeParam(raw);
   const hasParam = consumesParam && programmeId !== null;
-  const isSample = hasParam && programmeId !== '' && isSampleProgramme(programmeId);
-  const syntaxValid = hasParam && programmeId !== '' && (isSample || looksLikeContractId(programmeId));
+  const syntaxValid = hasParam && programmeId !== '' && looksLikeContractId(programmeId);
   const [verification, setVerification] = useState<VerificationState>({
     programmeId: null,
     status: 'idle',
@@ -75,7 +71,7 @@ export function useProgrammeParam(): ProgrammeParamState {
   const [attempt, setAttempt] = useState(0);
 
   useEffect(() => {
-    if (!syntaxValid || !programmeId || isSample) return;
+    if (!syntaxValid || !programmeId) return;
 
     let cancelled = false;
 
@@ -92,7 +88,7 @@ export function useProgrammeParam(): ProgrammeParamState {
     return () => {
       cancelled = true;
     };
-  }, [attempt, isSample, programmeId, registry, syntaxValid]);
+  }, [attempt, programmeId, registry, syntaxValid]);
 
   const clear = useCallback(() => {
     const next = new URLSearchParams(searchParams);
@@ -131,21 +127,6 @@ export function useProgrammeParam(): ProgrammeParamState {
         error: null,
         message:
           'That programme link is not a valid Milepost programme address. Check the link or clear it to use the default programme.',
-        clear,
-        refetch,
-      };
-    }
-
-    if (isSample) {
-      return {
-        raw,
-        programmeId,
-        status: 'valid',
-        active: true,
-        blocksProgramme: false,
-        loading: false,
-        error: null,
-        message: null,
         clear,
         refetch,
       };
@@ -209,5 +190,5 @@ export function useProgrammeParam(): ProgrammeParamState {
       clear,
       refetch,
     };
-  }, [clear, hasParam, isSample, programmeId, raw, refetch, syntaxValid, verification]);
+  }, [clear, hasParam, programmeId, raw, refetch, syntaxValid, verification]);
 }
