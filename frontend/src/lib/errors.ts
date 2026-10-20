@@ -80,6 +80,10 @@ const PROGRAM: Table = {
   37: { kind: 'conflict', message: 'This application has been withdrawn.', action: 'Withdrawn applications cannot be reviewed, finalized, or re-applied.' },
   38: { kind: 'blocked', message: 'The median award is below this programme\u2019s minimum and cannot be finalised.', action: 'The application is unchanged and can still be finalised later if the minimum is met.' },
   39: { kind: 'blocked', message: 'This programme is paused.', action: 'The creator has temporarily halted contributions, applications, reviews, awards and releases. Refunds and sweeps still work \u2014 wait for the creator to unpause before retrying.' },
+  40: { kind: 'invalid', message: 'The schema authority is not one of this programme\u2019s verifiers.' },
+  41: { kind: 'invalid', message: 'This programme refers to a schema that does not exist.' },
+  42: { kind: 'none', message: 'The release deadline was extended.' },
+  43: { kind: 'invalid', message: 'An open award must pay its recipient directly.' },
 };
 
 const ATTEST: Table = {

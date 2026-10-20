@@ -1,4 +1,78 @@
 import type { AttestationFixture } from '../fixtures/attestationFixtures';
+import type { Buffer } from 'buffer';
+import { extractCode } from './errors';
+
+export interface OnChainAttestation {
+  revoked_at: unknown;
+}
+
+interface ReadResult<T> {
+  result: T;
+}
+
+interface FallibleRead<T> {
+  unwrap: () => T;
+}
+
+export interface AttestationVerifierClients {
+  attest: {
+    is_valid: (args: { uid: Buffer }) => Promise<ReadResult<boolean>>;
+    get: (args: { uid: Buffer }) => Promise<ReadResult<FallibleRead<OnChainAttestation>>>;
+  };
+  program: {
+    is_spent: (args: { attestation: Buffer }) => Promise<ReadResult<boolean>>;
+  };
+}
+
+export type AttestationVerdict = 'valid' | 'used' | 'revoked' | 'expired' | 'not_found' | 'error';
+
+export interface AttestationStatus {
+  verdict: AttestationVerdict;
+  used?: boolean;
+  error?: unknown;
+}
+
+/**
+ * Reads the authoritative contracts and turns their separate answers into
+ * the status a recipient should see before attempting a release.
+ *
+ * `is_valid` is deliberately not enough to distinguish expiry, revocation or
+ * absence, so the stored record is fetched after an invalid result. A network
+ * or RPC failure remains `error`; it must never be presented as an invalid
+ * attestation.
+ */
+export async function readAttestationStatus(
+  clients: AttestationVerifierClients,
+  uid: Buffer,
+): Promise<AttestationStatus> {
+  let valid: boolean;
+  try {
+    valid = (await clients.attest.is_valid({ uid })).result;
+  } catch (error) {
+    return { verdict: 'error', error };
+  }
+
+  let attestation: OnChainAttestation;
+  try {
+    attestation = (await clients.attest.get({ uid })).result.unwrap();
+  } catch (error) {
+    if (extractCode(error) === 3) return { verdict: 'not_found' };
+    return { verdict: 'error', error };
+  }
+
+  let used: boolean;
+  try {
+    used = (await clients.program.is_spent({ attestation: uid })).result;
+  } catch (error) {
+    return { verdict: 'error', error };
+  }
+
+  if (attestation.revoked_at !== undefined && attestation.revoked_at !== null) {
+    return { verdict: 'revoked', used };
+  }
+  if (!valid) return { verdict: 'expired', used };
+  return { verdict: used ? 'used' : 'valid', used };
+}
 
 /** A Stellar account address (`G...`), the shape `subject` and `attester` take. */
 export const STELLAR_ADDRESS = /^G[A-Z2-7]{55}$/;

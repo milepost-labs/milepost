@@ -64,6 +64,69 @@ fn identical_schemas_collide_rather_than_duplicate() {
 }
 
 #[test]
+fn a_schema_cannot_predecessor_itself() {
+    let f = setup();
+    let first = open_schema(&f);
+
+    assert_eq!(
+        f.client.try_register_schema(
+            &f.authority,
+            &String::from_str(&f.env, "enrolment:v1"),
+            &true,
+            &false,
+            &Some(first),
+        ),
+        Err(Ok(Error::CycleDetected))
+    );
+}
+
+#[test]
+fn an_indirect_schema_cycle_is_rejected() {
+    let f = setup();
+    let first = open_schema(&f);
+    let second = f.client.register_schema(
+        &f.authority,
+        &String::from_str(&f.env, "enrolment:v2"),
+        &true,
+        &false,
+        &Some(first.clone()),
+    );
+
+    assert_eq!(
+        f.client.try_register_schema(
+            &f.authority,
+            &String::from_str(&f.env, "enrolment:v1"),
+            &true,
+            &false,
+            &Some(second),
+        ),
+        Err(Ok(Error::CycleDetected))
+    );
+}
+
+#[test]
+fn a_valid_predecessor_chain_registers() {
+    let f = setup();
+    let first = open_schema(&f);
+    let second = f.client.register_schema(
+        &f.authority,
+        &String::from_str(&f.env, "enrolment:v2"),
+        &true,
+        &false,
+        &Some(first),
+    );
+    let third = f.client.register_schema(
+        &f.authority,
+        &String::from_str(&f.env, "enrolment:v3"),
+        &true,
+        &false,
+        &Some(second.clone()),
+    );
+
+    assert_eq!(f.client.get_schema(&third).predecessor, Some(second));
+}
+
+#[test]
 fn same_definition_from_a_different_authority_is_a_different_schema() {
     let f = setup();
     let first = open_schema(&f);

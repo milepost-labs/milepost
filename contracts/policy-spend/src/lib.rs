@@ -154,6 +154,7 @@ impl PolicySpend {
                 if existing.steward != steward {
                     return Err(SpendError::NotSteward);
                 }
+                return Err(SpendError::AlreadyConfigured);
             }
             None => wallet.require_auth(),
         }

@@ -86,6 +86,17 @@ tests decode events through the bindings' own specs, so they fail on it.
 
 CI does the same on every PR, in the `bindings` job.
 
+The frontend's plain-language error tables are checked against every
+`#[contracterror]` enum in the contracts. Run the parity check locally from the
+repository root:
+
+```bash
+python3 scripts/check-error-parity.py
+```
+
+It reports missing contract codes and stale table entries by contract and
+variant name. The bindings CI job runs it on every pull request.
+
 ### Local Development Modes
 - **Fixture Mode:** Run `VITE_FIXTURES=1 npm --prefix frontend run dev` to run and inspect UI screens locally without requiring an active wallet connection or testnet funds.
 - **Component Gallery:** In dev mode, open `/dev/ui` in the browser to inspect all components from `src/components/ui/` and `src/components/state/`. It is left out of production builds, and CI fails if it ever reaches one (`frontend/scripts/check-no-dev-pages.sh`).
