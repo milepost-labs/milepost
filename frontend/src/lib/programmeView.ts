@@ -163,18 +163,6 @@ export function mergeProgrammes(
         userRoles: userRoles?.[entry.id],
       });
     }
-  for (const entry of FIXTURE_PROGRAMMES) {
-    if (seen.has(entry.id)) continue;
-    seen.add(entry.id);
-    out.push({
-      id: entry.id,
-      name: entry.name ?? 'Unnamed programme',
-      creator: entry.creator,
-      createdLedger: entry.createdLedger,
-      sample: isSampleProgrammeId(entry.id),
-      chain: FIXTURE_CHAIN[entry.id] ?? chainFor(entry.id),
-      userRoles: userRoles?.[entry.id],
-    });
   }
 
   return out;
