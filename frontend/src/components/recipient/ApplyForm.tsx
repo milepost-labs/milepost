@@ -2,6 +2,7 @@ import { useState, useId } from 'react';
 import { Link } from 'react-router-dom';
 import { Buffer } from 'buffer';
 import { useOpenProgrammes } from '../../hooks/useOpenProgrammes';
+import { useContractRead } from '../../hooks/useContractRead';
 import { useTransaction } from '../../hooks/useTransaction';
 import { useWallet } from '../../context/useWallet';
 import { useSoroban } from '../../context/useSoroban';
@@ -60,6 +61,7 @@ export function ApplyForm({
   const amountFieldId = useId();
   const notesFieldId = useId();
   const helpId = useId();
+  const minimumId = useId();
 
   const { address } = useWallet();
   const { programmeAt } = useSoroban();
@@ -86,6 +88,35 @@ export function ApplyForm({
       ? selectedProgrammeId
       : allOpen[0]?.id ?? '';
 
+  // A programme can set a minimum award; finalize refuses anything below it.
+  // Reading it here lets the form warn before the application is submitted,
+  // without turning the minimum into a client-side block: reviewer votes may
+  // still produce a median above it.
+  const selectionIsSample = isSampleProgrammeId(effectiveSelection);
+  const minimumRead = useContractRead<{
+    programmeId: string;
+    minimumAward: bigint;
+  }>(
+    async () => {
+      const response = await programmeAt(effectiveSelection).get_config();
+      const config = response.result.unwrap();
+      return {
+        result: {
+          programmeId: effectiveSelection,
+          minimumAward: config.minimum_award ?? 0n,
+        },
+      };
+    },
+    [programmeAt, effectiveSelection],
+    { enabled: Boolean(effectiveSelection) && !selectionIsSample },
+  );
+  // A read for a previous programme must not colour the current one, and a
+  // sample programme has no on-chain minimum at all.
+  const minimumAward =
+    !selectionIsSample && minimumRead.data?.programmeId === effectiveSelection
+      ? minimumRead.data.minimumAward
+      : 0n;
+
   // Amount validation using the project's existing parseAmount util.
   const amountResult = amountInput.trim()
     ? (() => {
@@ -99,6 +130,10 @@ export function ApplyForm({
     : null;
 
   const amountError = amountResult && !amountResult.ok ? amountResult.error : '';
+  const belowMinimum =
+    amountResult?.ok === true &&
+    minimumAward > 0n &&
+    amountResult.value < minimumAward;
   const isValid =
     amountResult?.ok === true &&
     Boolean(effectiveSelection) &&
@@ -286,7 +321,7 @@ export function ApplyForm({
                 value={amountInput}
                 onChange={(e) => setAmountInput(e.target.value)}
                 placeholder="0"
-                aria-describedby={helpId}
+                aria-describedby={minimumAward > 0n ? `${helpId} ${minimumId}` : helpId}
                 className="apply-form__input"
               />
               <span className="apply-form__currency">USDC</span>
@@ -295,6 +330,24 @@ export function ApplyForm({
               Ask for what you actually need. Reviewers can approve up to this
               amount, not more. Your award is the middle of their votes.
             </span>
+            {minimumAward > 0n && (
+              <span id={minimumId} className="apply-form__minimum">
+                Minimum award:{' '}
+                <strong className="numeric">
+                  {formatAmount(minimumAward, { asset: 'USDC' })}
+                </strong>
+                .
+              </span>
+            )}
+            {belowMinimum && (
+              <span className="apply-form__warning" role="status">
+                This is below the programme&rsquo;s minimum award of{' '}
+                <strong>{formatAmount(minimumAward, { asset: 'USDC' })}</strong>.
+                Your award is the median of reviewer votes, so a median below
+                the minimum cannot be finalized. You can still submit — votes
+                may land above it.
+              </span>
+            )}
             <span role="alert" className="apply-form__error" aria-live="polite">
               {amountError}
             </span>

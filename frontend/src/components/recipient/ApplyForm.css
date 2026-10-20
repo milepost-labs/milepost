@@ -167,6 +167,31 @@
   min-height: 18px;
 }
 
+/* The programme's floor, stated before an amount is typed so it is not a
+   surprise only after the request comes in low. */
+.apply-form__minimum {
+  font-size: var(--text-caption);
+  line-height: var(--leading-body);
+  color: var(--text-muted);
+}
+
+.apply-form__minimum strong {
+  color: var(--text);
+  font-weight: var(--weight-semibold);
+}
+
+/* A warning, not an error: submitting stays allowed because the median of
+   reviewer votes may still land above the programme's minimum. */
+.apply-form__warning {
+  font-size: var(--text-caption);
+  line-height: var(--leading-body);
+  color: var(--warning-strong);
+}
+
+.apply-form__warning strong {
+  font-weight: var(--weight-bold);
+}
+
 .apply-form__submit-btn {
   align-self: flex-start;
   cursor: pointer;

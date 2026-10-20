@@ -316,6 +316,34 @@ describe('Issue #267 - TermsTab component', () => {
     );
     expect(screen.getByText('16 votes (max 16)')).toBeDefined();
   });
+
+  it('shows the programme minimum award when one is set', () => {
+    render(
+      <MemoryRouter>
+        <TermsTab
+          programmeId="prog-xyz"
+          asset="XLM"
+          minimumAward={2_000_0000000n}
+        />
+      </MemoryRouter>,
+    );
+
+    expect(screen.getByText('Minimum award')).toBeDefined();
+    expect(screen.getByText('2,000.00 XLM')).toBeDefined();
+    expect(screen.getByText(/BelowMinimumAward, error 38/)).toBeDefined();
+    expect(screen.getByText(/median of reviewer votes/i)).toBeDefined();
+  });
+
+  it('shows no minimum row when the programme has no minimum', () => {
+    render(
+      <MemoryRouter>
+        <TermsTab programmeId="prog-xyz" minimumAward={0n} />
+      </MemoryRouter>,
+    );
+
+    expect(screen.queryByText('Minimum award')).toBeNull();
+    expect(screen.queryByText(/BelowMinimumAward/)).toBeNull();
+  });
 });
 
 describe('ProgrammeTabs wrapper component', () => {
@@ -327,6 +355,7 @@ describe('ProgrammeTabs wrapper component', () => {
           phase="Settled"
           quorum={3}
           asset="USDC"
+          minimumAward={1_000_0000000n}
           isSample
         />
       </MemoryRouter>,
@@ -347,5 +376,6 @@ describe('ProgrammeTabs wrapper component', () => {
     fireEvent.click(termsBtn);
     expect(termsBtn.getAttribute('aria-selected')).toBe('true');
     expect(screen.getByText('Chosen per award')).toBeDefined();
+    expect(screen.getByText('1,000.00 USDC')).toBeDefined();
   });
 });

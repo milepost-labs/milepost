@@ -760,6 +760,7 @@ export const ProgrammeDetail = () => {
               programmeId={programmeId}
               phase={phaseName}
               quorum={config.data?.quorum ?? 1}
+              minimumAward={config.data?.minimum_award ?? 0n}
               isSample={isSampleProgrammeId(programmeId)}
               asset={ASSET_LABEL}
             />

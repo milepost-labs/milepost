@@ -116,6 +116,10 @@ function makeProgramme(opts: {
     })),
     apply: vi.fn(async () => ({ signAndSend: applySignAndSend })),
     _applySignAndSend: applySignAndSend,
+    // ApplyForm reads the programme minimum before submitting. No minimum here.
+    get_config: vi.fn(async () => ({
+      result: { unwrap: () => ({ minimum_award: 0n }) },
+    })),
     release: vi.fn(async () => ({ signAndSend: releaseSignAndSend })),
     get_award: vi.fn(async () => ({
       result: { unwrap: () => freshAward },
