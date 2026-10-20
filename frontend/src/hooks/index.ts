@@ -15,4 +15,5 @@ export {
 } from './useProgrammeReads';
 export { useRecipientApplications } from './useRecipientApplications';
 export { useStanding } from './useStanding';
+export { useRpcHealth } from './useRpcHealth';
 

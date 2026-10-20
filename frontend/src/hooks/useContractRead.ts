@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import type { ContractName } from '../lib/errors';
+import { isRpcFailure, reportRpcFailure, reportRpcSuccess } from '../lib/rpcHealth';
 
 /**
  * One way to read from a contract.
@@ -91,10 +92,12 @@ export function useContractRead<T>(
 
     try {
       const response = await callRef.current();
+      reportRpcSuccess();
       if (!mounted.current || current !== generation.current) return;
       setData(response.result);
       setArchived(false);
     } catch (caught) {
+      if (isRpcFailure(caught)) reportRpcFailure();
       if (!mounted.current || current !== generation.current) return;
       if (isArchivedError(caught)) {
         setArchived(true);

@@ -8,6 +8,7 @@ import {
   useProgrammeBalance,
   type ProgrammeBalanceStatus,
 } from '../../hooks/useProgrammeBalance';
+import { useBalances } from '../../hooks/useBalances';
 import { validateAmount } from '../../lib/amount';
 import { explain, explainCode, isFailure, type Explained } from '../../lib/errors';
 import { contributeBlockedReason, feeBpsOf, formatBps, splitContribution } from '../../lib/funding';
@@ -22,12 +23,14 @@ import {
 import type { Phase } from '../../lib/phaseGate';
 import { formatUsdc, type DirectoryProgramme } from '../../lib/programmeView';
 import { ErrorPanel, PendingState } from '../state/AsyncStates';
+import { formatAmount, STROOPS_PER_UNIT } from '../../lib/amount';
 import { AmountField, RadioGroup } from '../ui';
 import { ContributeReceipt } from './ContributeReceipt';
 import './Funding.css';
 
 const PRESETS = ['100', '500', '1,000'];
 const STEPS = ['Amount', 'Confirm', 'Receipt'] as const;
+const MIN_XLM_RESERVE = STROOPS_PER_UNIT;
 
 type Step = 'amount' | 'confirm' | 'outcome';
 
@@ -96,6 +99,8 @@ export function ContributeFlow({
   // Read from the chosen programme's token contract. `undefined` while it is
   // unknown, so an amount is never refused against a balance we do not have.
   const balanceRead = useProgrammeBalance(programme);
+  const xlmBalance = useBalances(address);
+  const xlmBalance = useBalances(address);
   const walletBalance = balanceRead.balance ?? undefined;
 
   const parsed = validateAmount(amount, { balance: walletBalance, asset: 'USDC' });
@@ -171,6 +176,7 @@ export function ContributeFlow({
       if (programme.sample) return sampleSendable(() => sampleOutcome(programme.id), sampleDelayMs);
       const assembled = await client().contribute({ donor: address, amount: value });
       return {
+        estimatedFee: BigInt((assembled as unknown as { simulationResponse?: { minResourceFee?: string } }).simulationResponse?.minResourceFee ?? 0),
         signAndSend: async (options: Parameters<typeof assembled.signAndSend>[0]) => {
           const sent = await assembled.signAndSend(options);
           sent.result.unwrap();
@@ -289,6 +295,10 @@ export function ContributeFlow({
               <dt>If it isn't all awarded</dt>
               <dd>You get your share back</dd>
             </div>
+            <div>
+              <dt>Estimated network fee</dt>
+              <dd className="numeric">Calculated before signing</dd>
+            </div>
           </dl>
 
           <p className={`fund-check fund-check--${check.status === 'read' ? (phaseOk ? 'ok' : 'blocked') : check.status}`}>
@@ -336,11 +346,21 @@ export function ContributeFlow({
       )}
 
       {view === 'pending' && (
-        <PendingState
-          title={tx.busy && !programme?.sample ? phaseLabel(tx.phase) : 'Waiting for the network…'}
-          note="Usually a few seconds. Keep this page open until it confirms."
-          live={false}
-        />
+        <>
+          <PendingState
+            title={tx.slow ? 'Still waiting for confirmation' : tx.busy && !programme?.sample ? phaseLabel(tx.phase) : 'Waiting for the network…'}
+            note={tx.slow ? 'Do not send again. The outcome is unknown until the network responds.' : 'Usually a few seconds. Keep this page open until it confirms.'}
+            live={false}
+          />
+          {tx.estimatedFee !== null && (
+            <p className="fund-note numeric">Estimated network fee: {formatAmount(tx.estimatedFee, { asset: 'XLM' })}</p>
+          )}
+          {tx.estimatedFee !== null && xlmBalance.xlm !== null && xlmBalance.xlm < tx.estimatedFee + MIN_XLM_RESERVE && (
+            <p className="fund-blocked" role="alert">
+              Your XLM balance cannot cover this fee while preserving the minimum reserve. Fund the wallet on Testnet with Friendbot before signing.
+            </p>
+          )}
+        </>
       )}
 
       {view === 'done' && programme && value !== null && tx.result && (

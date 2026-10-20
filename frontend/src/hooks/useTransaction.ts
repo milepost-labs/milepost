@@ -1,4 +1,4 @@
-import { useCallback, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { useWallet } from '../context/useWallet';
 import { explain, type ContractName, type Explained } from '../lib/errors';
 
@@ -31,6 +31,8 @@ export interface Sendable<T> {
   }) => Promise<{ result: T }>;
   restorePreamble?: Array<{ type: string }>;
   restoreFootprint?: () => Promise<void>;
+  /** Simulation fee in stroops, when the binding exposes it. */
+  estimatedFee?: bigint;
 }
 
 export interface TransactionState<T> {
@@ -39,6 +41,10 @@ export interface TransactionState<T> {
   busy: boolean;
   error: Explained | null;
   result: T | null;
+  /** Fee from the latest simulation, available before signing. */
+  estimatedFee: bigint | null;
+  /** True when confirmation has taken longer than the safe waiting threshold. */
+  slow: boolean;
   /** Resolves to the result, or null if it failed. Never throws. */
   send: (build: () => Promise<Sendable<T>>) => Promise<T | null>;
   reset: () => void;
@@ -58,15 +64,25 @@ export function useTransaction<T = unknown>(
   const [phase, setPhase] = useState<TransactionPhase>('idle');
   const [error, setError] = useState<Explained | null>(null);
   const [result, setResult] = useState<T | null>(null);
+  const [estimatedFee, setEstimatedFee] = useState<bigint | null>(null);
+  const [slow, setSlow] = useState(false);
 
   // Guards against a double-click submitting twice. A duplicated contribution
   // is real money, so this is not merely tidiness.
   const inFlight = useRef(false);
 
+  useEffect(() => {
+    if (!inFlight.current) return;
+    const timer = window.setTimeout(() => setSlow(true), 10_000);
+    return () => window.clearTimeout(timer);
+  }, [phase]);
+
   const reset = useCallback(() => {
     setPhase('idle');
     setError(null);
     setResult(null);
+    setEstimatedFee(null);
+    setSlow(false);
   }, []);
 
   const send = useCallback(
@@ -107,6 +123,11 @@ export function useTransaction<T = unknown>(
         // before anything is signed, which is the good place for them.
         setPhase('building');
         let transaction = await build();
+        const simulation = transaction as Sendable<T> & {
+          simulationResponse?: { minResourceFee?: string | number | bigint };
+        };
+        const rawFee = simulation.estimatedFee ?? simulation.simulationResponse?.minResourceFee;
+        if (rawFee !== undefined) setEstimatedFee(BigInt(rawFee));
 
         // If simulation detected archived entries, restore them first.
         if (transaction.restorePreamble && transaction.restorePreamble.length > 0) {
@@ -116,6 +137,11 @@ export function useTransaction<T = unknown>(
             await transaction.restoreFootprint();
             // After restore preamble is prepared, rebuild and re-simulate to get the real transaction.
             transaction = await build();
+            const rebuilt = transaction as Sendable<T> & {
+              simulationResponse?: { minResourceFee?: string | number | bigint };
+            };
+            const rebuiltFee = rebuilt.estimatedFee ?? rebuilt.simulationResponse?.minResourceFee;
+            if (rebuiltFee !== undefined) setEstimatedFee(BigInt(rebuiltFee));
           }
         }
 
@@ -150,6 +176,8 @@ export function useTransaction<T = unknown>(
     busy: phase === 'building' || phase === 'signing' || phase === 'submitting' || phase === 'restoring',
     error,
     result,
+    estimatedFee,
+    slow,
     send,
     reset,
   };

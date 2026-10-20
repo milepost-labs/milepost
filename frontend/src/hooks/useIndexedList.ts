@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
+import { isRpcFailure, reportRpcFailure, reportRpcSuccess } from '../lib/rpcHealth';
 
 /**
  * One way to read a list from the published index.
@@ -62,10 +63,12 @@ export function useIndexedList<T>(
     const current = ++generation.current;
     try {
       const result = await loadRef.current();
+      reportRpcSuccess();
       if (!mounted.current || current !== generation.current) return;
       setData(result);
       setError(null);
     } catch (caught) {
+      if (isRpcFailure(caught)) reportRpcFailure();
       if (!mounted.current || current !== generation.current) return;
       setError(caught);
     } finally {
