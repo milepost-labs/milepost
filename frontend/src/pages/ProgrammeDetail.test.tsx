@@ -3,6 +3,7 @@ import { fireEvent, render, screen, within } from '@testing-library/react';
 import { MemoryRouter, Route, Routes } from 'react-router-dom';
 import { Buffer } from 'buffer';
 import { ProgrammeDetail } from './ProgrammeDetail';
+import { formatDate } from '../lib/format';
 
 // Issue #342 — the programme detail page. One page shows a real programme's
 // on-chain reads (phase, money, config, registry), what each phase lets you do,
@@ -111,6 +112,24 @@ vi.mock('../lib/indexer', async (importOriginal) => ({
 
 const tokenNameMock = vi.hoisted(() => vi.fn(async () => ({ result: 'native' })));
 
+// The header resolves the creation ledger's close time over RPC. Programme
+// detail tests are about the page's arrangement, not RPC pagination, so the
+// hook is stubbed; ledgerTime.test.ts covers the resolution itself.
+const ledgerTimeMock = vi.hoisted(() => ({
+  value: null as { seconds: number; estimated: boolean } | null,
+}));
+
+vi.mock('../hooks/useLedgerTime', () => ({
+  useLedgerTime: () => ({
+    data: ledgerTimeMock.value,
+    error: null,
+    archived: false,
+    loading: false,
+    fetching: false,
+    refetch: vi.fn(),
+  }),
+}));
+
 vi.mock('../lib/token', async (importOriginal) => ({
   ...(await importOriginal<typeof import('../lib/token')>()),
   fetchTokenName: tokenNameMock,
@@ -134,6 +153,7 @@ beforeEach(() => {
   programme = makeProgramme();
   registry = makeRegistry();
   indexed = [];
+  ledgerTimeMock.value = null;
   mocks.address = VIEWER;
   mocks.announce.mockClear();
   tokenNameMock.mockClear();
@@ -190,6 +210,31 @@ describe('ProgrammeDetail — a deployed programme', () => {
     expect(screen.getByLabelText('Metadata document URL')).toBeTruthy();
     // Renders the whole page with every read; slow on a loaded CI runner.
   }, 20_000);
+
+  it('shows the ledger date when the close time was read exactly', async () => {
+    indexed = [{ id: REAL_ID, name: 'Riverside horticulture grants', creator: null, createdLedger: 4811204 }];
+    const seconds = Math.floor(Date.parse('2026-03-12T10:00:00Z') / 1000);
+    ledgerTimeMock.value = { seconds, estimated: false };
+    renderProgramme(`/programme/${REAL_ID}`);
+
+    await screen.findByRole('heading', { name: 'Riverside horticulture grants' });
+    const time = screen.getByText(formatDate(seconds)).closest('time');
+    expect(time).toBeTruthy();
+    expect(time?.parentElement?.textContent).not.toContain('about');
+    expect(screen.getByText('4,811,204')).toBeTruthy();
+  });
+
+  it('marks the ledger date as approximate when it was estimated', async () => {
+    indexed = [{ id: REAL_ID, name: 'Riverside horticulture grants', creator: null, createdLedger: 4811204 }];
+    const seconds = Math.floor(Date.parse('2026-03-12T10:00:00Z') / 1000);
+    ledgerTimeMock.value = { seconds, estimated: true };
+    renderProgramme(`/programme/${REAL_ID}`);
+
+    await screen.findByRole('heading', { name: 'Riverside horticulture grants' });
+    const time = screen.getByText(formatDate(seconds)).closest('time');
+    expect(time?.parentElement?.textContent).toContain('about');
+    expect(screen.getByText('4,811,204')).toBeTruthy();
+  });
 
   it('says when it is showing the seeded demo programme', async () => {
     renderProgramme('/programme');

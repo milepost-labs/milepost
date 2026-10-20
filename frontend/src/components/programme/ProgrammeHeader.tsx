@@ -1,4 +1,6 @@
 import { Link } from 'react-router-dom';
+import { formatDate } from '../../lib/format';
+import type { LedgerTime } from '../../lib/ledgerTime';
 import { AddressChip, ModePill } from '../ui';
 import './phasePill.css';
 import './ProgrammeHeader.css';
@@ -42,6 +44,7 @@ export function ProgrammeHeader({
   name,
   creator,
   createdLedger,
+  createdAt = null,
   phase,
   phaseError = false,
   verified,
@@ -53,6 +56,12 @@ export function ProgrammeHeader({
   name: string;
   creator: string | null;
   createdLedger: number | null;
+  /**
+   * When the creation ledger closed. `estimated` is true when the RPC no
+   * longer retained the ledger and the date was counted back from the latest
+   * one, so the header can say "about".
+   */
+  createdAt?: LedgerTime | null;
   /** The on-chain phase, or null while it has not been read. */
   phase: string | null;
   phaseError?: boolean;
@@ -94,6 +103,24 @@ export function ProgrammeHeader({
         </span>
         <span className="programme-header__meta-item">
           Ledger <span className="numeric">{createdLedger?.toLocaleString() ?? '—'}</span>
+          {createdAt && (
+            <span className="programme-header__created">
+              {createdAt.estimated ? 'about ' : ''}
+              <time
+                dateTime={new Date(createdAt.seconds * 1000).toISOString()}
+                title={
+                  createdAt.estimated
+                    ? 'Estimated from the latest ledger close time'
+                    : 'Read from the ledger close time'
+                }
+              >
+                {formatDate(createdAt.seconds)}
+              </time>
+              {createdAt.estimated && (
+                <span className="visually-hidden"> estimated from the latest ledger</span>
+              )}
+            </span>
+          )}
         </span>
         <span className="programme-header__read">
           <span className="programme-header__read-dot" aria-hidden="true" />
