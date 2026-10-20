@@ -189,23 +189,10 @@ The scripts in `examples/` show integrators how to use the published `@milepost/
 To run the same check locally after changing a contract or regenerating bindings:
 
 ```bash
-# Build and pack the binding packages
-for pkg in attest policy-spend program record registry; do
-  npm ci --prefix "packages/$pkg" --no-audit --no-fund --loglevel=error
-  npm run build --prefix "packages/$pkg"
-done
-
-# Install TypeScript and @types/node, then overlay the local tarballs
-TMP=$(mktemp -d)
-for pkg in attest policy-spend program record registry; do
-  (cd "packages/$pkg" && npm pack --pack-destination "$TMP" --ignore-scripts --loglevel=error >/dev/null)
-done
-npm install --prefix examples --no-save --no-audit --no-fund --loglevel=error typescript @types/node
-npm install --prefix examples --no-save --no-audit --no-fund --loglevel=error "$TMP"/*.tgz
-
-# Typecheck
-npx --prefix examples tsc --noEmit -p examples/tsconfig.json
+./scripts/typecheck-examples.sh
 ```
+
+It builds any binding package that has no `dist/` yet, installs the TypeScript version pinned in `examples/package-lock.json`, overlays the local bindings and typechecks every script.
 
 ---
 

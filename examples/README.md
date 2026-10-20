@@ -33,15 +33,8 @@ All scripts use testnet contract IDs from each package's `networks` export. No e
 
 ## CI
 
-Each script is type-checked in CI against the locally built bindings in the `bindings` job. The equivalent local command is:
+Each script is type-checked in CI against the locally built bindings in the `bindings` job. To run the same check from the repository root:
 
 ```bash
-# from the repo root, after building the binding packages:
-TMP=$(mktemp -d)
-for pkg in attest policy-spend program record registry; do
-  (cd "packages/$pkg" && npm pack --pack-destination "$TMP" --ignore-scripts --loglevel=error >/dev/null)
-done
-npm install --prefix examples --no-save typescript @types/node
-npm install --prefix examples --no-save "$TMP"/*.tgz
-npx --prefix examples tsc --noEmit -p examples/tsconfig.json
+./scripts/typecheck-examples.sh
 ```
