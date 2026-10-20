@@ -20,7 +20,7 @@
   cursor: pointer;
   border: 0;
   border-radius: var(--radius-input);
-  padding: 10px var(--space-4);
+  padding: var(--space-3) var(--space-4);
   font-size: var(--text-sm);
   font-weight: var(--weight-bold);
   background: transparent;
@@ -68,6 +68,6 @@
 
   .programme-tabs__button {
     flex: 1;
-    padding: 10px var(--space-2);
+    padding: var(--space-3) var(--space-2);
   }
 }

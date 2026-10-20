@@ -14,5 +14,7 @@ export {
   type KeyedRead,
 } from './useProgrammeReads';
 export { useRecipientApplications } from './useRecipientApplications';
+export { useRecipientAwards } from './useRecipientAwards';
 export { useStanding } from './useStanding';
+export { useRpcHealth } from './useRpcHealth';
 

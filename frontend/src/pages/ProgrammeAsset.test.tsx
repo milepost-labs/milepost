@@ -18,9 +18,9 @@ describe('Issue #441 - ProgrammeAssetRules', () => {
     vi.spyOn(tokenLib, 'fetchTokenName').mockResolvedValue({ result: 'native' });
 
     render(
-      <dl>
+      <ul>
         <ProgrammeAssetRules tokenAddress="CDLZFC3SYJYDZT7K67VZ75HPJVIEUVNIXF47ZG2FB2RMQQVU2HHGCYSC" />
-      </dl>,
+      </ul>,
     );
 
     await waitFor(() => {
@@ -38,9 +38,9 @@ describe('Issue #441 - ProgrammeAssetRules', () => {
     vi.spyOn(tokenLib, 'fetchTokenName').mockResolvedValue({ result: `USDC:${issuerAddress}` });
 
     render(
-      <dl>
+      <ul>
         <ProgrammeAssetRules tokenAddress="CAAAAAAAAAAABBBBBBBBBBBBCCCCCCCCCCCCDDDDDDDDDDDDEEEEEEEEE" />
-      </dl>,
+      </ul>,
     );
 
     await waitFor(() => {

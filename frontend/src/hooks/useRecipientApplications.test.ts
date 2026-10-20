@@ -5,14 +5,14 @@ import { useRecipientApplications } from './useRecipientApplications';
 const APPLICANT = 'GAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA';
 const REAL = `C${'A'.repeat(55)}`;
 const OTHER = `C${'B'.repeat(55)}`;
-const SAMPLE = 'CDV7VOCATIONALCOHORT3PL5QZ2WM8RT4HX6KJ9A3FC';
+const SAMPLE = 'CCOIACASOVO3ZQLXWWJFGZAU3Y545AGPXLBP4NYHYD77RDCBPXRVZ37C';
 
 const index = vi.hoisted(() => ({ programmes: [] as { id: string }[] }));
 vi.mock('../lib/indexer', () => ({
   fetchProgrammes: async () => index.programmes,
 }));
 
-const wallet = vi.hoisted(() => ({ address: APPLICANT as string | null }));
+const wallet = vi.hoisted(() => ({ address: 'GAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA' as string | null }));
 vi.mock('../context/useWallet', () => ({ useWallet: () => ({ address: wallet.address }) }));
 
 const clients = vi.hoisted(() => ({ map: {} as Record<string, unknown> }));

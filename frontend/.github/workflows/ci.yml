@@ -42,6 +42,11 @@ jobs:
       - name: Test
         run: npm test
 
+      # Every route, both themes, against axe; the contracts and the index are
+      # mocked. See src/test/accessibility.test.tsx.
+      - name: Accessibility checks
+        run: npm run test:a11y
+
       # The app builds and signs transactions, so a compromised production
       # dependency reaches transaction construction. The failure policy is
       # deliberate and documented in scripts/check-npm-advisories.sh.

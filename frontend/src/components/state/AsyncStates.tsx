@@ -311,6 +311,7 @@ export function TransactionOutcome({
   pendingNote,
   onDismiss,
   onRetry,
+  slow = false,
 }: {
   phase: string;
   error: Explained | null;
@@ -321,6 +322,7 @@ export function TransactionOutcome({
   onDismiss?: () => void;
   /** Offer only where sending the same transaction again makes sense. */
   onRetry?: () => void;
+  slow?: boolean;
 }) {
   const pending = phase === 'building' || phase === 'signing' || phase === 'submitting';
   const pendingText = pendingTitle ?? 'Waiting for the network…';
@@ -331,7 +333,13 @@ export function TransactionOutcome({
 
   if (error) return <ErrorPanel explained={error} onRetry={onRetry} live={false} />;
   if (pending) {
-    return <PendingState title={pendingText} note={pendingNote ?? 'Usually a few seconds.'} live={false} />;
+    return (
+      <PendingState
+        title={slow ? 'Still waiting for confirmation' : pendingText}
+        note={slow ? 'Do not send again. The outcome is not known yet.' : pendingNote ?? 'Usually a few seconds.'}
+        live={false}
+      />
+    );
   }
   if (phase === 'success') {
     return <Success title={successTitle} description={successDescription} onDismiss={onDismiss} live={false} />;

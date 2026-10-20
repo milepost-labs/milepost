@@ -31,7 +31,7 @@
 .recipient-signed-out {
   background: var(--surface);
   border-radius: var(--radius-hero-lg, 24px);
-  padding: clamp(22px, 4vw, 36px);
+  padding: clamp(24px, 4vw, 36px);
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(min(100%, 300px), 1fr));
   gap: var(--space-5-5) var(--space-6-5);
@@ -41,7 +41,7 @@
 .recipient-signed-out__callout {
   display: flex;
   flex-direction: column;
-  gap: var(--space-3-5, 14px);
+  gap: var(--space-4);
 }
 
 .recipient-signed-out__title {
@@ -69,7 +69,7 @@
   cursor: pointer;
   border: 0;
   border-radius: var(--radius-full);
-  padding: 13px 24px;
+  padding: 12px 24px;
   font-size: var(--text-md);
   font-weight: var(--weight-bold);
   background: var(--accent);
@@ -93,7 +93,7 @@
 
 .recipient-signed-out__link {
   border-radius: var(--radius-full);
-  padding: 13px 24px;
+  padding: 12px 24px;
   font-size: var(--text-md);
   font-weight: var(--weight-bold);
   background: var(--surface-raised);
@@ -128,7 +128,7 @@
 .recipient-signed-out__item {
   background: var(--bg);
   border-radius: var(--radius-row);
-  padding: 14px 16px;
+  padding: var(--space-4);
   display: flex;
   flex-direction: column;
   gap: var(--space-1);

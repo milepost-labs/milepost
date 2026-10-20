@@ -179,7 +179,11 @@ export function chainFor(id: string): FixtureChainRead {
   return FIXTURE_CHAIN[id] ?? FIXTURE_CHAIN_DEFAULT;
 }
 
-/** True when `id` names one of the stand-in programmes, not a deployed contract. */
+/**
+ * True when `id` names one of the stand-in programmes. Sample ids have the
+ * contract id shape, so this is a membership check; `isSampleProgrammeId` in
+ * `lib/programmeView.ts` is the one the app uses.
+ */
 export function isSampleProgrammeId(id: string): boolean {
   return FIXTURE_PROGRAMMES.some((programme) => programme.id === id);
 }

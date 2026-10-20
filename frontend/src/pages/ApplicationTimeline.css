@@ -63,6 +63,7 @@
 .timeline-step::before {
   content: '';
   position: absolute;
+  /* design-system-guard: allow spacing */
   left: 5px;
   top: var(--space-2);
   bottom: calc(var(--space-6) * -1);

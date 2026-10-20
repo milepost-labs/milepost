@@ -46,6 +46,7 @@ vi.mock('../hooks/useProgrammeParam', () => ({
 
 vi.mock('../context/useSoroban', () => ({
   useSoroban: () => ({
+    rpcUrl: 'https://soroban-testnet.stellar.org',
     programmeAt: () => hoisted.programmeClient,
     attest: { keepalive: hoisted.attestKeepalive },
     record: { keepalive: hoisted.recordKeepalive },
@@ -87,17 +88,17 @@ describe('Keepalive on-chain extensions', () => {
     await screen.findByText(/Extended — about 90 days left/);
   });
 
-  it('extends every extendable entry under 30 days, including standing', async () => {
+  it('extends every extendable entry, including standing and an attestation', async () => {
     renderPage();
     fireEvent.change(screen.getByLabelText('Attestation id'), {
       target: { value: ATTESTATION_UID },
     });
 
     fireEvent.click(
-      await screen.findByRole('button', { name: /Extend the 4 under 30 days/ }),
+      await screen.findByRole('button', { name: 'Extend all 3' }),
     );
 
-    await waitFor(() => expect(hoisted.keepalive).toHaveBeenCalledTimes(2));
+    await waitFor(() => expect(hoisted.keepalive).toHaveBeenCalledTimes(1));
     await waitFor(() => expect(hoisted.recordKeepalive).toHaveBeenCalledWith({ subject: SUBJECT }));
     await waitFor(() =>
       expect(hoisted.attestKeepalive).toHaveBeenCalledWith({
@@ -110,25 +111,25 @@ describe('Keepalive on-chain extensions', () => {
     let calls = 0;
     hoisted.keepalive.mockImplementation(() => {
       calls += 1;
-      if (calls === 2) return Promise.reject(new Error('rpc exploded'));
+      if (calls === 1) return Promise.reject(new Error('rpc exploded'));
       return assembled(undefined);
     });
 
     renderPage();
     fireEvent.click(
-      await screen.findByRole('button', { name: /Extend the 3 under 30 days/ }),
+      await screen.findByRole('button', { name: 'Extend all 2' }),
     );
 
-    await waitFor(() => expect(hoisted.keepalive).toHaveBeenCalledTimes(2));
+    await waitFor(() => expect(hoisted.keepalive).toHaveBeenCalledTimes(1));
     await waitFor(() => expect(hoisted.recordKeepalive).toHaveBeenCalledTimes(1));
     await screen.findByText(/Something went wrong/);
-    expect(screen.getAllByText(/Extended — about 90 days left/).length).toBe(2);
+    expect(screen.getAllByText(/Extended — about 90 days left/).length).toBe(1);
   });
 
   it('does not offer an extension while the programme is a sample', () => {
     renderPage();
     fireEvent.change(screen.getByLabelText('Programme'), {
-      target: { value: 'CBQ4SCHOOLBURSARY2026XK3ZP7M2QWJ5T8VN4RD6HY' },
+      target: { value: 'CBJWECZ3EUVNAE73YIMT2KWWNRHRF7NNWVKOLQRVOHSKYRYE32XBRPW7' },
     });
     expect(screen.getAllByText(/This is a sample programme/).length).toBeGreaterThan(0);
     expect(screen.getAllByRole('button', { name: 'Extend' }).every((button) => button.hasAttribute('disabled'))).toBe(true);

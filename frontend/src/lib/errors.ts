@@ -196,6 +196,13 @@ export function explain(error: unknown, contract: ContractName = 'program'): Exp
   if (/user (declined|rejected)|denied by the user|UserDeclined/i.test(text)) {
     return { kind: 'none', message: 'You declined the signature.', action: 'Nothing was submitted.' };
   }
+  if (/expired ?state|restore.*preamble/i.test(text)) {
+    return {
+      kind: 'blocked',
+      message: 'This record has been archived on the ledger.',
+      action: 'Restore it from the Keepalive screen, then try again.',
+    };
+  }
   if (/fetch|network|timeout|ECONNREFUSED|Failed to fetch/i.test(text)) {
     return {
       kind: 'fault',

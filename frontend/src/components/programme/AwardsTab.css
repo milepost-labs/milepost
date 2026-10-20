@@ -58,7 +58,7 @@
 .awards-tab__row-info {
   display: flex;
   flex-direction: column;
-  gap: 3px;
+  gap: var(--space-1);
   min-width: 0;
 }
 
@@ -90,7 +90,7 @@
   display: flex;
   gap: var(--space-1);
   width: 100%;
-  padding-top: 2px;
+  padding-top: var(--space-1);
 }
 
 .awards-tab__tranche-bar {

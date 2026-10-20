@@ -99,7 +99,7 @@
   .terms-tab__row-header {
     flex-direction: column;
     align-items: flex-start;
-    gap: 2px;
+    gap: var(--space-1);
   }
 
   .terms-tab__val {

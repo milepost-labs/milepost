@@ -15,6 +15,8 @@ import { DEMO_PROGRAMME_ID } from '../../context/sorobanStore';
 // client, so it needs a Soroban context; the checks stay disabled here.
 vi.mock('../../context/useSoroban', () => ({
   useSoroban: () => ({ programmeAt: vi.fn() }),
+  // No provider: the verifiers tab then shows the roster without on-chain checks.
+  useOptionalSoroban: () => null,
 }));
 
 // Mock useIndexedList so AwardsTab tests can test loaded, loading, and error states
@@ -321,7 +323,7 @@ describe('ProgrammeTabs wrapper component', () => {
     render(
       <MemoryRouter>
         <ProgrammeTabs
-          programmeId="test-prog"
+          programmeId={FIXTURE_PROGRAMMES[0].id}
           phase="Settled"
           quorum={3}
           asset="USDC"

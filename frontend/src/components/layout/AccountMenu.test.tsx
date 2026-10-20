@@ -140,7 +140,7 @@ describe('AccountMenu', () => {
     // Once only, polite (no kind given), and the message itself is visual.
     expect(mockAnnounce).toHaveBeenCalledTimes(1);
     expect(mockAnnounce.mock.calls[0][1]).toBeUndefined();
-    expect(screen.getByText(FUNDED)).not.toHaveAttribute('role');
+    expect(screen.getByText(FUNDED).getAttribute('role')).toBeNull();
   });
 
   it('announces a Friendbot failure once, as an alert', async () => {
@@ -170,7 +170,7 @@ describe('AccountMenu', () => {
       expect(mockAnnounce).toHaveBeenCalledWith('Friendbot is unavailable', 'alert'),
     );
     expect(mockAnnounce).toHaveBeenCalledTimes(1);
-    expect(screen.getByText('Friendbot is unavailable')).not.toHaveAttribute('role');
+    expect(screen.getByText('Friendbot is unavailable').getAttribute('role')).toBeNull();
   });
 
   it('announces the new balance once after a manual refresh', async () => {

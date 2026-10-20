@@ -10,9 +10,9 @@ const REAL_CLOSED = `C${'B'.repeat(55)}`;
 const REAL_FAULT  = `C${'C'.repeat(55)}`;
 
 // A sample programme id present in FIXTURE_PROGRAMMES whose fixture phase is Open.
-const SAMPLE_OPEN = 'CBQ4SCHOOLBURSARY2026XK3ZP7M2QWJ5T8VN4RD6HY';
+const SAMPLE_OPEN = 'CBJWECZ3EUVNAE73YIMT2KWWNRHRF7NNWVKOLQRVOHSKYRYE32XBRPW7';
 // A sample programme id whose fixture phase is NOT Open (it is Review).
-const SAMPLE_CLOSED = 'CDV7VOCATIONALCOHORT3PL5QZ2WM8RT4HX6KJ9A3FC';
+const SAMPLE_CLOSED = 'CCOIACASOVO3ZQLXWWJFGZAU3Y545AGPXLBP4NYHYD77RDCBPXRVZ37C';
 
 // ---------- module mocks ---------------------------------------------------
 
@@ -87,8 +87,9 @@ describe('useOpenProgrammes', () => {
   });
 
   it('does not call get_phase for sample programmes', async () => {
-    // One sample id in the index (will be merged via FIXTURE_PROGRAMMES too).
-    index.programmes = [{ id: SAMPLE_OPEN }];
+    // Samples come from FIXTURE_PROGRAMMES, not the index. Anything the index
+    // lists was deployed by the registry and is read as real.
+    index.programmes = [];
 
     const { result } = renderHook(() => useOpenProgrammes());
 

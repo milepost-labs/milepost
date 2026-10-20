@@ -5,6 +5,7 @@ import { useContractRead, useTransaction } from '../../hooks';
 import { formatAmount, validateAmount } from '../../lib/amount';
 import { explain, explainCode, type Explained } from '../../lib/errors';
 import { looksLikeContractId, truncateAddress } from '../../lib/format';
+import { isSampleProgrammeId } from '../../lib/programmeView';
 import { isPhase, phaseRequirement, type Phase } from '../../lib/phaseGate';
 import { sampleSendable, SAMPLE_TX_DELAY_MS } from '../../lib/fundingTx';
 import { AmountField, Button, Field } from '../ui';
@@ -56,7 +57,8 @@ export function AllocatedSpending({ award, sampleDelayMs = SAMPLE_TX_DELAY_MS }:
   const wallet = useWallet();
   const { programmeAt } = useSoroban();
 
-  const isReal = looksLikeContractId(award.programmeId);
+  // Sample ids have the contract shape too, so shape alone cannot tell them apart.
+  const isReal = looksLikeContractId(award.programmeId) && !isSampleProgrammeId(award.programmeId);
   const recipient = wallet.address;
 
   const client = useMemo(

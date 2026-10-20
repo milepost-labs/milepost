@@ -16,7 +16,7 @@ import { ProgrammeHeader } from "../components/programme/ProgrammeHeader";
 import { WhereTheMoneyIs } from "../components/programme/WhereTheMoneyIs";
 import { ProgrammeTabs } from "../components/programme/ProgrammeTabs";
 import { ProgrammeActions } from "../components/programme/ProgrammeActions";
-import { Badge, Button, Card, Deadline, Field, List, ListRow, PhaseBadge, Stat } from "../components/ui";
+import { AddressChip, Badge, Button, Card, Deadline, Field, List, ListRow, PhaseBadge, Stat } from "../components/ui";
 import { useSoroban } from "../context/useSoroban";
 import { useContractRead, useContractResult, useIndexedList, useProgramme } from "../hooks";
 import { fetchProgrammes } from "../lib/indexer";
@@ -24,7 +24,8 @@ import { directoryHref } from "../lib/programmeView";
 import { formatAmount } from "../lib/amount";
 import { isSampleProgrammeId } from "../lib/programmeView";
 import { registryVerificationCopy } from "../lib/registryVerification";
-import { FIXTURE_CHAIN, isSampleProgrammeId } from "../fixtures/programmes";
+import { FIXTURE_CHAIN } from "../fixtures/programmes";
+import { fetchTokenName, parseTokenName } from "../lib/token";
 import "./ProgrammeDetail.css";
 
 const ZERO = 0n;
@@ -96,42 +97,42 @@ export function ProgrammeAssetRules({ tokenAddress }: { tokenAddress: string }) 
 
   return (
     <>
-      <div>
-        <dt>Asset</dt>
-        <dd>
-          {tokenRead.loading && <span className="text-muted">Reading asset…</span>}
-          {Boolean(tokenRead.error) && (
-            <span className="text-muted">
-              {formatAddress(tokenAddress)}
-            </span>
-          )}
-          {assetInfo && (
-            <div className="programme-asset-display">
-              <span className="programme-asset-code">{assetInfo.code}</span>
-              {assetInfo.issuer && (
-                <span className="programme-asset-issuer">
-                  <span className="programme-asset-issuer-label text-muted">Issuer:</span>
-                  <AddressChip
-                    address={assetInfo.issuer}
-                    showExplorerLink
-                    copyLabel="Copy issuer address"
-                  />
-                </span>
-              )}
-            </div>
-          )}
-        </dd>
-      </div>
-      <div>
-        <dt>Asset contract</dt>
-        <dd className="numeric" title={tokenAddress}>
+      <ListRow
+        title="Asset"
+        trailing={
+          <>
+            {tokenRead.loading && <span className="text-muted">Reading asset…</span>}
+            {Boolean(tokenRead.error) && (
+              <span className="text-muted">{formatAddress(tokenAddress)}</span>
+            )}
+            {assetInfo && (
+              <span className="programme-asset-display">
+                <span className="programme-asset-code">{assetInfo.code}</span>
+                {assetInfo.issuer && (
+                  <span className="programme-asset-issuer">
+                    <span className="programme-asset-issuer-label text-muted">Issuer:</span>
+                    <AddressChip
+                      address={assetInfo.issuer}
+                      showExplorerLink
+                      copyLabel="Copy issuer address"
+                    />
+                  </span>
+                )}
+              </span>
+            )}
+          </>
+        }
+      />
+      <ListRow
+        title="Asset contract"
+        trailing={
           <AddressChip
             address={tokenAddress}
             showExplorerLink
             copyLabel="Copy asset contract address"
           />
-        </dd>
-      </div>
+        }
+      />
     </>
   );
 }
@@ -829,14 +830,7 @@ export const ProgrammeDetail = () => {
                     </span>
                   }
                 />
-                <ListRow
-                  title="Asset contract"
-                  trailing={
-                    <span className="numeric" title={value.token}>
-                      {formatAddress(value.token)}
-                    </span>
-                  }
-                />
+                <ProgrammeAssetRules tokenAddress={value.token} />
                 <ListRow
                   title="Reviewer votes needed"
                   trailing={

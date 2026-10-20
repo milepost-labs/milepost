@@ -20,3 +20,4 @@ soroban-sdk = { workspace = true, features = ["testutils"] }
 milepost-attest = { path = "../attest", features = ["testutils"] }
 milepost-record = { path = "../record", features = ["testutils"] }
 milepost-test-utils = { path = "../../crates/test-utils", features = ["testutils"] }
+proptest = "1"

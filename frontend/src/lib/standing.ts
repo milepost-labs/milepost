@@ -50,14 +50,14 @@ const formatXlm = (amount: bigint) => formatAmount(amount, { asset: 'XLM' });
  * `record.get`, so it is shown only when a source has supplied it.
  */
 export function standingStats(standing: StandingAggregate): { label: string; value: string }[] {
-  const released =
+  const delivered =
     standing.tranchesAwarded === undefined
       ? String(standing.tranchesReleased)
       : `${standing.tranchesReleased} of ${standing.tranchesAwarded}`;
   return [
     { label: 'Programmes that funded you', value: String(standing.programmes) },
     { label: 'Total received', value: formatXlm(standing.totalReceived) },
-    { label: 'Tranches delivered', value: released },
+    { label: 'Tranches delivered', value: delivered },
   ];
 }
 

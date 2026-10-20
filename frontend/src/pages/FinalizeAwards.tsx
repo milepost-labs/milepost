@@ -427,8 +427,10 @@ export const FinalizeAwards = () => {
 
   const quorum = isSample ? sampleChain.quorum : (config.data?.quorum ?? 0);
   const votes = application.data?.votes ?? [];
-  const quorumReached = application.data != null && votes.length >= quorum;
-  const granted = quorumReached ? votes[Math.floor((quorum - 1) / 2)] : null;
+  // A quorum of 0 means the config has not been read yet, not that no votes
+  // are needed: the contract refuses to construct a programme without one.
+  const quorumReached = application.data != null && quorum > 0 && votes.length >= quorum;
+  const granted = quorumReached ? (votes[Math.floor((quorum - 1) / 2)] ?? null) : null;
   const currentBudget = isSample ? sampleBudget : budget.data;
   const remainingAfter = currentBudget != null && granted != null ? currentBudget - granted : null;
   const insufficient = remainingAfter != null && remainingAfter < 0n;
@@ -483,58 +485,60 @@ export const FinalizeAwards = () => {
         programmes={programmes}
       />
 
-      <section className="stats-grid animate-fade-up" style={{ animationDelay: '100ms' }}>
-        <div className="stat-card">
-          <div className="stat-icon"><Coins size={24} /></div>
-          <div className="stat-content">
-            <span className="stat-label">Remaining Budget</span>
-            <span className="stat-value">
-              {isSample ? (
+      <section
+        className="finalize-stats animate-fade-up"
+        style={{ animationDelay: '100ms' }}
+        aria-label="Programme figures"
+      >
+        <Card>
+          <Stat
+            label="Remaining budget"
+            value={
+              isSample ? (
                 formatAmount(sampleRemaining, { asset: 'XLM' })
               ) : (
                 <AsyncView {...budget} onRetry={budget.refetch}>
                   {(value) => formatAmount(value, { asset: 'XLM' })}
                 </AsyncView>
-              )}
-            </span>
-          </div>
-        </div>
-        <div className="stat-card">
-          <div className="stat-icon"><AwardIcon size={24} /></div>
-          <div className="stat-content">
-            <span className="stat-label">Programme Phase</span>
-            <span className="stat-value">
-              {isSample ? (
+              )
+            }
+            numeric
+          />
+        </Card>
+        <Card>
+          <Stat
+            label="Programme phase"
+            value={
+              isSample ? (
                 <PhaseBadge phase={sampleChain.phase} />
               ) : (
                 <AsyncView {...phase} onRetry={phase.refetch}>
                   {(value) => <PhaseBadge phase={value.tag} />}
                 </AsyncView>
-              )}
-            </span>
-          </div>
-        </div>
-        <div className="stat-card">
-          <div className="stat-icon"><CheckCircle size={24} /></div>
-          <div className="stat-content">
-            <span className="stat-label">Reviewer votes needed</span>
-            <span className="stat-value">
-              {isSample ? (
+              )
+            }
+          />
+        </Card>
+        <Card>
+          <Stat
+            label="Reviewer votes needed"
+            value={
+              isSample ? (
                 `${sampleChain.quorum} votes`
               ) : (
                 <AsyncView {...config} onRetry={config.refetch}>
                   {(value) => `${value.quorum} votes`}
                 </AsyncView>
-              )}
-            </span>
-          </div>
-        </div>
-        <div className="stat-card">
-          <div className="stat-icon"><Coins size={24} /></div>
-          <div className="stat-content">
-            <span className="stat-label">Minimum Award</span>
-            <span className="stat-value">
-              {isSample ? (
+              )
+            }
+            numeric
+          />
+        </Card>
+        <Card>
+          <Stat
+            label="Minimum award"
+            value={
+              isSample ? (
                 'None'
               ) : (
                 <AsyncView {...config} onRetry={config.refetch}>
@@ -544,10 +548,11 @@ export const FinalizeAwards = () => {
                       : 'None'
                   }
                 </AsyncView>
-              )}
-            </span>
-          </div>
-        </div>
+              )
+            }
+            numeric
+          />
+        </Card>
       </section>
 
       <section className="finalize-panel animate-fade-up" style={{ animationDelay: '200ms' }}>

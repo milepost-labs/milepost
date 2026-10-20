@@ -63,6 +63,26 @@ the bundle baseline only once growth is confirmed to be intentional, and record
 an advisory exception only with a stated reason, in
 `.github/npm-audit-exceptions.json`.
 
+### Accessibility checks
+
+Every route in `src/routes.ts` is rendered in jsdom, in both themes, and checked
+with [axe-core](https://github.com/dequelabs/axe-core). A serious or critical
+violation fails the suite, and therefore CI. The contract clients, the wallet
+and the index are mocked, so the check never touches the network.
+
+```sh
+npm run test:a11y   # every route, light and dark
+```
+
+The `accessibility` job in the repository's `.github/workflows/ci.yml` runs this
+on every pull request to `dev` and on pushes to `dev` and `main`.
+
+A rule that genuinely cannot be fixed is recorded in
+`ACCESSIBILITY_EXCEPTIONS` in `src/test/accessibility.test.tsx`, with a `route`
+(optional), the `rule` id and a `reason`. The suite fails on an entry with no
+reason, and review treats the list as something that should stay empty. Prefer
+fixing the page.
+
 ### Test coverage
 
 CI runs the suite with coverage and writes the totals and the ten
@@ -134,9 +154,33 @@ writing a second version; `src/pages/ProgrammeDetail.tsx` shows the pattern end
 to end.
 
 ## Styling
-
+ 
 Use the tokens in `src/styles/tokens.css` for colour, spacing, type, radius and
 elevation. No literal hex values or pixel spacing in new CSS.
+
+### Design-system guard
+
+CI scans every page and component CSS file (`src/pages/` and `src/components/`)
+over whole files to prevent hard-coded colours or off-scale spacing from slipping in.
+Colours must use design tokens from `src/styles/tokens.css` (or semantic variables
+from `index.css`), and spacing properties must sit on the 4px scale.
+
+If a genuine one-off value is strictly necessary (e.g. alignment centering or
+visually-hidden clip margins), use the documented escape hatch above the declaration:
+
+```css
+/* design-system-guard: allow spacing */
+margin: -1px;
+```
+
+To run the check locally:
+
+```sh
+npm run check:design-system                          # scans all page and component CSS files
+node scripts/check-design-system.mjs --diff-base dev # scans only lines changed against dev
+npm run test:design-system                           # runs the guard's own test suite
+```
+
 
 ## Contract changes
 

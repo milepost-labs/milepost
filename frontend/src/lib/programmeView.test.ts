@@ -103,9 +103,10 @@ describe('isSampleProgrammeId', () => {
     expect(isSampleProgrammeId('')).toBe(false);
   });
 
-  it('guards the fixture set: no fixture id is a deployed contract', () => {
+  it('guards the fixture set: sample ids have the contract id shape but none is the seeded programme', () => {
     for (const programme of FIXTURE_PROGRAMMES) {
-      expect(isProgrammeContractId(programme.id)).toBe(false);
+      expect(isProgrammeContractId(programme.id)).toBe(true);
+      expect(programme.id).not.toBe(DEMO_PROGRAMME_ID);
     }
   });
 });

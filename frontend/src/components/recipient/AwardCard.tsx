@@ -1,17 +1,25 @@
 import { useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
+import { Buffer } from 'buffer';
+import type { Award } from '@milepost/program';
 import type { RecipientAwardFixture } from '../../fixtures/recipientFixtures';
 import { formatAmount, describeAmount } from '../../lib/amount';
 import { looksLikeContractId, truncateAddress } from '../../lib/format';
+import { isSampleProgrammeId } from '../../lib/programmeView';
 import { useAnnouncer } from '../../context/useAnnouncer';
-import { PendingPulse } from '../state/AsyncStates';
-import { ModePill } from '../ui';
+import { useWallet } from '../../context/useWallet';
+import { useSoroban } from '../../context/useSoroban';
+import { useTransaction } from '../../hooks/useTransaction';
+import { sampleSendable, SAMPLE_TX_DELAY_MS } from '../../lib/fundingTx';
+import { Field, Button, ModePill } from '../ui';
+import { ErrorPanel, TransactionOutcome } from '../state/AsyncStates';
 import { AllocatedSpending } from './AllocatedSpending';
 import './AwardCard.css';
 
 interface AwardCardProps {
   award: RecipientAwardFixture;
-  simulateAlreadyUsedError?: boolean;
+  /** Overridable for tests: keep stand-in delay short. */
+  sampleDelayMs?: number;
 }
 
 /**
@@ -53,73 +61,178 @@ function modeDestination(mode: RecipientAwardFixture['mode'], payee: string | nu
  * wallet.
  */
 export function AwardCard({
-  award,
-  simulateAlreadyUsedError = false,
+  award: initialAward,
+  sampleDelayMs = SAMPLE_TX_DELAY_MS,
 }: AwardCardProps) {
   const announce = useAnnouncer();
   const { address } = useWallet();
   const { programmeAt } = useSoroban();
 
-  // Local state for release lifecycle
-  const [releasedCount, setReleasedCount] = useState(award.tranchesReleased);
-  const [releaseStatus, setReleaseStatus] = useState<'idle' | 'pending' | 'error'>('idle');
-  const [releaseErrorMessage, setReleaseErrorMessage] = useState<string | null>(null);
+  // On-chain award state: starts from the fixture/prop and is updated after
+  // each confirmed release so tiles reflect the chain, not a local counter.
+  const [liveAward, setLiveAward] = useState<RecipientAwardFixture>(initialAward);
+  // A new award from the caller replaces the local copy.
+  const [seenAward, setSeenAward] = useState(initialAward);
+  if (initialAward !== seenAward) {
+    setSeenAward(initialAward);
+    setLiveAward(initialAward);
+  }
 
-  const grantedBigInt = BigInt(award.granted);
-  const trancheBase = award.tranches > 0 ? grantedBigInt / BigInt(award.tranches) : 0n;
-  const releasedAmount = trancheBase * BigInt(releasedCount);
+  // Sample ids have the contract shape too, so shape alone cannot tell them apart.
+  const isReal = looksLikeContractId(initialAward.programmeId) && !isSampleProgrammeId(initialAward.programmeId);
+  const isSample = !isReal;
 
-  const isProofReady = award.attestationReady && releasedCount === award.tranchesReleased;
-  const canRelease = isProofReady && releasedCount < award.tranches && releaseStatus !== 'pending';
+  // Release form state
+  const [attestationHex, setAttestationHex] = useState('');
+  const [attesterInput, setAttesterInput] = useState('');
+  const [formOpen, setFormOpen] = useState(false);
 
-  const tranchesList = Array.from({ length: award.tranches }, (_, i) => {
-    const isLast = i === award.tranches - 1;
-    const amount = isLast ? grantedBigInt - trancheBase * BigInt(award.tranches - 1) : trancheBase;
-    const isReleased = i < releasedCount;
-    const isNext = i === releasedCount;
+  const tx = useTransaction<{ amount: bigint; txHash: string }>({ contract: 'program' });
 
-    let statusLabel = 'Locked';
-    let statusClass = 'tranche-tile--locked';
+  // Derived display values from live award state.
+  const grantedBigInt = BigInt(liveAward.granted);
+  const releasedBigInt = BigInt(liveAward.released);
+  const releasedCount = liveAward.tranchesReleased;
+  const tranches = liveAward.tranches;
+  const trancheBase = tranches > 0 ? grantedBigInt / BigInt(tranches) : 0n;
 
-    if (isReleased) {
-      statusLabel = 'Released';
-      statusClass = 'tranche-tile--released';
-    } else if (isNext) {
-      if (isProofReady) {
-        statusLabel = 'Proof received';
-        statusClass = 'tranche-tile--proof-ready';
-      } else {
-        statusLabel = 'Waiting on verifier';
-        statusClass = 'tranche-tile--waiting';
+  const tranchesList = useMemo(
+    () =>
+      Array.from({ length: tranches }, (_, i) => {
+        const isLast = i === tranches - 1;
+        const amount = isLast
+          ? grantedBigInt - trancheBase * BigInt(tranches - 1)
+          : trancheBase;
+        const isReleased = i < releasedCount;
+        const isNext = i === releasedCount;
+
+        let statusLabel = 'Locked';
+        let statusClass = 'tranche-tile--locked';
+
+        if (isReleased) {
+          statusLabel = 'Released';
+          statusClass = 'tranche-tile--released';
+        } else if (isNext) {
+          if (liveAward.attestationReady) {
+            statusLabel = 'Proof received';
+            statusClass = 'tranche-tile--proof-ready';
+          } else {
+            statusLabel = 'Waiting on verifier';
+            statusClass = 'tranche-tile--waiting';
+          }
+        }
+
+        return {
+          index: i + 1,
+          amount,
+          amountFormatted: formatAmount(amount, { asset: 'USDC' }),
+          statusLabel,
+          statusClass,
+        };
+      }),
+    [tranches, grantedBigInt, trancheBase, releasedCount, liveAward.attestationReady],
+  );
+
+  // Validate the attestation hex and attester address.
+  const attestationBuf = hexToBuffer(attestationHex);
+  const attestationError =
+    attestationHex.trim().length > 0 && attestationBuf === null
+      ? 'Enter the 64-character hex attestation UID.'
+      : '';
+  const attesterError =
+    attesterInput.trim().length > 0 && !/^G[A-Z2-7]{55}$/.test(attesterInput.trim())
+      ? 'Enter a valid Stellar address (starts with G).'
+      : '';
+  const canRelease =
+    releasedCount < tranches &&
+    !tx.busy &&
+    (isSample ||
+      (attestationBuf !== null && /^G[A-Z2-7]{55}$/.test(attesterInput.trim())));
+
+  const handleRelease = async () => {
+    if (!canRelease) return;
+
+    const recipient = address ?? initialAward.recipient;
+    const progId = initialAward.programmeId;
+    const client = isReal ? programmeAt(progId) : null;
+    const nextTranche = releasedCount + 1;
+
+    const result = await tx.send(async () => {
+      if (isSample) {
+        return sampleSendable(() => ({ amount: trancheBase, txHash: '' }), sampleDelayMs);
       }
+
+      const attBuf = attestationBuf!;
+      const attester = attesterInput.trim();
+
+      const assembled = await client!.release({
+        recipient,
+        attestation: attBuf,
+        attester,
+      });
+
+      return {
+        signAndSend: async (
+          options: Parameters<typeof assembled.signAndSend>[0],
+        ) => {
+          const sent = await assembled.signAndSend(options);
+          const amount = sent.result.unwrap();
+          const txHash =
+            (sent as { sendTransactionResponse?: { hash?: string } })
+              .sendTransactionResponse?.hash ?? '';
+
+          // Re-read the award so tiles reflect chain state, not a local counter.
+          try {
+            const fresh = await client!.get_award({ recipient });
+            const freshAward = fresh.result.unwrap() as Award;
+            setLiveAward({
+              ...initialAward,
+              granted: freshAward.granted.toString(),
+              released: freshAward.released.toString(),
+              tranches: freshAward.tranches,
+              tranchesReleased: freshAward.tranches_released,
+              payee:
+                freshAward.mode.tag === 'Direct'
+                  ? freshAward.payee
+                  : null,
+              mode: freshAward.mode.tag,
+            });
+          } catch {
+            // If the re-read fails, fall back to incrementing locally so the
+            // UI is not left in a stale confirmed-but-unchanged state.
+            setLiveAward((prev) => ({
+              ...prev,
+              released: (BigInt(prev.released) + amount).toString(),
+              tranchesReleased: prev.tranchesReleased + 1,
+            }));
+          }
+
+          return { result: { amount, txHash } };
+        },
+      };
+    });
+
+    if (result !== null) {
+      // A sample has no chain to re-read, so advance the stand-in locally.
+      if (isSample) {
+        setLiveAward((prev) => ({
+          ...prev,
+          released: (BigInt(prev.released) + result.amount).toString(),
+          tranchesReleased: prev.tranchesReleased + 1,
+        }));
+      }
+      announce(`Tranche ${nextTranche} released.`);
+      setFormOpen(false);
+      setAttestationHex('');
+      setAttesterInput('');
+    } else if (tx.error) {
+      announce(`Tranche not released. ${tx.error.message}`, 'alert');
     }
+  };
 
-    return {
-      index: i + 1,
-      amount,
-      amountFormatted: formatAmount(amount, { asset: 'USDC' }),
-      statusLabel,
-      statusClass,
-    };
-  });
-
-  const handleRelease = () => {
-    setReleaseStatus('pending');
-    setReleaseErrorMessage(null);
-
-    setTimeout(() => {
-      if (simulateAlreadyUsedError) {
-        const errorDetail = explain(22, 'program');
-        setReleaseStatus('error');
-        setReleaseErrorMessage(errorDetail.message);
-        announce('Tranche not released: proof already used.', 'alert');
-      } else {
-        const nextCount = releasedCount + 1;
-        setReleasedCount(nextCount);
-        setReleaseStatus('idle');
-
-        announce(`Tranche ${nextCount} released.`);
-      }
+  const allReleased = releasedCount >= tranches;
+  const showReleaseForm = !allReleased && (formOpen || isSample);
+  const destination = modeDestination(liveAward.mode, liveAward.payee);
 
   return (
     <article className="award-card" aria-labelledby={`award-${initialAward.programmeId}`}>
@@ -144,7 +257,12 @@ export function AwardCard({
             </span>
           </span>
         </div>
-        <ModePill mode={award.mode} />
+        <div className="award-card__badges">
+          {initialAward.sample && (
+            <span className="award-card__sample">Sample data</span>
+          )}
+          <ModePill mode={liveAward.mode} />
+        </div>
       </div>
 
       {/* Tranche tiles */}
@@ -274,10 +392,25 @@ export function AwardCard({
         <ErrorPanel explained={tx.error} onRetry={() => setFormOpen(true)} live={false} />
       )}
 
+      {/* The form closes on success; the receipt stays until dismissed. */}
+      {tx.phase === 'success' && !showReleaseForm && (
+        <TransactionOutcome
+          phase={tx.phase}
+          error={null}
+          successTitle={`Tranche ${releasedCount} released`}
+          successDescription={
+            tx.result
+              ? `${formatAmount(tx.result.amount, { asset: 'USDC' })} released.`
+              : undefined
+          }
+          onDismiss={() => tx.reset()}
+        />
+      )}
+
       {/* Mode-specific spending actions */}
       <div className="award-card__mode-spending">
-        {award.mode === 'Allocated' && (
-          <AllocatedSpending award={award} />
+        {liveAward.mode === 'Allocated' && (
+          <AllocatedSpending award={liveAward} />
         )}
 
         {liveAward.mode === 'Restricted' && (

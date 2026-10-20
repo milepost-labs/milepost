@@ -229,7 +229,7 @@ vi.mock('../context/useSoroban', () => ({
 
 vi.mock('../fixtures/payeeFixtures', () => ({
   FIXTURE_PAYEES: {
-    CBQ4SCHOOLBURSARY2026XK3ZP7M2QWJ5T8VN4RD6HY: [
+    CBJWECZ3EUVNAE73YIMT2KWWNRHRF7NNWVKOLQRVOHSKYRYE32XBRPW7: [
       { address: 'GAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA', label: 'Sample Payee Clinic' },
     ],
     CD6X33SKLUEMANS67ID3LJL572FFGERMMJCIFRW7P7EKZQLH35XT67C6: [
@@ -434,7 +434,7 @@ describe('Issue #439 - Real vs Sample programmes payee management', () => {
   });
 
   it('shows no fixture payees on real programmes and checks any address with is_payee', async () => {
-    renderPage();
+    await renderPage();
 
     // Must not show invented fixture payees
     expect(screen.queryByText('Real Programme Fixture')).toBeNull();
@@ -452,7 +452,7 @@ describe('Issue #439 - Real vs Sample programmes payee management', () => {
   });
 
   it('labels addresses added or removed this session as session-only', async () => {
-    renderPage();
+    await renderPage();
 
     // Add address in this session
     fireEvent.change(screen.getByLabelText('Payee address'), { target: { value: VALID_A } });
@@ -471,10 +471,10 @@ describe('Issue #439 - Real vs Sample programmes payee management', () => {
   });
 
   it('shows fixture payees with sample data tag on a sample programme', async () => {
-    renderPage();
+    await renderPage();
 
     const progInput = screen.getByLabelText('Programme address');
-    fireEvent.change(progInput, { target: { value: 'CBQ4SCHOOLBURSARY2026XK3ZP7M2QWJ5T8VN4RD6HY' } });
+    fireEvent.change(progInput, { target: { value: 'CBJWECZ3EUVNAE73YIMT2KWWNRHRF7NNWVKOLQRVOHSKYRYE32XBRPW7' } });
     fireEvent.click(screen.getByRole('button', { name: 'Look up' }));
 
     await waitFor(() => {

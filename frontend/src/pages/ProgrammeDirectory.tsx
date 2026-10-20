@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
 import { MoneyRow } from '../components/programme/MoneyRow';
-import { ModePill } from '../components/ui';
+import { Badge, ModePill } from '../components/ui';
 import '../components/programme/phasePill.css';
 import { Skeleton, Empty } from '../components/state/AsyncStates';
 import { describeAmount } from '../lib/amount';
@@ -128,13 +128,8 @@ export const ProgrammeDirectory = () => {
   }, [params, setParams, showSamples]);
 
   const all = useMemo(
-    () => mergeProgrammes(listRead.data, userRoles, { showSamples }),
-    [listRead.data, userRoles, showSamples],
-  );
-  const counts = useMemo(() => phaseCounts(all, query), [all, query]);
-  const all = useMemo(
-    () => mergeProgrammes(listRead.data, userRoles, registryRead.ids ?? undefined),
-    [listRead.data, userRoles, registryRead.ids],
+    () => mergeProgrammes(listRead.data, userRoles, { showSamples }, registryRead.ids ?? undefined),
+    [listRead.data, userRoles, showSamples, registryRead.ids],
   );
   const realIds = useMemo(() => all.filter((p) => !p.sample).map((p) => p.id), [all]);
   const reads = useProgrammeChainReads(realIds);
@@ -333,7 +328,12 @@ export const ProgrammeDirectory = () => {
           {!loading && shown.length > 0 && (
             <div className="directory-grid">
               {shown.map((programme) => (
-                <ProgrammeCard key={programme.id} programme={programme} carriedSearch={carriedSearch} />
+                <ProgrammeCard
+                  key={programme.id}
+                  programme={programme}
+                  carriedSearch={carriedSearch}
+                  readError={readsByError.get(programme.id)}
+                />
               ))}
             </div>
           )}
@@ -352,10 +352,13 @@ export const ProgrammeDirectory = () => {
 function ProgrammeCard({
   programme,
   carriedSearch,
+  readError,
 }: {
   programme: DirectoryProgramme;
   /** The directory's filters, carried through so the programme can link back. */
   carriedSearch: string;
+  /** Set when this real programme's chain read failed. */
+  readError?: unknown;
 }) {
   const { chain } = programme;
   const budget = BigInt(chain.contributed) - BigInt(chain.fee);
@@ -391,6 +394,8 @@ function ProgrammeCard({
                 {ROLE_LABELS[role]}
               </span>
             ))}
+            {/* The roles are stand-ins until the per-programme role reads are wired. */}
+            <Badge tone="neutral">Sample data</Badge>
           </div>
         )}
 
@@ -417,13 +422,13 @@ function ProgrammeCard({
         )}
 
         <div className="directory-card-new__foot">
-          <span className="directory-card-new__sample">
-            {programme.sample ? 'Sample data' : 'Sample chain read'}
-          </span>
-          <span className="directory-card-new__mode">
-            <span className="directory-card-new__mode-label">Planned default</span>
-            <ModePill mode={chain.mode} />
-          </span>
+          <span className="directory-card-new__sample">{tag}</span>
+          {chain.mode && (
+            <span className="directory-card-new__mode">
+              <span className="directory-card-new__mode-label">Planned default</span>
+              <ModePill mode={chain.mode} />
+            </span>
+          )}
           <span className="directory-card-new__cta">{programmeCta(chain.phase)} →</span>
         </div>
       </article>

@@ -19,6 +19,15 @@
     <meta name="twitter:card" content="summary" />
     <meta name="twitter:title" content="Milepost" />
     <meta name="twitter:description" content="Conditional disbursement on Stellar. Money releases in tranches only when a verifier confirms a condition was met." />
+    <!-- Content Security Policy: restrict script sources and API endpoints.
+         - default-src 'self': sandbox to this origin
+         - script-src 'self': only scripts from this origin (no inline; vite handles bundling)
+         - style-src 'self' https://fonts.googleapis.com: styles from self and Google Fonts CSS endpoint
+         - font-src https://fonts.gstatic.com: fonts from Google's CDN
+         - connect-src 'self' https://soroban-testnet.stellar.org https://soroban.stellar.org https://milepost-labs.github.io wss://localhost:* blob:: RPC endpoints for Soroban, index at GitHub, and dev websocket
+         - img-src 'self' data:: images from self and data URIs (favicons, logos)
+    -->
+    <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; style-src 'self' https://fonts.googleapis.com; font-src https://fonts.gstatic.com; connect-src 'self' https://soroban-testnet.stellar.org https://soroban.stellar.org https://milepost-labs.github.io wss://localhost:* blob:; img-src 'self' data:" />
   </head>
   <body>
     <div id="root"></div>

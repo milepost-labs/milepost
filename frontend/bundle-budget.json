@@ -1,7 +1,7 @@
 {
   "frontend": {
     "description": "Total uncompressed JavaScript bytes in dist/assets after npm run build.",
-    "baseline_bytes": 956842,
+    "baseline_bytes": 1068412,
     "allowed_growth_percent": 5
   }
 }

@@ -145,10 +145,10 @@ describe('SpendPolicy payees', () => {
 
   it('checks a single address with is_payee and shows the result', async () => {
     await renderPage();
-    fireEvent.change(screen.getByLabelText('Check an address'), { target: { value: PAYEE } });
+    fireEvent.change(screen.getByLabelText('Payee address'), { target: { value: PAYEE } });
     fireEvent.click(screen.getByRole('button', { name: 'Check payee' }));
 
-    await screen.findByText('Allowed payee');
+    await screen.findByText(/is an approved payee for this wallet\./);
     expect(state.policy!.is_payee).toHaveBeenCalledWith({ wallet: STEWARD, payee: PAYEE });
   });
 

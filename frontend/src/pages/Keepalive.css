@@ -117,6 +117,13 @@
   color: var(--text-muted);
 }
 
+.keepalive-page__unchecked {
+  margin: 0;
+  font-size: var(--text-sm);
+  line-height: var(--leading-body);
+  color: var(--text-muted);
+}
+
 .keepalive-page__targets {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(min(100%, var(--grid-min-card)), 1fr));
@@ -135,4 +142,10 @@
 
 .ttl-row__error {
   grid-column: 1 / -1;
+}
+
+.keepalive-page__subhead {
+  margin: 0;
+  font-size: var(--text-lg);
+  font-weight: var(--weight-bold);
 }

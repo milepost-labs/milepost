@@ -1,4 +1,4 @@
-import { useCallback, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { useWallet } from '../context/useWallet';
 import { explain, type ContractName, type Explained } from '../lib/errors';
 
@@ -28,6 +28,8 @@ export interface Sendable<T> {
   signAndSend: (options: {
     signTransaction: (xdr: string) => Promise<{ signedTxXdr: string; signerAddress: string }>;
   }) => Promise<{ result: T }>;
+  /** Simulation fee in stroops, when the binding exposes it. */
+  estimatedFee?: bigint;
 }
 
 export interface TransactionState<T> {
@@ -36,6 +38,10 @@ export interface TransactionState<T> {
   busy: boolean;
   error: Explained | null;
   result: T | null;
+  /** Fee from the latest simulation, available before signing. */
+  estimatedFee: bigint | null;
+  /** True when confirmation has taken longer than the safe waiting threshold. */
+  slow: boolean;
   /** Resolves to the result, or null if it failed. Never throws. */
   send: (build: () => Promise<Sendable<T>>) => Promise<T | null>;
   reset: () => void;
@@ -55,15 +61,25 @@ export function useTransaction<T = unknown>(
   const [phase, setPhase] = useState<TransactionPhase>('idle');
   const [error, setError] = useState<Explained | null>(null);
   const [result, setResult] = useState<T | null>(null);
+  const [estimatedFee, setEstimatedFee] = useState<bigint | null>(null);
+  const [slow, setSlow] = useState(false);
 
   // Guards against a double-click submitting twice. A duplicated contribution
   // is real money, so this is not merely tidiness.
   const inFlight = useRef(false);
 
+  useEffect(() => {
+    if (!inFlight.current) return;
+    const timer = window.setTimeout(() => setSlow(true), 10_000);
+    return () => window.clearTimeout(timer);
+  }, [phase]);
+
   const reset = useCallback(() => {
     setPhase('idle');
     setError(null);
     setResult(null);
+    setEstimatedFee(null);
+    setSlow(false);
   }, []);
 
   const send = useCallback(
@@ -104,6 +120,11 @@ export function useTransaction<T = unknown>(
         // before anything is signed, which is the good place for them.
         setPhase('building');
         const transaction = await build();
+        const simulation = transaction as Sendable<T> & {
+          simulationResponse?: { minResourceFee?: string | number | bigint };
+        };
+        const rawFee = simulation.estimatedFee ?? simulation.simulationResponse?.minResourceFee;
+        if (rawFee !== undefined) setEstimatedFee(BigInt(rawFee));
 
         setPhase('signing');
         const sent = await transaction.signAndSend({ signTransaction: wallet.signTransaction });
@@ -136,6 +157,8 @@ export function useTransaction<T = unknown>(
     busy: phase === 'building' || phase === 'signing' || phase === 'submitting',
     error,
     result,
+    estimatedFee,
+    slow,
     send,
     reset,
   };

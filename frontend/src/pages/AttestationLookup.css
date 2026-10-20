@@ -225,6 +225,26 @@
   }
 }
 
+.attest-lookup__status {
+  padding: var(--space-4);
+  font-size: var(--text-sm);
+  color: var(--text-muted);
+}
+
+.attest-lookup__limitation {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-card-lg);
+  padding: var(--space-4);
+  color: var(--text-muted);
+  font-size: var(--text-sm);
+  line-height: var(--leading-body);
+}
+
+.attest-lookup__limitation p {
+  margin: 0;
+}
+
 /* Programme selection for the spent check (issue #408) */
 .attest-lookup__programme {
   display: flex;
