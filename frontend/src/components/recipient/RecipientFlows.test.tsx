@@ -1,17 +1,24 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { render, screen, fireEvent, act, waitFor } from '@testing-library/react';
+import { render, screen, fireEvent, waitFor } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
 import { Buffer } from 'buffer';
 import { AwardCard } from './AwardCard';
 import { ApplyForm } from './ApplyForm';
 import { ApplicationTimelineList } from './ApplicationTimelineList';
 import type { RecipientAwardFixture, RecipientApplicationFixture } from '../../fixtures/recipientFixtures';
-import { explain, explainCode } from '../../lib/errors';
+import { explainCode } from '../../lib/errors';
 
 // Mock useAnnouncer so we can assert on announcements
 const mockAnnounce = vi.fn();
 vi.mock('../../context/useAnnouncer', () => ({
   useAnnouncer: () => mockAnnounce,
+}));
+
+// useOpenProgrammes (used by ApplyForm) fetches the programme index.
+// Return an empty list so only the sample fixtures show up.
+vi.mock('../../lib/indexer', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('../../lib/indexer')>()),
+  fetchProgrammes: vi.fn(async () => []),
 }));
 
 // --- Wallet + Soroban mocks for the Allocated spend flow --------------------
@@ -24,9 +31,12 @@ const PAYEE = 'GBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB';
 const REAL_PROGRAMME = 'CAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA';
 
 const walletMocks = vi.hoisted(() => ({
-  address: RECIPIENT as string | null,
+  address: 'GAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA' as string | null,
   connect: vi.fn(),
-  signTransaction: vi.fn(),
+  signTransaction: vi.fn(async () => ({
+    signedTxXdr: 'SIGNEDXDR==',
+    signerAddress: 'GAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA',
+  })),
 }));
 
 vi.mock('../../context/useWallet', () => ({
@@ -47,9 +57,44 @@ function makeProgramme(opts: {
   isPayee?: (addr: string) => boolean;
   finalized?: boolean;
   withdrawn?: boolean;
+  applyResult?: 'ok' | 'alreadyApplied' | 'wrongPhase';
+  releaseResult?: 'ok' | 'alreadyUsed' | 'invalidAttestation' | 'policyNotInstalled';
+  withdrawError?: string;
 } = {}) {
-  const allocation = opts.allocation ?? 10_000_000_000n; // 1,000 USDC
+  const allocation = opts.allocation ?? 10_000_000_000n;
+  // Withdrawing flips the stored flag, as the contract does, so a re-read sees it.
   const application = { finalized: opts.finalized ?? false, withdrawn: opts.withdrawn ?? false };
+
+  const applySignAndSend = vi.fn(async () => {
+    if (opts.applyResult === 'alreadyApplied') throw new Error('Error(Contract, #9)');
+    if (opts.applyResult === 'wrongPhase') throw new Error('Error(Contract, #2)');
+    return {
+      result: { unwrap: () => undefined },
+      sendTransactionResponse: { hash: 'TESTHASH1234567890ABCDEF' },
+    };
+  });
+
+  const releaseSignAndSend = vi.fn(async () => {
+    if (opts.releaseResult === 'alreadyUsed') throw new Error('Error(Contract, #22)');
+    if (opts.releaseResult === 'invalidAttestation') throw new Error('Error(Contract, #21)');
+    if (opts.releaseResult === 'policyNotInstalled') throw new Error('Error(Contract, #34)');
+    return {
+      result: { unwrap: () => 10_000_000_000n },
+      sendTransactionResponse: { hash: 'RELEASEHASH1234567890' },
+    };
+  });
+
+  // Fresh award returned after a successful release.
+  const freshAward = {
+    recipient: RECIPIENT,
+    granted: 30_000_000_000n,
+    released: 20_000_000_000n,
+    tranches: 3,
+    tranches_released: 2,
+    payee: RECIPIENT,
+    mode: { tag: 'Restricted', values: undefined },
+  };
+
   return {
     allocation_of: vi.fn(async () => ({ result: allocation })),
     is_payee: vi.fn(async ({ payee }: { payee: string }) => ({
@@ -62,7 +107,19 @@ function makeProgramme(opts: {
     get_application: vi.fn(async () => ({
       result: { unwrap: () => application },
     })),
-    withdraw: vi.fn(),
+    withdraw: vi.fn(async () => ({
+      signAndSend: vi.fn(async () => {
+        if (opts.withdrawError) throw new Error(opts.withdrawError);
+        application.withdrawn = true;
+        return { result: { unwrap: () => undefined } };
+      }),
+    })),
+    apply: vi.fn(async () => ({ signAndSend: applySignAndSend })),
+    _applySignAndSend: applySignAndSend,
+    release: vi.fn(async () => ({ signAndSend: releaseSignAndSend })),
+    get_award: vi.fn(async () => ({
+      result: { unwrap: () => freshAward },
+    })),
   };
 }
 
@@ -176,7 +233,7 @@ describe('Recipient Issues Suite (#272, #273, #274, #275)', () => {
         attestation: expect.any(Buffer),
         attester: ATTESTER,
       });
-      const { attestation } = programme.release.mock.calls[0][0] as { attestation: Buffer };
+      const { attestation } = (programme.release.mock.calls[0] as unknown[])[0] as { attestation: Buffer };
       expect(attestation).toHaveLength(32);
       expect(mockAnnounce).toHaveBeenCalledWith('Tranche 2 released.');
     });
@@ -485,7 +542,7 @@ describe('Recipient Issues Suite (#272, #273, #274, #275)', () => {
 
       // Wait for the programme list to load (async phase reads complete)
       // Only Open programmes should be listed in the radio group
-      expect(screen.getByText(/Community resilience grants 2026/i)).toBeDefined();
+      expect(await screen.findByText(/Community resilience grants 2026/i)).toBeDefined();
       expect(screen.getByText(/Smallholder inputs, long rains/i)).toBeDefined();
       // SME supplier microgrants Q2 is in Settled phase, and Vocational bursaries is in Review, so neither should be listed
       expect(screen.queryByText(/Workforce skills grants, cohort 3/i)).toBeNull();
@@ -517,8 +574,6 @@ describe('Recipient Issues Suite (#272, #273, #274, #275)', () => {
       // Wait for programme list to load.
       const amountInput = await screen.findByPlaceholderText('0');
       const notesInput = screen.getByRole('textbox', { name: /application notes/i });
-      // Wait for programme list to load so a selection exists and submit can be enabled.
-      const input = await screen.findByPlaceholderText('0');
       const submitBtn = screen.getByRole('button', { name: /submit application/i }) as HTMLButtonElement;
 
       // Initially disabled (no amount, no notes).
@@ -526,8 +581,7 @@ describe('Recipient Issues Suite (#272, #273, #274, #275)', () => {
 
       // Invalid amount (zero).
       fireEvent.change(amountInput, { target: { value: '0' } });
-      const err3 = explain(3, 'program');
-      expect(screen.getByText(err3.message)).toBeDefined();
+      expect(screen.getByText('Amount must be greater than zero')).toBeDefined();
       expect(submitBtn.disabled).toBe(true);
 
       // Valid amount but still no notes — stays disabled.
@@ -553,7 +607,7 @@ describe('Recipient Issues Suite (#272, #273, #274, #275)', () => {
       );
 
       // Wait for the sample programme list.
-      await screen.findByText(/Secondary school bursaries 2026/i);
+      await screen.findByText(/Community resilience grants 2026/i);
 
       fireEvent.change(screen.getByPlaceholderText('0'), { target: { value: '500' } });
       fireEvent.change(screen.getByRole('textbox', { name: /application notes/i }), {
@@ -580,7 +634,8 @@ describe('Recipient Issues Suite (#272, #273, #274, #275)', () => {
         { id: REAL_PROGRAMME, name: 'Live Grant Round', creator: null, createdLedger: null },
       ]);
 
-      programme = makeProgramme({ applyResult: 'ok' });
+      // Only Open programmes are offered, so the real one must read as Open.
+      programme = makeProgramme({ applyResult: 'ok', phase: 'Open' });
 
       render(
         <MemoryRouter>
@@ -611,7 +666,7 @@ describe('Recipient Issues Suite (#272, #273, #274, #275)', () => {
         metadata_hash: expect.any(Buffer),
       });
 
-      const callArgs = programme.apply.mock.calls[0][0] as { metadata_hash: Buffer };
+      const callArgs = (programme.apply.mock.calls[0] as unknown[])[0] as { metadata_hash: Buffer };
       expect(callArgs.metadata_hash).toHaveLength(32);
 
       // Receipt shows the tx hash and the metadata hash.
@@ -625,7 +680,7 @@ describe('Recipient Issues Suite (#272, #273, #274, #275)', () => {
         { id: REAL_PROGRAMME, name: 'Live Grant Round', creator: null, createdLedger: null },
       ]);
 
-      programme = makeProgramme({ applyResult: 'alreadyApplied' });
+      programme = makeProgramme({ applyResult: 'alreadyApplied', phase: 'Open' });
 
       render(
         <MemoryRouter>
@@ -782,7 +837,7 @@ describe('Recipient Issues Suite (#272, #273, #274, #275)', () => {
     it('tags a sample application as sample data', () => {
       const mockApplications: RecipientApplicationFixture[] = [
         {
-          programmeId: 'CDV7VOCATIONALCOHORT3PL5QZ2WM8RT4HX6KJ9A3FC',
+          programmeId: 'CCOIACASOVO3ZQLXWWJFGZAU3Y545AGPXLBP4NYHYD77RDCBPXRVZ37C',
           programmeName: 'Vocational Training Stipends Q3',
           phase: 'Review',
           requested: '12000000000',
@@ -802,7 +857,6 @@ describe('Recipient Issues Suite (#272, #273, #274, #275)', () => {
       expect(screen.getByText('Sample data')).toBeDefined();
     });
   });
-});
 
   describe('Issue #276 — Recipient: withdraw an application', () => {
     // A real (56-char C-prefixed) programme id — uses on-chain path.
@@ -811,7 +865,7 @@ describe('Recipient Issues Suite (#272, #273, #274, #275)', () => {
       programmeName: 'Vocational Training Stipends Q3',
       phase: 'Review',
       requested: '12000000000',
-      submittedLedger: 4704410,
+      submittedAt: 1_700_000_000,
       votes: ['9000000000'],
       quorum: 3,
     };
@@ -819,20 +873,20 @@ describe('Recipient Issues Suite (#272, #273, #274, #275)', () => {
     // A sample (non-contract) programme id — stand-in path.
     const sampleApplication: RecipientApplicationFixture = {
       ...openApplication,
-      programmeId: 'CDV7VOCATIONALCOHORT3PL5QZ2WM8RT4HX6KJ9A3FC',
+      programmeId: 'CCOIACASOVO3ZQLXWWJFGZAU3Y545AGPXLBP4NYHYD77RDCBPXRVZ37C',
       sample: true,
     };
 
-    it('shows the withdraw button on a non-finalised, non-withdrawn application', () => {
+    it('shows the withdraw button on a non-finalised, non-withdrawn application', async () => {
       render(
         <MemoryRouter>
           <ApplicationTimelineList applications={[openApplication]} />
         </MemoryRouter>
       );
-      expect(screen.getByRole('button', { name: /withdraw application/i })).toBeDefined();
+      expect((await screen.findByRole('button', { name: /withdraw application/i }))).toBeDefined();
     });
 
-    it('does not show the withdraw button on a finalised application', () => {
+    it('does not show the withdraw button on a finalised application', async () => {
       render(
         <MemoryRouter>
           <ApplicationTimelineList applications={[{ ...openApplication, finalized: true }]} />
@@ -841,7 +895,7 @@ describe('Recipient Issues Suite (#272, #273, #274, #275)', () => {
       expect(screen.queryByRole('button', { name: /withdraw application/i })).toBeNull();
     });
 
-    it('does not show the withdraw button on an already-withdrawn application', () => {
+    it('does not show the withdraw button on an already-withdrawn application', async () => {
       render(
         <MemoryRouter>
           <ApplicationTimelineList applications={[{ ...openApplication, withdrawn: true }]} />
@@ -850,29 +904,29 @@ describe('Recipient Issues Suite (#272, #273, #274, #275)', () => {
       expect(screen.queryByRole('button', { name: /withdraw application/i })).toBeNull();
     });
 
-    it('asks for confirmation before withdrawing', () => {
+    it('asks for confirmation before withdrawing', async () => {
       render(
         <MemoryRouter>
           <ApplicationTimelineList applications={[openApplication]} />
         </MemoryRouter>
       );
-      fireEvent.click(screen.getByRole('button', { name: /withdraw application/i }));
-      expect(screen.getByText(/This cannot be undone/i)).toBeDefined();
-      expect(screen.getByRole('button', { name: /yes, withdraw/i })).toBeDefined();
+      fireEvent.click((await screen.findByRole('button', { name: /withdraw application/i })));
+      expect(screen.getByText(/Withdrawing is permanent/i)).toBeDefined();
+      expect(screen.getByRole('button', { name: /confirm withdraw/i })).toBeDefined();
       expect(screen.getByRole('button', { name: /cancel/i })).toBeDefined();
     });
 
-    it('cancel hides the confirmation step without withdrawing', () => {
+    it('cancel hides the confirmation step without withdrawing', async () => {
       render(
         <MemoryRouter>
           <ApplicationTimelineList applications={[openApplication]} />
         </MemoryRouter>
       );
-      fireEvent.click(screen.getByRole('button', { name: /withdraw application/i }));
+      fireEvent.click((await screen.findByRole('button', { name: /withdraw application/i })));
       fireEvent.click(screen.getByRole('button', { name: /cancel/i }));
 
-      expect(screen.queryByText(/This cannot be undone/i)).toBeNull();
-      expect(screen.getByRole('button', { name: /withdraw application/i })).toBeDefined();
+      expect(screen.queryByText(/Withdrawing is permanent/i)).toBeNull();
+      expect((await screen.findByRole('button', { name: /withdraw application/i }))).toBeDefined();
       expect(programme.withdraw).not.toHaveBeenCalled();
     });
 
@@ -882,12 +936,12 @@ describe('Recipient Issues Suite (#272, #273, #274, #275)', () => {
           <ApplicationTimelineList applications={[openApplication]} />
         </MemoryRouter>
       );
-      fireEvent.click(screen.getByRole('button', { name: /withdraw application/i }));
-      fireEvent.click(screen.getByRole('button', { name: /yes, withdraw/i }));
+      fireEvent.click((await screen.findByRole('button', { name: /withdraw application/i })));
+      fireEvent.click(screen.getByRole('button', { name: /confirm withdraw/i }));
 
       expect(await screen.findByText(/Application withdrawn/i)).toBeDefined();
       expect(programme.withdraw).toHaveBeenCalledWith({ applicant: RECIPIENT });
-      expect(mockAnnounce).toHaveBeenCalledWith('Application withdrawn.');
+      expect(mockAnnounce).toHaveBeenCalledWith('Application withdrawn');
 
       // Withdraw button is gone once confirmed.
       expect(screen.queryByRole('button', { name: /withdraw application/i })).toBeNull();
@@ -901,10 +955,11 @@ describe('Recipient Issues Suite (#272, #273, #274, #275)', () => {
           />
         </MemoryRouter>
       );
-      fireEvent.click(screen.getByRole('button', { name: /withdraw application/i }));
-      fireEvent.click(screen.getByRole('button', { name: /yes, withdraw/i }));
+      fireEvent.click((await screen.findByRole('button', { name: /withdraw application/i })));
+      fireEvent.click(screen.getByRole('button', { name: /confirm withdraw/i }));
 
-      expect(await screen.findByText(/Application withdrawn/i)).toBeDefined();
+      // The stand-in waits SAMPLE_TX_DELAY_MS, like a real confirmation.
+      expect(await screen.findByText(/Application withdrawn/i, {}, { timeout: 3000 })).toBeDefined();
       expect(programme.withdraw).not.toHaveBeenCalled();
     });
 
@@ -916,14 +971,14 @@ describe('Recipient Issues Suite (#272, #273, #274, #275)', () => {
           <ApplicationTimelineList applications={[openApplication]} />
         </MemoryRouter>
       );
-      fireEvent.click(screen.getByRole('button', { name: /withdraw application/i }));
-      fireEvent.click(screen.getByRole('button', { name: /yes, withdraw/i }));
+      fireEvent.click((await screen.findByRole('button', { name: /withdraw application/i })));
+      fireEvent.click(screen.getByRole('button', { name: /confirm withdraw/i }));
 
       const err13 = explainCode('program', 13);
       expect(await screen.findByText(err13.message)).toBeDefined();
     });
 
-    it('shows withdrawn state in the timeline steps when already withdrawn', () => {
+    it('shows withdrawn state in the timeline steps when already withdrawn', async () => {
       render(
         <MemoryRouter>
           <ApplicationTimelineList

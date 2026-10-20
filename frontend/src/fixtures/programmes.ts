@@ -70,7 +70,7 @@ export interface FixtureChainRead {
 
 export const FIXTURE_PROGRAMMES: FixtureProgramme[] = [
   {
-    id: 'CBQ4SCHOOLBURSARY2026XK3ZP7M2QWJ5T8VN4RD6HY',
+    id: 'CBJWECZ3EUVNAE73YIMT2KWWNRHRF7NNWVKOLQRVOHSKYRYE32XBRPW7',
     name: 'Community resilience grants 2026',
     creator: 'GAKR7W…D2QX',
     createdLedger: 4811204,
@@ -82,7 +82,7 @@ export const FIXTURE_PROGRAMMES: FixtureProgramme[] = [
     createdLedger: 4798551,
   },
   {
-    id: 'CDV7VOCATIONALCOHORT3PL5QZ2WM8RT4HX6KJ9A3FC',
+    id: 'CCOIACASOVO3ZQLXWWJFGZAU3Y545AGPXLBP4NYHYD77RDCBPXRVZ37C',
     name: 'Workforce skills grants, cohort 3',
     creator: 'GB2ZHM…Q7RP',
     createdLedger: 4702316,
@@ -179,7 +179,11 @@ export function chainFor(id: string): FixtureChainRead {
   return FIXTURE_CHAIN[id] ?? FIXTURE_CHAIN_DEFAULT;
 }
 
-/** True when `id` names one of the stand-in programmes, not a deployed contract. */
+/**
+ * True when `id` names one of the stand-in programmes. Sample ids have the
+ * contract id shape, so this is a membership check; `isSampleProgrammeId` in
+ * `lib/programmeView.ts` is the one the app uses.
+ */
 export function isSampleProgrammeId(id: string): boolean {
   return FIXTURE_PROGRAMMES.some((programme) => programme.id === id);
 }

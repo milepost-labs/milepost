@@ -1997,8 +1997,7 @@ fn extending_to_the_current_sweep_deadline_is_equivalent() {
     let config = f.client.get_config();
 
     assert_eq!(
-        f.client
-            .try_extend_release_deadline(&config.sweep_deadline),
+        f.client.try_extend_release_deadline(&config.sweep_deadline),
         Ok(Ok(()))
     );
 

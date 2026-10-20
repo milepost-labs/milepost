@@ -38,17 +38,41 @@ export const VerifiersTab: FC<VerifiersTabProps> = ({
         Verifiers are trusted signers who confirm a condition was met. Each signed confirmation, called an attestation, unlocks one tranche: one instalment of the award.
       </p>
 
-      <div className="verifiers-tab__note-card" role="note">
-        <div className="verifiers-tab__badge">Stand-in data</div>
-        <p className="verifiers-tab__explanation">
-          <strong>Verifier roster future source:</strong> The roster is not published by the indexer yet.
-          Until it is, the verifiers below are examples, not this programme's real roster.
-        </p>
-        <p className="verifiers-tab__distinction">
-          <strong>Reviewers vs verifiers:</strong> Reviewers decide the award amount. Verifiers confirm release
-          conditions later by signing attestations when milestones are met.
-        </p>
-      </div>
+      {!isSample && programmeId && (
+        <div className="verifiers-tab__check" role="group" aria-label="Check an address">
+          <Field
+            label="Check an address"
+            hint="Is this address a reviewer, verifier or payee on this programme?"
+            value={addrInput}
+            onChange={(e) => setAddrInput(e.target.value.trim())}
+            placeholder="G… or C…"
+          />
+          <Button type="button" onClick={() => setCheckAddr(addrInput)} disabled={!addrInput}>
+            Check
+          </Button>
+          {enabled && !reviewer.loading && !verifier.loading && !payee.loading && (
+            <ul className="verifiers-tab__check-results">
+              <li>Reviewer: {reviewer.data ? 'Yes' : 'No'}</li>
+              <li>Verifier: {verifier.data ? 'Yes' : 'No'}</li>
+              <li>Payee: {payee.data ? 'Yes' : 'No'}</li>
+            </ul>
+          )}
+        </div>
+      )}
+
+      {isSample && (
+        <div className="verifiers-tab__note-card" role="note">
+          <div className="verifiers-tab__badge">Sample data</div>
+          <p className="verifiers-tab__explanation">
+            <strong>Verifier roster future source:</strong> The roster is not published by the indexer yet.
+            These are example verifiers, not a real programme's roster.
+          </p>
+          <p className="verifiers-tab__distinction">
+            <strong>Reviewers vs verifiers:</strong> Reviewers decide the award amount. Verifiers confirm release
+            conditions later by signing attestations when milestones are met.
+          </p>
+        </div>
+      )}
 
       {isSample && (
         <div className="verifiers-tab__list">

@@ -88,17 +88,24 @@ export function useOpenProgrammes(): OpenProgrammesState {
     [allProgrammes],
   );
 
-  const phaseRead = useContractRead<DirectoryProgramme[]>(
+  // The phase read is tagged with the list it was made for. When the index
+  // lands, the list changes and the previous answer (for the empty list) no
+  // longer counts, so the form keeps loading instead of briefly saying that
+  // nothing is open.
+  const realKey = realProgrammes.map((p) => p.id).join(',');
+  const phaseRead = useContractRead<{ key: string; open: DirectoryProgramme[] }>(
     async () => {
       const results = await Promise.all(
         realProgrammes.map((p) => readIfOpen(p, programmeAt)),
       );
-      return { result: results.filter((p): p is DirectoryProgramme => p !== null) };
+      const open = results.filter((p): p is DirectoryProgramme => p !== null);
+      return { result: { key: realKey, open } };
     },
-    [realProgrammes, programmeAt],
+    [realProgrammes, programmeAt, realKey],
     // Always enabled — no wallet needed for public phase reads.
     { enabled: true },
   );
+  const phasesCurrent = phaseRead.data?.key === realKey;
 
   const { refetch: refetchPhases } = phaseRead;
   const { refetch: refetchProgrammes } = programmesRead;
@@ -108,9 +115,9 @@ export function useOpenProgrammes(): OpenProgrammesState {
   }, [refetchProgrammes, refetchPhases]);
 
   return {
-    real: phaseRead.data ?? [],
+    real: phasesCurrent ? phaseRead.data!.open : [],
     samples: sampleProgrammes,
-    loading: phaseRead.loading || programmesRead.loading,
+    loading: programmesRead.loading || (!phasesCurrent && !phaseRead.error),
     fetching: phaseRead.fetching || programmesRead.fetching,
     error: phaseRead.error,
     refetch,

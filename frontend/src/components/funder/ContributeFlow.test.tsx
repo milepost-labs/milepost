@@ -13,7 +13,7 @@ const mocks = vi.hoisted(() => ({
   signTransaction: vi.fn(),
   // The balance the contribute flow is told about. `ready` with the figure is
   // the normal case; tests switch it to fail or to load.
-  balance: { value: 52_500_000_000n as bigint | null, status: 'ready' as string, refetch: () => {} },
+  balance: { balance: 52_500_000_000n as bigint | null, status: 'ready' as string, refetch: () => {} },
 }));
 
 vi.mock('../../context/useAnnouncer', () => ({ useAnnouncer: () => mocks.announce }));
@@ -65,7 +65,7 @@ function renderFlow(options: { linked?: string; withReal?: boolean } = {}) {
 
 // Each test starts from a read balance; a test that needs otherwise sets it itself.
 beforeEach(() => {
-  mocks.balance.value = 52_500_000_000n;
+  mocks.balance.balance = 52_500_000_000n;
   mocks.balance.status = 'ready';
 });
 
@@ -109,7 +109,7 @@ describe('ContributeFlow — amount step', () => {
   });
 
   it('says the balance is unavailable and does not cap an amount when the read fails', () => {
-    mocks.balance.value = null;
+    mocks.balance.balance = null;
     mocks.balance.status = 'unavailable';
     renderFlow();
     enterAmount('6,000');

@@ -4,6 +4,7 @@ import { useWallet } from '../../context/useWallet';
 import { useContractRead, useTransaction } from '../../hooks';
 import { explain, explainCode } from '../../lib/errors';
 import { looksLikeContractId } from '../../lib/format';
+import { isSampleProgrammeId } from '../../lib/programmeView';
 import { sampleSendable, SAMPLE_TX_DELAY_MS } from '../../lib/fundingTx';
 import { Button, Modal } from '../ui';
 import { ErrorPanel, TransactionOutcome } from '../state/AsyncStates';
@@ -41,7 +42,10 @@ export function ApplicationWithdraw({ application, sampleDelayMs = SAMPLE_TX_DEL
   const wallet = useWallet();
   const { programmeAt } = useSoroban();
 
-  const isReal = looksLikeContractId(application.programmeId);
+  // Sample ids have the contract shape too, so shape alone cannot tell them apart.
+  const isReal = looksLikeContractId(application.programmeId) && !isSampleProgrammeId(application.programmeId);
+  // A sample has no chain to re-read, so its withdrawal is remembered here.
+  const [withdrawnLocally, setWithdrawnLocally] = useState(false);
   const recipient = wallet.address;
 
   const client = useMemo(
@@ -62,7 +66,9 @@ export function ApplicationWithdraw({ application, sampleDelayMs = SAMPLE_TX_DEL
   );
 
   const finalized = isReal ? applicationRead.data?.finalized ?? false : application.finalized ?? false;
-  const withdrawn = isReal ? applicationRead.data?.withdrawn ?? false : application.withdrawn ?? false;
+  const withdrawn =
+    withdrawnLocally ||
+    (isReal ? applicationRead.data?.withdrawn ?? false : application.withdrawn ?? false);
 
   const [confirmOpen, setConfirmOpen] = useState(false);
 
@@ -70,6 +76,7 @@ export function ApplicationWithdraw({ application, sampleDelayMs = SAMPLE_TX_DEL
     contract: 'program',
     onSuccess: () => {
       if (isReal) applicationRead.refetch();
+      else setWithdrawnLocally(true);
     },
   });
 
@@ -131,9 +138,17 @@ export function ApplicationWithdraw({ application, sampleDelayMs = SAMPLE_TX_DEL
         </p>
       )}
 
-      {view.kind === 'withdrawn' && (
-        <ErrorPanel explained={explainCode('program', 37)} />
-      )}
+      {view.kind === 'withdrawn' &&
+        (tx.phase === 'success' ? (
+          <TransactionOutcome
+            phase={tx.phase}
+            error={null}
+            successTitle="Application withdrawn"
+            successDescription="You can no longer apply to this programme."
+          />
+        ) : (
+          <ErrorPanel explained={explainCode('program', 37)} />
+        ))}
 
       {view.kind === 'finalised' && (
         <ErrorPanel explained={explainCode('program', 13)} />

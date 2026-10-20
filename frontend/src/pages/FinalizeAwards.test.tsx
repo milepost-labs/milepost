@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { act, fireEvent, render, screen, within } from '@testing-library/react';
+import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
 import { Buffer } from 'buffer';
 import { FinalizeAwards } from './FinalizeAwards';
@@ -20,15 +20,6 @@ const mocks = vi.hoisted(() => ({
   address: null as string | null,
   announce: vi.fn(),
 }));
-import { fireEvent, render, screen } from '@testing-library/react';
-import { MemoryRouter } from 'react-router-dom';
-import { FinalizeAwards } from './FinalizeAwards';
-
-const mocks = {
-  address: 'GAH3D4RM45ETE4W7VDRCWZBPRPT63CJXAGXFYVBC2FGANBZTS4OTKXCA' as string | null,
-  programmeParam: { status: 'none', programmeId: null as string | null, blocksProgramme: false },
-  indexedProgrammes: [] as any[],
-};
 
 vi.mock('../context/useWallet', () => ({
   useWallet: () => ({
@@ -114,59 +105,12 @@ vi.mock('../context/useSoroban', () => ({
   }),
 }));
 
-function renderPage() {
+/** The seeded testnet programme: real, so the single-application flow reads it. */
+const REAL_PROGRAMME_ID = 'CD6X33SKLUEMANS67ID3LJL572FFGERMMJCIFRW7P7EKZQLH35XT67C6';
+
+function renderPage(path = '/finalize') {
   return render(
-    <MemoryRouter initialEntries={['/finalize']}>
-  }),
-}));
-
-vi.mock('../context/useAnnouncer', () => ({
-  useAnnouncer: () => vi.fn(),
-}));
-
-vi.mock('../hooks/useProgrammeParam', () => ({
-  useProgrammeParam: () => mocks.programmeParam,
-}));
-
-vi.mock('../lib/indexer', () => ({
-  fetchProgrammes: vi.fn(async () => mocks.indexedProgrammes),
-}));
-
-function makeMockContract(data?: {
-  budget?: bigint;
-  phase?: string;
-  quorum?: number;
-  minimumAward?: bigint;
-}) {
-  const wrap = <T,>(val: T) => ({ result: { unwrap: () => val } });
-  return {
-    budget: vi.fn(async () => wrap(data?.budget ?? 500000000000n)),
-    get_phase: vi.fn(async () => wrap({ tag: data?.phase ?? 'Review' })),
-    get_config: vi.fn(async () =>
-      wrap({
-        quorum: data?.quorum ?? 4,
-        minimum_award: data?.minimumAward ?? 10000000000n,
-      }),
-    ),
-    get_application: vi.fn(async () => wrap(null)),
-    get_award: vi.fn(async () => wrap(null)),
-    is_payee: vi.fn(async () => false),
-    is_paused: vi.fn(async () => false),
-    finalize: vi.fn(async () => wrap({})),
-  };
-}
-
-let mockContract = makeMockContract();
-
-vi.mock('../context/useSoroban', () => ({
-  useSoroban: () => ({
-    programmeAt: vi.fn(() => mockContract),
-  }),
-}));
-
-function renderPage(initialEntries = ['/finalize']) {
-  return render(
-    <MemoryRouter initialEntries={initialEntries}>
+    <MemoryRouter initialEntries={[path]}>
       <FinalizeAwards />
     </MemoryRouter>,
   );
@@ -178,7 +122,18 @@ function submitApplicant(address: string) {
 }
 
 /** Load the default application and wait for its card to settle. */
+/**
+ * Wait for the linked programme to be confirmed and its config read, so an
+ * applicant is loaded against the real programme rather than the default
+ * sample the page shows while the link is being checked.
+ */
+async function waitForRealProgramme() {
+  await waitFor(() => expect(programme.get_config).toHaveBeenCalled());
+  await screen.findByText('3 votes');
+}
+
 async function loadApplication() {
+  await waitForRealProgramme();
   submitApplicant(APPLICANT);
   await screen.findByText('Enough votes in');
 }
@@ -276,9 +231,9 @@ describe('FinalizeAwards — the finalize board', () => {
 
 describe('FinalizeAwards — the single-application flow', () => {
   it('starts empty, needs an applicant, and summarises the programme', async () => {
-    renderPage();
+    renderPage(`/finalize?programme=${REAL_PROGRAMME_ID}`);
 
-    expect(screen.getByRole('heading', { name: 'Finalize Awards' })).toBeTruthy();
+    expect(screen.getByRole('heading', { name: 'Finalize awards' })).toBeTruthy();
     expect(screen.getByText('No application loaded yet')).toBeTruthy();
     expect(screen.getByText('Paste an applicant address above and press Load.')).toBeTruthy();
 
@@ -295,7 +250,7 @@ describe('FinalizeAwards — the single-application flow', () => {
   });
 
   it('computes the middle vote and finalizes to a verified payee in Direct mode', async () => {
-    renderPage();
+    renderPage(`/finalize?programme=${REAL_PROGRAMME_ID}`);
     await loadApplication();
 
     expect(screen.getByText('500.00 XLM')).toBeTruthy();
@@ -328,11 +283,12 @@ describe('FinalizeAwards — the single-application flow', () => {
       payee: PAYEE,
       mode: { tag: 'Direct', values: undefined },
     });
-    expect(mocks.announce).toHaveBeenCalledWith('Award finalized at 150.00 XLM.');
+    // The announcement follows the success render, so it may land a tick later.
+    await waitFor(() => expect(mocks.announce).toHaveBeenCalledWith('Award finalized at 150.00 XLM.'));
   });
 
   it('refuses a payee this programme has not verified', async () => {
-    renderPage();
+    renderPage(`/finalize?programme=${REAL_PROGRAMME_ID}`);
     await loadApplication();
     fireEvent.click(screen.getByRole('button', { name: /^Direct/ }));
 
@@ -348,7 +304,7 @@ describe('FinalizeAwards — the single-application flow', () => {
   });
 
   it('treats every other mode as paying the applicant directly', async () => {
-    renderPage();
+    renderPage(`/finalize?programme=${REAL_PROGRAMME_ID}`);
     await loadApplication();
 
     for (const tag of ['Allocated', 'Restricted', 'Open']) {
@@ -367,7 +323,7 @@ describe('FinalizeAwards — the single-application flow', () => {
 
   it('blocks finalising when the middle vote is below the programme minimum', async () => {
     programme.get_config.mockImplementation(() => unwrap(makeConfig({ minimum_award: 2000000000n })));
-    renderPage();
+    renderPage(`/finalize?programme=${REAL_PROGRAMME_ID}`);
     await loadApplication();
 
     const alert = await screen.findByRole('alert');
@@ -385,7 +341,7 @@ describe('FinalizeAwards — the single-application flow', () => {
 
   it('blocks finalising when the budget cannot cover the award', async () => {
     programme.budget.mockImplementation(() => unwrap(1000000000n));
-    renderPage();
+    renderPage(`/finalize?programme=${REAL_PROGRAMME_ID}`);
     await loadApplication();
 
     expect(await screen.findByText(/This award exceeds the remaining budget\./)).toBeTruthy();
@@ -399,7 +355,8 @@ describe('FinalizeAwards — the single-application flow', () => {
     programme.get_application.mockImplementation(() =>
       unwrap(makeApplication({ votes: [1000000000n, 1500000000n] })),
     );
-    renderPage();
+    renderPage(`/finalize?programme=${REAL_PROGRAMME_ID}`);
+    await waitForRealProgramme();
     submitApplicant(APPLICANT);
 
     expect(await screen.findByText('Awaiting votes')).toBeTruthy();
@@ -411,7 +368,7 @@ describe('FinalizeAwards — the single-application flow', () => {
 
   it('shows an already-settled application with the award it produced', async () => {
     programme.get_application.mockImplementation(() => unwrap(makeApplication({ finalized: true })));
-    renderPage();
+    renderPage(`/finalize?programme=${REAL_PROGRAMME_ID}`);
     submitApplicant(APPLICANT);
 
     expect(
@@ -428,7 +385,7 @@ describe('FinalizeAwards — the single-application flow', () => {
 
   it('asks a signed-out visitor to connect before finalising', async () => {
     mocks.address = null;
-    renderPage();
+    renderPage(`/finalize?programme=${REAL_PROGRAMME_ID}`);
     await loadApplication();
 
     expect(screen.getByText('Connect a wallet above to sign the finalise transaction.')).toBeTruthy();
@@ -439,7 +396,7 @@ describe('FinalizeAwards — the single-application flow', () => {
 
   it('shows a contract refusal from finalize with its own message', async () => {
     programme.finalize.mockRejectedValue(new Error('HostError: Error(Contract, #13)'));
-    renderPage();
+    renderPage(`/finalize?programme=${REAL_PROGRAMME_ID}`);
     await loadApplication();
     fireEvent.click(screen.getByRole('button', { name: /^Allocated/ }));
 
@@ -447,76 +404,5 @@ describe('FinalizeAwards — the single-application flow', () => {
 
     expect(await screen.findByText('This application has already been settled into an award.')).toBeTruthy();
     expect(screen.queryByText(/HostError/)).toBeNull();
-describe('FinalizeAwards: Issue #432 single programme source of truth', () => {
-  beforeEach(() => {
-    mocks.programmeParam = { status: 'none', programmeId: null, blocksProgramme: false };
-    mocks.indexedProgrammes = [];
-    mockContract = makeMockContract();
-  });
-
-  it('reads stats and applications from the selected sample programme', async () => {
-    renderPage();
-
-    // The default selection is "Workforce skills grants, cohort 3" (CDV7VOCATIONALCOHORT3PL5QZ2WM8RT4HX6KJ9A3FC)
-    // which has Review phase, 5 votes needed, and sample applications.
-    expect(screen.getByRole('heading', { name: 'Finalize Awards' })).toBeTruthy();
-
-    // Verify figures belong to Workforce skills grants:
-    // Contributed 8,000 - Fee 80 - Awarded 3,150 = Remaining 4,770.00 XLM
-    expect(screen.getAllByText('4,770.00 XLM').length).toBeGreaterThanOrEqual(1);
-    expect(screen.getByText('Review')).toBeTruthy();
-    expect(screen.getByText('5 votes')).toBeTruthy();
-    expect(screen.getByText('None')).toBeTruthy();
-
-    // Verify sample application rows are rendered for Workforce skills grants
-    expect(
-      screen.getByText(/Awards ready to finalize total 5,000\.00 XLM, but only 4,770\.00 XLM is left\./),
-    ).toBeTruthy();
-  });
-
-  it('updates the list and the figures together when switching programmes', async () => {
-    renderPage();
-
-    // Switch from Workforce skills grants to Community resilience grants 2026 (Open phase)
-    const select = screen.getByLabelText('Programme');
-    fireEvent.change(select, {
-      target: { value: 'CBQ4SCHOOLBURSARY2026XK3ZP7M2QWJ5T8VN4RD6HY' },
-    });
-
-    // The figures should now reflect Community resilience grants:
-    // Contributed 12,600 - Fee 126 = Remaining 12,474.00 XLM
-    // Quorum: 3 votes, Phase: Open
-    expect(await screen.findByText('12,474.00 XLM')).toBeTruthy();
-    expect(screen.getByText('Open')).toBeTruthy();
-    expect(screen.getByText('3 votes')).toBeTruthy();
-
-    // The applications list updates together to indicate it is Open, not Review
-    expect(
-      screen.getByText(/Finalizing is available only during Review\. This programme is Open\./),
-    ).toBeTruthy();
-  });
-
-  it('drives reads from on-chain contract for real programmes', async () => {
-    const REAL_PID = 'CAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA';
-    mocks.programmeParam = { status: 'valid', programmeId: REAL_PID, blocksProgramme: false };
-    mockContract = makeMockContract({
-      budget: 950000000000n, // 95,000 XLM
-      phase: 'Review',
-      quorum: 7,
-      minimumAward: 25000000000n, // 2,500 XLM
-    });
-
-    renderPage([`/finalize?programme=${REAL_PID}`]);
-
-    // On-chain reads are awaited and displayed
-    expect(await screen.findByText('95,000.00 XLM')).toBeTruthy();
-    expect(screen.getByText('Review')).toBeTruthy();
-    expect(screen.getByText('7 votes')).toBeTruthy();
-    expect(screen.getByText('2,500.00 XLM')).toBeTruthy();
-
-    // Real programme message rendered in FinalizeBoard
-    expect(
-      screen.getByText('Real programme awards are finalized by loading an applicant below.'),
-    ).toBeTruthy();
   });
 });

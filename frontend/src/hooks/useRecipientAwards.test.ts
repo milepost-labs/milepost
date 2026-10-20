@@ -9,14 +9,14 @@ const REAL_A = `C${'A'.repeat(55)}`; // Direct mode
 const REAL_B = `C${'B'.repeat(55)}`; // Allocated mode
 const REAL_C = `C${'C'.repeat(55)}`; // programme with no award (error 19)
 // A sample programme id — not a valid contract address, present in FIXTURE_MY_AWARDS.
-const SAMPLE = 'CA3NSMEMICROGRANTSQ2V8TX4QK7PL2RZ9MD5HW6JUB';
+const SAMPLE = 'CBAVXWACVVQIBYAZ2YCSIPWXA24E3NZ3CIRAWJ2UHEQUQP67POYS6GFM';
 
 const index = vi.hoisted(() => ({ programmes: [] as { id: string }[] }));
 vi.mock('../lib/indexer', () => ({
   fetchProgrammes: async () => index.programmes,
 }));
 
-const wallet = vi.hoisted(() => ({ address: RECIPIENT as string | null }));
+const wallet = vi.hoisted(() => ({ address: 'GAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA' as string | null }));
 vi.mock('../context/useWallet', () => ({ useWallet: () => ({ address: wallet.address }) }));
 
 const clients = vi.hoisted(() => ({ map: {} as Record<string, unknown> }));
@@ -137,8 +137,9 @@ describe('useRecipientAwards', () => {
   });
 
   it('keeps a sample programme as a tagged stand-in without making a contract call', async () => {
-    // Add the sample id to the index so mergeProgrammes picks it up.
-    index.programmes = [{ id: SAMPLE }];
+    // Samples come from FIXTURE_PROGRAMMES through mergeProgrammes; anything
+    // the index lists was deployed by the registry and is read as real.
+    index.programmes = [];
 
     const { result } = renderHook(() => useRecipientAwards());
 
@@ -186,15 +187,16 @@ describe('useRecipientAwards', () => {
 
     const { result } = renderHook(() => useRecipientAwards());
 
-    await waitFor(() => expect(result.current.awards.length).toBe(2));
+    const real = () => result.current.awards.filter((a) => !a.sample);
+    await waitFor(() => expect(real().length).toBe(2));
 
-    const modes = result.current.awards.map((a) => a.mode).sort();
+    const modes = real().map((a) => a.mode).sort();
     expect(modes).toEqual(['Open', 'Restricted']);
 
     expect(restrictedClient.allocation_of).not.toHaveBeenCalled();
     expect(openClient.allocation_of).not.toHaveBeenCalled();
 
     // payee is null for both non-Direct modes.
-    result.current.awards.forEach((a) => expect(a.payee).toBeNull());
+    real().forEach((a) => expect(a.payee).toBeNull());
   });
 });

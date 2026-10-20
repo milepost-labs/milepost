@@ -6,7 +6,7 @@ import { RecipientSignedOut, Standing, StandingPanel, StandingStats } from './St
 import { isTtlLow, standingStats } from '../lib/standing';
 
 const SUBJECT = 'GAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA';
-const LOOKED_UP_SUBJECT = 'GBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB';
+const LOOKED_UP_SUBJECT = 'GBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB';
 const STANDING_FIXTURE = {
   programmes: 3,
   tranchesReleased: 5,
@@ -19,7 +19,7 @@ const STANDING_FIXTURE = {
 // for the keepalive row matter here.
 const chain = vi.hoisted(() => ({ get: vi.fn(), keepalive: vi.fn() }));
 const wallet = vi.hoisted(() => ({
-  address: SUBJECT as string | null,
+  address: 'GAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA' as string | null,
   signTransaction: vi.fn(),
 }));
 vi.mock('../context/useSoroban', () => ({

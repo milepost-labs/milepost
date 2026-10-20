@@ -86,16 +86,51 @@ tests decode events through the bindings' own specs, so they fail on it.
 
 CI does the same on every PR, in the `bindings` job.
 
-The frontend's plain-language error tables are checked against every
-`#[contracterror]` enum in the contracts. Run the parity check locally from the
-repository root:
+The same job fails if a component shows a `FIXTURE_*` stand-in without its
+"Sample data" tag. See [Sample data](frontend/CONTRIBUTING.md#sample-data) in
+the frontend guide for the rule, the allowlist and how to run the check
+locally (`npm run check:sample-tags --prefix frontend`).
+
+CI also checks that every page and component CSS file uses design tokens
+(`frontend/scripts/check-design-system.mjs`), failing on hard-coded colours or
+spacing off the 4px scale. See [Design-system guard](frontend/CONTRIBUTING.md#design-system-guard)
+for details and how to run it locally (`npm run check:design-system --prefix frontend`
+or with `--diff-base <commit>` for diff mode).
+### Contract error explanations
+
+Every `#[contracterror]` variant in `contracts/` must have a plain-language
+explanation in `frontend/src/lib/errors.ts`, so no failure reaches a user as
+"unknown error". The `bindings` job checks both directions on every pull
+request: a code the app does not explain, and an explanation for a code the
+contract no longer has. Run it locally from the repository root:
 
 ```bash
 python3 scripts/check-error-parity.py
 ```
 
-It reports missing contract codes and stale table entries by contract and
-variant name. The bindings CI job runs it on every pull request.
+It lists each mismatch by contract, code and variant name. When you add an
+error variant, add its entry to the matching table in the same pull request.
+
+### Automated accessibility checks
+
+Every route in `frontend/src/routes.ts` is rendered in jsdom, in both the light
+and dark themes, and checked with [axe-core](https://github.com/dequelabs/axe-core).
+A serious or critical violation fails the build. The contracts, the wallet and
+the index are mocked, so the check never touches the network.
+
+Run it locally from `frontend/`:
+
+```bash
+cd frontend
+npm ci            # first time, or after a dependency change
+npm run test:a11y # every route, both themes
+```
+
+The `accessibility` job in `.github/workflows/ci.yml` runs the same command on
+every pull request to `dev` and on pushes to `dev` and `main`. To silence a
+rule, add an entry to `ACCESSIBILITY_EXCEPTIONS` in
+`frontend/src/test/accessibility.test.tsx` with a `reason`; the suite fails on
+an entry with no reason. Fixing the page is always preferred.
 
 ### Local Development Modes
 - **Fixture Mode:** Run `VITE_FIXTURES=1 npm --prefix frontend run dev` to run and inspect UI screens locally without requiring an active wallet connection or testnet funds.
@@ -253,6 +288,14 @@ Before marking a PR ready for review:
 * Contract checks pass if Rust files were touched (`cargo fmt`, `cargo clippy`, `cargo test`)
 * If a contract interface changed, the app in `frontend/` still builds and tests against it (see [Frontend](#3-frontend))
 * PR description references the issue number(s) with `Closes #<number>`
+
+**Malware check**
+Every PR runs `node scripts/check-malware.mjs`. It fails if a lockfile pins a
+package version known to be malicious, if a new dependency runs an install
+script, if a package comes from outside the npm or crates.io registries, if a
+workflow uses `pull_request_target`, or if a file contains hidden Unicode. If
+your dependency is legitimately blocked, say why in the PR. A maintainer
+records the exception, with its reason, in `.github/malware-check-allowlist.json`.
 
 ---
 

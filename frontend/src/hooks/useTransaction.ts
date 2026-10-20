@@ -20,7 +20,6 @@ export type TransactionPhase =
   | 'building'
   | 'signing'
   | 'submitting'
-  | 'restoring'
   | 'success'
   | 'error';
 
@@ -29,8 +28,6 @@ export interface Sendable<T> {
   signAndSend: (options: {
     signTransaction: (xdr: string) => Promise<{ signedTxXdr: string; signerAddress: string }>;
   }) => Promise<{ result: T }>;
-  restorePreamble?: Array<{ type: string }>;
-  restoreFootprint?: () => Promise<void>;
   /** Simulation fee in stroops, when the binding exposes it. */
   estimatedFee?: bigint;
 }
@@ -122,28 +119,12 @@ export function useTransaction<T = unknown>(
         // Building also simulates, so most contract errors surface here —
         // before anything is signed, which is the good place for them.
         setPhase('building');
-        let transaction = await build();
+        const transaction = await build();
         const simulation = transaction as Sendable<T> & {
           simulationResponse?: { minResourceFee?: string | number | bigint };
         };
         const rawFee = simulation.estimatedFee ?? simulation.simulationResponse?.minResourceFee;
         if (rawFee !== undefined) setEstimatedFee(BigInt(rawFee));
-
-        // If simulation detected archived entries, restore them first.
-        if (transaction.restorePreamble && transaction.restorePreamble.length > 0) {
-          setPhase('restoring');
-
-          if (transaction.restoreFootprint) {
-            await transaction.restoreFootprint();
-            // After restore preamble is prepared, rebuild and re-simulate to get the real transaction.
-            transaction = await build();
-            const rebuilt = transaction as Sendable<T> & {
-              simulationResponse?: { minResourceFee?: string | number | bigint };
-            };
-            const rebuiltFee = rebuilt.estimatedFee ?? rebuilt.simulationResponse?.minResourceFee;
-            if (rebuiltFee !== undefined) setEstimatedFee(BigInt(rebuiltFee));
-          }
-        }
 
         setPhase('signing');
         const sent = await transaction.signAndSend({ signTransaction: wallet.signTransaction });
@@ -173,7 +154,7 @@ export function useTransaction<T = unknown>(
 
   return {
     phase,
-    busy: phase === 'building' || phase === 'signing' || phase === 'submitting' || phase === 'restoring',
+    busy: phase === 'building' || phase === 'signing' || phase === 'submitting',
     error,
     result,
     estimatedFee,
@@ -188,8 +169,6 @@ export function phaseLabel(phase: string): string {
   switch (phase) {
     case 'building':
       return 'Preparing…';
-    case 'restoring':
-      return 'Restoring archived data…';
     case 'signing':
       return 'Waiting for your signature…';
     case 'submitting':

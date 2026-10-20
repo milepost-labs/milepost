@@ -5,14 +5,11 @@ import { useOpenProgrammes } from '../../hooks/useOpenProgrammes';
 import { useTransaction } from '../../hooks/useTransaction';
 import { useWallet } from '../../context/useWallet';
 import { useSoroban } from '../../context/useSoroban';
-import { useOpenProgrammes } from '../../hooks/useOpenProgrammes';
-import { explain } from '../../lib/errors';
 import { parseAmount, formatAmount } from '../../lib/amount';
 import { isSampleProgrammeId } from '../../lib/programmeView';
 import { SAMPLE_TX_DELAY_MS, sampleSendable, sampleOutcome } from '../../lib/fundingTx';
 import { useAnnouncer } from '../../context/useAnnouncer';
 import { Loading, ErrorState, TransactionOutcome } from '../state/AsyncStates';
-import { Loading, ErrorState } from '../state/AsyncStates';
 import { PendingPulse } from '../state/AsyncStates';
 import './ApplyForm.css';
 
@@ -72,11 +69,6 @@ export function ApplyForm({
   // All Open programmes: real first, then samples.
   const allOpen = [...real, ...samples];
 
-  const { real, samples, loading, error, refetch } = useOpenProgrammes();
-
-  // All Open programmes in display order: real first, then samples.
-  const allOpen = [...real, ...samples];
-
   const queryProgId = preselectedProgrammeId ?? '';
   const initialProgId =
     allOpen.some((p) => p.id === queryProgId)
@@ -115,26 +107,6 @@ export function ApplyForm({
   const tx = useTransaction<ApplyReceipt>({ contract: 'program' });
 
   const handleSubmit = async (e: React.FormEvent) => {
-  const [step, setStep] = useState<'form' | 'pending' | 'done'>('form');
-  const [submittedData, setSubmittedData] = useState<{
-    progName: string;
-    amountFormatted: string;
-  } | null>(null);
-
-  // Keep the selection valid if the programme list changes while the form is
-  // open (e.g. a programme closes between renders).
-  const effectiveSelection =
-    allOpen.some((p) => p.id === selectedProgrammeId) ? selectedProgrammeId : allOpen[0]?.id ?? '';
-
-  // Validate amount
-  const cleanedAmount = amountInput.replace(/,/g, '').trim();
-  const parsedNum = Number(cleanedAmount);
-  const hasTyped = amountInput.length > 0;
-  const isPositive = !Number.isNaN(parsedNum) && parsedNum > 0;
-  const amountError = hasTyped && !isPositive ? explain(3, 'program').message : '';
-  const isValid = isPositive && Boolean(effectiveSelection);
-
-  const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     if (!isValid || !amountResult?.ok) return;
 
@@ -153,10 +125,6 @@ export function ApplyForm({
       const amountFormatted = formatAmount(stroops, { asset: 'USDC' });
       const progName = selectedProg.name;
       const progId = selectedProg.id;
-    const selectedProg = allOpen.find((p) => p.id === effectiveSelection);
-    const progName = selectedProg?.name ?? 'Selected Programme';
-    const stroops = BigInt(Math.floor(parsedNum * 10_000_000));
-    const amountFormatted = formatAmount(stroops, { asset: 'USDC' });
 
       if (isSample) {
         return sampleSendable(() => {
@@ -210,8 +178,6 @@ export function ApplyForm({
       announce('Application submitted.');
       onSubmitted?.(effectiveSelection);
     }
-      onSubmitted?.(effectiveSelection, cleanedAmount);
-    }, 1200);
   };
 
   const handleReset = () => {
@@ -240,7 +206,7 @@ export function ApplyForm({
 
             {loading && <Loading label="Reading open programmes" rows={2} />}
 
-            {!loading && error && (
+            {!loading && Boolean(error) && (
               <ErrorState error={error} contract="program" onRetry={refetch} />
             )}
 
@@ -256,8 +222,6 @@ export function ApplyForm({
                 role="radiogroup"
                 aria-label="Open programmes"
               >
-              <div className="apply-form__programmes" role="radiogroup" aria-label="Open programmes">
-                {/* Real programmes from the index */}
                 {real.length > 0 && (
                   <div className="apply-form__prog-group">
                     {real.map((p) => {
@@ -278,7 +242,6 @@ export function ApplyForm({
                   </div>
                 )}
 
-                {/* Sample programmes — always labelled as sample data */}
                 {samples.length > 0 && (
                   <div className="apply-form__prog-group apply-form__prog-group--samples">
                     <span

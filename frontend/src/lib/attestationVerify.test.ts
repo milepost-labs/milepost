@@ -1,100 +1,139 @@
 import { Buffer } from 'buffer';
 import { describe, expect, it, vi } from 'vitest';
-import {
-  readAttestationStatus,
-  validateVerifyClaimInput,
-  verifyClaim,
-  type AttestationVerifierClients,
-} from './attestationVerify';
+import type { Client as AttestClient } from '@milepost/attest';
+import { validateVerifyClaimInput, verifyClaim, verifyClaimOnChain } from './attestationVerify';
 import { FIXTURE_ATTESTATIONS } from '../fixtures/attestationFixtures';
 
-const uid = Buffer.from('attestation');
+// Issue #539. `verifyClaimOnChain` is what AttestationLookup calls: it reads the
+// record with `attest.get`, asks `attest.verify` for the verdict, and explains a
+// failed verdict from the record. Whether a proof was already used comes from
+// `program.is_spent` and is covered in AttestationLookup.test.tsx.
 
-function clients({
-  valid = true,
-  revoked = false,
-  used = false,
+const SUBJECT = 'GCFIRY65OQE7DFP5KLNS2PF2LVZMUZYJX4OZIEQ36N2IQANUB5XVYOJR';
+const ATTESTER = 'GCATS5YOVB6ROX2WUNKGNQ2MP3GMXDMKSG2O4N5CLX3A6W4PZGZZI55U';
+const UID = '11'.repeat(32);
+const SCHEMA = '22'.repeat(32);
+const claim = { uid: UID, subject: SUBJECT, schema: SCHEMA, attester: ATTESTER };
+
+const record = (overrides: Record<string, unknown> = {}) => ({
+  uid: Buffer.from(UID, 'hex'),
+  schema: Buffer.from(SCHEMA, 'hex'),
+  subject: SUBJECT,
+  attester: ATTESTER,
+  data_hash: Buffer.alloc(32),
+  created_at: 100n,
+  expires_at: undefined,
+  revoked_at: undefined,
+  ...overrides,
+});
+
+function attestClient({
+  stored = record(),
+  verified = true,
   getError,
-  validError,
-  spentError,
+  verifyError,
 }: {
-  valid?: boolean;
-  revoked?: boolean;
-  used?: boolean;
+  stored?: ReturnType<typeof record>;
+  verified?: boolean;
   getError?: unknown;
-  validError?: unknown;
-  spentError?: unknown;
-} = {}): AttestationVerifierClients {
-  return {
-    attest: {
-      is_valid: vi.fn(async () => {
-        if (validError) throw validError;
-        return { result: valid };
-      }),
-      get: vi.fn(async () => {
-        if (getError) throw getError;
-        return { result: { unwrap: () => ({ revoked_at: revoked ? 1 : null }) } };
-      }),
-    },
-    program: {
-      is_spent: vi.fn(async () => {
-        if (spentError) throw spentError;
-        return { result: used };
-      }),
-    },
-  };
+  verifyError?: unknown;
+} = {}) {
+  const get = vi.fn(async () => {
+    if (getError) throw getError;
+    return { result: { unwrap: () => stored } };
+  });
+  const verify = vi.fn(async () => {
+    if (verifyError) throw verifyError;
+    return { result: verified };
+  });
+  return { client: { get, verify } as unknown as AttestClient, get, verify };
 }
 
-describe('readAttestationStatus', () => {
+describe('verifyClaimOnChain', () => {
   it.each([
-    ['valid', { valid: true }, { verdict: 'valid', used: false }],
-    ['used', { valid: true, used: true }, { verdict: 'used', used: true }],
-    ['revoked', { valid: false, revoked: true }, { verdict: 'revoked', used: false }],
-    ['expired', { valid: false }, { verdict: 'expired', used: false }],
-    ['revoked and used', { valid: false, revoked: true, used: true }, { verdict: 'revoked', used: true }],
-  ] as const)('%s', async (_name, options, expected) => {
-    await expect(readAttestationStatus(clients(options), uid)).resolves.toEqual(expected);
+    ['valid', { verified: true }, { valid: true }],
+    [
+      'revoked',
+      { verified: false, stored: record({ revoked_at: 200n }) },
+      { valid: false, reason: 'This attestation has been revoked by its attester.' },
+    ],
+    [
+      'revoked and expired reads as revoked',
+      { verified: false, stored: record({ revoked_at: 200n, expires_at: 150n }) },
+      { valid: false, reason: 'This attestation has been revoked by its attester.' },
+    ],
+    [
+      'expired',
+      { verified: false, stored: record({ expires_at: 150n }) },
+      { valid: false, reason: 'This attestation expired at Unix timestamp 150.' },
+    ],
+    [
+      'about another subject',
+      { verified: false, stored: record({ subject: ATTESTER }) },
+      { valid: false, reason: 'This attestation is not about the subject you gave.' },
+    ],
+    [
+      'under another schema',
+      { verified: false, stored: record({ schema: Buffer.from('33'.repeat(32), 'hex') }) },
+      { valid: false, reason: 'This attestation was made under a different schema.' },
+    ],
+    [
+      'by another attester',
+      { verified: false, stored: record({ attester: SUBJECT }) },
+      { valid: false, reason: 'This attestation was not made by the attester you gave.' },
+    ],
+    [
+      'refused for a reason the record does not show',
+      { verified: false },
+      { valid: false, reason: 'The claim does not pass verification.' },
+    ],
+  ])('%s', async (_name, options, expected) => {
+    const { client } = attestClient(options);
+    expect(await verifyClaimOnChain(client, claim)).toMatchObject(expected);
   });
 
-  it('reports a missing attestation without treating it as an RPC failure', async () => {
-    const missing = new Error('Error(Contract, #3)');
-    const reader = clients({ valid: false, getError: missing });
-
-    await expect(readAttestationStatus(reader, uid)).resolves.toEqual({ verdict: 'not_found' });
-    expect(reader.program.is_spent).not.toHaveBeenCalled();
-  });
-
-  it('keeps an RPC failure distinct from an invalid attestation', async () => {
-    const error = new Error('fetch failed');
-    const reader = clients({ validError: error });
-
-    await expect(readAttestationStatus(reader, uid)).resolves.toEqual({ verdict: 'error', error });
-  });
-
-  it('reports failures reading the record and spend state', async () => {
-    const getError = new Error('timeout while reading attestation');
-    await expect(readAttestationStatus(clients({ getError }), uid)).resolves.toEqual({
-      verdict: 'error',
-      error: getError,
+  it('passes the claim to attest.verify as the contract expects', async () => {
+    const { client, get, verify } = attestClient();
+    await verifyClaimOnChain(client, { ...claim, subject: ` ${SUBJECT} ` });
+    expect(get).toHaveBeenCalledWith({ uid: Buffer.from(UID, 'hex') });
+    expect(verify).toHaveBeenCalledWith({
+      uid: Buffer.from(UID, 'hex'),
+      subject: SUBJECT,
+      schema: Buffer.from(SCHEMA, 'hex'),
+      attester: ATTESTER,
     });
+  });
 
-    const spentError = new Error('network unavailable');
-    await expect(readAttestationStatus(clients({ spentError }), uid)).resolves.toEqual({
-      verdict: 'error',
-      error: spentError,
+  it.each([
+    ['the Result error the SDK throws on unwrap', new Error('AttestationNotFound')],
+    ['a simulation failure carrying the code', new Error('HostError: Error(Contract, #3)')],
+  ])('reports not found for %s', async (_name, getError) => {
+    const { client, verify } = attestClient({ getError });
+    expect(await verifyClaimOnChain(client, claim)).toEqual({
+      valid: false,
+      reason: 'No attestation exists with this id.',
     });
+    expect(verify).not.toHaveBeenCalled();
+  });
+
+  it('rethrows an RPC failure reading the record instead of calling it not found', async () => {
+    const getError = new Error('Failed to fetch');
+    const { client } = attestClient({ getError });
+    await expect(verifyClaimOnChain(client, claim)).rejects.toBe(getError);
+  });
+
+  it('rethrows an RPC failure from verify instead of calling the claim invalid', async () => {
+    const verifyError = new Error('timeout');
+    const { client } = attestClient({ verifyError });
+    await expect(verifyClaimOnChain(client, claim)).rejects.toBe(verifyError);
   });
 });
 
 describe('fixture claim validation', () => {
-  const validClaim = {
-    uid: 'a4b7d11af82c9e03',
-    subject: `G${'A'.repeat(55)}`,
-    schema: 'invoice-approved/v1',
-    attester: `G${'B'.repeat(55)}`,
-  };
+  const validClaim = claim;
   const fixtureClaim = {
-    ...validClaim,
+    uid: 'a4b7d11af82c9e03',
+    schema: 'invoice-approved/v1',
     subject: 'GBQX4MW3T9K2L7P1N5V8R4D6Y7KDA',
     attester: 'GDLX2PV4V7L8Z1M5N2K9C3WKA4R9B',
   };
@@ -106,7 +145,7 @@ describe('fixture claim validation', () => {
     ).toEqual({
       uid: 'Enter the attestation id to check.',
       subject: 'Enter the subject address.',
-      schema: 'Enter the schema.',
+      schema: 'Enter the schema uid.',
       attester: 'That does not look like a Stellar address.',
     });
   });
@@ -114,6 +153,8 @@ describe('fixture claim validation', () => {
   it.each([
     ['subject', { ...validClaim, subject: 'not-an-address' }, 'That does not look like a Stellar address.'],
     ['attester', { ...validClaim, attester: 'not-an-address' }, 'That does not look like a Stellar address.'],
+    ['uid', { ...validClaim, uid: 'a4b7d11af82c9e03' }, 'Enter the 64-character hex attestation uid.'],
+    ['schema', { ...validClaim, schema: 'invoice-approved/v1' }, 'Enter the 64-character hex schema uid.'],
   ])('validates an invalid %s address', (_field, input, message) => {
     expect(validateVerifyClaimInput(input)).toHaveProperty(_field, message);
   });

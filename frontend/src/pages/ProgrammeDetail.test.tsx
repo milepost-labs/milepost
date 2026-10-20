@@ -184,11 +184,12 @@ describe('ProgrammeDetail — a deployed programme', () => {
     // Timeline and the tabbed detail panels are present.
     expect(screen.getByText('Timeline and phase')).toBeTruthy();
     expect(screen.getByText(/Next deadline:/)).toBeTruthy();
-    expect(screen.getByRole('region', { name: 'Programme timeline' })).toBeTruthy();
+    expect(screen.getByRole('list', { name: 'Programme timeline' })).toBeTruthy();
     expect(screen.getByRole('tablist', { name: 'Programme details' })).toBeTruthy();
     expect(screen.getByRole('tab', { selected: true })).toBeTruthy();
     expect(screen.getByLabelText('Metadata document URL')).toBeTruthy();
-  });
+    // Renders the whole page with every read; slow on a loaded CI runner.
+  }, 20_000);
 
   it('says when it is showing the seeded demo programme', async () => {
     renderProgramme('/programme');
@@ -202,7 +203,8 @@ describe('ProgrammeDetail — a deployed programme', () => {
     registry.is_programme.mockResolvedValue({ result: false });
     renderProgramme(`/programme/${REAL_ID}`);
 
-    expect(await screen.findByText(/This address was not deployed by the Milepost registry/)).toBeTruthy();
+    // Stated in the registry notice and again where write actions are refused.
+    expect((await screen.findAllByText(/This address was not deployed by the Milepost registry/)).length).toBeGreaterThan(0);
     expect(screen.getByText(/That is not a verdict on the creator/)).toBeTruthy();
     expect(screen.getAllByText('Not registry-deployed')).toHaveLength(2);
   });

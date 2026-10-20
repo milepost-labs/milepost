@@ -195,7 +195,7 @@ export const AwardsTab: FC<AwardsTabProps> = ({
     return fetchedAwards ?? [];
   }, [sample, phase, fetchedAwards]);
 
-  const advisoryNote = isSample
+  const advisoryNote = sample
     ? 'Awards use the middle reviewer vote after enough reviewers have voted. Listed from the public index, advisory.'
     : 'From the public index (awards.json), advisory. Each award is re-read on-chain before it is acted on.';
 

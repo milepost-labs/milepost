@@ -10,7 +10,7 @@
 
 import { formatAmount } from './amount';
 import type { IndexedProgramme } from './indexer';
-import { isProgrammeContractId } from './registryVerification';
+import { DEMO_PROGRAMME_ID } from '../context/sorobanStore';
 import { chainFor,
   FIXTURE_CHAIN,
   FIXTURE_PROGRAMMES,
@@ -23,13 +23,13 @@ import type { UserRole } from '../fixtures/userRoles';
 /**
  * The one decision for whether a programme is a sample.
  *
- * A programme is a sample only when its id is listed in the fixture set AND is
- * not a contract id. The second condition is the guard: a fixture can never
- * claim a registry-deployed programme, even if someone adds a real id to
- * `FIXTURE_PROGRAMMES` by mistake.
+ * Sample ids have the same shape as real contract ids (so id validation has no
+ * special case), which means shape cannot tell them apart: a programme is a
+ * sample only when its id is listed in the fixture set. The seeded testnet
+ * programme is real and is never a sample, even if it is listed there.
  */
 export function isSampleProgrammeId(id: string): boolean {
-  return !isProgrammeContractId(id) && FIXTURE_PROGRAMMES.some((p) => p.id === id);
+  return id !== DEMO_PROGRAMME_ID && FIXTURE_PROGRAMMES.some((p) => p.id === id);
 }
 
 export type DirectoryPhase = 'All' | FixturePhase;
@@ -158,7 +158,7 @@ export function mergeProgrammes(
         name: entry.name ?? 'Unnamed programme',
         creator: entry.creator,
         createdLedger: entry.createdLedger,
-        sample: true,
+        sample: isSampleProgrammeId(entry.id),
         chain: FIXTURE_CHAIN[entry.id] ?? chainFor(entry.id),
         userRoles: userRoles?.[entry.id],
       });

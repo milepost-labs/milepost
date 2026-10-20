@@ -40,3 +40,14 @@ test('keeps exception comments when checking only added lines', () => {
   ].join('\n');
   assert.deepEqual(scanCss(source, 'fixture.css', new Set([3])), []);
 });
+
+test('ignores hex references in multi-line block comments', () => {
+  const source = [
+    '/* Issue #483: stepping sweeps squares',
+    '   and tests #abcdef in comments */',
+    '.tab {',
+    '  color: var(--text);',
+    '}',
+  ].join('\n');
+  assert.deepEqual(scanCss(source, 'components/MoneyPath.css'), []);
+});

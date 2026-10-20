@@ -49,7 +49,7 @@ export function OfflineBanner() {
     // twice.
     <div className="offline-banner" role="status">
       <WifiOff size={16} aria-hidden="true" />
-      <span>{online ? 'The network is not responding; reads may fail.' : 'You&rsquo;re offline. Reads and writes will fail until the connection returns.'}</span>
+      <span>{online ? 'The network is not responding; reads may fail.' : 'You’re offline. Reads and writes will fail until the connection returns.'}</span>
       {online && rpc.unavailable && <button type="button" onClick={rpc.retry}>Try again</button>}
     </div>
   );

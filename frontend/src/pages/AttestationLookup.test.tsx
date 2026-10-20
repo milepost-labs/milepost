@@ -91,6 +91,18 @@ describe('AttestationLookup spent status', () => {
 
     await screen.findByText('Could not check this programme');
   });
+
+  it('shows both revoked and used for a proof revoked after it released', async () => {
+    const revoked = FIXTURE_ATTESTATIONS.find((a) => a.revoked)!;
+    state.isSpent = vi.fn(() => Promise.resolve({ result: true }));
+    renderPage();
+    fireEvent.click(screen.getByRole('button', { name: revoked.uid }));
+    selectProgramme();
+
+    await screen.findByText('Already released a tranche here');
+    expect(screen.getByText('Revoked')).toBeTruthy();
+    expect(state.isSpent.mock.calls[0][0].attestation.toString('hex')).toBe(revoked.uid);
+  });
 });
 
 // Issue #536 — a recipient or verifier address is searched in recent

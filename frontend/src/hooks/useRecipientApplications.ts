@@ -138,7 +138,8 @@ export function useRecipientApplications(
   }, [refetchProgrammes, refetch]);
 
   return {
-    applications: read.data ?? [],
+    // A failed read shows the failure, not the list from before it.
+    applications: read.error ? [] : (read.data ?? []),
     loading: enabled && (read.loading || (Boolean(address) && programmesRead.loading)),
     fetching: read.fetching || programmesRead.fetching,
     error: enabled && address ? read.error : null,

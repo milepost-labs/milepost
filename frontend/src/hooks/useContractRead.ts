@@ -18,7 +18,7 @@ import { isRpcFailure, reportRpcFailure, reportRpcSuccess } from '../lib/rpcHeal
 export interface ContractRead<T> {
   data: T | null;
   error: unknown;
-  /** True when the entry is archived (entry TTL expired). Distinct from error. */
+  /** True when the read failed because the entry is archived (TTL expired). `error` is set too. */
   archived: boolean;
   /** True only on the first load. A refetch keeps existing data visible. */
   loading: boolean;
@@ -99,13 +99,10 @@ export function useContractRead<T>(
     } catch (caught) {
       if (isRpcFailure(caught)) reportRpcFailure();
       if (!mounted.current || current !== generation.current) return;
-      if (isArchivedError(caught)) {
-        setArchived(true);
-        setError(null);
-      } else {
-        setArchived(false);
-        setError(caught);
-      }
+      // Still an error, so screens that do not check `archived` show it
+      // rather than reading an archived entry as absent.
+      setArchived(isArchivedError(caught));
+      setError(caught);
     } finally {
       if (mounted.current && current === generation.current) {
         setFetching(false);

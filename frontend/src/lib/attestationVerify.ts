@@ -1,79 +1,7 @@
 import { Buffer } from 'buffer';
 import type { AttestationFixture } from '../fixtures/attestationFixtures';
-import type { Buffer } from 'buffer';
 import { extractCode } from './errors';
-
-export interface OnChainAttestation {
-  revoked_at: unknown;
-}
-
-interface ReadResult<T> {
-  result: T;
-}
-
-interface FallibleRead<T> {
-  unwrap: () => T;
-}
-
-export interface AttestationVerifierClients {
-  attest: {
-    is_valid: (args: { uid: Buffer }) => Promise<ReadResult<boolean>>;
-    get: (args: { uid: Buffer }) => Promise<ReadResult<FallibleRead<OnChainAttestation>>>;
-  };
-  program: {
-    is_spent: (args: { attestation: Buffer }) => Promise<ReadResult<boolean>>;
-  };
-}
-
-export type AttestationVerdict = 'valid' | 'used' | 'revoked' | 'expired' | 'not_found' | 'error';
-
-export interface AttestationStatus {
-  verdict: AttestationVerdict;
-  used?: boolean;
-  error?: unknown;
-}
-
-/**
- * Reads the authoritative contracts and turns their separate answers into
- * the status a recipient should see before attempting a release.
- *
- * `is_valid` is deliberately not enough to distinguish expiry, revocation or
- * absence, so the stored record is fetched after an invalid result. A network
- * or RPC failure remains `error`; it must never be presented as an invalid
- * attestation.
- */
-export async function readAttestationStatus(
-  clients: AttestationVerifierClients,
-  uid: Buffer,
-): Promise<AttestationStatus> {
-  let valid: boolean;
-  try {
-    valid = (await clients.attest.is_valid({ uid })).result;
-  } catch (error) {
-    return { verdict: 'error', error };
-  }
-
-  let attestation: OnChainAttestation;
-  try {
-    attestation = (await clients.attest.get({ uid })).result.unwrap();
-  } catch (error) {
-    if (extractCode(error) === 3) return { verdict: 'not_found' };
-    return { verdict: 'error', error };
-  }
-
-  let used: boolean;
-  try {
-    used = (await clients.program.is_spent({ attestation: uid })).result;
-  } catch (error) {
-    return { verdict: 'error', error };
-  }
-
-  if (attestation.revoked_at !== undefined && attestation.revoked_at !== null) {
-    return { verdict: 'revoked', used };
-  }
-  if (!valid) return { verdict: 'expired', used };
-  return { verdict: used ? 'used' : 'valid', used };
-}
+import type { Client as AttestClient, Attestation } from '@milepost/attest';
 
 /** A Stellar account address (`G...`), the shape `subject` and `attester` take. */
 export const STELLAR_ADDRESS = /^G[A-Z2-7]{55}$/;
@@ -127,6 +55,18 @@ export function validateVerifyClaimInput(input: VerifyClaimInput): VerifyClaimFi
   return errors;
 }
 
+/**
+ * Whether a failed `attest.get` means the attestation does not exist.
+ *
+ * `get` returns `Result<Attestation>`, and the SDK's `unwrap()` throws the
+ * variant's name ("AttestationNotFound") with no code. A call that fails in
+ * simulation carries the code instead (`Error(Contract, #3)`).
+ */
+function isAttestationNotFound(caught: unknown): boolean {
+  if (caught instanceof Error && caught.message === 'AttestationNotFound') return true;
+  return extractCode(caught) === 3;
+}
+
 export type VerifyClaimResult =
   | { valid: true; attestation?: Attestation }
   | { valid: false; reason: string; attestation?: Attestation };
@@ -157,9 +97,14 @@ export async function verifyClaimOnChain(
   try {
     const getResult = await attest.get({ uid: uidBuf });
     attestation = getResult.result.unwrap();
-  } catch {
-    // AttestationNotFound (error 3) — no record exists.
-    return { valid: false, reason: 'No attestation exists with this id.' };
+  } catch (caught) {
+    // Only AttestationNotFound (error 3) means there is no record. Anything
+    // else — an unreachable RPC, a timeout — is rethrown, so it is shown as a
+    // failed check rather than as an attestation that does not exist.
+    if (isAttestationNotFound(caught)) {
+      return { valid: false, reason: 'No attestation exists with this id.' };
+    }
+    throw caught;
   }
 
   // Then call verify — the authoritative boolean.

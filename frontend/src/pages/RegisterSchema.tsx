@@ -199,12 +199,6 @@ export const RegisterSchema = () => {
               The name and fields are stored as one text description. Write them for the humans who will verify later, because the network cannot tell whether a vague checklist is useful.
             </p>
 
-            {!address && (
-              <p className="ui-field__message ui-field__message--error" role="alert">
-                Sign in — the connected address becomes the schema owner.
-              </p>
-            )}
-
             <div className="register-schema__actions">
               <Button
                 onClick={() => void handleRegister()}

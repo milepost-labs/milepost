@@ -1,14 +1,14 @@
 import { Buffer } from 'buffer';
 import { describe, expect, it, vi } from 'vitest';
-import { Keypair, nativeToScVal, Address, xdr, type rpc } from '@milepost/program';
+import { nativeToScVal, Address, xdr, type rpc } from '@milepost/program';
 import type { Attestation } from '@milepost/attest';
 import { attestationStatus, isSearchableAddress, searchAttestations } from './attestationSearch';
 import { EVENTS_MAX_PAGES, EVENTS_PAGE_SIZE, describeWindow, readRecentEvents } from './contractEvents';
 
 const ATTEST_ID = `C${'A'.repeat(55)}`;
-const RECIPIENT = Keypair.random().publicKey();
-const VERIFIER = Keypair.random().publicKey();
-const OTHER = Keypair.random().publicKey();
+const RECIPIENT = 'GCFIRY65OQE7DFP5KLNS2PF2LVZMUZYJX4OZIEQ36N2IQANUB5XVYOJR';
+const VERIFIER = 'GCATS5YOVB6ROX2WUNKGNQ2MP3GMXDMKSG2O4N5CLX3A6W4PZGZZI55U';
+const OTHER = 'GDWUSKGGFDI4FRXK5EBTRECZSVQSSWJHHJOGH6JWG3AUMFFMQ435DIAG';
 const uid = (n: number) => n.toString(16).padStart(2, '0').repeat(32);
 
 function attestedEvent(n: number, subject: string, attester: string, ledger: number) {

@@ -1,4 +1,3 @@
-import { useState } from 'react';
 import { Link } from 'react-router-dom';
 import type { RecipientApplicationFixture } from '../../fixtures/recipientFixtures';
 import { applicationStatus, applicationSteps } from '../../lib/applicationView';

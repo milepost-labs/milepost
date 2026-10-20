@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
 import { Buffer } from 'buffer';
 import type { Application } from '@milepost/program';
@@ -111,6 +111,48 @@ export const VerifierDashboard = () => {
     { contract: 'program', enabled: applicantValid },
   );
 
+  // Issues #430/#431: walk the indexed (advisory) programme list, re-check
+  // each on-chain, and keep only the ones where this address actually holds
+  // a role — the index is never trusted on its own for this.
+  type MyProgramme = { id: string; name: string | null; isVerifier: boolean; isReviewer: boolean; phase: string | null };
+  // The address is stored beside the list, so a signed-out reader never sees
+  // the previous account's roles: only a list read for the current address
+  // counts. Resetting state inside the effect would cascade a render instead.
+  const [loaded, setLoaded] = useState<{ address: string; list: MyProgramme[] } | null>(null);
+  useEffect(() => {
+    if (!address) return;
+    let cancelled = false;
+    (async () => {
+      const indexed = await fetchProgrammes().catch(() => []);
+      const checked = await Promise.all(
+        indexed.map(async (p) => {
+          // A programme that cannot be read holds no role we can confirm.
+          try {
+            const programme = programmeAt(p.id);
+            const [ver, rev, phase] = await Promise.all([
+              programme.is_verifier({ addr: address }).then((r) => r.result).catch(() => false),
+              programme.is_reviewer({ addr: address }).then((r) => r.result).catch(() => false),
+              programme.get_phase().then((r) => r.result.unwrap().tag).catch(() => null),
+            ]);
+            return { id: p.id, name: p.name, isVerifier: ver, isReviewer: rev, phase: phase != null ? String(phase) : null };
+          } catch {
+            return { id: p.id, name: p.name, isVerifier: false, isReviewer: false, phase: null };
+          }
+        }),
+      );
+      if (!cancelled) setLoaded({ address, list: checked.filter((p) => p.isVerifier || p.isReviewer) });
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [address, programmeAt]);
+  const myProgrammes = loaded && loaded.address === address ? loaded.list : null;
+  const verifierProgrammes = myProgrammes?.filter((p) => p.isVerifier) ?? [];
+  const reviewerProgrammes = useMemo(
+    () => (myProgrammes ?? []).filter((p) => p.isReviewer).sort((a, b) => (a.phase === 'Review' ? -1 : b.phase === 'Review' ? 1 : 0)),
+    [myProgrammes],
+  );
+
   const phaseName = phaseRead.data?.tag ?? null;
   const reviewGateReason = programmeParam.blocksProgramme
     ? 'The programme link is not usable. Correct it above or clear it from the URL.'
@@ -128,12 +170,7 @@ export const VerifierDashboard = () => {
               ? 'The connected wallet is not a registered reviewer for this programme.'
               : null;
 
-  const useProgramme = () => {
-    const value = programmeInput.trim();
-    if (!isProgrammeContractId(value)) {
-      setProgrammeError('Enter a valid programme contract address.');
-      return;
-    }
+  const openProgramme = (value: string) => {
     setProgrammeError(null);
     setProgrammeInputOverride(value);
     setProgrammeIdOverride(value);
@@ -145,6 +182,14 @@ export const VerifierDashboard = () => {
     setSearchParams(next, { replace: true });
   };
 
+  const chooseProgramme = () => {
+    const value = programmeInput.trim();
+    if (!isProgrammeContractId(value)) {
+      setProgrammeError('Enter a valid programme contract address.');
+      return;
+    }
+    openProgramme(value);
+  };
   const programmes = useMemo(() => {
     const ids = new Set<string>();
     for (const item of queue) ids.add(item.programmeId);
@@ -408,7 +453,7 @@ export const VerifierDashboard = () => {
                         <li key={p.id}>
                           {p.name ?? truncateAddress(p.id)} — {p.phase ?? 'unknown phase'}
                           {p.phase === 'Review' && (
-                            <button type="button" onClick={() => setSelectedApplicant('')}>
+                            <button type="button" onClick={() => openProgramme(p.id)}>
                               Review here
                             </button>
                           )}
@@ -443,7 +488,7 @@ export const VerifierDashboard = () => {
                     error={programmeError}
                     placeholder="C…"
                   />
-                  <Button variant="secondary" onClick={useProgramme}>
+                  <Button variant="secondary" onClick={chooseProgramme}>
                     Use programme
                   </Button>
                 </div>

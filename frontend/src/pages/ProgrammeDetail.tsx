@@ -16,7 +16,7 @@ import { ProgrammeHeader } from "../components/programme/ProgrammeHeader";
 import { WhereTheMoneyIs } from "../components/programme/WhereTheMoneyIs";
 import { ProgrammeTabs } from "../components/programme/ProgrammeTabs";
 import { ProgrammeActions } from "../components/programme/ProgrammeActions";
-import { Badge, Button, Card, Deadline, Field, List, ListRow, PhaseBadge, Stat } from "../components/ui";
+import { AddressChip, Badge, Button, Card, Deadline, Field, List, ListRow, PhaseBadge, Stat } from "../components/ui";
 import { useSoroban } from "../context/useSoroban";
 import { useContractRead, useContractResult, useIndexedList, useProgramme } from "../hooks";
 import { fetchProgrammes } from "../lib/indexer";
@@ -24,7 +24,8 @@ import { directoryHref } from "../lib/programmeView";
 import { formatAmount } from "../lib/amount";
 import { isSampleProgrammeId } from "../lib/programmeView";
 import { registryVerificationCopy } from "../lib/registryVerification";
-import { FIXTURE_CHAIN, isSampleProgrammeId } from "../fixtures/programmes";
+import { FIXTURE_CHAIN } from "../fixtures/programmes";
+import { fetchTokenName, parseTokenName } from "../lib/token";
 import "./ProgrammeDetail.css";
 
 const ZERO = 0n;
@@ -96,42 +97,42 @@ export function ProgrammeAssetRules({ tokenAddress }: { tokenAddress: string }) 
 
   return (
     <>
-      <div>
-        <dt>Asset</dt>
-        <dd>
-          {tokenRead.loading && <span className="text-muted">Reading asset…</span>}
-          {Boolean(tokenRead.error) && (
-            <span className="text-muted">
-              {formatAddress(tokenAddress)}
-            </span>
-          )}
-          {assetInfo && (
-            <div className="programme-asset-display">
-              <span className="programme-asset-code">{assetInfo.code}</span>
-              {assetInfo.issuer && (
-                <span className="programme-asset-issuer">
-                  <span className="programme-asset-issuer-label text-muted">Issuer:</span>
-                  <AddressChip
-                    address={assetInfo.issuer}
-                    showExplorerLink
-                    copyLabel="Copy issuer address"
-                  />
-                </span>
-              )}
-            </div>
-          )}
-        </dd>
-      </div>
-      <div>
-        <dt>Asset contract</dt>
-        <dd className="numeric" title={tokenAddress}>
+      <ListRow
+        title="Asset"
+        trailing={
+          <>
+            {tokenRead.loading && <span className="text-muted">Reading asset…</span>}
+            {Boolean(tokenRead.error) && (
+              <span className="text-muted">{formatAddress(tokenAddress)}</span>
+            )}
+            {assetInfo && (
+              <span className="programme-asset-display">
+                <span className="programme-asset-code">{assetInfo.code}</span>
+                {assetInfo.issuer && (
+                  <span className="programme-asset-issuer">
+                    <span className="programme-asset-issuer-label text-muted">Issuer:</span>
+                    <AddressChip
+                      address={assetInfo.issuer}
+                      showExplorerLink
+                      copyLabel="Copy issuer address"
+                    />
+                  </span>
+                )}
+              </span>
+            )}
+          </>
+        }
+      />
+      <ListRow
+        title="Asset contract"
+        trailing={
           <AddressChip
             address={tokenAddress}
             showExplorerLink
             copyLabel="Copy asset contract address"
           />
-        </dd>
-      </div>
+        }
+      />
     </>
   );
 }
@@ -812,40 +813,43 @@ export const ProgrammeDetail = () => {
         <Card title="Programme rules">
           <AsyncView {...config} onRetry={config.refetch} contract="program">
             {(value) => (
-              <dl className="config-list">
-                <div>
-                  <dt>Creator</dt>
-                  <dd className="numeric" title={value.creator}>
-                    {formatAddress(value.creator)}
-                  </dd>
-                </div>
-                <div>
-                  <dt>Treasury</dt>
-                  <dd className="numeric" title={value.treasury}>
-                    {formatAddress(value.treasury)}
-                  </dd>
-                </div>
-                <div>
-                  <dt>Asset contract</dt>
-                  <dd className="numeric" title={value.token}>
-                    {formatAddress(value.token)}
-                  </dd>
-                </div>
-                <div>
-                  <dt>Reviewer votes needed</dt>
-                  <dd className="numeric">{value.quorum} reviewer votes</dd>
-                </div>
-                <div>
-                  <dt>Tranches</dt>
-                  <dd className="numeric">{value.tranches}</dd>
-                </div>
-                <div>
-                  <dt>Metadata hash</dt>
-                  <dd className="numeric">
-                    {value.metadata_hash.toString("hex")}
-                  </dd>
-                </div>
-              </dl>
+              <List label="Programme rules">
+                <ListRow
+                  title="Creator"
+                  trailing={
+                    <span className="numeric" title={value.creator}>
+                      {formatAddress(value.creator)}
+                    </span>
+                  }
+                />
+                <ListRow
+                  title="Treasury"
+                  trailing={
+                    <span className="numeric" title={value.treasury}>
+                      {formatAddress(value.treasury)}
+                    </span>
+                  }
+                />
+                <ProgrammeAssetRules tokenAddress={value.token} />
+                <ListRow
+                  title="Reviewer votes needed"
+                  trailing={
+                    <span className="numeric">{value.quorum} reviewer votes</span>
+                  }
+                />
+                <ListRow
+                  title="Tranches"
+                  trailing={<span className="numeric">{value.tranches}</span>}
+                />
+                <ListRow
+                  title="Metadata hash"
+                  meta={
+                    <span className="numeric programme-wrap">
+                      {value.metadata_hash.toString("hex")}
+                    </span>
+                  }
+                />
+              </List>
             )}
           </AsyncView>
         </Card>
@@ -858,127 +862,68 @@ export const ProgrammeDetail = () => {
           </AsyncView>
         </Card>
 
-        <Card title="Reviewer and verifier access">
+        <Card className="programme-grid__wide" title="Reviewers, verifiers and schema">
           <AsyncView {...config} onRetry={config.refetch} contract="program">
             {(value) => (
-              <div className="membership-grid">
-                <div className="membership-card">
-                  <UsersRound aria-hidden="true" />
-                  <div>
-                    <h3>Reviewers</h3>
-                    <p>
+              <List className="programme-access" label="Reviewers, verifiers and schema">
+                <ListRow
+                  leading={<UsersRound aria-hidden="true" />}
+                  title="Reviewers"
+                  meta={
+                    <>
                       The programme checks reviewer membership by address with{" "}
                       <span className="numeric">is_reviewer(addr)</span>. The app cannot list every reviewer yet, so this page shows the live reviewer-vote requirement instead.
-                    </p>
-                    <Badge tone="accent">{value.quorum} votes required</Badge>
-                  </div>
-                </div>
-                <div className="membership-card">
-                  <ShieldCheck aria-hidden="true" />
-                  <div>
-                    <h3>Verifiers</h3>
-                    <p>
+                    </>
+                  }
+                  trailing={<Badge tone="accent">{value.quorum} votes required</Badge>}
+                />
+                <ListRow
+                  leading={<ShieldCheck aria-hidden="true" />}
+                  title="Verifiers"
+                  meta={
+                    <>
                       The programme checks verifier membership by address with{" "}
                       <span className="numeric">is_verifier(addr)</span>. The current app can confirm one verifier address at a time but does not list every verifier yet.
-                    </p>
-                    <Badge tone="neutral">
-                      {value.tranches} tranches
-                    </Badge>
-                  </div>
-                </div>
-                <div className="membership-card membership-card--wide">
-                  <Landmark aria-hidden="true" />
-                  <div>
-                    <h3>Linked infrastructure</h3>
-                    <p>
-                      Attestations, standing records, spending rules, and treasury addresses are read from programme configuration.
-                    </p>
+                    </>
+                  }
+                  trailing={<Badge tone="neutral">{value.tranches} tranches</Badge>}
+                />
+                <ListRow
+                  leading={<UsersRound aria-hidden="true" />}
+                  title="Verifier roster"
+                  meta={
+                    <>
+                      Only confirmations signed by these trusted verifiers can release funds. Recipients should know whose signature they need to obtain. The app cannot list verifier addresses from this programme yet; this roster will come from deployment records or the public index. For now, verifier checking is available via{" "}
+                      <span className="numeric">is_verifier(addr)</span>.
+                    </>
+                  }
+                />
+                <ListRow
+                  leading={<FileText aria-hidden="true" />}
+                  title="Schema"
+                  meta={
+                    <>
+                      A schema defines what verifiers are allowed to confirm. Attestations must match this template before a tranche can release.
+                      <span className="numeric programme-wrap">
+                        {value.schema.toString("hex")}
+                      </span>
+                    </>
+                  }
+                />
+                <ListRow
+                  leading={<Landmark aria-hidden="true" />}
+                  title="Linked infrastructure"
+                  meta="Attestations, standing records, spending rules, and treasury addresses are read from programme configuration."
+                  trailing={
                     <Link
                       to={`/funders?programme=${encodeURIComponent(programmeId)}`}
                       className="programme-link"
                     >
                       Back to funder dashboard
                     </Link>
-                  </div>
-                </div>
-              </div>
-            )}
-          </AsyncView>
-        </Card>
-
-        <Card title="Trusted verifiers and schema">
-          <AsyncView {...config} onRetry={config.refetch} contract="program">
-            {(value) => (
-              <div
-                style={{
-                  display: "flex",
-                  flexDirection: "column",
-                  gap: "1.5rem",
-                }}
-              >
-                <div>
-                  <h3
-                    style={{
-                      fontSize: "1rem",
-                      fontWeight: 600,
-                      marginBottom: "0.5rem",
-                    }}
-                  >
-                    Schema
-                  </h3>
-                  <p
-                    style={{
-                      fontSize: "0.875rem",
-                      color: "var(--color-muted)",
-                      marginBottom: "0.75rem",
-                    }}
-                  >
-                    A schema defines what verifiers are allowed to confirm. Attestations must match this template before a tranche can release.
-                  </p>
-                  <div
-                    style={{
-                      padding: "0.75rem",
-                      backgroundColor: "var(--color-surface)",
-                      borderRadius: "var(--radius-md)",
-                      fontFamily: "monospace",
-                      fontSize: "0.875rem",
-                      wordBreak: "break-all",
-                    }}
-                  >
-                    {value.schema.toString("hex")}
-                  </div>
-                </div>
-                <div>
-                  <h3
-                    style={{
-                      fontSize: "1rem",
-                      fontWeight: 600,
-                      marginBottom: "0.5rem",
-                    }}
-                  >
-                    Verifier roster
-                  </h3>
-                  <p
-                    style={{
-                      fontSize: "0.875rem",
-                      color: "var(--color-muted)",
-                      marginBottom: "0.75rem",
-                    }}
-                  >
-                    Only confirmations signed by these trusted verifiers can release funds. Recipients should know whose signature they need to obtain.
-                  </p>
-                  <p
-                    style={{
-                      fontSize: "0.875rem",
-                      fontStyle: "italic",
-                      color: "var(--color-muted)",
-                    }}
-                  >
-                    Note: the app cannot list verifier addresses from this programme yet. This roster will come from deployment records or the public index. For now, verifier checking is available via{" "}
-                    <span className="numeric">is_verifier(addr)</span>.
-                  </p>
-                </div>
-              </div>
+                  }
+                />
+              </List>
             )}
           </AsyncView>
         </Card>

@@ -73,11 +73,12 @@ describe('MoneyPath announcements', () => {
     render(<MoneyPath />);
     const tabs = screen.getAllByRole('tab');
 
-    fireEvent.click(tabs[0]);
-    expect(announce).toHaveBeenCalledWith('Step 1, Contribute: 10,000 USDC contributed to the budget');
-
+    // Step 1 is already on screen, so pressing it says nothing; move away first.
     fireEvent.click(tabs[5]);
     expect(announce).toHaveBeenCalledWith('Step 6, Release: 2,500 USDC released to the recipient');
+
+    fireEvent.click(tabs[0]);
+    expect(announce).toHaveBeenCalledWith('Step 1, Contribute: 10,000 USDC contributed to the budget');
 
     fireEvent.click(tabs[6]);
     expect(announce).toHaveBeenCalledWith('Step 7, Spend: 2,500 USDC paid to a verified payee');

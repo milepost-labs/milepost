@@ -95,18 +95,20 @@ fn configure_stores_the_rules() {
 }
 
 #[test]
-fn configuring_the_same_wallet_twice_is_rejected_without_changing_state() {
+fn the_steward_can_change_the_rules_later() {
+    // `configure` doubles as the update path: after the first call only the
+    // steward signs, so `AlreadyConfigured` is never raised for them.
     let f = setup();
-    let before = f.client.get_policy(&f.wallet);
     let cap = CAP + 1;
     let period = PERIOD + 1;
 
-    assert_eq!(
-        f.client
-            .try_configure(&f.steward, &f.wallet, &f.token, &cap, &period),
-        Err(Ok(SpendError::AlreadyConfigured))
-    );
-    assert_eq!(f.client.get_policy(&f.wallet), before);
+    f.client
+        .configure(&f.steward, &f.wallet, &f.token, &cap, &period);
+
+    let p = f.client.get_policy(&f.wallet);
+    assert_eq!(p.cap, cap);
+    assert_eq!(p.period, period);
+    assert_eq!(p.steward, f.steward);
 }
 
 #[test]

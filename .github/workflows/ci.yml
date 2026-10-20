@@ -155,7 +155,9 @@ jobs:
       - name: Verify bindings are publishable
         run: ./scripts/check-bindings-publishable.sh
 
-      - name: Check frontend explanations cover contract errors
+      # Every contract error must have a plain-language explanation in the app,
+      # and the app must not explain a code the contracts no longer have.
+      - name: Check the app explains every contract error
         run: python3 ./scripts/check-error-parity.py
 
       - name: Build the app against local bindings
@@ -168,19 +170,22 @@ jobs:
       - name: Check no development-only pages reached the build
         run: ./frontend/scripts/check-no-dev-pages.sh
 
-      # Page CSS may use the existing baseline, but new colour literals and
-      # off-scale spacing must go through the token system.
-      # The checkout is shallow, so the commit to diff against is fetched
-      # explicitly: the PR's base, or the previous commit on a push.
-      - name: Check new page CSS uses design tokens
-        env:
-          BASE_SHA: ${{ github.event.pull_request.base.sha || github.event.before }}
-        run: |
-          git fetch --no-tags --depth=1 origin "$BASE_SHA"
-          node frontend/scripts/check-design-system.mjs --diff-base "$BASE_SHA"
+      # Every page and component CSS file must use design tokens for colours and
+      # spacing on the 4px scale.
+      - name: Check page and component CSS uses design tokens
+        run: node frontend/scripts/check-design-system.mjs
 
       - name: Test the design-system guard
         run: npm run test:design-system --prefix frontend
+
+      # Every stand-in value on screen carries a "Sample data" tag. A component
+      # that reads a FIXTURE_* export without rendering the tag fails here,
+      # unless frontend/scripts/sample-tag-allowlist.json says why it may.
+      - name: Check fixtures are rendered with the sample tag
+        run: npm run check:sample-tags --prefix frontend
+
+      - name: Test the sample-tag check
+        run: npm run test:sample-tags --prefix frontend
 
       # Not cosmetic. The React Compiler rules here catch render-purity and
       # cascading-setState bugs that type-check cleanly and misbehave at runtime.
@@ -256,3 +261,26 @@ jobs:
       - name: Check every route with axe
         run: npm run test:a11y --prefix frontend
 
+  malware:
+    name: Malware check
+    runs-on: ubuntu-latest
+    # Read-only, and it installs nothing: the check has no dependencies, so a
+    # hostile package in a PR's lockfile is looked up, never run.
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 24
+
+      # Known-malicious packages (OSV MAL- entries) in every lockfile, new
+      # install scripts, packages from outside the registries, worm files,
+      # pull_request_target workflows and hidden Unicode. Exceptions go in
+      # .github/malware-check-allowlist.json with a reason. See the header of
+      # scripts/check-malware.mjs.
+      - name: Check for supply-chain malware
+        run: node scripts/check-malware.mjs
+
+      - name: Test the malware check
+        run: node --test scripts/check-malware.test.mjs

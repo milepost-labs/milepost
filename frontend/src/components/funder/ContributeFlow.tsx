@@ -100,7 +100,6 @@ export function ContributeFlow({
   // unknown, so an amount is never refused against a balance we do not have.
   const balanceRead = useProgrammeBalance(programme);
   const xlmBalance = useBalances(address);
-  const xlmBalance = useBalances(address);
   const walletBalance = balanceRead.balance ?? undefined;
 
   const parsed = validateAmount(amount, { balance: walletBalance, asset: 'USDC' });

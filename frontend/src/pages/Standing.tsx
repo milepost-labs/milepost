@@ -1,16 +1,15 @@
 import { useState, type FormEvent } from 'react';
 import { Link } from 'react-router-dom';
 import { Buffer } from 'buffer';
-import type { Standing as OnChainStanding } from '@milepost/record';
-import { useContractResult, useTransaction, phaseLabel } from '../hooks';
-import { AsyncView, ErrorPanel } from '../components/state/AsyncStates';
-import { Badge, Button, Card, TextArea } from '../components/ui';
+import { Search } from 'lucide-react';
+import { useStanding, useTransaction, phaseLabel } from '../hooks';
+import { Empty, ErrorPanel, ErrorState, Loading } from '../components/state/AsyncStates';
+import { AddressChip, Badge, Button, Card, Field, TextArea } from '../components/ui';
 import { SignInSheet } from '../components/layout/SignInSheet';
 import { useAnnouncer } from '../context/useAnnouncer';
 import { useSoroban } from '../context/useSoroban';
 import { useWallet } from '../context/useWallet';
-import { FIXTURE_STANDING } from '../fixtures/standing';
-import { KEEPALIVE_DAYS, isTtlLow, standingStats, type StandingAggregate } from '../lib/standing';
+import { KEEPALIVE_DAYS, isTtlLow, standingStats, type StandingView } from '../lib/standing';
 import { describeAmount } from '../lib/amount';
 import { looksLikeAddress } from '../lib/format';
 import { isFailure } from '../lib/errors';
@@ -239,7 +238,7 @@ export function RecipientSignedOut({ onSignIn }: { onSignIn: () => void }) {
 }
 
 /** The three aggregate figures. Pure, so it renders without a wallet. */
-export function StandingStats({ standing }: { standing: StandingAggregate }) {
+export function StandingStats({ standing }: { standing: StandingView }) {
   return (
     <div className="standing-stats">
       {standingStats(standing).map((stat) => (
@@ -265,7 +264,7 @@ export function StandingStats({ standing }: { standing: StandingAggregate }) {
  * The remaining life is a TTL read the frontend does not surface yet, so when
  * it is unknown the row offers the extension without promising a number.
  */
-function StandingTtlRow({ liveForDays, subject }: { liveForDays: number; subject: string }) {
+function StandingTtlRow({ standing, subject }: { standing: StandingView; subject: string }) {
   const { record } = useSoroban();
   const { address } = useWallet();
   const announce = useAnnouncer();
@@ -279,8 +278,9 @@ function StandingTtlRow({ liveForDays, subject }: { liveForDays: number; subject
     },
   });
 
-  const days = extended ? KEEPALIVE_DAYS : liveForDays;
-  const low = isTtlLow(liveForDays, extended);
+  const known = standing.liveForDays !== undefined;
+  const low = known && isTtlLow(standing.liveForDays!, extended);
+  const days = extended ? KEEPALIVE_DAYS : standing.liveForDays;
 
   const handleExtend = () => {
     void tx.send(async () => {
@@ -328,13 +328,32 @@ function StandingTtlRow({ liveForDays, subject }: { liveForDays: number; subject
   );
 }
 
-/** The signed-in standing view: the on-chain aggregates, TTL row and verifier. */
-function StandingPanel({ standing, subject }: { standing: OnChainStanding; subject: string }) {
-  const aggregate: StandingAggregate = {
-    programmes: standing.programmes,
-    tranchesReleased: standing.tranches,
-    totalReceived: standing.total_received,
-  };
+/**
+ * The standing of one subject, read from the `record` contract.
+ *
+ * `record.get` returns the aggregates; an address with no history answers
+ * `NotFound`, which is a first-time applicant's ordinary state rather than a
+ * failure, so it gets the empty state. Any other failure is shown as one.
+ */
+export function StandingPanel({ subject }: { subject: string }) {
+  const standing = useStanding(subject);
+
+  if (standing.loading) {
+    return <Loading label="Reading standing" rows={2} />;
+  }
+
+  if (standing.error) {
+    return <ErrorState error={standing.error} contract="record" onRetry={standing.refetch} />;
+  }
+
+  if (!standing.standing) {
+    return (
+      <Empty
+        title="No standing yet."
+        description="Standing is written the first time a programme releases a tranche to this address. It is the record the next funder can rely on, and it appears here as soon as it exists."
+      />
+    );
+  }
 
   return (
     <div className="standing-panel">
@@ -345,27 +364,26 @@ function StandingPanel({ standing, subject }: { standing: OnChainStanding; subje
         against it — even one this protocol has never seen.
       </p>
 
-      <StandingStats standing={aggregate} />
+      <StandingStats standing={standing.standing} />
 
-      <StandingTtlRow liveForDays={FIXTURE_STANDING.liveForDays} subject={subject} />
-      <span className="standing-sample">
-        <Badge tone="neutral">Sample data</Badge> Sample lifetime for the design phase. Reading the real TTL is a separate change.
-      </span>
+      <StandingTtlRow standing={standing.standing} subject={subject} />
 
-      <Card title="Verify a shared history">
-        <p className="standing-panel__intro">
-          Standing stores a rolling hash root, not the history itself. A next funder can
-          fold the history you share through the contract and check it against the root
-          below — no trust in you or an indexer required.
-        </p>
-        <p className="standing-root">
-          <span className="standing-root__label">On-chain history root</span>
-          <code className="numeric standing-root__value">
-            {standing.history_root.toString('hex')}
-          </code>
-        </p>
-        <HistoryVerifier onChainRoot={standing.history_root} />
-      </Card>
+      {standing.historyRoot && (
+        <Card title="Verify a shared history">
+          <p className="standing-panel__intro">
+            Standing stores a rolling hash root, not the history itself. A next funder can
+            fold the history a recipient shares through the contract and check it against the
+            root below — no trust in the recipient or an indexer required.
+          </p>
+          <p className="standing-root">
+            <span className="standing-root__label">On-chain history root</span>
+            <code className="numeric standing-root__value">
+              {standing.historyRoot.toString('hex')}
+            </code>
+          </p>
+          <HistoryVerifier onChainRoot={standing.historyRoot} />
+        </Card>
+      )}
     </div>
   );
 }
@@ -375,12 +393,11 @@ function StandingPanel({ standing, subject }: { standing: OnChainStanding; subje
  * transaction log.
  *
  * Signed out, the design shows an explainer rather than empty shells. Signed
- * in, it reads the real `record.get` entry and lets anyone verify a claimed
- * history against the root stored there.
+ * in, it reads the signed-in address's standing from the chain and offers a
+ * lookup so any address's record can be read before it is underwritten.
  */
 export const Standing = () => {
   const { address } = useWallet();
-  const { record } = useSoroban();
   const [signInOpen, setSignInOpen] = useState(false);
   const [lookupInput, setLookupInput] = useState('');
   const [lookedUp, setLookedUp] = useState<string | null>(null);
@@ -396,18 +413,6 @@ export const Standing = () => {
     setLookupInput('');
   };
 
-  const standing = useContractResult<OnChainStanding>(
-    () => record.get({ subject: address ?? '' }),
-    [record, address],
-    { contract: 'record', enabled: Boolean(address) },
-  );
-
-  const standing = useContractResult<OnChainStanding>(
-    () => record.get({ subject: address ?? '' }),
-    [record, address],
-    { contract: 'record', enabled: Boolean(address) },
-  );
-
   return (
     <div className="standing-page">
       <header className="standing-head">
@@ -421,18 +426,6 @@ export const Standing = () => {
       {address ? (
         <div className="standing-section">
           <RecipientSectionNav />
-          <AsyncView
-            {...standing}
-            contract="record"
-            onRetry={standing.refetch}
-            empty={{
-              title: 'No track record yet',
-              description:
-                'Standing appears after a first tranche is released to this address, on any programme.',
-            }}
-          >
-            {(data) => <StandingPanel standing={data} subject={address} />}
-          </AsyncView>
         </div>
       ) : (
         <RecipientSignedOut onSignIn={() => setSignInOpen(true)} />

@@ -190,6 +190,51 @@
   min-height: 18px;
 }
 
+.spend-policy__lookup,
+.spend-policy__payee-check {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  gap: var(--space-3);
+  max-width: var(--page-measure-narrow);
+}
+
+.spend-policy__lookup .ui-field,
+.spend-policy__payee-check .ui-field {
+  flex: 1 1 var(--field-min-width);
+  min-width: 0;
+}
+
+.spend-policy__target {
+  margin: 0;
+  font-size: var(--text-sm);
+  color: var(--text-muted);
+}
+
+.spend-policy__summary {
+  margin: 0;
+  padding: var(--space-4) var(--space-5);
+  border-radius: var(--radius-card-lg);
+  font-size: var(--text-base);
+  line-height: var(--leading-body);
+  background: var(--success-soft);
+  max-width: 66ch;
+}
+
+.spend-policy__summary--none,
+.spend-policy__summary--unprotected,
+.spend-policy__summary--no-rules {
+  background: var(--refund-soft);
+  color: var(--refund);
+  font-weight: var(--weight-semibold);
+}
+
+.spend-policy__payee-result {
+  margin: 0;
+  font-size: var(--text-sm);
+  overflow-wrap: anywhere;
+}
+
 /* Configure + payee management (issues #409, #410) */
 .spend-policy__form {
   display: flex;

@@ -363,7 +363,7 @@ export function DeployProgramme() {
             error={schemaInput !== '' ? (schemaError ?? undefined) : undefined}
             hint={
               schemaInput === ''
-                ? `The schema tranches release against. It must already exist in attest. Known: ${FIXTURE_SCHEMAS.map((s) => s.id).join(', ')}.`
+                ? 'The schema tranches release against. It must already exist in attest — it is checked before you continue.'
                 : undefined
             }
             spellCheck={false}

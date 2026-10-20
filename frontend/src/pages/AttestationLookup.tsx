@@ -504,11 +504,11 @@ export const AttestationLookup = () => {
                 <article key={attestation.uid} className="attest-result-card">
                   <div className="attest-result-card__head">
                     <span className="attest-result-card__uid">{attestation.uid}</span>
-                    {attestation.revoked ? (
-                      <Badge tone="danger">Revoked</Badge>
-                    ) : (
-                      <SpentStatus programme={programme} uid={attestation.uid} />
-                    )}
+                    <Badge tone="warning">Sample data</Badge>
+                    {attestation.revoked && <Badge tone="danger">Revoked</Badge>}
+                    {/* Still checked when revoked: a proof revoked after it
+                        released a tranche must not hide that money moved. */}
+                    <SpentStatus programme={programme} uid={attestation.uid} />
                   </div>
                   {programmeId && (
                     <span className="attest-result-card__programme">

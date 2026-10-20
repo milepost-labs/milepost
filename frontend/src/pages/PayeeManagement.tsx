@@ -8,6 +8,7 @@ import { useContractResult, useProgrammeParam, useTransaction } from '../hooks';
 import { AddressChip, Badge, Button, Card, Field, RadioGroup, TextArea } from '../components/ui';
 import { ProgrammeParamNotice } from '../components/programme/ProgrammeParamNotice';
 import { Empty, ErrorPanel, ErrorState, PendingState, TransactionOutcome } from '../components/state/AsyncStates';
+import { FIXTURE_PROGRAMMES } from '../fixtures/programmes';
 import { FIXTURE_PAYEES, type PayeeFixture } from '../fixtures/payeeFixtures';
 import {
   bulkBatchDone,
@@ -100,9 +101,12 @@ export const PayeeManagement = () => {
       !config.fetching &&
       config.data.creator === wallet.address,
   );
+  const isSample = programmeId !== null && isSampleProgramme(programmeId);
 
   const [sessionChanges, setSessionChanges] = useState<Record<string, SessionChange[]>>({});
-  const currentSessionChanges = sessionChanges[programmeId] ?? [];
+  // Session changes are kept per programme; with no programme chosen there are none.
+  const sessionKey = programmeId ?? '';
+  const currentSessionChanges = sessionChanges[sessionKey] ?? [];
 
   const [checkInput, setCheckInput] = useState('');
   const [checkError, setCheckError] = useState<string | null>(null);
@@ -110,6 +114,7 @@ export const PayeeManagement = () => {
   const [checkLoading, setCheckLoading] = useState(false);
 
   const handleCheckAddress = async () => {
+    if (!programme) return;
     const addr = checkInput.trim();
     if (!PAYEE_ADDRESS.test(addr)) {
       setCheckError('Enter a valid Stellar address.');
@@ -171,7 +176,7 @@ export const PayeeManagement = () => {
     }
     setSessionAdds((prev) => ({
       ...prev,
-      [programmeId]: [...(prev[programmeId] ?? []), payee],
+      [sessionKey]: [...(prev[sessionKey] ?? []), payee],
     }));
   };
 
@@ -201,9 +206,9 @@ export const PayeeManagement = () => {
       remember({ address: addr, label: lbl });
       setSessionChanges((prev) => ({
         ...prev,
-        [programmeId]: [
+        [sessionKey]: [
           { address: addr, label: lbl, action: 'added' },
-          ...(prev[programmeId] ?? []).filter((c) => c.address !== addr),
+          ...(prev[sessionKey] ?? []).filter((c) => c.address !== addr),
         ],
       }));
       setAddressInput('');
@@ -227,8 +232,18 @@ export const PayeeManagement = () => {
   };
 
   const handleRevoke = (address: string) => {
-    if (!programme) return;
-    void tx.send(() => programme.deny_payee({ payee: address }));
+    if (!programme || !programmeId) return;
+    void tx.send(() => programme.deny_payee({ payee: address })).then((res) => {
+      if (res !== null) {
+        setSessionChanges((prev) => ({
+          ...prev,
+          [sessionKey]: [
+            { address, label: 'Removed payee', action: 'removed' },
+            ...(prev[sessionKey] ?? []).filter((c) => c.address !== address),
+          ],
+        }));
+      }
+    });
   };
 
   const canSubmit = Boolean(programme) && isCreator && PAYEE_ADDRESS.test(addressInput.trim());
@@ -321,18 +336,18 @@ export const PayeeManagement = () => {
     if (verifiedInThisRun.length > 0) {
       setSessionChanges((prev) => ({
         ...prev,
-        [programmeId]: [
+        [sessionKey]: [
           ...verifiedInThisRun.map((address) => ({ address, label: 'Bulk verified', action: 'added' as const })),
-          ...(prev[programmeId] ?? []).filter((c) => !verifiedInThisRun.includes(c.address)),
+          ...(prev[sessionKey] ?? []).filter((c) => !verifiedInThisRun.includes(c.address)),
         ],
       }));
     }
     if (bulkMode === 'remove' && eligibleAddresses.length > 0) {
       setSessionChanges((prev) => ({
         ...prev,
-        [programmeId]: [
+        [sessionKey]: [
           ...eligibleAddresses.map((address) => ({ address, label: 'Bulk removed', action: 'removed' as const })),
-          ...(prev[programmeId] ?? []).filter((c) => !eligibleAddresses.includes(c.address)),
+          ...(prev[sessionKey] ?? []).filter((c) => !eligibleAddresses.includes(c.address)),
         ],
       }));
     }
