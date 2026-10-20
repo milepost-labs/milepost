@@ -21,7 +21,7 @@ jobs:
       - uses: dtolnay/rust-toolchain@stable
         with:
           targets: wasm32v1-none
-      - uses: stellar/stellar-cli@v28.0.0
+      - uses: stellar/stellar-cli@v28.1.0
 
       - name: Build wasm
         run: stellar contract build
