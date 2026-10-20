@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { programmeActions, type ActionInput, type ActionKey } from './programmeActions';
+import { phaseRequirement, type Phase } from './phaseGate';
 
 const ID = 'CCOIACASOVO3ZQLXWWJFGZAU3Y545AGPXLBP4NYHYD77RDCBPXRVZ37C';
 
@@ -43,6 +44,35 @@ describe('programmeActions', () => {
       'refund',
     ]);
     expect(enabledKeys({ phase: 'Cancelled' })).toEqual(['refund']);
+  });
+
+  it('covers every action in every phase with its availability and full reason', () => {
+    const requiredPhase: Record<ActionKey, 'Open' | 'Review' | 'Settled'> = {
+      contribute: 'Open',
+      apply: 'Open',
+      finalize: 'Review',
+      release: 'Settled',
+      refund: 'Settled',
+    };
+    const actionKeys: ActionKey[] = ['contribute', 'apply', 'finalize', 'release', 'refund'];
+    const phases: Phase[] = ['Open', 'Review', 'Settled', 'Cancelled'];
+
+    for (const phase of phases) {
+      for (const key of actionKeys) {
+        const action = byKey({ phase }, key);
+        const allowed = key === 'refund'
+          ? phase === 'Cancelled'
+          : phase === requiredPhase[key];
+
+        expect(action.enabled, `${phase}: ${key}`).toBe(allowed);
+        if (!allowed) {
+          const expectedReason = phase === 'Settled' && key === 'refund'
+            ? 'Refunds open after the release window closes.'
+            : phaseRequirement(requiredPhase[key], phase);
+          expect(action.reason, `${phase}: ${key} reason`).toBe(expectedReason);
+        }
+      }
+    }
   });
 
   it('names the phase an unavailable action needs', () => {
