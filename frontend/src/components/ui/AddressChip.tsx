@@ -46,7 +46,13 @@ export function AddressChip({
 
   return (
     <span className="address-chip" title={address}>
-      <code className="address-chip__text">{display}</code>
+      {/* The shortened form is what sighted users compare; assistive tech gets
+          the full value, because a truncated address is not enough to check
+          who you are paying. */}
+      <code className="address-chip__text" aria-hidden="true">
+        {display}
+      </code>
+      <span className="visually-hidden">{address}</span>
       {verification && (
         <span className={`address-chip__verified address-chip__verified--${verification.tone}`} title={verification.description}>
           {verified ? <ShieldCheck size={14} aria-hidden="true" /> : <ShieldAlert size={14} aria-hidden="true" />}
