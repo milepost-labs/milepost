@@ -16,7 +16,7 @@ import { ProgrammeHeader } from "../components/programme/ProgrammeHeader";
 import { WhereTheMoneyIs } from "../components/programme/WhereTheMoneyIs";
 import { ProgrammeTabs } from "../components/programme/ProgrammeTabs";
 import { ProgrammeActions } from "../components/programme/ProgrammeActions";
-import { AddressChip, Badge, Button, Card, Deadline, Field, List, ListRow, PhaseBadge, Stat } from "../components/ui";
+import { AddToCalendar, AddressChip, Badge, Button, Card, Deadline, Field, List, ListRow, PhaseBadge, Stat } from "../components/ui";
 import { useSoroban } from "../context/useSoroban";
 import { useContractRead, useContractResult, useIndexedList, useProgramme } from "../hooks";
 import { fetchProgrammes } from "../lib/indexer";
@@ -805,6 +805,22 @@ export const ProgrammeDetail = () => {
                     />
                   ))}
                 </List>
+                {/* A sample programme's dates are made up; they do not
+                    belong in anyone's calendar. */}
+                {!isSample && (
+                  <div>
+                    <AddToCalendar
+                      programmeName={indexEntry?.name ?? programmeId}
+                      programmeUrl={`${window.location.origin}/programme/${encodeURIComponent(programmeId)}`}
+                      deadlines={timelineRows.map((row) => ({
+                        key: row.key,
+                        label: row.label,
+                        unixSeconds: row.deadline,
+                      }))}
+                      nowMs={nowMs}
+                    />
+                  </div>
+                )}
               </div>
             )}
           </AsyncView>

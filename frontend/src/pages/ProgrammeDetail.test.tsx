@@ -3,6 +3,7 @@ import { fireEvent, render, screen, within } from '@testing-library/react';
 import { MemoryRouter, Route, Routes } from 'react-router-dom';
 import { Buffer } from 'buffer';
 import { ProgrammeDetail } from './ProgrammeDetail';
+import { FIXTURE_PROGRAMMES } from '../fixtures/programmes';
 
 // Issue #342 — the programme detail page. One page shows a real programme's
 // on-chain reads (phase, money, config, registry), what each phase lets you do,
@@ -185,11 +186,21 @@ describe('ProgrammeDetail — a deployed programme', () => {
     expect(screen.getByText('Timeline and phase')).toBeTruthy();
     expect(screen.getByText(/Next deadline:/)).toBeTruthy();
     expect(screen.getByRole('list', { name: 'Programme timeline' })).toBeTruthy();
+    expect(
+      screen.getByRole('button', { name: 'Add the 4 remaining deadlines to your calendar' }),
+    ).toBeTruthy();
     expect(screen.getByRole('tablist', { name: 'Programme details' })).toBeTruthy();
     expect(screen.getByRole('tab', { selected: true })).toBeTruthy();
     expect(screen.getByLabelText('Metadata document URL')).toBeTruthy();
     // Renders the whole page with every read; slow on a loaded CI runner.
   }, 20_000);
+
+  it('offers no calendar for a sample programme, whose dates are made up', async () => {
+    renderProgramme(`/programme/${FIXTURE_PROGRAMMES[0].id}`);
+
+    expect(await screen.findByRole('list', { name: 'Programme timeline' })).toBeTruthy();
+    expect(screen.queryByRole('button', { name: /to your calendar/ })).toBeNull();
+  });
 
   it('says when it is showing the seeded demo programme', async () => {
     renderProgramme('/programme');
@@ -282,6 +293,7 @@ describe('ProgrammeDetail — what each phase allows', () => {
 
     expect(await screen.findByText('All configured deadlines have passed.')).toBeTruthy();
     expect(screen.getAllByText('Passed')).toHaveLength(4);
+    expect(screen.queryByRole('button', { name: /to your calendar/ })).toBeNull();
     expect(screen.queryByText('Refunds open after the release window closes.')).toBeNull();
 
     const refund = await screen.findByRole('link', { name: 'Refund' });

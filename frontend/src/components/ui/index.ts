@@ -3,6 +3,7 @@ export { AddressChip, type AddressChipProps } from './AddressChip';
 export { Button, type ButtonProps } from './Button';
 export { Card, Stat, type CardProps } from './Card';
 export { Deadline, type DeadlineProps } from './Deadline';
+export { AddToCalendar, type AddToCalendarProps } from './AddToCalendar';
 export { Field, type FieldProps } from './Field';
 export { AmountField, type AmountFieldProps } from './AmountField';
 export { Badge, PhaseBadge, ModePill, type BadgeTone } from './Badge';
