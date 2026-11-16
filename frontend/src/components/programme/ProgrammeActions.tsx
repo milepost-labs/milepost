@@ -1,10 +1,11 @@
 import { useState } from 'react';
 import { Link } from 'react-router-dom';
-import { ShieldAlert } from 'lucide-react';
+import { ArrowRight, ShieldAlert } from 'lucide-react';
 import { useWallet } from '../../context/useWallet';
 import { SignInSheet } from '../layout/SignInSheet';
 import { isPhase } from '../../lib/phaseGate';
 import { programmeActions } from '../../lib/programmeActions';
+import { Button, DisabledReason } from '../ui';
 import './ProgrammeActions.css';
 
 export interface ProgrammeActionsProps {
@@ -60,9 +61,12 @@ export function ProgrammeActions({ programmeId, phase, refundsOpen, refundable, 
 
   return (
     <aside className="programme-actions" aria-labelledby="programme-actions-heading">
-      <h2 id="programme-actions-heading" className="programme-actions__heading">
-        What you can do now
-      </h2>
+      <div className="programme-actions__head">
+        <h2 id="programme-actions-heading" className="programme-actions__heading">
+          What you can do now
+        </h2>
+        <p className="programme-actions__sub">Checked against the clock and the chain.</p>
+      </div>
 
       {showVerificationWarning && (
         <div
@@ -95,9 +99,9 @@ export function ProgrammeActions({ programmeId, phase, refundsOpen, refundable, 
       {!signedIn && (
         <div className="programme-actions__signin">
           <p>Sign in to act on this programme. Everything on this page stays readable without it.</p>
-          <button type="button" className="programme-actions__button" onClick={() => setSignInOpen(true)}>
+          <Button size="sm" onClick={() => setSignInOpen(true)}>
             Sign in
-          </button>
+          </Button>
         </div>
       )}
 
@@ -105,23 +109,24 @@ export function ProgrammeActions({ programmeId, phase, refundsOpen, refundable, 
         {actions.map((action) => {
           const reasonId = `programme-action-why-${action.key}`;
           return (
-            <li
-              key={action.key}
-              className={`programme-action${action.phaseAllows ? '' : ' programme-action--unavailable'}`}
-            >
+            <li key={action.key} className="programme-action">
               <div className="programme-action__row">
                 <span className="programme-action__text">
                   <span className="programme-action__label">{action.label}</span>
                   <span className="programme-action__who">{action.who}</span>
                 </span>
                 {action.enabled && action.href ? (
-                  <Link to={action.href} className="programme-actions__button" aria-describedby={reasonId}>
+                  <Link
+                    to={action.href}
+                    className="ui-button ui-button--primary ui-button--sm"
+                    aria-describedby={reasonId}
+                  >
                     {action.button}
                   </Link>
                 ) : (
                   <button
                     type="button"
-                    className="programme-actions__button programme-actions__button--off"
+                    className="ui-button ui-button--secondary ui-button--sm"
                     aria-disabled="true"
                     aria-describedby={reasonId}
                   >
@@ -129,9 +134,13 @@ export function ProgrammeActions({ programmeId, phase, refundsOpen, refundable, 
                   </button>
                 )}
               </div>
-              <span id={reasonId} className="programme-action__reason">
-                {action.reason}
-              </span>
+              {action.enabled ? (
+                <p id={reasonId} className="programme-action__reason">
+                  {action.reason}
+                </p>
+              ) : (
+                <DisabledReason id={reasonId}>{action.reason}</DisabledReason>
+              )}
             </li>
           );
         })}
@@ -140,9 +149,10 @@ export function ProgrammeActions({ programmeId, phase, refundsOpen, refundable, 
       <div className="programme-actions__manage">
         <Link
           to={`/admin/payees?programme=${encodeURIComponent(programmeId)}`}
-          className="programme-actions__button"
+          className="programme-actions__manage-link"
         >
           Manage payees
+          <ArrowRight aria-hidden="true" />
         </Link>
         <span className="programme-actions__manage-note">
           Only the programme&rsquo;s creator can verify or remove a payee.

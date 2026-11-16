@@ -154,19 +154,21 @@ describe('ProgrammeDetail — a deployed programme', () => {
     expect(screen.getByText('Phase read on-chain just now')).toBeTruthy();
     expect(screen.getByText('4,811,204')).toBeTruthy();
     expect(screen.queryByText(/Showing the seeded demo programme/)).toBeNull();
-    expect(screen.getByText('Now · Contributions and applications')).toBeTruthy();
+    expect(document.querySelector('[aria-current="step"]')?.textContent).toContain('Open · now');
 
     // Funding summary: four stats straight off the reads.
     const funding = screen.getByRole('region', { name: 'Programme funding summary' });
     expect(within(funding).getByText('Contributed')).toBeTruthy();
-    expect(await within(funding).findByText('8,000.00 XLM')).toBeTruthy();
-    expect(within(funding).getByText('Granted')).toBeTruthy();
+    expect(await within(funding).findByText('8,000')).toBeTruthy();
+    expect(within(funding).getByText('2% protocol fee')).toBeTruthy();
+    expect(within(funding).getByText('Budget')).toBeTruthy();
+    expect(within(funding).getByText('Awarded')).toBeTruthy();
     expect(within(funding).getByText('Released')).toBeTruthy();
 
     // Money panel reconciles contributed less fee.
     await moneyReady();
     expect(screen.getByText('Where the money is')).toBeTruthy();
-    expect(screen.getByText('Not yet awarded')).toBeTruthy();
+    expect(screen.getByText('Unawarded')).toBeTruthy();
     expect(screen.getByText('Protocol fee')).toBeTruthy();
 
     // Registry verdict from `registry.is_programme`.
@@ -174,7 +176,7 @@ describe('ProgrammeDetail — a deployed programme', () => {
     expect(screen.getAllByText('Registry-deployed')).toHaveLength(2);
 
     // Rules: asset read through the token contract, rest straight from config.
-    expect(await screen.findByText('XLM')).toBeTruthy();
+    expect(await within(screen.getByRole('list', { name: 'Programme rules' })).findByText('XLM')).toBeTruthy();
     expect(tokenNameMock).toHaveBeenCalledWith(TOKEN, RPC_URL);
     expect(screen.getByText('Asset contract')).toBeTruthy();
     expect(screen.getByText('3 reviewer votes')).toBeTruthy();
@@ -183,7 +185,7 @@ describe('ProgrammeDetail — a deployed programme', () => {
     expect(screen.getByText('cd'.repeat(32))).toBeTruthy();
 
     // Timeline and the tabbed detail panels are present.
-    expect(screen.getByText('Timeline and phase')).toBeTruthy();
+    expect(screen.getByRole('heading', { name: 'Timeline' })).toBeTruthy();
     expect(screen.getByText(/Next deadline:/)).toBeTruthy();
     expect(screen.getByRole('list', { name: 'Programme timeline' })).toBeTruthy();
     expect(
@@ -258,7 +260,7 @@ describe('ProgrammeDetail — what each phase allows', () => {
         'Needs the required reviewer votes on the application. In an oversubscribed round, whoever finalizes first decides the order.',
       ),
     ).toBeTruthy();
-    expect(screen.getByText('Now · Reviewers vote; anyone can finalize')).toBeTruthy();
+    expect(document.querySelector('[aria-current="step"]')?.textContent).toContain('Review · now');
     expect(
       screen.getAllByText('Available only while the programme is Open. This programme is Review.'),
     ).toHaveLength(2);
@@ -313,7 +315,7 @@ describe('ProgrammeDetail — what each phase allows', () => {
       screen.getByText('7,920.00 XLM is refundable, in proportion to what each funder put in.'),
     ).toBeTruthy();
     // Cancelled is not one of the stepper's steps, so nothing is marked current.
-    expect(screen.queryByText(/^Now · /)).toBeNull();
+    expect(document.querySelector('[aria-current="step"]')).toBeNull();
     expect(screen.getByText('Available only during Review. This programme is Cancelled.')).toBeTruthy();
   });
 
@@ -338,7 +340,7 @@ describe('ProgrammeDetail — what each phase allows', () => {
 
     expect(await screen.findByText('Could not read the phase on-chain')).toBeTruthy();
     expect(screen.getAllByText('Reading the phase on-chain…')).toHaveLength(5);
-    expect(screen.queryByText(/^Now · /)).toBeNull();
+    expect(document.querySelector('[aria-current="step"]')).toBeNull();
   });
 });
 

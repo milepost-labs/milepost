@@ -1,6 +1,5 @@
-import { AlertTriangle } from 'lucide-react';
 import { useContractRead, type useProgramme } from '../../hooks';
-import { Card } from '../ui';
+import { Notice } from '../ui';
 import './PausedBanner.css';
 
 /**
@@ -16,18 +15,14 @@ export function PausedBanner({ client }: { client: ReturnType<typeof useProgramm
   if (!paused.data) return null;
 
   return (
-    <Card className="paused-banner">
-      <div className="paused-banner__row">
-        <AlertTriangle aria-hidden="true" size={20} />
-        <div>
-          <h3 className="paused-banner__title">This programme is paused</h3>
-          <p className="typo-text text-muted">
-            The creator has temporarily halted contributions, applications, reviews, awards, and
-            releases. <strong>Refunds remain available</strong> — pausing never blocks a donor from
-            reclaiming their money.
-          </p>
-        </div>
-      </div>
-    </Card>
+    <Notice tone="warn" role="status" className="paused-banner">
+      <h3 className="paused-banner__title">This programme is paused</h3>
+      <p>
+        The creator has temporarily halted contributions, applications, reviews, awards, and
+        releases. The clock keeps running: deadlines do not move.{' '}
+        <strong>Refunds remain available</strong> — pausing never blocks a donor from reclaiming
+        their money.
+      </p>
+    </Notice>
   );
 }

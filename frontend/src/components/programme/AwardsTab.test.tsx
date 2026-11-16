@@ -67,7 +67,7 @@ describe('Issue #440 - AwardsTab index-chain disagreement', () => {
     );
 
     await waitFor(() => {
-      expect(screen.getByText('10,000.00 USDC')).toBeDefined();
+      expect(screen.getByRole('cell', { name: '10000 USDC' }).textContent).toBe('10,000');
     });
 
     expect(screen.queryByText(/Index behind: shows/i)).toBeNull();
@@ -96,8 +96,9 @@ describe('Issue #440 - AwardsTab index-chain disagreement', () => {
     );
 
     await waitFor(() => {
-      // Subtitle displays chain values
-      expect(screen.getByText(/1 of 2 tranches · 5,000\.00 USDC released/)).toBeDefined();
+      // The row displays chain values
+      expect(screen.getByLabelText('1 of 2 tranches released')).toBeDefined();
+      expect(screen.getByRole('cell', { name: '5000 USDC' }).textContent).toBe('5,000');
     });
 
     // Mismatch marker shows index value (0.00 USDC)
@@ -118,7 +119,8 @@ describe('Issue #440 - AwardsTab index-chain disagreement', () => {
     });
 
     // Falls back to index values
-    expect(screen.getByText('10,000.00 USDC')).toBeDefined();
-    expect(screen.getByText(/0 of 2 tranches · 0\.00 USDC released/)).toBeDefined();
+    expect(screen.getByRole('cell', { name: '10000 USDC' }).textContent).toBe('10,000');
+    expect(screen.getByLabelText('0 of 2 tranches released')).toBeDefined();
+    expect(screen.getByRole('cell', { name: '0 USDC' }).textContent).toBe('0');
   });
 });

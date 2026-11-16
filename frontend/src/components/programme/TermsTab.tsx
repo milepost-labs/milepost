@@ -1,18 +1,19 @@
 import type { FC } from 'react';
 import { Link } from 'react-router-dom';
+import { ModePill } from '../ui';
 import './TermsTab.css';
 
 /** The four payment modes, as `Mode` documents them in the program contract. */
 const MODES = [
   {
-    mode: 'Direct',
-    description:
-      'Paid straight to a verified destination, called a payee, chosen when the award is finalized. The recipient never holds the money.',
-  },
-  {
     mode: 'Allocated',
     description:
       'Held in escrow, locked inside the programme. The recipient chooses which verified payee receives it, and when. This depends on nothing outside the contract.',
+  },
+  {
+    mode: 'Direct',
+    description:
+      'Paid straight to a verified destination, called a payee, chosen when the award is finalized. The recipient never holds the money.',
   },
   {
     mode: 'Restricted',
@@ -72,25 +73,26 @@ export const TermsTab: FC<TermsTabProps> = ({
       id="panel-terms"
       aria-labelledby="tab-terms"
     >
-      <div className="terms-tab__list">
+      <dl className="terms-tab__list">
         {terms.map((item) => (
           <div key={item.k} className="terms-tab__row">
-            <div className="terms-tab__row-header">
-              <span className="terms-tab__key">{item.k}</span>
+            <dt className="terms-tab__key">{item.k}</dt>
+            <dd className="terms-tab__def">
               <span className="terms-tab__val">{item.v}</span>
-            </div>
-            {item.explanation && (
-              <p className="terms-tab__explanation">{item.explanation}</p>
-            )}
+              {item.explanation && (
+                <span className="terms-tab__explanation">{item.explanation}</span>
+              )}
+            </dd>
           </div>
         ))}
-      </div>
+      </dl>
 
+      <h3 className="terms-tab__modes-title">The payment modes, strongest guarantee first</h3>
       <dl className="terms-tab__mode-card">
         {MODES.map((item) => (
           <div key={item.mode}>
             <dt>
-              <strong>{item.mode}</strong>
+              <ModePill mode={item.mode} />
             </dt>
             <dd>{item.description}</dd>
           </div>

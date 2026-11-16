@@ -109,7 +109,7 @@
   color: var(--text);
 }
 
-.fund-card__head .phase-pill {
+.fund-card__head .ui-badge--phase {
   flex: none;
   margin-top: var(--space-3);
 }

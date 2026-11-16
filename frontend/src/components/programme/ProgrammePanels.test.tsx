@@ -73,18 +73,17 @@ describe('Issue #264 - WhereTheMoneyIs component', () => {
     expect(screen.getByText(/Budget 10,500\.00 USDC/)).toBeDefined();
 
     // 4-line legend items
-    expect(screen.getByText('Not yet awarded')).toBeDefined();
-    expect(screen.getByText('5,500.00 USDC')).toBeDefined();
-
-    expect(screen.getByText('Awarded, locked')).toBeDefined();
-    expect(screen.getByText('2,800.00 USDC')).toBeDefined();
-
-    expect(screen.getByText('Released')).toBeDefined();
-    expect(screen.getByText('2,200.00 USDC')).toBeDefined();
+    // Bare figures: the asset is named once, beside the budget.
+    const figure = (label: string) => screen.getByText(label).nextElementSibling?.textContent;
+    expect(figure('Unawarded')).toBe('5,500');
+    expect(figure('Awarded, locked')).toBe('2,800');
+    expect(figure('Released')).toBe('2,200');
 
     // Refunds are not open, so nothing is refundable yet.
-    expect(screen.getByText('Refundable')).toBeDefined();
-    expect(screen.getByText('0.00 USDC')).toBeDefined();
+    expect(figure('Refundable')).toBe('0');
+
+    // 120 squares, each marked with its state for forced-colours mode.
+    expect(document.querySelectorAll('.money-row__square')).toHaveLength(120);
 
     // Footer stats with capped quorum (max 16)
     expect(screen.getByText(/Reviewer votes needed/).textContent).toContain('16');
@@ -108,10 +107,10 @@ describe('Issue #264 - WhereTheMoneyIs component', () => {
       />,
     );
     // 10,000 budget - 2,000 released - 1,000 refunded - 500 swept
-    expect(screen.getByText('6,500.00 USDC')).toBeDefined();
+    expect(screen.getByText('Refundable').nextElementSibling?.textContent).toBe('6,500');
     // Nothing is still waiting to be awarded or locked for release.
-    expect(screen.getByText('Not yet awarded').nextElementSibling?.textContent).toBe('0.00 USDC');
-    expect(screen.getByText('Awarded, locked').nextElementSibling?.textContent).toBe('0.00 USDC');
+    expect(screen.getByText('Unawarded').nextElementSibling?.textContent).toBe('0');
+    expect(screen.getByText('Awarded, locked').nextElementSibling?.textContent).toBe('0');
   });
 
   it('preserves precision on large amounts exceeding safe number range', () => {
@@ -147,8 +146,9 @@ describe('Issue #265 - AwardsTab component', () => {
 
     // Renders recipient from mock FIXTURE_AWARDS
     expect(screen.getByText(/GBB4Q2…8T19/)).toBeDefined();
-    expect(screen.getByText(/3 of 3 tranches · 14,000\.00 USDC released/)).toBeDefined();
-    expect(screen.getByText('14,000.00 USDC')).toBeDefined();
+    // Amounts are bare figures; the asset is named once, above the table.
+    expect(screen.getByText(/amounts in USDC/)).toBeDefined();
+    expect(screen.getAllByText('14,000').length).toBeGreaterThan(0);
 
     // Tranche bars have aria-label
     const trancheContainer = screen.getByLabelText('3 of 3 tranches released');
@@ -173,7 +173,8 @@ describe('Issue #265 - AwardsTab component', () => {
       />,
     );
 
-    expect(screen.getByText('No awards yet. Applications are still open.')).toBeDefined();
+    expect(screen.getByText('No awards yet')).toBeDefined();
+    expect(screen.getByText('Applications are still open.')).toBeDefined();
   });
 
   it('reads the index for the seeded demo programme even when a caller marks it a sample', async () => {
@@ -220,8 +221,8 @@ describe('Issue #265 - AwardsTab component', () => {
     expect(
       screen.getByText(/From the public index \(awards\.json\), advisory/),
     ).toBeDefined();
-    expect(screen.getByText('2,000.00 USDC')).toBeDefined();
-    expect(screen.getByText('1,800.00 USDC')).toBeDefined();
+    expect(screen.getByText('2,000')).toBeDefined();
+    expect(screen.getByText('1,800')).toBeDefined();
     // The fixture awards must not appear.
     expect(screen.queryByText(/GBB4Q2…8T19/)).toBeNull();
     expect(screen.queryByText(/Awards use the middle reviewer vote after enough reviewers have voted/)).toBeNull();

@@ -6,85 +6,81 @@
   box-sizing: border-box;
 }
 
+/* A definition list with a hairline over each row: a list, so the rule is
+   allowed. Term on the left, its value and one plain sentence on the right. */
 .terms-tab__list {
-  display: flex;
-  flex-direction: column;
+  margin: 0;
   width: 100%;
 }
 
 .terms-tab__row {
-  display: flex;
-  flex-direction: column;
-  gap: var(--space-1);
-  padding: var(--space-2) 0;
-  border-bottom: 1px solid var(--surface-raised);
-}
-
-.terms-tab__row:last-child {
-  border-bottom: none;
-}
-
-.terms-tab__row-header {
-  display: flex;
-  justify-content: space-between;
-  align-items: baseline;
-  gap: var(--space-4);
-  flex-wrap: wrap;
-  font-size: var(--text-sm);
+  display: grid;
+  grid-template-columns: 12.5rem minmax(0, 1fr);
+  gap: var(--space-1) var(--space-4);
+  padding: var(--space-3) 0;
+  box-shadow: inset 0 1px 0 var(--line);
 }
 
 .terms-tab__key {
-  color: var(--text-muted);
+  color: var(--ink-muted);
+  font-size: var(--text-sm);
+}
+
+.terms-tab__def {
+  margin: 0;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+  min-width: 0;
 }
 
 .terms-tab__val {
-  font-weight: var(--weight-semibold);
-  color: var(--text);
-  text-align: right;
+  font-size: var(--text-md);
+  color: var(--ink);
 }
 
 .terms-tab__explanation {
-  margin: 0;
-  font-size: var(--text-xs);
-  color: var(--text-muted);
+  font-size: var(--text-caption);
+  color: var(--ink-muted);
   line-height: var(--leading-body);
 }
 
-.terms-tab__mode-card {
-  background: var(--bg);
-  border-radius: var(--radius-row);
-  padding: var(--space-3) var(--space-4);
-  font-size: var(--text-sm);
-  line-height: var(--leading-relaxed);
-  color: var(--text);
-}
-
-.terms-tab__mode-card strong {
-  font-weight: var(--weight-bold);
+.terms-tab__modes-title {
+  margin: var(--space-2) 0 0;
+  font-size: var(--text-md);
+  font-weight: var(--weight-semibold);
 }
 
 .terms-tab__mode-card {
   display: grid;
-  gap: var(--space-2);
+  gap: var(--space-4);
   margin: 0;
+  background: var(--bg-sunken);
+  border-radius: var(--radius-md);
+  padding: var(--space-5);
+  font-size: var(--text-sm);
+  line-height: var(--leading-body);
+}
+
+.terms-tab__mode-card dt {
+  margin-bottom: var(--space-1-5);
 }
 
 .terms-tab__mode-card dd {
   margin: 0;
-  color: var(--text-muted);
+  color: var(--ink-muted);
 }
 
 .terms-tab__keepalive-link {
+  align-self: flex-start;
   font-size: var(--text-sm);
-  font-weight: var(--weight-bold);
+  font-weight: var(--weight-semibold);
   color: var(--accent);
   text-decoration: none;
   display: inline-flex;
   align-items: center;
   min-height: var(--tap-min);
-  padding: var(--space-2) 0;
   border-radius: var(--radius-sm);
-  outline-offset: var(--focus-offset);
 }
 
 .terms-tab__keepalive-link:hover {
@@ -92,17 +88,16 @@
 }
 
 .terms-tab__keepalive-link:focus-visible {
-  outline: 2px solid var(--accent);
+  outline: 2px solid var(--focus);
+  outline-offset: var(--focus-offset);
 }
 
-@media (max-width: 480px) {
-  .terms-tab__row-header {
-    flex-direction: column;
-    align-items: flex-start;
-    gap: var(--space-1);
+@media (max-width: 600px) {
+  .terms-tab__row {
+    grid-template-columns: minmax(0, 1fr);
   }
 
-  .terms-tab__val {
-    text-align: left;
+  .terms-tab__mode-card {
+    padding: var(--space-4);
   }
 }

@@ -1,7 +1,12 @@
 import type { FC } from 'react';
 import { formatAmount, describeAmount } from '../../lib/amount';
 import { computeMoneySquares, getMoneyState } from '../../lib/moneySquares';
+import { formatFigure } from '../../lib/programmeView';
+import './MoneyRow.css';
 import './WhereTheMoneyIs.css';
+
+/** Squares in the detail grid: three rows of forty on a wide screen. */
+const SQUARES = 120;
 
 export interface WhereTheMoneyIsProps {
   contributed: bigint;
@@ -54,37 +59,37 @@ export const WhereTheMoneyIs: FC<WhereTheMoneyIsProps> = ({
     released,
     refundsOpen ? released : granted,
     refundable,
-    40,
+    SQUARES,
   );
 
   const legend = [
     {
       bg: 'var(--accent-soft)',
-      label: 'Not yet awarded',
-      v: formatAmount(notYetAwarded, { asset }),
+      label: 'Unawarded',
+      v: formatFigure(notYetAwarded),
       raw: notYetAwarded,
     },
     {
       bg: 'var(--locked)',
       label: 'Awarded, locked',
-      v: formatAmount(awardedLocked, { asset }),
+      v: formatFigure(awardedLocked),
       raw: awardedLocked,
     },
     {
       bg: 'var(--accent)',
       label: 'Released',
-      v: formatAmount(released, { asset }),
+      v: formatFigure(released),
       raw: released,
     },
     {
       bg: 'var(--refund)',
       label: 'Refundable',
-      v: formatAmount(refundable, { asset }),
+      v: formatFigure(refundable),
       raw: refundable,
     },
   ];
 
-  const gridSummary = `40-square budget distribution: ${describeAmount(released, asset)} released, ${describeAmount(awardedLocked, asset)} awarded and locked, ${describeAmount(notYetAwarded, asset)} not yet awarded${refundable > 0n ? `, ${describeAmount(refundable, asset)} refundable` : ''}`;
+  const gridSummary = `Budget distribution: ${describeAmount(released, asset)} released, ${describeAmount(awardedLocked, asset)} awarded and locked, ${describeAmount(notYetAwarded, asset)} not yet awarded${refundable > 0n ? `, ${describeAmount(refundable, asset)} refundable` : ''}`;
 
   return (
     <section
@@ -104,14 +109,14 @@ export const WhereTheMoneyIs: FC<WhereTheMoneyIsProps> = ({
       </div>
 
       <div
-        className="where-the-money-is__grid"
+        className="money-row money-row--detail"
         role="img"
         aria-label={gridSummary}
       >
         {squares.map((q, i) => (
           <span
             key={i}
-            className="where-the-money-is__square"
+            className="money-row__square"
             data-money-state={getMoneyState(q)}
             style={{ backgroundColor: q }}
             aria-hidden="true"

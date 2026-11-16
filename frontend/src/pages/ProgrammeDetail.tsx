@@ -1,28 +1,26 @@
 import { useEffect, useMemo, useState } from "react";
-import { Link, useLocation } from "react-router-dom";
+import { useLocation } from "react-router-dom";
 import type { ProgrammeConfig } from "@milepost/program";
 import {
   AlertTriangle,
   CheckCircle2,
   FileText,
-  Landmark,
-  ShieldAlert,
   ShieldCheck,
   UsersRound,
 } from "lucide-react";
-import { AsyncView } from "../components/state/AsyncStates";
+import { AsyncView, ErrorState } from "../components/state/AsyncStates";
 import { PausedBanner } from "../components/programme/PausedBanner";
 import { ProgrammeHeader } from "../components/programme/ProgrammeHeader";
 import { WhereTheMoneyIs } from "../components/programme/WhereTheMoneyIs";
 import { ProgrammeTabs } from "../components/programme/ProgrammeTabs";
 import { ProgrammeActions } from "../components/programme/ProgrammeActions";
-import { AddToCalendar, AddressChip, Badge, Button, Card, Deadline, Field, List, ListRow, PhaseBadge, Stat } from "../components/ui";
+import { AddToCalendar, AddressChip, Badge, Button, Card, Deadline, Field, List, ListRow, Notice, StatTile } from "../components/ui";
 import { useSoroban } from "../context/useSoroban";
 import { useContractRead, useContractResult, useIndexedList, useProgramme } from "../hooks";
 import { fetchProgrammes } from "../lib/indexer";
 import { directoryHref } from "../lib/programmeView";
-import { formatAmount } from "../lib/amount";
-import { isSampleProgrammeId } from "../lib/programmeView";
+import { formatAmount, percentOf } from "../lib/amount";
+import { formatFigure, isSampleProgrammeId } from "../lib/programmeView";
 import { registryVerificationCopy } from "../lib/registryVerification";
 import { FIXTURE_CHAIN } from "../fixtures/programmes";
 import { fetchTokenName, parseTokenName } from "../lib/token";
@@ -623,10 +621,27 @@ export const ProgrammeDetail = () => {
       : [];
   }, [config.data, nowMs]);
 
+  const asset = ASSET_LABEL;
+  const deadlines = config.data
+    ? {
+        apply: Number(config.data.apply_deadline),
+        review: Number(config.data.review_deadline),
+        release: Number(config.data.release_deadline),
+        sweep: Number(config.data.sweep_deadline),
+      }
+    : null;
+  const registryCopy =
+    isRegistered.data === null || isRegistered.data === undefined
+      ? null
+      : registryVerificationCopy(isRegistered.data);
+  // A figure for a stat tile: the read, a dash when it failed, an ellipsis
+  // while it is on its way. The money panel below carries the retry.
+  const tileFigure = (read: { data: bigint | null; error: unknown }) =>
+    read.data !== null ? formatFigure(read.data) : read.error ? '—' : '…';
+  const tileUnit = (read: { data: bigint | null }) => (read.data !== null ? asset : undefined);
+
   return (
     <div className="programme-detail">
-      <PausedBanner client={programme} />
-
       <ProgrammeHeader
         id={programmeId}
         name={indexEntry?.name ?? "Programme detail"}
@@ -638,126 +653,118 @@ export const ProgrammeDetail = () => {
         backTo={directoryHref(location.search)}
         mode={plannedMode}
         sample={isSample}
+        deadlines={deadlines}
+        nowMs={nowMs}
+        action={
+          /* A sample programme's dates are made up; they do not belong in
+             anyone's calendar. */
+          !isSample && timelineRows.length > 0 ? (
+            <AddToCalendar
+              programmeName={indexEntry?.name ?? programmeId}
+              programmeUrl={`${window.location.origin}/programme/${encodeURIComponent(programmeId)}`}
+              deadlines={timelineRows.map((row) => ({
+                key: row.key,
+                label: row.label,
+                unixSeconds: row.deadline,
+              }))}
+              nowMs={nowMs}
+            />
+          ) : null
+        }
       />
-      <AsyncView
-        {...isRegistered}
-        onRetry={isRegistered.refetch}
-        contract="registry"
-      >
-        {(deployedByRegistry) => {
-          const copy = registryVerificationCopy(deployedByRegistry);
-          return (
-            <p className="programme-verification">
-              {deployedByRegistry ? (
-                <ShieldCheck aria-hidden="true" />
-              ) : (
-                <ShieldAlert aria-hidden="true" />
-              )}
-              <Badge tone={copy.tone}>{copy.label}</Badge>
-              <span className="programme-verification__text">
-                {copy.description}
-              </span>
-            </p>
-          );
-        }}
-      </AsyncView>
+
+      <PausedBanner client={programme} />
+
+      {Boolean(isRegistered.error) && (
+        <ErrorState error={isRegistered.error} contract="registry" onRetry={isRegistered.refetch} />
+      )}
+
       {isDefault && (
-        <p className="programme-hero__hint">
+        <Notice tone="info" className="programme-detail__hint">
           Showing the seeded demo programme. Add a contract id after{" "}
           <span className="numeric">/programme/</span> to inspect another
           programme.
-        </p>
+        </Notice>
       )}
 
       <section
-        className="programme-stats animate-fade-up"
+        className="ui-stat-tiles programme-stats"
         aria-label="Programme funding summary"
       >
-        <Card>
-          <Stat
-            label="Contributed"
-            value={
-              <AsyncView {...contributed} onRetry={contributed.refetch}>
-                {(value) => formatXlm(value)}
-              </AsyncView>
-            }
-            hint="Total committed to the programme"
-            numeric
-          />
-        </Card>
-        <Card>
-          <Stat
-            label="Budget"
-            value={
-              <AsyncView {...budget} onRetry={budget.refetch}>
-                {(value) => formatXlm(value)}
-              </AsyncView>
-            }
-            hint="Contributed less protocol fee"
-            numeric
-          />
-        </Card>
-        <Card>
-          <Stat
-            label="Granted"
-            value={
-              <AsyncView {...granted} onRetry={granted.refetch}>
-                {(value) => formatXlm(value)}
-              </AsyncView>
-            }
-            hint="Awards approved by reviewers"
-            numeric
-          />
-        </Card>
-        <Card>
-          <Stat
-            label="Released"
-            value={
-              <AsyncView {...released} onRetry={released.refetch}>
-                {(value) => formatXlm(value)}
-              </AsyncView>
-            }
-            hint="Tranches already paid out"
-            numeric
-          />
-        </Card>
+        <StatTile
+          label="Contributed"
+          value={tileFigure(contributed)}
+          unit={tileUnit(contributed)}
+          hint={
+            config.data
+              ? `${config.data.fee_bps / 100}% protocol fee`
+              : "Put in by funders"
+          }
+        />
+        <StatTile
+          label="Budget"
+          value={tileFigure(budget)}
+          unit={tileUnit(budget)}
+          hint="Contributed, less the fee"
+        />
+        <StatTile
+          label="Awarded"
+          value={tileFigure(granted)}
+          unit={tileUnit(granted)}
+          hint={
+            granted.data !== null && budget.data !== null && budget.data > ZERO
+              ? `${Math.round(percentOf(granted.data, budget.data))}% of budget`
+              : "Set by the reviewers’ votes"
+          }
+        />
+        <StatTile
+          label="Released"
+          value={tileFigure(released)}
+          unit={tileUnit(released)}
+          hint={
+            config.data
+              ? `${config.data.tranches} ${config.data.tranches === 1 ? "tranche" : "tranches"} per award`
+              : "Paid out at mileposts"
+          }
+          highlight
+        />
       </section>
 
-      <section className="programme-grid animate-fade-up">
-        <div className="programme-main">
-          <div className="programme-section--center">
-            <AsyncView
-              data={figures}
-              loading={moneyLoading}
-              error={moneyError}
-              onRetry={refetchMoney}
-              contract="program"
-            >
-              {(value) => (
-                <WhereTheMoneyIs
-                  contributed={value.totalContributed}
-                  fee={value.fee}
-                  granted={value.totalGranted}
-                  released={value.totalReleased}
-                  refunded={value.totalRefunded ?? ZERO}
-                  swept={value.totalSwept ?? ZERO}
-                  refundsOpen={refundsOpen}
-                  feeBps={config.data?.fee_bps}
-                  quorum={config.data?.quorum ?? 1}
-                  asset={ASSET_LABEL}
-                />
-              )}
-            </AsyncView>
+      <div className="programme-cols">
+        <div className="programme-cols__main">
+          <AsyncView
+            data={figures}
+            loading={moneyLoading}
+            error={moneyError}
+            onRetry={refetchMoney}
+            contract="program"
+          >
+            {(value) => (
+              <WhereTheMoneyIs
+                contributed={value.totalContributed}
+                fee={value.fee}
+                granted={value.totalGranted}
+                released={value.totalReleased}
+                refunded={value.totalRefunded ?? ZERO}
+                swept={value.totalSwept ?? ZERO}
+                refundsOpen={refundsOpen}
+                feeBps={config.data?.fee_bps}
+                quorum={config.data?.quorum ?? 1}
+                asset={asset}
+              />
+            )}
+          </AsyncView>
 
-            <ProgrammeTabs
-              programmeId={programmeId}
-              phase={phaseName}
-              quorum={config.data?.quorum ?? 1}
-              isSample={isSampleProgrammeId(programmeId)}
-              asset={ASSET_LABEL}
-            />
-          </div>
+          <ProgrammeTabs
+            programmeId={programmeId}
+            phase={phaseName}
+            quorum={config.data?.quorum ?? 1}
+            isSample={isSample}
+            asset={asset}
+          />
+        </div>
 
+        <div className="programme-cols__side">
           <ProgrammeActions
             programmeId={programmeId}
             phase={phase.data?.tag ?? null}
@@ -765,184 +772,154 @@ export const ProgrammeDetail = () => {
             refundable={refundable > ZERO ? formatXlm(refundable) : null}
             verified={isRegistered.error ? false : isRegistered.data}
           />
+
+          <section className="programme-timeline" aria-labelledby="programme-timeline-title">
+            <h2 id="programme-timeline-title" className="programme-timeline__title">
+              Timeline
+            </h2>
+            <AsyncView {...config} onRetry={config.refetch} contract="program">
+              {() => (
+                <>
+                  <p className="programme-timeline__summary">
+                    {activeDeadline ? (
+                      <>
+                        Next deadline: <strong>{activeDeadline.label}</strong>,{" "}
+                        {
+                          timelineRows.find((row) => row.key === activeDeadline.key)
+                            ?.relative
+                        }
+                        .
+                      </>
+                    ) : (
+                      "All configured deadlines have passed."
+                    )}
+                  </p>
+                  <ol className="programme-timeline__list" aria-label="Programme timeline">
+                    {timelineRows.map((row) => (
+                      <li
+                        key={row.key}
+                        className={`programme-timeline__item${
+                          row.status === "Passed" ? " programme-timeline__item--passed" : ""
+                        }`}
+                      >
+                        <span className="programme-timeline__label">
+                          {row.label}
+                          <span className="programme-timeline__status">{row.status}</span>
+                        </span>
+                        <Deadline unixSeconds={row.deadline} />
+                      </li>
+                    ))}
+                  </ol>
+                </>
+              )}
+            </AsyncView>
+          </section>
+        </div>
+      </div>
+
+      <section className="programme-chain" aria-labelledby="programme-chain-title">
+        <div className="programme-chain__head">
+          <h2 id="programme-chain-title" className="programme-chain__title">
+            On the chain
+          </h2>
+          <p className="programme-chain__lead">
+            What the programme was deployed with, read from its contract.
+          </p>
         </div>
 
-        <Card
-          className="programme-grid__wide"
-          title="Timeline and phase"
-          aside={phase.data ? <PhaseBadge phase={phaseName} /> : null}
-        >
-          <AsyncView {...config} onRetry={config.refetch} contract="program">
-            {() => (
-              <div className="timeline-panel">
-                {activeDeadline ? (
-                  <p className="timeline-summary">
-                    Next deadline: <strong>{activeDeadline.label}</strong>,{" "}
-                    {
-                      timelineRows.find((row) => row.key === activeDeadline.key)
-                        ?.relative
+        <div className="programme-chain__grid">
+          <Card title="Programme rules">
+            <AsyncView {...config} onRetry={config.refetch} contract="program">
+              {(value) => (
+                <List className="programme-rules" label="Programme rules">
+                  <ListRow
+                    title="Creator"
+                    trailing={
+                      <AddressChip
+                        address={value.creator}
+                        showExplorerLink
+                        copyLabel="Copy creator address"
+                      />
                     }
-                    .
-                  </p>
-                ) : (
-                  <p className="timeline-summary">
-                    All configured deadlines have passed.
-                  </p>
-                )}
-                <List label="Programme timeline">
-                  {timelineRows.map((row) => (
-                    <ListRow
-                      key={row.key}
-                      title={row.label}
-                      meta={<Deadline unixSeconds={row.deadline} />}
-                      trailing={
-                        <Badge
-                          tone={row.status === "Passed" ? "neutral" : "accent"}
-                        >
-                          {row.status}
-                        </Badge>
-                      }
-                    />
-                  ))}
-                </List>
-                {/* A sample programme's dates are made up; they do not
-                    belong in anyone's calendar. */}
-                {!isSample && (
-                  <div>
-                    <AddToCalendar
-                      programmeName={indexEntry?.name ?? programmeId}
-                      programmeUrl={`${window.location.origin}/programme/${encodeURIComponent(programmeId)}`}
-                      deadlines={timelineRows.map((row) => ({
-                        key: row.key,
-                        label: row.label,
-                        unixSeconds: row.deadline,
-                      }))}
-                      nowMs={nowMs}
-                    />
-                  </div>
-                )}
-              </div>
-            )}
-          </AsyncView>
-        </Card>
-
-        <Card title="Programme rules">
-          <AsyncView {...config} onRetry={config.refetch} contract="program">
-            {(value) => (
-              <List label="Programme rules">
-                <ListRow
-                  title="Creator"
-                  trailing={
-                    <span className="numeric" title={value.creator}>
-                      {formatAddress(value.creator)}
-                    </span>
-                  }
-                />
-                <ListRow
-                  title="Treasury"
-                  trailing={
-                    <span className="numeric" title={value.treasury}>
-                      {formatAddress(value.treasury)}
-                    </span>
-                  }
-                />
-                <ProgrammeAssetRules tokenAddress={value.token} />
-                <ListRow
-                  title="Reviewer votes needed"
-                  trailing={
-                    <span className="numeric">{value.quorum} reviewer votes</span>
-                  }
-                />
-                <ListRow
-                  title="Tranches"
-                  trailing={<span className="numeric">{value.tranches}</span>}
-                />
-                <ListRow
-                  title="Metadata hash"
-                  meta={
-                    <span className="numeric programme-wrap">
-                      {value.metadata_hash.toString("hex")}
-                    </span>
-                  }
-                />
-              </List>
-            )}
-          </AsyncView>
-        </Card>
-
-        <Card title="Programme metadata">
-          <AsyncView {...config} onRetry={config.refetch} contract="program">
-            {(value) => (
-              <MetadataCard committedHash={value.metadata_hash.toString("hex")} />
-            )}
-          </AsyncView>
-        </Card>
-
-        <Card className="programme-grid__wide" title="Reviewers, verifiers and schema">
-          <AsyncView {...config} onRetry={config.refetch} contract="program">
-            {(value) => (
-              <List className="programme-access" label="Reviewers, verifiers and schema">
-                <ListRow
-                  leading={<UsersRound aria-hidden="true" />}
-                  title="Reviewers"
-                  meta={
-                    <>
-                      The programme checks reviewer membership by address with{" "}
-                      <span className="numeric">is_reviewer(addr)</span>. The app cannot list every reviewer yet, so this page shows the live reviewer-vote requirement instead.
-                    </>
-                  }
-                  trailing={<Badge tone="accent">{value.quorum} votes required</Badge>}
-                />
-                <ListRow
-                  leading={<ShieldCheck aria-hidden="true" />}
-                  title="Verifiers"
-                  meta={
-                    <>
-                      The programme checks verifier membership by address with{" "}
-                      <span className="numeric">is_verifier(addr)</span>. The current app can confirm one verifier address at a time but does not list every verifier yet.
-                    </>
-                  }
-                  trailing={<Badge tone="neutral">{value.tranches} tranches</Badge>}
-                />
-                <ListRow
-                  leading={<UsersRound aria-hidden="true" />}
-                  title="Verifier roster"
-                  meta={
-                    <>
-                      Only confirmations signed by these trusted verifiers can release funds. Recipients should know whose signature they need to obtain. The app cannot list verifier addresses from this programme yet; this roster will come from deployment records or the public index. For now, verifier checking is available via{" "}
-                      <span className="numeric">is_verifier(addr)</span>.
-                    </>
-                  }
-                />
-                <ListRow
-                  leading={<FileText aria-hidden="true" />}
-                  title="Schema"
-                  meta={
-                    <>
-                      A schema defines what verifiers are allowed to confirm. Attestations must match this template before a tranche can release.
+                  />
+                  <ListRow
+                    title="Treasury"
+                    trailing={
+                      <AddressChip
+                        address={value.treasury}
+                        showExplorerLink
+                        copyLabel="Copy treasury address"
+                      />
+                    }
+                  />
+                  <ProgrammeAssetRules tokenAddress={value.token} />
+                  <ListRow
+                    title="Reviewer votes needed"
+                    trailing={
+                      <span className="numeric">{value.quorum} reviewer votes</span>
+                    }
+                  />
+                  <ListRow
+                    title="Tranches"
+                    trailing={<span className="numeric">{value.tranches}</span>}
+                  />
+                  <ListRow
+                    title="Metadata hash"
+                    meta={
                       <span className="numeric programme-wrap">
-                        {value.schema.toString("hex")}
+                        {value.metadata_hash.toString("hex")}
                       </span>
-                    </>
-                  }
-                />
-                <ListRow
-                  leading={<Landmark aria-hidden="true" />}
-                  title="Linked infrastructure"
-                  meta="Attestations, standing records, spending rules, and treasury addresses are read from programme configuration."
-                  trailing={
-                    <Link
-                      to={`/funders?programme=${encodeURIComponent(programmeId)}`}
-                      className="programme-link"
-                    >
-                      Back to funder dashboard
-                    </Link>
-                  }
-                />
-              </List>
-            )}
-          </AsyncView>
-        </Card>
+                    }
+                  />
+                  {registryCopy && (
+                    <ListRow title="Deployment" meta={registryCopy.description} />
+                  )}
+                </List>
+              )}
+            </AsyncView>
+          </Card>
+
+          <Card title="Programme metadata">
+            <AsyncView {...config} onRetry={config.refetch} contract="program">
+              {(value) => (
+                <MetadataCard committedHash={value.metadata_hash.toString("hex")} />
+              )}
+            </AsyncView>
+          </Card>
+
+          <Card className="programme-chain__wide" title="Reviewers, verifiers and schema">
+            <AsyncView {...config} onRetry={config.refetch} contract="program">
+              {(value) => (
+                <List className="programme-access" label="Reviewers, verifiers and schema">
+                  <ListRow
+                    leading={<UsersRound aria-hidden="true" />}
+                    title="Reviewers"
+                    meta="Reviewers set the amounts. The programme knows each reviewer by address and keeps no list of them, so this page shows how many votes an award needs. Check an address under the Verifiers tab."
+                    trailing={<Badge tone="accent">{value.quorum} votes required</Badge>}
+                  />
+                  <ListRow
+                    leading={<ShieldCheck aria-hidden="true" />}
+                    title="Verifiers"
+                    meta="Verifiers unlock payments; they do not set amounts. Only a confirmation signed by one of this programme’s verifiers can release a tranche, so a recipient should know whose signature they need. The programme keeps no list of them either; the roster will come from the public index."
+                    trailing={<Badge tone="neutral">{value.tranches} tranches</Badge>}
+                  />
+                  <ListRow
+                    leading={<FileText aria-hidden="true" />}
+                    title="Schema"
+                    meta={
+                      <>
+                        A schema defines what verifiers are allowed to confirm. An attestation must match it before a tranche can release.
+                        <span className="numeric programme-wrap">
+                          {value.schema.toString("hex")}
+                        </span>
+                      </>
+                    }
+                  />
+                </List>
+              )}
+            </AsyncView>
+          </Card>
+        </div>
       </section>
     </div>
   );

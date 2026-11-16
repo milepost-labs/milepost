@@ -1,22 +1,58 @@
+import { useState, type CSSProperties, type ReactNode } from 'react';
 import { Link } from 'react-router-dom';
-import { AddressChip, ModePill } from '../ui';
-import './phasePill.css';
+import { ArrowLeft, Ban, Check, ShieldAlert, ShieldCheck } from 'lucide-react';
+import { AddressChip, ModePill, PhaseBadge, SampleTag } from '../ui';
+import { formatDate, truncateAddress } from '../../lib/format';
+import { registryVerificationCopy } from '../../lib/registryVerification';
 import './ProgrammeHeader.css';
 
-const PHASE_ORDER = ['Open', 'Review', 'Settled'] as const;
+/** The four deadlines from the programme's config, in unix seconds. */
+export interface ProgrammeDeadlines {
+  apply: number;
+  review: number;
+  release: number;
+  sweep: number;
+}
 
-const PHASE_NOTES: Record<(typeof PHASE_ORDER)[number], string> = {
-  Open: 'Contributions and applications',
-  Review: 'Reviewers vote; anyone can finalize',
-  Settled: 'Releases at mileposts; refunds after window',
-};
+interface Step {
+  label: string;
+  /** What its deadline does, before and after that deadline. */
+  ahead: string;
+  behind: string;
+  at: keyof ProgrammeDeadlines;
+}
 
-function phaseClass(phase: string): string {
-  const key = phase.toLowerCase();
-  if (key === 'open' || key === 'review' || key === 'settled' || key === 'cancelled') {
-    return `phase-pill--${key}`;
-  }
-  return 'phase-pill--unknown';
+const STEPS: Step[] = [
+  { label: 'Open', ahead: 'Applications close', behind: 'Applications closed', at: 'apply' },
+  { label: 'Review', ahead: 'Review ends', behind: 'Review ended', at: 'review' },
+  { label: 'Settled', ahead: 'Release window ends', behind: 'Release window ended', at: 'release' },
+  { label: 'Sweep', ahead: 'Leftovers to treasury from', behind: 'Leftovers to treasury since', at: 'sweep' },
+];
+
+/**
+ * Which step the programme is on. The phase is the on-chain read; only the
+ * move from Settled to Sweep comes from the clock, because the contract has no
+ * phase for it: once the release window ends, what is left is refunded and
+ * then swept.
+ */
+function currentStep(phase: string | null, deadlines: ProgrammeDeadlines | null, nowMs: number): number {
+  if (phase === 'Open') return 0;
+  if (phase === 'Review') return 1;
+  if (phase === 'Settled') return deadlines && nowMs >= deadlines.release * 1000 ? 3 : 2;
+  return -1;
+}
+
+/**
+ * How far through the current step the clock is, 0 to 100, or null when it
+ * cannot be known: the Open step has no start time on the chain, so it is
+ * never drawn part-filled.
+ */
+function stepProgress(index: number, deadlines: ProgrammeDeadlines | null, nowMs: number): number | null {
+  if (!deadlines || index < 1) return null;
+  const start = deadlines[STEPS[index - 1].at] * 1000;
+  const end = deadlines[STEPS[index].at] * 1000;
+  if (end <= start) return null;
+  return Math.round(Math.min(1, Math.max(0, (nowMs - start) / (end - start))) * 100);
 }
 
 /**
@@ -24,8 +60,8 @@ function phaseClass(phase: string): string {
  * is in its life, before anything below is read.
  *
  * The phase is only ever the on-chain read: while it loads nothing is marked
- * current, and a failed read says so rather than guessing. The stepper marks
- * the current phase filled and any passed phase with a tick; a cancelled
+ * current, and a failed read says so rather than guessing. The phase bar fills
+ * the steps already passed and marks the current one "now"; a cancelled
  * programme shows no current step and gets a banner instead.
  *
  * "All programmes" returns to the directory the reader came from, filters
@@ -48,6 +84,9 @@ export function ProgrammeHeader({
   backTo = '/directory',
   mode = null,
   sample = false,
+  deadlines = null,
+  nowMs,
+  action,
 }: {
   id: string;
   name: string;
@@ -64,72 +103,113 @@ export function ProgrammeHeader({
   mode?: string | null;
   /** True for a stand-in programme, so the header says sample data. */
   sample?: boolean;
+  /** From the programme's config; the phase bar shows no dates until it is read. */
+  deadlines?: ProgrammeDeadlines | null;
+  /** The clock the dates are compared with. Defaults to now. */
+  nowMs?: number;
+  /** Sits opposite the title: the page's one header action. */
+  action?: ReactNode;
 }) {
+  const [mountedAt] = useState(() => Date.now());
+  const now = nowMs ?? mountedAt;
   const cancelled = phase === 'Cancelled';
-  const currentIndex = phase ? PHASE_ORDER.indexOf(phase as (typeof PHASE_ORDER)[number]) : -1;
+  const current = currentStep(phase, deadlines, now);
+  const progress = stepProgress(current, deadlines, now);
   const readLine = phase
     ? 'Phase read on-chain just now'
     : phaseError
       ? 'Could not read the phase on-chain'
       : 'Reading the phase on-chain…';
+  const registry = verified === undefined ? null : registryVerificationCopy(verified);
 
   return (
     <header className="programme-header">
       <Link to={backTo} className="programme-header__back">
-        ← All programmes
+        <ArrowLeft aria-hidden="true" />
+        All programmes
       </Link>
 
-      <div className="programme-header__badges">
-        {phase && <span className={`phase-pill ${phaseClass(phase)}`}>{phase}</span>}
-        {mode && <ModePill mode={mode} />}
-        {sample && <span className="programme-header__sample">Sample data</span>}
+      <div className="programme-header__top">
+        <div className="programme-header__text">
+          <div className="programme-header__badges">
+            {phase && <PhaseBadge phase={phase} />}
+            {mode && <ModePill mode={mode} />}
+            {sample && <SampleTag />}
+            {registry && (
+              <span
+                className={`programme-header__trust${verified ? '' : ' programme-header__trust--warn'}`}
+                title={registry.description}
+              >
+                {verified ? <ShieldCheck aria-hidden="true" /> : <ShieldAlert aria-hidden="true" />}
+                {registry.label}
+              </span>
+            )}
+          </div>
+
+          <h1 className="programme-header__name">{name}</h1>
+
+          <div className="programme-header__meta">
+            <span className="programme-header__meta-item">
+              Programme <AddressChip address={id} verified={verified} copyLabel="Copy programme id" />
+            </span>
+            <span className="programme-header__meta-item">
+              Creator{' '}
+              <code className="numeric" title={creator ?? undefined}>
+                {creator ? truncateAddress(creator) : '—'}
+              </code>
+            </span>
+            <span className="programme-header__meta-item">
+              Created at ledger <span className="numeric">{createdLedger?.toLocaleString() ?? '—'}</span>
+            </span>
+            <span className={`programme-header__read${phase ? ' programme-header__read--ok' : ''}`}>
+              {phase && <Check aria-hidden="true" />}
+              {readLine}
+            </span>
+          </div>
+        </div>
+        {action && <div className="programme-header__action">{action}</div>}
       </div>
 
-      <h1 className="programme-header__name">{name}</h1>
+      {cancelled && (
+        <div role="status" className="programme-header__cancelled">
+          <Ban aria-hidden="true" />
+          <p>
+            <b>This programme was cancelled.</b> No more money will be released. Contributors can
+            claim back their share of everything not yet paid out.
+          </p>
+        </div>
+      )}
 
-      <div className="programme-header__meta">
-        <AddressChip address={id} verified={verified} copyLabel="Copy programme id" />
-        <span className="programme-header__meta-item">
-          Created by <code className="numeric">{creator ?? '—'}</code>
-        </span>
-        <span className="programme-header__meta-item">
-          Ledger <span className="numeric">{createdLedger?.toLocaleString() ?? '—'}</span>
-        </span>
-        <span className="programme-header__read">
-          <span className="programme-header__read-dot" aria-hidden="true" />
-          {readLine}
-        </span>
-      </div>
-
-      <ol className="phase-stepper" aria-label="Programme phases">
-        {PHASE_ORDER.map((step, i) => {
-          const current = !cancelled && i === currentIndex;
-          const done = !cancelled && currentIndex > i;
-          const note = current ? `Now · ${PHASE_NOTES[step]}` : PHASE_NOTES[step];
+      <ol className="phase-bar" aria-label="Programme phases">
+        {STEPS.map((step, i) => {
+          const isCurrent = i === current;
+          const done = current > i;
+          const at = deadlines ? deadlines[step.at] : null;
+          const passed = at !== null && now >= at * 1000;
+          const style =
+            isCurrent && progress !== null ? ({ '--phase-progress': `${progress}%` } as CSSProperties) : undefined;
           return (
             <li
-              key={step}
-              className={`phase-stepper__step${current ? ' phase-stepper__step--current' : ''}${
-                done ? ' phase-stepper__step--done' : ''
+              key={step.label}
+              className={`phase-bar__step${done ? ' phase-bar__step--done' : ''}${
+                isCurrent ? ' phase-bar__step--now' : ''
               }`}
-              aria-current={current ? 'step' : undefined}
+              aria-current={isCurrent ? 'step' : undefined}
+              style={style}
             >
-              <span className="phase-stepper__label">
-                {done ? '✓ ' : ''}
-                {step}
+              <b className="phase-bar__label">
+                {step.label}
+                {isCurrent && <span className="phase-bar__now"> · now</span>}
+                {done && <span className="visually-hidden"> (passed)</span>}
+              </b>
+              <span className="phase-bar__note">
+                {passed ? step.behind : step.ahead}
+                {at !== null && ` ${formatDate(at)}`}
               </span>
-              <span className="phase-stepper__note">{note}</span>
             </li>
           );
         })}
       </ol>
-
-      {cancelled && (
-        <div role="status" className="programme-header__cancelled">
-          <b>This programme was cancelled.</b> No more money will be released. Contributors can
-          claim back their share of everything not yet paid out.
-        </div>
-      )}
     </header>
   );
 }

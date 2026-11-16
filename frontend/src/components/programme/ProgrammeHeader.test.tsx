@@ -65,28 +65,73 @@ describe('ProgrammeHeader', () => {
     const { rerender } = render(<ProgrammeHeader {...baseProps} phase={null} />, {
       wrapper: MemoryRouter,
     });
-    expect(screen.queryByText(/Now ·/)).toBeNull();
+    expect(document.querySelector('[aria-current="step"]')).toBeNull();
     expect(screen.getByText(/Reading the phase on-chain/)).toBeTruthy();
     rerender(<ProgrammeHeader {...baseProps} phase={null} phaseError />);
     expect(screen.getByText(/Could not read the phase on-chain/)).toBeTruthy();
   });
 
-  it('marks the current step and ticks passed phases', () => {
+  it('marks the current step "now" and says which steps have passed', () => {
     renderHeader({ ...baseProps, phase: 'Review' });
 
-    const current = screen.getByText(/Now ·/).closest('li');
-    expect(current?.getAttribute('aria-current')).toBe('step');
-    expect(current?.textContent).toContain('Review');
+    const steps = within(screen.getByRole('list', { name: 'Programme phases' })).getAllByRole('listitem');
+    expect(steps.map((step) => step.getAttribute('aria-current'))).toEqual([null, 'step', null, null]);
+    expect(steps[1].textContent).toContain('Review · now');
 
-    // Open has passed, so it carries a tick.
-    expect(screen.getByText(/✓ Open/)).toBeTruthy();
+    // Open has passed; the fill is colour, so the words say it too.
+    expect(steps[0].textContent).toContain('Open (passed)');
     expect(screen.getByText(/Phase read on-chain just now/i)).toBeTruthy();
+  });
+
+  it('dates each step from the programme deadlines, in the tense the clock gives', () => {
+    const day = 86_400;
+    const now = 1_800_000_000;
+    renderHeader({
+      ...baseProps,
+      phase: 'Review',
+      nowMs: now * 1000,
+      deadlines: { apply: now - day, review: now + day, release: now + 30 * day, sweep: now + 60 * day },
+    });
+
+    const steps = within(screen.getByRole('list', { name: 'Programme phases' })).getAllByRole('listitem');
+    expect(steps[0].textContent).toContain('Applications closed');
+    expect(steps[1].textContent).toContain('Review ends');
+    // Half of the review window has gone, so the bar is painted half way.
+    expect(steps[1].style.getPropertyValue('--phase-progress')).toBe('50%');
+    // The Open step has no start on the chain, so it is never part-filled.
+    expect(steps[0].style.getPropertyValue('--phase-progress')).toBe('');
+  });
+
+  it('moves to Sweep once a settled programme passes its release window', () => {
+    const day = 86_400;
+    const now = 1_800_000_000;
+    renderHeader({
+      ...baseProps,
+      phase: 'Settled',
+      nowMs: now * 1000,
+      deadlines: { apply: now - 9 * day, review: now - 6 * day, release: now - day, sweep: now + 5 * day },
+    });
+
+    const current = document.querySelector('[aria-current="step"]');
+    expect(current?.textContent).toContain('Sweep · now');
+    expect(current?.textContent).toContain('Leftovers to treasury from');
+  });
+
+  it('shortens the creator address so the header never runs wider than a phone', () => {
+    renderHeader({
+      ...baseProps,
+      creator: 'GCS7774GF6OHIEXCXMUGI56RLOPHE3SEOK4F2CEMQYFXALNEYLK5IGHX',
+      phase: 'Open',
+    });
+
+    expect(screen.getByText('GCS777…IGHX')).toBeTruthy();
+    expect(screen.queryByText('GCS7774GF6OHIEXCXMUGI56RLOPHE3SEOK4F2CEMQYFXALNEYLK5IGHX')).toBeNull();
   });
 
   it('shows no current step and a banner when cancelled', () => {
     renderHeader({ ...baseProps, phase: 'Cancelled' });
 
-    expect(screen.queryByText(/Now ·/)).toBeNull();
+    expect(document.querySelector('[aria-current="step"]')).toBeNull();
     expect(screen.getByText(/was cancelled/i)).toBeTruthy();
     expect(screen.getByText(/their share of everything not yet paid out/i)).toBeTruthy();
   });

@@ -10,7 +10,7 @@ import { SAMPLE_TX_DELAY_MS, sampleSendable } from '../../lib/fundingTx';
 import { formatUsdc } from '../../lib/programmeView';
 import { describeAmount } from '../../lib/amount';
 import { ErrorPanel } from '../state/AsyncStates';
-import '../programme/phasePill.css';
+import { PhaseBadge } from '../ui';
 import './Funding.css';
 
 export interface ContributionListProps {
@@ -101,7 +101,7 @@ function ContributionItem({
         <Link to={href} className="fund-card__name">
           {card.name}
         </Link>
-        <span className={`phase-pill phase-pill--${card.phase.toLowerCase()}`}>{card.phase}</span>
+        <PhaseBadge phase={card.phase} />
       </div>
       <div className="fund-card__body">
         <span className="fund-card__figures">

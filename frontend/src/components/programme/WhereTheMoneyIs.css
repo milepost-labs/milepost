@@ -1,10 +1,13 @@
+/* The money panel: a sunken band, the budget drawn as squares, and the four
+   figures the squares stand for. Amounts are bare; the asset is named once,
+   beside the budget. */
 .where-the-money-is {
-  background: var(--surface);
-  border-radius: var(--radius-card-lg);
-  padding: var(--space-5);
+  background: var(--bg-sunken);
+  border-radius: var(--radius-band);
+  padding: var(--space-6);
   display: flex;
   flex-direction: column;
-  gap: var(--space-4-5);
+  gap: var(--space-5);
   box-sizing: border-box;
   width: 100%;
   min-width: 0;
@@ -14,36 +17,22 @@
   display: flex;
   justify-content: space-between;
   align-items: baseline;
-  gap: var(--space-3);
+  gap: var(--space-2) var(--space-3);
   flex-wrap: wrap;
 }
 
 .where-the-money-is__title {
   margin: 0;
-  font-size: var(--text-lg);
-  font-weight: var(--weight-extrabold);
-  color: var(--text);
+  font-family: var(--font-display);
+  font-size: var(--text-xl);
+  font-weight: var(--weight-display);
+  letter-spacing: var(--tracking-title);
+  color: var(--ink);
 }
 
 .where-the-money-is__budget {
-  font-size: var(--text-caption);
-  color: var(--text-muted);
-}
-
-.where-the-money-is__grid {
-  display: grid;
-  grid-template-columns: repeat(var(--money-cols), minmax(0, 1fr));
-  gap: var(--space-1);
-  width: 100%;
-  box-sizing: border-box;
-}
-
-.where-the-money-is__square {
-  aspect-ratio: 1;
-  border-radius: var(--radius-square);
-  display: block;
-  min-width: 0;
-  box-sizing: border-box;
+  font-size: var(--text-sm);
+  color: var(--ink-muted);
 }
 
 .where-the-money-is__legend {
@@ -51,37 +40,41 @@
   margin: 0;
   padding: 0;
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(min(100%, 190px), 1fr));
-  gap: var(--space-2) var(--space-4-5);
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: var(--space-4);
 }
 
 .where-the-money-is__legend-item {
+  position: relative;
   display: flex;
-  align-items: center;
-  gap: var(--space-2);
-  font-size: var(--text-sm);
+  flex-direction: column;
+  padding-left: var(--space-4);
   min-width: 0;
 }
 
 .where-the-money-is__legend-dot {
-  width: 12px;
-  height: 12px;
-  border-radius: var(--radius-square);
-  flex: none;
+  position: absolute;
+  left: 0;
+  top: var(--space-1);
+  width: 8px;
+  height: 8px;
+  border-radius: var(--radius-sq);
   box-sizing: border-box;
 }
 
 .where-the-money-is__legend-label {
-  flex: 1;
-  color: var(--text-muted);
-  overflow-wrap: break-word;
+  font-size: var(--text-caption);
+  color: var(--ink-muted);
 }
 
 .where-the-money-is__legend-value {
   font-family: var(--font-numeric);
-  font-weight: var(--weight-semibold);
-  color: var(--text);
-  white-space: nowrap;
+  font-size: var(--text-panel);
+  font-weight: var(--weight-medium);
+  letter-spacing: var(--tracking-tight);
+  line-height: var(--leading-snug);
+  color: var(--ink);
+  overflow-wrap: anywhere;
 }
 
 .where-the-money-is__footer {
@@ -89,28 +82,22 @@
   flex-wrap: wrap;
   gap: var(--space-1) var(--space-4-5);
   font-size: var(--text-caption);
-  color: var(--text-muted);
-  padding-top: var(--space-1);
-  border-top: 1px solid var(--surface-raised);
+  color: var(--ink-muted);
 }
 
 .where-the-money-is__footer strong {
-  color: var(--text);
-  font-weight: var(--weight-semibold);
+  color: var(--ink);
+  font-weight: var(--weight-medium);
 }
 
-@media (max-width: 480px) {
+@media (max-width: 860px) {
+  .where-the-money-is__legend {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 600px) {
   .where-the-money-is {
-    padding: var(--space-4);
-    gap: var(--space-3);
-  }
-
-  .where-the-money-is__grid {
-    --money-cols: var(--money-cols-narrow);
-  }
-
-  .where-the-money-is__footer {
-    flex-direction: column;
-    gap: var(--space-1);
+    padding: var(--space-5) var(--space-4);
   }
 }

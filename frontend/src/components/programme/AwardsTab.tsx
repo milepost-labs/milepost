@@ -9,8 +9,9 @@ import { useContractResult } from '../../hooks/useContractRead';
 import { SorobanContext } from '../../context/sorobanStore';
 import { formatAmount, parseAmount, describeAmount } from '../../lib/amount';
 import { awardsToCsv, downloadFile } from '../../lib/csv';
-import { isSampleProgrammeId } from '../../lib/programmeView';
+import { formatFigure, isSampleProgrammeId } from '../../lib/programmeView';
 import { FIXTURE_AWARDS } from '../../fixtures/programmeFixtures';
+import { Empty } from '../state/AsyncStates';
 import { Badge, Button, SampleTag } from '../ui';
 import './AwardsTab.css';
 
@@ -107,65 +108,51 @@ export const AwardRowItem: FC<AwardRowItemProps> = ({
   }
 
   return (
-    <div className="awards-tab__row">
-      <div className="awards-tab__row-info">
-        <div className="awards-tab__recipient-line">
-          <span
-            className="awards-tab__recipient numeric"
-            title={award.recipient}
-          >
+    <tr>
+      <td data-label="Recipient">
+        <span className="awards-tab__recipient-line">
+          <span className="awards-tab__recipient numeric" title={award.recipient}>
             {shortAddress(award.recipient)}
           </span>
-          {chainFailed && (
-            <Badge tone="neutral">Advisory</Badge>
-          )}
-        </div>
-        <span className="awards-tab__subtitle">
-          {hasTranches
-            ? `${tranchesReleased} of ${tranches} tranches · ${formatAmount(
-                released,
-                { asset },
-              )} released`
-            : 'Tranche status read on-chain'}
+          {chainFailed && <Badge tone="neutral">Advisory</Badge>}
         </span>
         {differs && (
           <span className="awards-tab__diff" role="status">
             {mismatchText}
           </span>
         )}
-      </div>
-
-      <div
-        className="awards-tab__row-amount numeric"
-        aria-label={describeAmount(granted, asset)}
-      >
-        {formatAmount(granted, { asset })}
-      </div>
-
-      {hasTranches && (
-        <div
-          className="awards-tab__tranches"
-          role="img"
-          aria-label={trancheLabel}
-        >
-          {Array.from({ length: tranches }, (_, i) => {
-            const isReleased = i < tranchesReleased;
-            return (
+      </td>
+      <td data-label="Tranches">
+        {hasTranches ? (
+          <span className="awards-tab__tranches" role="img" aria-label={trancheLabel}>
+            {Array.from({ length: tranches }, (_, i) => (
               <span
                 key={i}
-                className="awards-tab__tranche-bar"
-                data-money-state={isReleased ? 'released' : 'locked'}
-                style={{
-                  backgroundColor: isReleased
-                    ? 'var(--accent)'
-                    : 'var(--locked)',
-                }}
+                className="awards-tab__tranche"
+                data-money-state={i < tranchesReleased ? 'released' : 'locked'}
               />
-            );
-          })}
-        </div>
-      )}
-    </div>
+            ))}
+          </span>
+        ) : (
+          <span className="awards-tab__muted">Read on-chain</span>
+        )}
+      </td>
+      <td data-label="Award" className="numeric-col numeric" aria-label={describeAmount(granted, asset)}>
+        {formatFigure(granted)}
+      </td>
+      <td data-label="Released" className="numeric-col numeric" aria-label={describeAmount(released, asset)}>
+        {formatFigure(released)}
+      </td>
+      <td data-label="Payee">
+        {award.payee ? (
+          <span className="awards-tab__payee numeric" title={award.payee}>
+            {shortAddress(award.payee)}
+          </span>
+        ) : (
+          <span className="awards-tab__muted">Not set</span>
+        )}
+      </td>
+    </tr>
   );
 };
 
@@ -205,14 +192,19 @@ export const AwardsTab: FC<AwardsTabProps> = ({
     downloadFile(csv, filename, 'text/csv;charset=utf-8;');
   }, [awards, programmeId]);
 
-  let emptyMsg = 'The index has no awards for this programme yet.';
-  if (phase === 'Open') {
-    emptyMsg = 'No awards yet. Applications are still open.';
-  } else if (phase === 'Review') {
-    emptyMsg = 'No awards are final yet. Each is set once enough reviewer votes are in and someone finalizes it.';
-  } else if (phase === 'Settled') {
-    emptyMsg = 'No awards were made.';
-  }
+  const empty =
+    phase === 'Open'
+      ? { title: 'No awards yet', description: 'Applications are still open.' }
+      : phase === 'Review'
+        ? {
+            title: 'No awards are final yet',
+            description: 'Each is set once enough reviewer votes are in and someone finalizes it.',
+          }
+        : phase === 'Settled'
+          ? { title: 'No awards were made', description: 'The programme settled without any.' }
+          : phase === 'Cancelled'
+            ? { title: 'No awards', description: 'This programme was cancelled before any awards were set.' }
+            : { title: 'No awards yet', description: 'The index has no awards for this programme yet.' };
 
   return (
     <div
@@ -222,15 +214,14 @@ export const AwardsTab: FC<AwardsTabProps> = ({
       aria-labelledby="tab-awards"
       tabIndex={0}
     >
-      <p className="awards-tab__note">
-        {sample && <><SampleTag />{' '}</>}
-        {advisoryNote}
-      </p>
-
       {!loading && !error && awards.length > 0 && (
-        <div className="awards-tab__actions">
+        <div className="awards-tab__bar">
+          <span className="awards-tab__count">
+            {awards.length} {awards.length === 1 ? 'award' : 'awards'} · amounts in {asset}
+          </span>
           <Button
-            variant="secondary"
+            variant="ghost"
+            size="sm"
             icon={<Download size={14} aria-hidden="true" />}
             onClick={handleDownloadCsv}
           >
@@ -246,7 +237,7 @@ export const AwardsTab: FC<AwardsTabProps> = ({
       )}
 
       {!loading && Boolean(error) && (
-        <div className="awards-tab__empty" role="alert">
+        <div className="awards-tab__error" role="alert">
           <p>
             Couldn&apos;t load awards from the index.{' '}
             {error instanceof Error ? error.message : String(error)}
@@ -254,25 +245,41 @@ export const AwardsTab: FC<AwardsTabProps> = ({
         </div>
       )}
 
-      {!loading && !error && awards.length === 0 && (
-        <div className="awards-tab__empty">
-          <p>{emptyMsg}</p>
-        </div>
-      )}
+      {!loading && !error && awards.length === 0 && <Empty {...empty} />}
 
       {!loading && !error && awards.length > 0 && (
-        <div className="awards-tab__list">
-          {awards.map((award, idx) => (
-            <AwardRowItem
-              key={`${award.recipient}-${idx}`}
-              award={award}
-              programmeId={programmeId}
-              isSample={isSample}
-              asset={asset}
-            />
-          ))}
-        </div>
+        <table className="ui-table awards-tab__table">
+          <thead>
+            <tr>
+              <th scope="col">Recipient</th>
+              <th scope="col">Tranches</th>
+              <th scope="col" className="numeric-col">
+                Award
+              </th>
+              <th scope="col" className="numeric-col">
+                Released
+              </th>
+              <th scope="col">Payee</th>
+            </tr>
+          </thead>
+          <tbody>
+            {awards.map((award, idx) => (
+              <AwardRowItem
+                key={`${award.recipient}-${idx}`}
+                award={award}
+                programmeId={programmeId}
+                isSample={isSample}
+                asset={asset}
+              />
+            ))}
+          </tbody>
+        </table>
       )}
+
+      <p className="awards-tab__note">
+        {sample && <><SampleTag />{' '}</>}
+        {advisoryNote}
+      </p>
     </div>
   );
 };

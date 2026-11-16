@@ -1,212 +1,170 @@
 .programme-detail {
   display: flex;
   flex-direction: column;
-  gap: var(--space-7);
-}
-
-.programme-hero {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) minmax(16rem, 24rem);
   gap: var(--space-6);
-  align-items: stretch;
-  padding: var(--space-6);
+  min-width: 0;
 }
 
-.programme-hero__copy {
-  display: flex;
-  flex-direction: column;
-  align-items: flex-start;
-  gap: var(--space-3);
+.programme-detail__hint {
+  align-self: flex-start;
 }
 
-.programme-hero__copy h1,
-.programme-hero__copy p {
-  margin: 0;
-}
-
-.programme-id {
-  max-width: 100%;
-}
-
-.programme-hero__hint {
-  color: var(--text-muted);
-  font-size: var(--text-sm);
-}
-
-.programme-hero__status {
-  display: flex;
-  flex-direction: column;
-  justify-content: space-between;
-  gap: var(--space-5);
-  padding: var(--space-5);
-  border: 1px solid var(--border);
-  border-radius: var(--radius-lg);
-  background: var(--surface);
-}
-
-.next-deadline {
-  display: grid;
-  grid-template-columns: auto minmax(0, 1fr);
-  gap: var(--space-2) var(--space-3);
-  align-items: center;
-}
-
-.next-deadline svg {
-  grid-row: span 2;
-  color: var(--accent);
-}
-
-.next-deadline span {
-  color: var(--text-muted);
-  font-size: var(--text-sm);
-}
-
-.next-deadline strong {
-  color: var(--text-main);
-  font-size: var(--text-xl);
-}
-
+/* The stat row carries its own bottom margin elsewhere; here the page's gap
+   does the spacing. */
 .programme-stats {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(min(100%, 14rem), 1fr));
-  gap: var(--space-4);
+  margin-bottom: 0;
 }
 
-.programme-grid {
+/* Money and tabs on the left, what you can do and the timeline on the right.
+   The side column drops under the main one once the two no longer fit. */
+.programme-cols {
   display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: var(--space-5);
-}
-
-.programme-grid > .programme-grid__wide,
-.programme-main {
-  grid-column: span 2;
-}
-
-/* Money and tabs on the left, the sticky actions panel on the right. The
-   panel drops under the money column once the two no longer fit side by side. */
-.programme-main {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(min(100%, var(--grid-min-column)), 1fr));
+  grid-template-columns: minmax(0, 1fr) 22.5rem;
   gap: var(--space-5);
   align-items: start;
+}
+
+.programme-cols__main,
+.programme-cols__side {
+  display: flex;
+  flex-direction: column;
   min-width: 0;
 }
 
-.programme-section--center {
-  display: flex;
-  flex-direction: column;
-  gap: var(--space-5);
-  min-width: 0;
-  width: 100%;
+.programme-cols__main {
+  gap: var(--space-6);
 }
 
-.money-flow {
-  display: flex;
-  flex-direction: column;
-  gap: var(--space-5);
-}
-
-.money-equation {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr) auto minmax(0, 1fr);
+.programme-cols__side {
   gap: var(--space-4);
-  align-items: center;
-  padding: var(--space-4);
-  border: 1px solid var(--border);
+}
+
+/* Timeline: the programme's four deadlines down a line, a square at each. */
+.programme-timeline {
+  background: var(--bg-sunken);
   border-radius: var(--radius-md);
-  background: var(--surface-hover);
-}
-
-.money-equation div {
+  padding: var(--space-5);
   min-width: 0;
 }
 
-.money-equation span {
-  color: var(--text-muted);
+.programme-timeline__title {
+  margin: 0 0 var(--space-3);
+  font-family: var(--font-display);
+  font-size: var(--text-panel);
+  font-weight: var(--weight-display);
+  letter-spacing: var(--tracking-tight);
+}
+
+.programme-timeline__summary {
+  margin: 0 0 var(--space-4);
   font-size: var(--text-sm);
+  color: var(--ink-muted);
 }
 
-.money-equation > span {
-  font-size: var(--text-xl);
-  font-weight: var(--weight-bold);
+.programme-timeline__summary strong {
+  color: var(--ink);
+  font-weight: var(--weight-semibold);
 }
 
-.money-equation strong {
-  display: block;
-  margin-top: var(--space-1);
-  color: var(--text-main);
-  font-size: var(--text-lg);
-  overflow-wrap: anywhere;
+.programme-timeline__list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
 }
 
-.money-meter {
+.programme-timeline__item {
+  position: relative;
   display: flex;
-  min-height: var(--space-4);
-  overflow: hidden;
-  border-radius: var(--radius-full);
-  background: var(--surface-hover);
+  flex-direction: column;
+  gap: var(--space-1);
+  padding: 0 0 var(--space-4) var(--space-6);
 }
 
-.money-meter span {
-  min-width: 0;
-  transition: width var(--transition-normal);
+.programme-timeline__item:last-child {
+  padding-bottom: 0;
 }
 
-.money-meter__released {
-  background: var(--success);
+.programme-timeline__item::before {
+  content: '';
+  position: absolute;
+  left: var(--space-1);
+  top: var(--space-1);
+  width: 10px;
+  height: 10px;
+  border-radius: var(--radius-sq);
+  background: var(--money-locked);
 }
 
-.money-meter__granted {
-  background: var(--warning);
-}
-
-.money-meter__available {
+.programme-timeline__item--passed::before {
   background: var(--accent);
 }
 
-.money-details {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(min(100%, 14rem), 1fr));
+.programme-timeline__item::after {
+  content: '';
+  position: absolute;
+  left: var(--space-2);
+  top: var(--space-5);
+  bottom: 0;
+  width: 2px;
+  background: var(--line);
+}
+
+.programme-timeline__item:last-child::after {
+  display: none;
+}
+
+.programme-timeline__label {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
   gap: var(--space-3);
-}
-
-.money-details div {
-  min-width: 0;
-  padding: var(--space-4);
-  border: 1px solid var(--border);
-  border-radius: var(--radius-md);
-  background: var(--surface);
-}
-
-.money-details dt {
-  color: var(--text-muted);
   font-size: var(--text-sm);
-}
-
-.money-details dd {
-  margin: var(--space-1) 0 0;
-  color: var(--text-main);
   font-weight: var(--weight-semibold);
-  overflow-wrap: anywhere;
 }
 
-.timeline-panel {
+.programme-timeline__status {
+  font-family: var(--font-numeric);
+  font-size: var(--text-xs);
+  font-weight: var(--weight-medium);
+  color: var(--ink-muted);
+}
+
+/* What the contract was deployed with: reference detail, below the fold. */
+.programme-chain {
   display: flex;
   flex-direction: column;
-  gap: var(--space-4);
+  gap: var(--space-5);
+  margin-top: var(--space-5);
+  min-width: 0;
 }
 
-.timeline-summary {
+.programme-chain__title {
   margin: 0;
-  color: var(--text-muted);
+  font-family: var(--font-display);
+  font-size: var(--text-xl);
+  font-weight: var(--weight-display);
+  letter-spacing: var(--tracking-title);
 }
 
-.programme-link {
-  font-weight: var(--weight-medium);
-  display: inline-flex;
-  align-items: center;
-  min-height: var(--tap-min);
+.programme-chain__lead {
+  margin: var(--space-1) 0 0;
+  font-size: var(--text-sm);
+  color: var(--ink-muted);
+}
+
+.programme-chain__grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: var(--space-5);
+  align-items: start;
+}
+
+.programme-chain__grid > * {
+  min-width: 0;
+}
+
+.programme-chain__grid > .programme-chain__wide {
+  grid-column: 1 / -1;
 }
 
 .programme-wrap {
@@ -215,52 +173,42 @@
   overflow-wrap: anywhere;
 }
 
-/* The access rows carry sentences, so the badge or link wraps under the text
-   on narrow screens instead of squeezing it. */
+/* The access rows carry sentences, so the badge wraps under the text on
+   narrow screens instead of squeezing it. */
 .programme-access .ui-list-row {
   flex-wrap: wrap;
   align-items: flex-start;
+}
+
+/* The sentence keeps a readable measure; the badge drops below it rather
+   than squeezing it into a column of single words. */
+.programme-access .ui-list-row__main {
+  flex: 1 1 14rem;
+}
+
+/* A rule's name never breaks; its value drops to the next line instead. */
+.programme-rules .ui-list-row {
+  flex-wrap: wrap;
+}
+
+.programme-rules .ui-list-row__main {
+  flex: 1 0 auto;
+  max-width: 100%;
 }
 
 .programme-access .ui-list-row__leading {
   color: var(--accent);
 }
 
-/* The registry verification line, under the header. */
-.programme-verification {
-  display: flex;
-  align-items: center;
-  flex-wrap: wrap;
-  gap: var(--space-2) var(--space-3);
-  margin: 0;
-}
-
-.programme-verification svg {
-  color: var(--accent);
-  flex-shrink: 0;
-}
-
-.programme-verification__text {
-  flex: 1 1 var(--grid-min-card);
-  min-width: 0;
-  color: var(--text-muted);
-  font-size: var(--text-sm);
+@media (max-width: 1100px) {
+  .programme-cols {
+    grid-template-columns: minmax(0, 1fr);
+  }
 }
 
 @media (max-width: 820px) {
-  .programme-hero,
-  .programme-grid {
-    grid-template-columns: 1fr;
-  }
-
-  .programme-grid > .programme-grid__wide,
-  .programme-main {
-    grid-column: auto;
-  }
-
-  .money-equation {
-    grid-template-columns: 1fr;
-    gap: var(--space-2);
+  .programme-chain__grid {
+    grid-template-columns: minmax(0, 1fr);
   }
 }
 

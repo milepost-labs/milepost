@@ -6,118 +6,97 @@
   box-sizing: border-box;
 }
 
+.awards-tab__bar {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: var(--space-3);
+  flex-wrap: wrap;
+}
+
+.awards-tab__count {
+  font-size: var(--text-sm);
+  color: var(--ink-muted);
+}
+
 .awards-tab__note {
   margin: 0;
   font-size: var(--text-caption);
-  color: var(--text-muted);
+  color: var(--ink-muted);
   line-height: var(--leading-body);
-}
-
-.awards-tab__actions {
-  display: flex;
-  justify-content: flex-end;
 }
 
 .awards-tab__status {
+  padding: var(--space-4) 0;
+  font-size: var(--text-sm);
+  color: var(--ink-muted);
+}
+
+.awards-tab__error {
+  background: var(--danger-soft);
+  border-radius: var(--radius-md);
   padding: var(--space-4);
   font-size: var(--text-sm);
-  color: var(--text-muted);
-}
-
-.awards-tab__empty {
-  background: var(--surface-raised);
-  border-radius: var(--radius-row);
-  padding: var(--space-4-5);
-  font-size: var(--text-sm);
   line-height: var(--leading-body);
-  color: var(--text-muted);
 }
 
-.awards-tab__empty p {
+.awards-tab__error p {
   margin: 0;
 }
 
-.awards-tab__list {
-  display: flex;
-  flex-direction: column;
-  gap: var(--space-3);
-  width: 100%;
-}
-
-.awards-tab__row {
-  background: var(--bg);
-  border-radius: var(--radius-row);
-  padding: var(--space-3) var(--space-4);
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) auto;
-  gap: var(--space-2) var(--space-4);
-  align-items: center;
-  box-sizing: border-box;
-}
-
-.awards-tab__row-info {
-  display: flex;
-  flex-direction: column;
-  gap: var(--space-1);
-  min-width: 0;
-}
-
-.awards-tab__recipient {
-  font-family: var(--font-numeric);
-  font-size: var(--text-caption);
-  font-weight: var(--weight-semibold);
-  color: var(--text);
-  overflow-wrap: anywhere;
-}
-
-.awards-tab__subtitle {
-  font-size: var(--text-xs);
-  color: var(--text-muted);
-  overflow-wrap: break-word;
-}
-
-.awards-tab__row-amount {
-  font-family: var(--font-numeric);
-  font-size: var(--text-md);
-  font-weight: var(--weight-semibold);
-  color: var(--text);
-  text-align: right;
-  white-space: nowrap;
-}
-
-.awards-tab__tranches {
-  grid-column: 1 / -1;
-  display: flex;
-  gap: var(--space-1);
-  width: 100%;
-  padding-top: var(--space-1);
-}
-
-.awards-tab__tranche-bar {
-  flex: 1;
-  height: 8px;
-  border-radius: var(--radius-square);
-  min-width: 4px;
-  box-sizing: border-box;
-}
-
-@media (max-width: 480px) {
-  .awards-tab__row {
-    padding: var(--space-3);
-    gap: var(--space-2);
-  }
-}
-
 .awards-tab__recipient-line {
-  display: flex;
+  display: inline-flex;
   align-items: center;
   gap: var(--space-2);
+  flex-wrap: wrap;
+}
+
+.awards-tab__recipient,
+.awards-tab__payee {
+  font-family: var(--font-numeric);
+  color: var(--ink);
+}
+
+.awards-tab__muted {
+  color: var(--ink-muted);
+  font-size: var(--text-caption);
+}
+
+/* One square per tranche: painted once released, grey while locked. */
+.awards-tab__tranches {
+  display: inline-flex;
+  gap: var(--space-1);
+  vertical-align: middle;
+}
+
+.awards-tab__tranche {
+  width: 10px;
+  height: 10px;
+  flex: none;
+  border-radius: var(--radius-sq);
+  box-sizing: border-box;
+  background: var(--money-locked);
+}
+
+.awards-tab__tranche[data-money-state='released'] {
+  background: var(--money-released);
 }
 
 .awards-tab__diff {
-  display: inline-flex;
-  align-items: center;
+  display: block;
   font-size: var(--text-xs);
   color: var(--warning-strong);
   line-height: var(--leading-body);
+}
+
+@media (max-width: 640px) {
+  /* Stacked rows: the note about a lagging index sits under the address. */
+  .awards-tab__table td[data-label='Recipient'] {
+    flex-wrap: wrap;
+  }
+
+  .awards-tab__diff {
+    flex-basis: 100%;
+    text-align: right;
+  }
 }
