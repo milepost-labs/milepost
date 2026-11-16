@@ -2,7 +2,7 @@ import { useMemo, useState, type ChangeEvent, type FormEvent } from 'react';
 import { Buffer } from 'buffer';
 import type { Client as ProgrammeClient } from '@milepost/program';
 import type { Attestation } from '@milepost/attest';
-import { Badge, Field } from '../components/ui';
+import { Badge, Field, SampleTag } from '../components/ui';
 import { useContractRead, useContractResult } from '../hooks';
 import { useSoroban } from '../context/useSoroban';
 import { explain } from '../lib/errors';
@@ -504,7 +504,7 @@ export const AttestationLookup = () => {
                 <article key={attestation.uid} className="attest-result-card">
                   <div className="attest-result-card__head">
                     <span className="attest-result-card__uid">{attestation.uid}</span>
-                    <Badge tone="warning">Sample data</Badge>
+                    <SampleTag />
                     {attestation.revoked && <Badge tone="danger">Revoked</Badge>}
                     {/* Still checked when revoked: a proof revoked after it
                         released a tranche must not hide that money moved. */}
@@ -527,7 +527,7 @@ export const AttestationLookup = () => {
 
             {hits.length > 0 && (
               <span className="attest-lookup__sample-note">
-                <Badge tone="neutral">Sample data</Badge> Sample attestations for the design phase.
+                <SampleTag /> Sample attestations for the design phase.
               </span>
             )}
           </div>

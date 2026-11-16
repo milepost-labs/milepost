@@ -39,9 +39,9 @@ describe('ProgrammeHeader', () => {
   it('shows the phase, planned mode and sample tag together for a sample programme', () => {
     renderHeader({ ...baseProps, phase: 'Review', mode: 'Direct', sample: true });
 
-    const badges = screen.getByText('Direct mode').parentElement as HTMLElement;
+    const badges = screen.getByText('Direct').parentElement as HTMLElement;
     expect(within(badges).getByText('Review')).toBeTruthy();
-    expect(within(badges).getByText('Direct mode')).toBeTruthy();
+    expect(within(badges).getByText('Direct')).toBeTruthy();
     expect(within(badges).getByText('Sample data')).toBeTruthy();
   });
 

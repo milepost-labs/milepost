@@ -26,7 +26,7 @@ import { useSoroban } from '../context/useSoroban';
 import { fetchProgrammes } from '../lib/indexer';
 import { AsyncView, Loading } from '../components/state/AsyncStates';
 import { PausedBanner } from '../components/programme/PausedBanner';
-import { Badge, Button, Card, Field, PhaseBadge, Select, Stat } from '../components/ui';
+import { Badge, Button, Card, Field, PhaseBadge, Select, Stat, SampleTag } from '../components/ui';
 import { formatAmount } from '../lib/amount';
 import { explainCode } from '../lib/errors';
 import { FIXTURE_CHAIN, FIXTURE_PROGRAMMES, chainFor } from '../fixtures/programmes';
@@ -299,7 +299,7 @@ function FinalizeBoard({
             </ul>
           )}
           <p className="finalize-board__sample">
-            <Badge tone="neutral">Sample data</Badge> Sample applications for the design phase.
+            <SampleTag /> Sample applications for the design phase.
           </p>
         </>
       )}

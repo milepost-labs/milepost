@@ -1,26 +1,66 @@
+/* Money is rows of small squares that wrap, never a bar. Squares keep a fixed
+   size, so a row of forty reads the same on a card and on a phone. */
 .money-row {
-  display: grid;
-  grid-template-columns: repeat(var(--money-cols), minmax(0, 1fr));
+  display: flex;
+  flex-wrap: wrap;
   width: 100%;
 }
 
 .money-row--card {
-  gap: var(--space-1);
+  /* design-system-guard: allow spacing */
+  gap: 3px;
 }
 
 .money-row--detail {
-  gap: var(--space-2);
+  /* design-system-guard: allow spacing */
+  gap: 5px;
 }
 
 .money-row__square {
-  aspect-ratio: 1;
-  border-radius: var(--radius-square);
-  min-width: 0;
+  width: 10px;
+  height: 10px;
+  flex: none;
+  border-radius: var(--radius-sq);
   box-sizing: border-box;
+  transition: background var(--transition-normal);
 }
 
-@media (max-width: 480px) {
-  .money-row {
-    --money-cols: var(--money-cols-narrow);
+.money-row--detail .money-row__square {
+  width: 16px;
+  height: 16px;
+  border-radius: var(--radius-sq-lg);
+}
+
+@media (max-width: 600px) {
+  .money-row--detail {
+    gap: var(--space-1);
+  }
+  .money-row--detail .money-row__square {
+    width: 12px;
+    height: 12px;
+    border-radius: var(--radius-sq);
   }
 }
+
+.money-legend {
+  display: inline-flex;
+  flex-wrap: wrap;
+  gap: var(--space-1-5) var(--space-4);
+  color: var(--ink-muted);
+  font-size: var(--text-caption);
+}
+.money-legend > span {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-1-5);
+}
+.money-legend__sq {
+  width: 10px;
+  height: 10px;
+  flex: none;
+  border-radius: var(--radius-sq);
+}
+.money-legend__sq--unawarded { background: var(--money-unawarded); }
+.money-legend__sq--locked { background: var(--money-locked); }
+.money-legend__sq--released { background: var(--money-released); }
+.money-legend__sq--refundable { background: var(--money-refundable); }

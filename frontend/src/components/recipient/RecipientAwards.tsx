@@ -1,5 +1,5 @@
 import { AwardCard } from './AwardCard';
-import { Badge } from '../ui';
+import { SampleTag } from '../ui';
 import { ErrorState, Loading } from '../state/AsyncStates';
 import { useRecipientAwards } from '../../hooks';
 import type { RecipientAwardFixture } from '../../fixtures/recipientFixtures';
@@ -40,7 +40,7 @@ export function RecipientAwards({ awards }: RecipientAwardsProps = {}) {
       ))}
       {entries.some((award) => award.sample) && (
         <span className="recipient-awards__note">
-          <Badge tone="neutral">Sample data</Badge> Awards on sample programmes are stand-ins for
+          <SampleTag /> Awards on sample programmes are stand-ins for
           the design phase.
         </span>
       )}

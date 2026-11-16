@@ -73,9 +73,17 @@ function renderDirectory(path = '/directory') {
 }
 
 async function cardCount() {
-  const links = await screen.findAllByRole('link');
+  const links = await findCardLinks();
   return links.length;
 }
+
+
+/** The programme cards — each is one link — leaving out the page's own links. */
+const cardLinks = () => [...document.querySelectorAll<HTMLAnchorElement>('.directory-card')];
+const findCardLinks = async () => {
+  await waitFor(() => expect(cardLinks().length).toBeGreaterThan(0));
+  return cardLinks();
+};
 
 describe('ProgrammeDirectory', () => {
   beforeEach(() => {
@@ -98,33 +106,33 @@ describe('ProgrammeDirectory', () => {
 
   it('filters cards by search text', async () => {
     renderDirectory();
-    await screen.findAllByRole('link');
+    await findCardLinks();
 
     fireEvent.change(screen.getByLabelText(/search/i), { target: { value: 'flood' } });
 
     await waitFor(() => {
-      expect(screen.getAllByRole('link')).toHaveLength(1);
+      expect(cardLinks()).toHaveLength(1);
     });
     expect(screen.getByText(/Flood response cash transfers/i)).toBeTruthy();
   });
 
   it('filters cards by phase pill', async () => {
     renderDirectory();
-    await screen.findAllByRole('link');
+    await findCardLinks();
 
     fireEvent.click(screen.getByRole('button', { name: /Cancelled/ }));
 
     await waitFor(() => {
-      expect(screen.getAllByRole('link')).toHaveLength(1);
+      expect(cardLinks()).toHaveLength(1);
     });
   });
 
   it('restores filters from the URL', async () => {
     renderDirectory('/directory?phase=Review');
-    await screen.findAllByRole('link');
+    await findCardLinks();
 
     expect(screen.getByRole('button', { name: /Review/ }).getAttribute('aria-pressed')).toBe('true');
-    expect(screen.getAllByRole('link')).toHaveLength(1);
+    expect(cardLinks()).toHaveLength(1);
   });
 
   it('carries the current filters into the programme links', async () => {
@@ -138,7 +146,7 @@ describe('ProgrammeDirectory', () => {
 
   it('restores sort from the URL', async () => {
     renderDirectory('/directory?sort=largest-budget');
-    const links = await screen.findAllByRole('link');
+    const links = await findCardLinks();
 
     expect((screen.getByLabelText(/sort/i) as HTMLSelectElement).value).toBe('largest-budget');
     expect(links[0].textContent).toContain('SME supplier microgrants Q2');
@@ -146,7 +154,7 @@ describe('ProgrammeDirectory', () => {
 
   it('updates the URL while preserving search and phase filters', async () => {
     renderDirectory('/directory?phase=Open&q=community');
-    await screen.findAllByRole('link');
+    await findCardLinks();
 
     fireEvent.change(screen.getByLabelText(/sort/i), { target: { value: 'largest-budget' } });
 
@@ -178,14 +186,14 @@ describe('ProgrammeDirectory', () => {
 
   it('shows an empty state with a way out when nothing matches', async () => {
     renderDirectory();
-    await screen.findAllByRole('link');
+    await findCardLinks();
 
     fireEvent.change(screen.getByLabelText(/search/i), { target: { value: 'no-such-programme' } });
 
     expect(await screen.findByText(/clear filters/i)).toBeTruthy();
     fireEvent.click(screen.getByRole('button', { name: /clear filters/i }));
     await waitFor(() => {
-      expect(screen.getAllByRole('link')).toHaveLength(FIXTURE_PROGRAMMES.length);
+      expect(cardLinks()).toHaveLength(FIXTURE_PROGRAMMES.length);
     });
   });
 
@@ -213,7 +221,7 @@ describe('ProgrammeDirectory', () => {
     await waitFor(() => {
       expect(screen.getByText('Stellar Real Community Grant')).toBeTruthy();
       expect(screen.queryByText(/Showing sample programmes/i)).toBeNull();
-      expect(screen.getAllByRole('link')).toHaveLength(1);
+      expect(cardLinks()).toHaveLength(1);
     });
 
     const toggleButton = screen.getByRole('button', { name: 'Show sample programmes' });
@@ -225,7 +233,7 @@ describe('ProgrammeDirectory', () => {
     await waitFor(() => {
       expect(screen.getByLabelText(/current location/i).textContent).toContain('samples=1');
       expect(screen.getByRole('button', { name: 'Hide sample programmes' })).toBeTruthy();
-      expect(screen.getAllByRole('link')).toHaveLength(FIXTURE_PROGRAMMES.length + 1);
+      expect(cardLinks()).toHaveLength(FIXTURE_PROGRAMMES.length + 1);
     });
   });
 
@@ -243,13 +251,13 @@ describe('ProgrammeDirectory', () => {
     await waitFor(() => {
       expect(screen.getByText('Stellar Real Community Grant')).toBeTruthy();
       expect(screen.getByRole('button', { name: 'Hide sample programmes' }).getAttribute('aria-pressed')).toBe('true');
-      expect(screen.getAllByRole('link')).toHaveLength(FIXTURE_PROGRAMMES.length + 1);
+      expect(cardLinks()).toHaveLength(FIXTURE_PROGRAMMES.length + 1);
     });
   });
 
   it('does not make the card list a live region', async () => {
     const { container } = renderDirectory();
-    await screen.findAllByRole('link');
+    await findCardLinks();
 
     // Issue #485: replacing the cards must not be read aloud — the count is
     // announced through the shared announcer instead.
@@ -261,14 +269,14 @@ describe('ProgrammeDirectory', () => {
 
   it('announces nothing on the first load', async () => {
     renderDirectory();
-    await screen.findAllByRole('link');
+    await findCardLinks();
 
     expect(mockAnnounce).not.toHaveBeenCalled();
   });
 
   it('announces the count once per search change', async () => {
     renderDirectory();
-    await screen.findAllByRole('link');
+    await findCardLinks();
 
     fireEvent.change(screen.getByLabelText(/search/i), { target: { value: 'flood' } });
 
@@ -287,7 +295,7 @@ describe('ProgrammeDirectory', () => {
 
   it('announces the count once per phase pill change', async () => {
     renderDirectory();
-    await screen.findAllByRole('link');
+    await findCardLinks();
 
     fireEvent.click(screen.getByRole('button', { name: /Open/ }));
 
@@ -299,7 +307,7 @@ describe('ProgrammeDirectory', () => {
 
   it('announces the count once per sort change', async () => {
     renderDirectory();
-    await screen.findAllByRole('link');
+    await findCardLinks();
 
     fireEvent.change(screen.getByLabelText(/sort/i), { target: { value: 'largest-budget' } });
 
@@ -315,6 +323,6 @@ describe('ProgrammeDirectory', () => {
     await waitFor(() => {
       expect(screen.getAllByText('Planned default')).toHaveLength(FIXTURE_PROGRAMMES.length);
     });
-    expect(screen.getAllByText(/ mode$/)).toHaveLength(FIXTURE_PROGRAMMES.length);
+    expect(document.querySelectorAll('.ui-mode-pill')).toHaveLength(FIXTURE_PROGRAMMES.length);
   });
 });

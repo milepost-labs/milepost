@@ -13,12 +13,13 @@ const SOURCE_ROOT = 'src';
 const ALLOWLIST_FILE = path.join('scripts', 'sample-tag-allowlist.json');
 const FIXTURE_NAME = /^FIXTURE_[A-Z0-9_]+$/;
 const SAMPLE_TAG = 'Sample data';
+const SAMPLE_TAG_COMPONENT = 'SampleTag';
 
 /**
  * The `FIXTURE_*` exports a component reads, and whether it renders the tag.
  * Reads are value imports (type-only imports render nothing) and namespace
- * member access (`fixtures.FIXTURE_X`). The tag counts only as JSX text or a
- * string literal, so a comment that mentions it does not.
+ * member access (`fixtures.FIXTURE_X`). The tag counts as JSX text, a string
+ * literal, or the `<SampleTag>` component; a comment that mentions it does not.
  */
 export function inspectSource(source, file = '<input>.tsx') {
   const sourceFile = ts.createSourceFile(file, source, ts.ScriptTarget.Latest, true, ts.ScriptKind.TSX);
@@ -44,6 +45,14 @@ export function inspectSource(source, file = '<input>.tsx') {
       (ts.isJsxText(node) || ts.isStringLiteral(node) || ts.isNoSubstitutionTemplateLiteral(node)
         || ts.isTemplateHead(node) || ts.isTemplateMiddle(node) || ts.isTemplateTail(node))
       && node.text.includes(SAMPLE_TAG)
+    ) {
+      tagged = true;
+    }
+    // `<SampleTag />` renders the words itself, so using it is rendering the tag.
+    if (
+      (ts.isJsxSelfClosingElement(node) || ts.isJsxOpeningElement(node))
+      && ts.isIdentifier(node.tagName)
+      && node.tagName.text === SAMPLE_TAG_COMPONENT
     ) {
       tagged = true;
     }

@@ -375,6 +375,23 @@ export function formatUsdc(stroops: string | bigint): string {
   return `${formatted} USDC`;
 }
 
+/** An amount as a bare figure, for places that name the asset once nearby. */
+export function formatFigure(stroops: string | bigint): string {
+  const value = typeof stroops === 'bigint' ? stroops : BigInt(stroops || '0');
+  return formatAmount(value, { decimals: 2 }).replace(/\.00$/, '');
+}
+
+/**
+ * The asset a programme's amounts are in.
+ *
+ * A programme's token is not read yet, so this follows what is deployed: the
+ * programmes on testnet pay in native XLM, and the sample set is written in
+ * USDC. Replace with the programme's own token once that read exists.
+ */
+export function programmeAsset(programme: { sample: boolean }): string {
+  return programme.sample ? 'USDC' : 'XLM';
+}
+
 /**
  * The n-square money row, coloured by bucket: released, then awarded-but-locked,
  * then refundable (from the right), with the remainder shown as unawarded.

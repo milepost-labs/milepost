@@ -5,7 +5,7 @@ import { useSoroban } from '../context/useSoroban';
 import { useWallet } from '../context/useWallet';
 import { useAnnouncer } from '../context/useAnnouncer';
 import { useContractResult, useProgrammeParam, useTransaction } from '../hooks';
-import { AddressChip, Badge, Button, Card, Field, RadioGroup, TextArea } from '../components/ui';
+import { AddressChip, Badge, Button, Card, Field, RadioGroup, TextArea, SampleTag } from '../components/ui';
 import { ProgrammeParamNotice } from '../components/programme/ProgrammeParamNotice';
 import { Empty, ErrorPanel, ErrorState, PendingState, TransactionOutcome } from '../components/state/AsyncStates';
 import { FIXTURE_PROGRAMMES } from '../fixtures/programmes';
@@ -625,7 +625,7 @@ export const PayeeManagement = () => {
                       <AddressChip address={candidate.address} copyLabel="Copy payee address" />
                     </div>
                     <div className="payee-mgmt__row-actions">
-                      <Badge tone="warning">Sample data</Badge>
+                      <SampleTag />
                       <Badge tone={tone}>{label}</Badge>
                       {isCreator && status === 'verified' && (
                         <Button

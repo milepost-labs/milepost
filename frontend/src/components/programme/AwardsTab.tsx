@@ -11,7 +11,7 @@ import { formatAmount, parseAmount, describeAmount } from '../../lib/amount';
 import { awardsToCsv, downloadFile } from '../../lib/csv';
 import { isSampleProgrammeId } from '../../lib/programmeView';
 import { FIXTURE_AWARDS } from '../../fixtures/programmeFixtures';
-import { Badge, Button } from '../ui';
+import { Badge, Button, SampleTag } from '../ui';
 import './AwardsTab.css';
 
 export interface AwardsTabProps {
@@ -223,7 +223,7 @@ export const AwardsTab: FC<AwardsTabProps> = ({
       tabIndex={0}
     >
       <p className="awards-tab__note">
-        {sample && <><Badge tone="neutral">Sample data</Badge>{' '}</>}
+        {sample && <><SampleTag />{' '}</>}
         {advisoryNote}
       </p>
 

@@ -1,8 +1,8 @@
 import { useCallback, useEffect, useMemo, useRef } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
-import { MoneyRow } from '../components/programme/MoneyRow';
-import { Badge, ModePill } from '../components/ui';
-import '../components/programme/phasePill.css';
+import { MoneyLegend, MoneyRow } from '../components/programme/MoneyRow';
+import { ArrowRight, Plus, RefreshCw, Search, WifiOff } from 'lucide-react';
+import { Badge, ModePill, Notice, PageHead, PhaseBadge, SampleTag, Segmented } from '../components/ui';
 import { Skeleton, Empty } from '../components/state/AsyncStates';
 import { describeAmount } from '../lib/amount';
 import { useIndexedList, useProgrammeChainReads, useRegistryProgrammes } from '../hooks';
@@ -18,7 +18,8 @@ import {
   filterProgrammes,
   sortProgrammes,
   formatAgo,
-  formatUsdc,
+  formatFigure,
+  programmeAsset,
   hydrateRealProgrammes,
   mergeProgrammes,
   phaseCounts,
@@ -185,166 +186,166 @@ export const ProgrammeDirectory = () => {
     );
   }, [filterKey, loading, shown.length, announce]);
 
+  const phaseOptions = DIRECTORY_PHASES.map((option) => ({
+    value: option,
+    label: option,
+    count: counts[option],
+  }));
+
   return (
-    <div className="directory-container">
-      <section aria-labelledby="directory-heading" className="directory-section">
-        <div className="directory-top">
-          <div className="directory-top__copy">
-            <h1 id="directory-heading">Programmes</h1>
-            <p className="directory-top__lede">
-              Fund one, apply to one, or follow where the money went. No sign-in needed to
-              browse.
-            </p>
-          </div>
-          <label className="directory-search">
-            <span className="directory-search__label">Search</span>
-            <input
-              type="search"
-              value={query}
-              onChange={(event) => setQuery(event.target.value)}
-              placeholder="Programme name or id"
-            />
-          </label>
+    <div className="directory">
+      <PageHead
+        eyebrow="Programmes"
+        title="Where the money is going"
+        action={
+          <Link to="/admin" className="btn-secondary">
+            <Plus aria-hidden="true" />
+            Deploy a programme
+          </Link>
+        }
+      >
+        Every programme on Milepost, what it funds, and how much has actually been released. No sign-in
+        needed to browse.
+      </PageHead>
+
+      {stale && (
+        <Notice tone="warn" role="status" className="directory-notice">
+          <strong>The public index was last updated {ageText}.</strong> New programmes may be missing and
+          figures may be out of date. Anything you open is re-read on the chain.{' '}
+          <Link to="/status">View index status</Link>
+        </Notice>
+      )}
+
+      {error != null && (
+        <div role="alert" className="directory-error">
+          <p className="directory-error__title">
+            <WifiOff aria-hidden="true" />
+            Couldn&apos;t load the public index.
+          </p>
+          <p className="directory-error__body">
+            {registryRead.ids && registryRead.ids.length > 0
+              ? "The registry's programmes are listed instead, read straight from the chain; names, which only the index stores, return when it does."
+              : 'The list below is the sample set only.'}
+          </p>
+          <button
+            type="button"
+            className="btn-secondary directory-error__retry"
+            onClick={() => {
+              listRead.refetch();
+              metaRead.refetch();
+              registryRead.refetch();
+            }}
+          >
+            <RefreshCw aria-hidden="true" />
+            Try again
+          </button>
         </div>
+      )}
 
-        <div className="directory-controls">
-          <div role="group" aria-label="Filter by phase" className="directory-filters">
-            {DIRECTORY_PHASES.map((option) => {
-              const on = option === phase;
-              return (
-                <button
-                  key={option}
-                  type="button"
-                  className={`directory-filter${on ? ' directory-filter--on' : ''}`}
-                  aria-pressed={on}
-                  onClick={() => setPhase(option)}
-                >
-                  {option}
-                  <span className="directory-filter__count numeric">{counts[option]}</span>
-                </button>
-              );
-            })}
-            {isSignedIn && (
-              <button
-                type="button"
-                className={`directory-filter${yoursOnly ? ' directory-filter--on' : ''}`}
-                aria-pressed={yoursOnly}
-                onClick={toggleYours}
-              >
-                Yours
-              </button>
-            )}
-            {hasReal && (
-              <button
-                type="button"
-                className={`directory-filter${showSamples ? ' directory-filter--on' : ''}`}
-                aria-pressed={showSamples}
-                onClick={toggleSamples}
-              >
-                {showSamples ? 'Hide sample programmes' : 'Show sample programmes'}
-              </button>
-            )}
-          </div>
-          <label className="directory-sort">
-            <span className="directory-sort__label">Sort</span>
-            <select
-              value={sort}
-              onChange={(event) => setSort(asSort(event.target.value))}
-            >
-              {DIRECTORY_SORTS.map((option) => (
-                <option key={option.value} value={option.value}>
-                  {option.label}
-                </option>
-              ))}
-            </select>
+      {!hasReal && !loading && error == null && (
+        <Notice role="note" className="directory-notice">
+          <strong>Showing sample programmes.</strong> No real programmes have been published to the index
+          yet. These samples demonstrate layout and milestone workflows.
+        </Notice>
+      )}
+
+      <div className="directory-toolbar">
+        <div className="directory-search">
+          <Search aria-hidden="true" />
+          <label className="visually-hidden" htmlFor="directory-search">
+            Search programmes
           </label>
-          <span className="directory-indexline">{indexLine}</span>
+          <input
+            id="directory-search"
+            type="search"
+            value={query}
+            onChange={(event) => setQuery(event.target.value)}
+            placeholder="Search by name or id"
+          />
         </div>
-
-        {!hasReal && !loading && error == null && (
-          <div role="note" className="directory-banner directory-banner--samples">
-            <span className="directory-banner__title">Showing sample programmes.</span>
-            <span className="directory-banner__body">
-              No real programmes have been published to the index yet. These samples demonstrate layout and milestone workflows.
-            </span>
-          </div>
-        )}
-
-        {stale && (
-          <div role="status" className="directory-banner directory-banner--stale">
-            The public index was last updated {ageText}. New programmes may be missing.
-            Anything you open is re-read on-chain.{' '}
-            <Link to="/status" className="directory-banner__link">
-              View index status
-            </Link>
-          </div>
-        )}
-
-        {error != null && (
-          <div role="alert" className="directory-banner directory-banner--error">
-            <span className="directory-banner__title">Couldn&apos;t load the public index.</span>
-            <span className="directory-banner__body">
-              {registryRead.ids && registryRead.ids.length > 0
-                ? "The registry's programmes are listed instead, read straight from the chain; names, which only the index stores, return when it does."
-                : 'The list below is the sample set only.'}
-            </span>
-            <button
-              type="button"
-              className="directory-banner__retry"
-              onClick={() => {
-                listRead.refetch();
-                metaRead.refetch();
-                registryRead.refetch();
-              }}
-            >
-              Try again
+        <div className="directory-toolbar__filters">
+          <Segmented label="Filter by phase" options={phaseOptions} value={phase} onChange={setPhase} />
+          {isSignedIn && (
+            <button type="button" className="directory-toggle" aria-pressed={yoursOnly} onClick={toggleYours}>
+              Yours
             </button>
+          )}
+          {hasReal && (
+            <button type="button" className="directory-toggle" aria-pressed={showSamples} onClick={toggleSamples}>
+              {showSamples ? 'Hide sample programmes' : 'Show sample programmes'}
+            </button>
+          )}
+          <label className="visually-hidden" htmlFor="directory-sort">
+            Sort
+          </label>
+          <select
+            id="directory-sort"
+            className="directory-sort"
+            value={sort}
+            onChange={(event) => setSort(asSort(event.target.value))}
+          >
+            {DIRECTORY_SORTS.map((option) => (
+              <option key={option.value} value={option.value}>
+                {option.label}
+              </option>
+            ))}
+          </select>
+        </div>
+      </div>
+
+      <div className={`directory-fresh${stale ? ' directory-fresh--stale' : ''}`}>
+        {indexLine && (
+          <span className="directory-fresh__index">
+            <i className="directory-fresh__dot" aria-hidden="true" />
+            {indexLine}
+          </span>
+        )}
+        <span>Lists are advisory. Actions re-read the chain.</span>
+        <MoneyLegend />
+      </div>
+
+      {/* Not a live region: the count is announced through the shared
+          announcer, so replacing these cards reads nothing (#485). */}
+      <div aria-busy={loading} className="directory-body">
+        {loading && (
+          <div className="directory-grid">
+            {[0, 1, 2].map((i) => (
+              <Skeleton key={i} variant="card" label="Loading programmes" />
+            ))}
           </div>
         )}
 
-        {/* Not a live region: the count is announced through the shared
-            announcer, so replacing these cards reads nothing (#485). */}
-        <div aria-busy={loading} className="directory-body">
-          {loading && (
-            <div className="directory-grid">
-              {[0, 1, 2].map((i) => (
-                <Skeleton key={i} variant="card" label="Loading programmes" />
-              ))}
-            </div>
-          )}
+        {showEmpty && (
+          <Empty
+            title={
+              query
+                ? `No programmes match “${query}”`
+                : `No ${phase === 'All' ? '' : `${phase.toLowerCase()} `}programmes right now`
+            }
+            description="Try another phase, or clear the search."
+            onClearFilters={clearFilters}
+          />
+        )}
 
-          {showEmpty && (
-            <Empty
-              title={
-                query
-                  ? `No programmes match “${query}”`
-                  : `No ${phase === 'All' ? '' : `${phase.toLowerCase()} `}programmes right now`
-              }
-              description="Try another phase, or clear the search."
-              onClearFilters={clearFilters}
-            />
-          )}
+        {!loading && shown.length > 0 && (
+          <div className="directory-grid">
+            {shown.map((programme) => (
+              <ProgrammeCard
+                key={programme.id}
+                programme={programme}
+                carriedSearch={carriedSearch}
+                readError={readsByError.get(programme.id)}
+              />
+            ))}
+          </div>
+        )}
+      </div>
 
-          {!loading && shown.length > 0 && (
-            <div className="directory-grid">
-              {shown.map((programme) => (
-                <ProgrammeCard
-                  key={programme.id}
-                  programme={programme}
-                  carriedSearch={carriedSearch}
-                  readError={readsByError.get(programme.id)}
-                />
-              ))}
-            </div>
-          )}
-        </div>
-
-        <p className="directory-footnote">
-          This list comes from the public index, which is advisory, and is walked from the
-          registry for anything the index has not caught up with. Cards tagged “Live on
-          chain” show what the chain says; sample programmes keep their sample tag.
-        </p>
-      </section>
+      <p className="directory-footnote">
+        This list comes from the public index, which is advisory, and is walked from the registry for
+        anything the index has not caught up with. Cards tagged “Live on chain” show what the chain says;
+        sample programmes keep their sample tag.
+      </p>
     </div>
   );
 };
@@ -370,81 +371,82 @@ function ProgrammeCard({
   // A real programme whose read has not settled yet shows no figures at all:
   // its stand-in `chain` must never be mistaken for chain state.
   const reading = !programme.sample && !programme.real;
+  const asset = programmeAsset(programme);
 
   return (
-    <Link to={href} className="directory-card-link">
-      <article className="directory-card-new">
-        <div className="directory-card-new__head">
-          <span className="directory-card-new__title">
-            <span className="directory-card-new__name">{programme.name}</span>
-            {/* A registry-only entry is named by its id already. */}
-            {programme.name !== programme.id && (
-              <span className="directory-card-new__id numeric">{shortId(programme.id)}</span>
-            )}
+    <Link to={href} className={`directory-card directory-card--${chain.phase.toLowerCase()}`}>
+      <span className="directory-card__top">
+        {programme.sample ? <SampleTag /> : <span className="directory-card__source">{tag}</span>}
+        {reading ? <Badge tone="neutral">Reading</Badge> : <PhaseBadge phase={chain.phase} />}
+      </span>
+
+      <h2 className="directory-card__name">{programme.name}</h2>
+      {/* A registry-only entry is named by its id already. */}
+      <span className="directory-card__id numeric">
+        {programme.name !== programme.id && `${shortId(programme.id)} · `}
+        {asset}
+      </span>
+
+      {programme.userRoles && programme.userRoles.length > 0 && (
+        <span className="directory-card__roles" aria-label="Your roles">
+          {programme.userRoles.map((role) => (
+            <span key={role} className="directory-card__role">
+              {ROLE_LABELS[role]}
+            </span>
+          ))}
+          {/* The roles are stand-ins until the per-programme role reads are wired. */}
+          {!programme.sample && <SampleTag />}
+        </span>
+      )}
+
+      <span className="directory-card__status">{programmeStatus(chain)}</span>
+
+      {reading ? (
+        <span role="status" aria-busy="true" className="directory-card__status directory-card__money">
+          Reading this programme on the chain…
+        </span>
+      ) : (
+        <>
+          <span className="directory-card__money">
+            <MoneyRow chain={chain} count={40} variant="card" />
           </span>
-          <span className={`phase-pill${reading ? '' : ` phase-pill--${chain.phase.toLowerCase()}`}`}>
-            {reading ? 'Reading' : chain.phase}
+
+          <span className="directory-card__figures">
+            <Figure label="Budget" amount={budget} asset={asset} />
+            <Figure label="Awarded" amount={chain.awarded} asset={asset} />
+            <Figure label="Released" amount={chain.released} asset={asset} />
           </span>
-        </div>
+        </>
+      )}
 
-        {programme.userRoles && programme.userRoles.length > 0 && (
-          <div className="directory-card-new__roles" aria-label="Your roles">
-            {programme.userRoles.map((role) => (
-              <span key={role} className="directory-role-badge">
-                {ROLE_LABELS[role]}
-              </span>
-            ))}
-            {/* The roles are stand-ins until the per-programme role reads are wired. */}
-            <Badge tone="neutral">Sample data</Badge>
-          </div>
-        )}
-
-        <span className="directory-card-new__status">{programmeStatus(chain)}</span>
-
-        {reading ? (
-          <span
-            role="status"
-            aria-busy="true"
-            className="directory-card-new__status"
-          >
-            Reading this programme on the chain…
+      <span className="directory-card__foot">
+        {chain.mode ? (
+          <span className="directory-card__mode">
+            <span className="visually-hidden">Planned default</span>
+            <ModePill mode={chain.mode} />
           </span>
         ) : (
-          <>
-            <MoneyRow chain={chain} count={20} variant="card" />
-
-            <div className="directory-card-new__figures">
-              <Figure label="Budget" value={formatUsdc(budget)} amount={budget} />
-              <Figure label="Awarded" value={formatUsdc(chain.awarded)} amount={chain.awarded} />
-              <Figure label="Released" value={formatUsdc(chain.released)} amount={chain.released} />
-            </div>
-          </>
+          <span />
         )}
-
-        <div className="directory-card-new__foot">
-          <span className="directory-card-new__sample">{tag}</span>
-          {chain.mode && (
-            <span className="directory-card-new__mode">
-              <span className="directory-card-new__mode-label">Planned default</span>
-              <ModePill mode={chain.mode} />
-            </span>
-          )}
-          <span className="directory-card-new__cta">{programmeCta(chain.phase)} →</span>
-        </div>
-      </article>
+        <span className="directory-card__cta">
+          {programmeCta(chain.phase)}
+          <ArrowRight aria-hidden="true" />
+        </span>
+      </span>
     </Link>
   );
 }
 
-function Figure({ label, value, amount }: { label: string; value: string; amount?: bigint | string }) {
+/** A bare figure; the card names the asset once, beside the id. */
+function Figure({ label, amount, asset }: { label: string; amount: bigint | string; asset: string }) {
   return (
-    <span className="directory-figure">
-      <span className="directory-figure__label">{label}</span>
+    <span className="directory-card__figure">
+      <span className="directory-card__figure-label">{label}</span>
       <span
-        className="directory-figure__value numeric"
-        aria-label={amount !== undefined ? `${label}: ${describeAmount(amount, 'USDC')}` : undefined}
+        className="directory-card__figure-value numeric"
+        aria-label={`${label}: ${describeAmount(amount, asset)}`}
       >
-        {value}
+        {formatFigure(amount)}
       </span>
     </span>
   );

@@ -77,6 +77,9 @@
   --text-panel: 1.25rem;     /* 20 — panel heading, upper end */
   --text-amount-input: 2.25rem;  /* 36 — the amount field's figure */
   --text-figure: 1.75rem;        /* 28 — stat tiles */
+  --text-empty-title: 1.375rem;  /* 22 — empty-state titles, section headings */
+  --text-card-title: 1.3125rem;  /* 21 — programme card names */
+  --text-page-title: clamp(1.875rem, 4vw, 2.5rem); /* 30–40 — app page titles */
   --text-sheet-title: 1.625rem;  /* 26 — sheet and step titles */
   --text-question: clamp(1.125rem, 2.2vw, 1.375rem); /* 18–22 — landing problem questions */
 
@@ -126,6 +129,7 @@
      bands 28, pills. The finer-grained names below predate it and now land on
      those five. */
   --radius-sq: 3px;       /* money squares, logo bars */
+  --radius-sq-lg: 4px;    /* the larger squares on a programme page */
   --radius-sm: 8px;
   --radius-md: 14px;
   --radius-lg: 14px;

@@ -15,7 +15,7 @@ import { explain } from '../lib/errors';
 import { isProgrammeContractId } from '../lib/registryVerification';
 import { usePageTitle } from '../hooks/usePageTitle';
 import { formatAmount, validateAmount } from '../lib/amount';
-import { AmountField, Badge, Button, Field } from '../components/ui';
+import { AmountField, Badge, Button, Field, SampleTag } from '../components/ui';
 import { ProgrammeParamNotice } from '../components/programme/ProgrammeParamNotice';
 import { ErrorPanel, PendingState, TransactionOutcome } from '../components/state/AsyncStates';
 import { AttestationRevoke } from '../components/verifier/AttestationRevoke';
@@ -609,7 +609,7 @@ export const VerifierDashboard = () => {
                 )}
               </div>
               <p className="verifier-page__sample-note">
-                <Badge tone="neutral">Sample data</Badge> Applicant shortcuts are sample until an
+                <SampleTag /> Applicant shortcuts are sample until an
                 indexer supplies a reviewer queue.
               </p>
             </section>
@@ -731,7 +731,7 @@ export const VerifierDashboard = () => {
                 </ul>
               )}
               <p className="verifier-page__sample-note">
-                <Badge tone="neutral">Sample data</Badge> Sample queue for the design phase.
+                <SampleTag /> Sample queue for the design phase.
               </p>
             </section>
 
@@ -779,7 +779,7 @@ export const VerifierDashboard = () => {
                 </ul>
               )}
               <p className="verifier-page__sample-note">
-                <Badge tone="neutral">Sample data</Badge> Sample queue and attestations for the
+                <SampleTag /> Sample queue and attestations for the
                 design phase.
               </p>
             </section>
