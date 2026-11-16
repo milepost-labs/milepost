@@ -188,22 +188,42 @@ Providers wrap in this order: `ThemeProvider` → `WalletProvider` →
   `format.ts`, `errors.ts`, `indexer.ts`, `registryVerification.ts`
 - Feature areas already built: `admin/`, `funder/`, `programme/`
 
+### Design reference (`docs/design/`)
+
+The look the app is built to: `BRAND.md` (read it first), two HTML prototypes
+(the landing page, and the app shell with every screen), and the design's
+tokens. `docs/design/README.md` lists where the app deliberately departs from
+the prototypes because the contracts say otherwise.
+
+The idea is the road. Milepost green means released and "go"; road-paint
+yellow is used sparingly (the testnet dot, the Sample data tag); tranches are
+numbered milepost signs; money is rows of small squares in four states
+(unawarded, locked, released, refundable).
+
 ### Design tokens (`src/styles/tokens.css`)
 
-Already defined, and the reason they exist is that every page CSS file was
-inventing its own pixel values.
+Every value in page and component CSS comes from a token; a guard in CI
+rejects hard-coded colours and off-scale spacing.
 
-- **Spacing:** a 4px scale, `--space-1` (0.25rem) through `--space-8` (4rem).
+- **Grounds, not boxes.** Regions are separated by a background step
+  (`--bg-sunken` → `--bg` → `--bg-raised`) and space. No borders. A hairline
+  (`--line`) is allowed only in tables and lists.
+- **Colour:** `--ink`, `--ink-muted`, `--accent` (with `--accent-hover`,
+  `--accent-ink`, `--accent-soft`), `--signal`, `--danger`, and the money
+  colours `--money-unawarded|locked|released|refundable`. Older names
+  (`--surface`, `--text`, `--border`, `--refund`, …) are aliases onto these.
+- **Type:** `--font-display` (Bricolage Grotesque) for headlines, `--font-sans`
+  (Instrument Sans) for UI, `--font-numeric` (IBM Plex Mono, tabular) for every
+  number, amount, address and id.
+- **Spacing:** a 4px scale, `--space-1` (0.25rem) through `--space-16` (8rem).
   Anything off the scale is a mistake, not a nuance.
-- **Type:** `--text-xs` … `--text-3xl` (0.75rem → 2.75rem), weights 400/500/600/700
-- **Numeric font:** `--font-numeric` (IBM Plex Mono). Amounts are always
-  compared vertically, so tabular figures matter more than it sounds.
-- **Radius:** `--radius-sm|md|lg|full`
-- **Elevation:** `--elevation-1|2|3`, redefined for dark
-- **Semantic aliases:** `--accent`, `--accent-contrast`, `--danger`, `--success`,
-  `--warning`, `--border`, `--border-strong`, `--surface`, `--surface-raised`.
-  Components reference intent so a palette change lands in one place.
-- Dark mode via `[data-theme='dark']`. Colour still lives in `index.css`.
+- **Shape:** buttons and badges are pills (`--radius-pill`), inputs
+  `--radius-sm`, panels `--radius-md`, large bands `--radius-band`, money
+  squares `--radius-sq`.
+- **Shadow:** only floating layers cast one — `--shadow-1` for the sticky
+  header and floating controls, `--shadow-2` for menus and sheets.
+- **Focus:** a 2px `--focus` ring with a 2px offset on every control.
+- Dark mode via `[data-theme='dark']`, defaulting to the system setting.
 - `prefers-reduced-motion` is already honoured. Keep it.
 
 ---

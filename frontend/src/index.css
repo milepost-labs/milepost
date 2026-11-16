@@ -2,37 +2,22 @@
 @import './styles/print.css';
 
 :root {
-  /* Surface and Background (Light Mode) */
-  --bg-color: #f8fafc;
-  --surface-color: #ffffff;
-  --surface-hover: #f1f5f9;
-  --surface-border: #e2e8f0;
+  /* Names from before the token file existed. Colour lives in tokens.css;
+     these stay so older page CSS keeps resolving. */
+  --bg-color: var(--bg);
+  --surface-color: var(--bg-raised);
+  --surface-hover: var(--bg-sunken);
+  --surface-border: var(--line);
+  --text-main: var(--ink);
+  --text-muted: var(--ink-muted);
+  --color-success: var(--success);
+  --color-warning: var(--warning);
+  --color-error: var(--danger);
 
-  /* Typography Colors */
-  --text-main: hsl(222, 47%, 11%);
-  --text-muted: hsl(215, 16%, 47%);
-
-  /* Status Colors */
-  --color-success: hsl(158, 73%, 33%);
-  --color-warning: hsl(38, 92%, 50%);
-  --color-error: hsl(348, 83%, 47%);
-
-  /* Typography Variables */
   --font-family: var(--font-ui);
 
-  /* Transition Variables */
   --transition-fast: 150ms ease-out;
   --transition-normal: 300ms ease-out;
-}
-
-[data-theme='dark'] {
-  --bg-color: #16191e;
-  --surface-color: #1f242b;
-  --surface-hover: #282e37;
-  --surface-border: #2f3640;
-  --text-main: #edf0f3;
-  --text-muted: #a4aab4;
-  color-scheme: dark;
 }
 
 /* Global Reset & Base Styles */
@@ -47,50 +32,59 @@ body {
   background-color: var(--bg);
   color: var(--text);
   transition: background-color var(--transition-normal), color var(--transition-normal);
-  line-height: var(--leading-relaxed);
+  line-height: var(--leading-body);
   -webkit-font-smoothing: antialiased;
   min-height: 100vh;
+  overflow-x: hidden;
+}
+
+/* Global button classes, for the few places that predate the UI kit's Button.
+   Pills, like every button in the design. */
+.btn-primary,
+.btn-secondary {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--space-2);
+  min-height: var(--tap-min);
+  padding: 0 var(--space-4-5);
+  border: 0;
+  border-radius: var(--radius-pill);
+  font: inherit;
+  font-weight: var(--weight-semibold);
+  font-size: var(--text-md);
+  cursor: pointer;
+  text-decoration: none;
+  white-space: nowrap;
+  transition: background-color var(--transition-fast), color var(--transition-fast);
 }
 
 .btn-primary {
   background-color: var(--accent);
-  color: var(--accent-contrast);
-  border: none;
-  padding: var(--space-2) var(--space-4);
-  border-radius: var(--radius-sm);
-  font-weight: var(--weight-medium);
-  font-size: var(--text-sm);
-  cursor: pointer;
-  transition: opacity var(--transition-fast);
-  display: inline-flex;
-  align-items: center;
-  gap: var(--space-2);
+  color: var(--accent-ink);
 }
 
 .btn-primary:hover {
-  opacity: 0.9;
+  background-color: var(--accent-hover);
+  text-decoration: none;
 }
 
 .btn-secondary {
   background-color: transparent;
-  color: var(--text);
-  border: 1px solid var(--border);
-  padding: var(--space-2) var(--space-4);
-  border-radius: var(--radius-sm);
-  font-weight: var(--weight-medium);
-  font-size: var(--text-sm);
-  cursor: pointer;
-  transition: background-color var(--transition-fast);
+  color: var(--ink);
+  box-shadow: inset 0 0 0 1.5px var(--line);
 }
 
 .btn-secondary:hover {
-  background-color: var(--surface-raised);
+  background-color: var(--bg-sunken);
+  text-decoration: none;
 }
 
 h1, h2, h3, h4 {
-  font-weight: var(--weight-bold);
+  font-family: var(--font-display);
+  font-weight: var(--weight-display);
   line-height: var(--leading-heading);
-  letter-spacing: var(--tracking-tight);
+  letter-spacing: var(--tracking-title);
 }
 
 h1 {
@@ -116,17 +110,19 @@ a:hover {
 }
 
 .page-wrapper {
-  padding: var(--page-pad-top) 0 var(--page-pad-bottom);
-  min-height: calc(100vh - 80px);
+  padding-block: var(--page-pad-top) var(--page-pad-bottom);
+  min-height: 70vh;
 }
 
-@media (max-width: 640px) {
-  .container {
-    padding: 0 var(--space-3);
+@media (max-width: 860px) {
+  :root {
+    --page-gutter: var(--space-4);
+    --sticky-offset: 7.5rem;
   }
 
+  /* Room for the bottom tab bar, so it never covers the end of a page. */
   .page-wrapper {
-    padding: var(--space-4) 0;
+    padding-block: var(--space-5) var(--space-12);
   }
 }
 
@@ -149,7 +145,7 @@ a:hover {
   background: var(--bg);
 }
 ::-webkit-scrollbar-thumb {
-  background: var(--surface-raised);
+  background: var(--line);
   border-radius: var(--radius-full);
 }
 ::-webkit-scrollbar-thumb:hover {

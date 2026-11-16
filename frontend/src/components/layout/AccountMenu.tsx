@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
-import { ChevronDown, RefreshCw, Sparkles } from 'lucide-react';
+import { Coins, HandCoins, LogOut, RefreshCw, ShieldCheck, Sparkles } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import { useWallet } from '../../context/useWallet';
 import { useAnnouncer } from '../../context/useAnnouncer';
@@ -10,9 +10,9 @@ import { AddressChip } from '../ui';
 import { useDetailsMenu } from './useDetailsMenu';
 
 const ACCOUNT_LINKS = [
-  { label: 'My funding', path: '/funders' },
-  { label: 'My awards', path: '/recipients' },
-  { label: 'Spend policy', path: '/policy' },
+  { label: 'My funding', path: '/funders', Icon: Coins },
+  { label: 'My awards', path: '/recipients', Icon: HandCoins },
+  { label: 'Spend policy', path: '/policy', Icon: ShieldCheck },
 ];
 
 /** Said once on a successful Friendbot funding, and shown under the button. */
@@ -98,8 +98,14 @@ export function AccountMenu({ address }: { address: string }) {
   return (
     <details className="nav-menu account-menu" ref={ref}>
       <summary className="nav-menu__trigger account-menu__trigger" aria-label={`Account ${address}`}>
-        <span className="numeric">{truncateAddress(address)}</span>
-        <ChevronDown size={14} className="nav-menu__chevron" aria-hidden="true" />
+        <span className="account-menu__address numeric">{truncateAddress(address)}</span>
+        {/* Four money-coloured squares stand in for an avatar. Decorative. */}
+        <span className="account-menu__avatar" aria-hidden="true">
+          <i />
+          <i />
+          <i />
+          <i />
+        </span>
       </summary>
       <div className="nav-menu__panel account-menu__panel">
         <div className="nav-menu__group">
@@ -160,6 +166,7 @@ export function AccountMenu({ address }: { address: string }) {
         <div className="nav-menu__group">
           {ACCOUNT_LINKS.map((link) => (
             <Link key={link.path} to={link.path} className="nav-menu__item" onClick={close}>
+              <link.Icon aria-hidden="true" />
               {link.label}
             </Link>
           ))}
@@ -171,9 +178,11 @@ export function AccountMenu({ address }: { address: string }) {
               disconnect();
             }}
           >
+            <LogOut aria-hidden="true" />
             Sign out
           </button>
         </div>
+        <p className="account-menu__note">You pay your own network fees in XLM.</p>
       </div>
     </details>
   );

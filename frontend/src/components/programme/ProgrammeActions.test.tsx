@@ -74,7 +74,7 @@ describe('ProgrammeActions', () => {
     expect(within(row('Contribute')).getByText('Sign in to contribute.')).toBeTruthy();
 
     fireEvent.click(screen.getByRole('button', { name: 'Sign in' }));
-    expect(screen.getByRole('dialog', { name: 'Sign in' })).toBeTruthy();
+    expect(screen.getByRole('dialog', { name: 'Connect your wallet' })).toBeTruthy();
   });
 
   it('offers a refund with the amount once refunds open', () => {

@@ -58,7 +58,7 @@ describe('Funding dashboard', () => {
     expect(screen.queryByText('Refundable now')).toBeNull();
 
     fireEvent.click(screen.getByRole('button', { name: 'Sign in' }));
-    expect(screen.getByRole('dialog', { name: 'Sign in' })).toBeTruthy();
+    expect(screen.getByRole('dialog', { name: 'Connect your wallet' })).toBeTruthy();
   });
 
   it('shows contributed, programmes and refundable-now totals', async () => {

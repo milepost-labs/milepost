@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { APP_ROUTES, getSectionForPath } from './routes';
+import { APP_ROUTES, NAV_SECTIONS, SECTION_PAGES, getSectionForPath, getSectionPageForPath } from './routes';
 import { ROLES, ROLE_ENTRIES } from './pages/homeContent';
 
 describe('APP_ROUTES', () => {
@@ -28,6 +28,32 @@ describe('APP_ROUTES', () => {
       expect(validSections.has(route.section)).toBe(true);
       expect(getSectionForPath(route.path)).toBe(route.section);
     }
+  });
+});
+
+describe('SECTION_PAGES', () => {
+  it('only lists routes the app serves, each under its own section', () => {
+    const served = new Set(APP_ROUTES.map((route) => route.path));
+    for (const section of NAV_SECTIONS) {
+      for (const page of SECTION_PAGES[section.key]) {
+        expect(served.has(page.path)).toBe(true);
+        expect(getSectionForPath(page.path)).toBe(section.key);
+      }
+    }
+  });
+
+  it("opens each section on one of that section's own pages", () => {
+    for (const section of NAV_SECTIONS) {
+      expect(SECTION_PAGES[section.key].map((page) => page.path)).toContain(section.path);
+    }
+  });
+
+  it('finds the page a path sits under', () => {
+    expect(getSectionPageForPath('/funders/receipt')?.label).toBe('Receipt lookup');
+    expect(getSectionPageForPath('/recipients/standing')?.label).toBe('My awards');
+    expect(getSectionPageForPath('/programme/CABC')?.label).toBe('Directory');
+    expect(getSectionPageForPath('/admin/standing')?.label).toBe('Standing');
+    expect(getSectionPageForPath('/')).toBeNull();
   });
 });
 
