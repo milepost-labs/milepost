@@ -1,1 +1,0 @@
-export const FIXTURE_PATH_BUDGET = 10000;

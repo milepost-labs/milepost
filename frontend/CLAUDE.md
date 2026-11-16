@@ -230,54 +230,55 @@ rejects hard-coded colours and off-scale spacing.
 
 ## 5. The landing page
 
-The current `Home.tsx` is 210 lines with four sections (hero, "The Paradigm
-Shift", "Protocol Mechanics", "Built for the Ecosystem"). It is too short and
-too abstract. It should explain the protocol well enough that a funder,
-a recipient, a verifier or a developer knows what this is and where to go.
+`src/pages/Home.tsx`, built to `docs/design/prototypes/landing.html`. It has to
+explain the protocol well enough that a funder, a recipient, a verifier or a
+developer knows what this is and where to go. Copy and data live in
+`src/pages/homeContent.ts`; the sections with behaviour live in
+`src/components/landing/`; all styles are in `Landing.css`, scoped under `.lp`.
+The page runs edge to edge (`Layout` drops the shared column on `/`), and each
+section sets its own measure with `.lp-wrap`.
 
-Build these sections, in order:
+Sections, in order:
 
-1. **Hero** — the headline claim and the one-line mechanism. Primary CTA
-   **Launch app**; secondary "How it works" scrolling down. Do not put a wall of
-   text here.
-2. **The problem** — grant tooling stops at selection. Name the three unanswered
-   questions: did the money reach the person, could they spend it on the thing it
-   was for, can anyone prove it afterwards.
-3. **How it works** — the seven-step money path from §2 as a visual sequence.
-   This is the most important section on the page. Show that money moves only at
-   a milepost.
-4. **Why Stellar** — anchors and SEP-24/SEP-31 off-ramps (without these the rest
-   is theatre), fee sponsorship (recipients never hold XLM), passkey smart
-   wallets (no seed phrase), policy signers.
-5. **The three modes** — `Direct` / `Allocated` / `Restricted` compared, with the
-   honest trade-off for each.
-6. **One protocol, many verticals** — the table of six verticals with verifier,
-   condition and who gets paid. Makes clear the contracts are domain-free.
-7. **Roles** — four cards (Funder, Recipient, Verifier, Admin), each stating what
-   that person does and linking to their entry route.
-8. **Guarantees and limits** — budget never exceeded, permissionless finalize and
-   the ordering consequence, proportional refunds, standing as portable
-   underwriting, published lists advisory. Credibility comes from stating limits.
-9. **Live on testnet** — real figures from `meta.json` and `programmes.json`, with
-   the staleness notice. Never fabricate these.
-10. **For developers** — five contracts, bindings on npm, the indexer, and links
-    to `README.md`, `CONTRIBUTING.md`, `docs/glossary.md` and
-    `docs/end-to-end-tutorial.md`.
-11. **Footer** — repo, security policy, licence.
+1. **Hero** with the road demo (`RoadDemo`): one award, three tranches. Each
+   press plays the verifier and releases exactly one tranche. It is an example
+   and is labelled one; its data is `FIXTURE_HERO_AWARD`.
+2. **What brings you here?** Four typographic role lines, not cards: fund, get
+   funded, verify, build.
+3. **The problem.** An ink band; "selection" is struck through.
+4. **How it works** (`HowItWorks`): the seven steps beside a 40-square budget
+   board that changes with the step in view. The most important section: it
+   shows money moves at only three steps.
+5. **Payment modes** (`PaymentModes`): the four modes ranked by guarantee, with
+   the path the money takes. Never shown as equals.
+6. **Sectors** (`Sectors`): a sentence that rewrites itself per sector, over the
+   full table. Education is one row among six.
+7. **The people.** Reviewer and verifier as two separate jobs.
+8. **Why Stellar.** Each point is tagged *Today* or *Roadmap · not available*.
+9. **Guarantees and limits.** Same weight on both sides.
+10. **Live on testnet** (`LiveIndex`): real figures from `meta.json` and
+    `programmes.json`, with the staleness notice. Never fabricate these, and
+    there is no sample-data preview. Totals contributed and released are not in
+    the index, so they are not shown.
+11. **For developers.** An ink band: the real install command, the contracts
+    under their real names, the indexer, and the docs links.
+12. **Closing call to action and footer.** The footer links every route in
+    `APP_ROUTES`; `routes.test.ts` checks it.
 
-### Launch app
+Rules that hold on this page:
 
-"Launch app" must not dead-end on a page that needs a wallet to show anything.
-
-- Send it to `/directory`, which is meaningful without a wallet because it reads
-  the published index.
-- Offer a role chooser (in the hero or immediately after) routing to `/funders`,
-  `/recipients`, `/verifiers`, `/admin`.
-- Every role card and nav item must be reachable from the landing page. The
-  current navbar exposes Directory, Programme, Funders, Recipients, Verifiers,
-  Finalize, Policy, Admin — the landing page should not expose less.
-- If a wallet is not connected, a role dashboard explains what connecting will
-  show rather than rendering empty shells.
+- **Never claim** passkey or Face ID sign-in (sign-in is Freighter only), "no
+  XLM needed" or covered fees, cash-out to local money (anchors are roadmap
+  only), or invented live figures. The page says **testnet · pre-audit**.
+  Refunds are "proportional", never a "full refund".
+- **Launch app goes to `/directory`**, which is meaningful without a wallet
+  because it reads the published index. No way in dead-ends on a wallet prompt.
+- **Motion explains something about money** and stops for
+  `prefers-reduced-motion`. The demos play themselves only while on screen and
+  only until someone touches them. Content is never hidden without scripting:
+  scroll reveals apply only once the page marks itself ready.
+- **One announcer.** Self-playing changes never speak; a choice the reader makes
+  is announced once through `useAnnouncer`.
 
 ---
 
@@ -318,7 +319,7 @@ Two rules make that cheap to undo later:
 
 Two carve-outs, because they mislead rather than illustrate:
 
-- **Do not fabricate the "Live on testnet" figures** in landing section 9. That
+- **Do not fabricate the "Live on testnet" figures** in the landing page's live section. That
   section claims to show real chain state. Either read `meta.json` and
   `programmes.json`, which are live and working today, or drop the section until
   it can. The index already serves one real programme and its awards.

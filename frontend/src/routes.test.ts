@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
-import { APP_ROUTES, NAV_SECTIONS, SECTION_PAGES, getSectionForPath, getSectionPageForPath } from './routes';
-import { ROLES, ROLE_ENTRIES } from './pages/homeContent';
+import { APP_ROUTES, HOME_ANCHORS, NAV_SECTIONS, SECTION_PAGES, getSectionForPath, getSectionPageForPath } from './routes';
+import { FOOTER_GROUPS, ROLE_ENTRIES } from './pages/homeContent';
 
 describe('APP_ROUTES', () => {
   it('has no duplicate paths', () => {
@@ -57,33 +57,36 @@ describe('SECTION_PAGES', () => {
   });
 });
 
-describe('landing roles section', () => {
+describe('landing footer', () => {
+  const linked = FOOTER_GROUPS.flatMap((group) => group.links.map((link) => link.path));
+
   it('reaches every app route', () => {
-    const linked = new Set(ROLES.flatMap((role) => role.links.map((link) => link.path)));
-    const missing = APP_ROUTES.map((route) => route.path).filter((path) => !linked.has(path));
+    const missing = APP_ROUTES.map((route) => route.path).filter((path) => !linked.includes(path));
     expect(missing).toEqual([]);
   });
 
-  it('only links to routes the app serves', () => {
+  it('only links to routes the app serves, each once', () => {
     const served = new Set(APP_ROUTES.map((route) => route.path));
-    for (const role of ROLES) {
-      for (const link of role.links) expect(served.has(link.path)).toBe(true);
-    }
+    for (const path of linked) expect(served.has(path)).toBe(true);
+    expect(new Set(linked).size).toBe(linked.length);
   });
 });
 
-describe('landing role entry cards', () => {
-  it('sends each role to the route the app serves', () => {
+describe('landing role lines', () => {
+  it('sends each role to a route the app serves, or to a section of the page', () => {
     const served = new Set(APP_ROUTES.map((route) => route.path));
-    for (const entry of ROLE_ENTRIES) expect(served.has(entry.path)).toBe(true);
+    const anchors = new Set(HOME_ANCHORS.map((anchor) => `#${anchor.id}`));
+    for (const entry of ROLE_ENTRIES) {
+      expect(served.has(entry.path) || anchors.has(entry.path)).toBe(true);
+    }
   });
 
-  it('offers the four entry points in the design order', () => {
+  it('offers the four ways in, in the design order', () => {
     expect(ROLE_ENTRIES.map((entry) => entry.path)).toEqual([
       '/funders',
       '/recipients',
       '/verifiers',
-      '/admin',
+      '#developers',
     ]);
   });
 });

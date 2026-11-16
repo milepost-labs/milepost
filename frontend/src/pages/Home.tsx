@@ -1,270 +1,415 @@
-import React, { useEffect, useRef } from 'react';
+import { useRef } from 'react';
 import { Link } from 'react-router-dom';
-import './Home.css';
+import { ArrowRight, ArrowUpRight, Check, CircleAlert } from 'lucide-react';
 import { CopyButton } from '../components/ui/CopyButton';
-import { HeroDemo } from '../components/landing/HeroDemo';
-import { RoleEntryCards } from '../components/landing/RoleEntryCards';
-import { ProblemSection } from '../components/landing/ProblemSection';
-import { MoneyPath } from '../components/home/MoneyPath';
-import { WhyStellar } from '../components/home/WhyStellar';
-import { ModesCompared } from '../components/home/ModesCompared';
-import { Verticals } from '../components/home/Verticals';
-import { GUARANTEES, LIMITS, ROLES, type Claim } from './homeContent';
-import { LiveIndex } from '../components/home/LiveIndex';
+import { LogoMark } from '../components/layout/LogoMark';
+import { RoadDemo } from '../components/landing/RoadDemo';
+import { HowItWorks } from '../components/landing/HowItWorks';
+import { PaymentModes } from '../components/landing/PaymentModes';
+import { Sectors } from '../components/landing/Sectors';
+import { LiveIndex } from '../components/landing/LiveIndex';
+import { useReveal } from '../components/landing/motion';
 import { usePageTitle } from '../hooks/usePageTitle';
+import {
+  CONTRACTS,
+  DOC_LINKS,
+  FOOTER_GROUPS,
+  GUARANTEES,
+  INSTALL_COMMAND,
+  LIMITS,
+  PEOPLE,
+  PROBLEM_EYEBROW,
+  PROBLEM_FOOT,
+  PROBLEM_HEADING,
+  PROBLEM_QUESTIONS,
+  ROLE_ENTRIES,
+  STELLAR_POINTS,
+  type Claim,
+} from './homeContent';
+import '../components/landing/Landing.css';
+
+/** The commit the app was built from, shortened; the full id is on /about. */
+const BUILD = (import.meta.env.VITE_APP_VERSION || 'dev') as string;
+const APP_BUILD_VERSION = /^[0-9a-f]{40}$/.test(BUILD) ? BUILD.slice(0, 7) : BUILD;
+
+const HEADLINE = ['Money', 'moves', 'at', 'each', 'milepost.'];
+const HEADLINE_TURN = ['And', 'only', 'there.'];
 
 /**
- * Every outbound link points at the public repository, which is where the
- * README and docs live.
+ * Guarantees and limits render through this one component so neither column
+ * can drift into being quieter than the other: only the mark and its colour
+ * differ.
  */
-const REPO_URL = 'https://github.com/milepost-labs/milepost';
-
-const INSTALL_COMMAND =
-  'npm install @milepost/registry @milepost/program @milepost/attest @milepost/record @milepost/policy-spend';
-
-/**
- * `docs/end-to-end-tutorial.md`, named in issue #259, does not exist in the
- * repository yet and writing it is explicitly out of scope for this issue —
- * linking to it would be a dead link, which the acceptance criteria forbid.
- * Omitted here; add it back once that doc exists.
- */
-const DOC_LINKS = [
-  { label: 'README', href: `${REPO_URL}#readme` },
-  { label: 'Contributing', href: `${REPO_URL}/blob/main/CONTRIBUTING.md` },
-  { label: 'Glossary', href: `${REPO_URL}/blob/main/docs/glossary.md` },
-];
-
-const CONTRACTS = [
-  {
-    name: 'registry',
-    description: 'Deploys programmes and holds protocol config. The trust chain starts here.',
-  },
-  {
-    name: 'program',
-    description: 'One funding round: contributions, applications, review, awards, release, refunds.',
-  },
-  {
-    name: 'attest',
-    description: 'General-purpose, schema-based attestations. Knows nothing else about the protocol.',
-  },
-  { name: 'record', description: 'Portable, non-transferable standing. Counts and totals, never a list.' },
-  {
-    name: 'policy_spend',
-    description: 'Policy signer for smart wallets: one asset, verified payees, a cap.',
-  },
-];
-
-const INDEXER = {
-  name: 'milepost-indexer',
-  href: 'https://github.com/milepost-labs/milepost-indexer',
-  description: 'Reads contract events and publishes JSON lists, because the contracts keep none.',
-};
-
-/**
- * Both columns render through this one component so neither can drift into
- * being visually quieter than the other: only the heading colour differs.
- */
-function ClaimCard({
-  heading,
-  tone,
-  claims,
-}: {
-  heading: string;
-  tone: 'guaranteed' | 'limit';
-  claims: Claim[];
-}) {
+function ClaimList({ tone, heading, claims }: { tone: 'guaranteed' | 'limit'; heading: string; claims: Claim[] }) {
+  const Icon = tone === 'guaranteed' ? Check : CircleAlert;
   return (
-    <div className="claim-card">
-      <h3 className={`claim-card-heading claim-card-heading--${tone}`}>{heading}</h3>
-      <dl>
+    <div className={`lp-claims lp-claims--${tone}`} data-reveal={tone === 'limit' ? '1' : ''}>
+      <h3>
+        <span className="lp-claims__dot" aria-hidden="true" />
+        {heading}
+      </h3>
+      <ul>
         {claims.map((claim) => (
-          <div key={claim.title} className="claim">
-            <dt>{claim.title}</dt>
-            <dd className="text-muted">{claim.detail}</dd>
-          </div>
+          <li key={claim.title}>
+            <Icon aria-hidden="true" />
+            <div>
+              <b>{claim.title}</b>
+              <span>{claim.detail}</span>
+            </div>
+          </li>
         ))}
-      </dl>
+      </ul>
     </div>
   );
 }
 
-export const Home: React.FC = () => {
-  usePageTitle('Conditional Disbursement on Stellar');
-  const observerRef = useRef<IntersectionObserver | null>(null);
-
-  useEffect(() => {
-    observerRef.current = new IntersectionObserver((entries) => {
-      entries.forEach(entry => {
-        if (entry.isIntersecting) {
-          entry.target.classList.add('is-visible');
-        }
-      });
-    }, { threshold: 0.1 });
-
-    const hiddenElements = document.querySelectorAll('.scroll-animate');
-    hiddenElements.forEach((el) => observerRef.current?.observe(el));
-
-    return () => observerRef.current?.disconnect();
-  }, []);
+/**
+ * The landing page. It has to explain the protocol well enough that a funder,
+ * a recipient, a verifier or a developer knows what this is and where to go,
+ * and every way in works without a wallet: "Launch app" goes to the
+ * directory, which reads the public index.
+ *
+ * Sections, in order: hero with the road demo, "What brings you here?", the
+ * problem, how it works, payment modes, sectors, the people, why Stellar,
+ * guarantees and limits, live on testnet, for developers, a closing call to
+ * action, and the footer. The look follows `docs/design/prototypes/landing.html`;
+ * the copy follows the contracts where the two differ.
+ */
+export const Home = () => {
+  usePageTitle('Conditional grants on Stellar');
+  const rootRef = useRef<HTMLDivElement>(null);
+  useReveal(rootRef);
 
   return (
-    <div className="landing-page">
-      {/* Abstract Background Elements (Subtle & Professional) */}
-      <div className="bg-shape shape-top-right"></div>
-      <div className="bg-shape shape-bottom-left"></div>
-
-      {/* Hero: headline + interactive tranche demo (landing section 1). */}
-      <section className="hero" aria-labelledby="hero-heading">
-        <div className="hero__copy">
-          <span className="hero__pill">Conditional disbursement on Stellar · testnet</span>
-          <h1 id="hero-heading" className="hero__title">
-            Money moves at each milepost, and only at each milepost.
-          </h1>
-          <p className="hero__mechanism">
-            A funder commits money to a programme. Recipients receive it in tranches that unlock
-            only when a trusted verifier confirms a condition was met.
-          </p>
-          <div className="hero__actions">
-            <Link to="/directory" className="btn-primary btn-large">
-              Launch app
-            </Link>
-            <a href="#how" className="btn-secondary btn-large">
-              How it works ↓
-            </a>
+    <div className="lp" ref={rootRef}>
+      {/* Hero */}
+      <div className="lp-hero">
+        <div className="lp-wrap">
+          <div className="lp-hero__grid">
+            <div>
+              <p className="lp-eyebrow lp-hero__eyebrow">Conditional grants on Stellar</p>
+              <h1 className="lp-hero__title" aria-label="Money moves at each milepost. And only there.">
+                <span aria-hidden="true">
+                  {HEADLINE.map((word, i) => (
+                    <span key={word}>
+                      <span className="lp-word" style={{ animationDelay: `${0.05 + i * 0.07}s` }}>
+                        {word}
+                      </span>{' '}
+                    </span>
+                  ))}
+                  <span className="lp-hero__turn">
+                    {HEADLINE_TURN.map((word, i) => (
+                      <span key={word}>
+                        <span className="lp-word" style={{ animationDelay: `${0.5 + i * 0.07}s` }}>
+                          {word}
+                        </span>{' '}
+                      </span>
+                    ))}
+                  </span>
+                </span>
+              </h1>
+            </div>
+            <div data-reveal="2">
+              <p className="lp-lead">
+                Funders pool money into a programme. Reviewers decide how much each person gets. Then it's
+                paid in tranches, and each one unlocks only when a trusted verifier confirms the condition
+                was met.
+              </p>
+              <div className="lp-cta-row">
+                <Link to="/directory" className="btn-primary lp-btn">
+                  Browse programmes
+                  <ArrowRight aria-hidden="true" />
+                </Link>
+                <a href="#how" className="btn-secondary lp-btn">
+                  See how it works
+                </a>
+              </div>
+              <div className="lp-fineprint">
+                <span>
+                  <Check aria-hidden="true" />
+                  No wallet needed to browse
+                </span>
+                <span>
+                  <Check aria-hidden="true" />
+                  Every release on the public record
+                </span>
+              </div>
+            </div>
           </div>
-          <span className="hero__note">Browsing programmes needs no sign-in.</span>
+          <RoadDemo />
         </div>
-        <HeroDemo />
+      </div>
+
+      {/* What brings you here? */}
+      <section className="lp-section lp-roles" aria-labelledby="lp-roles-title">
+        <div className="lp-wrap">
+          <p className="lp-eyebrow" data-reveal>
+            What brings you here?
+          </p>
+          <h2 id="lp-roles-title" className="lp-h2 lp-h2--narrow" data-reveal="1">
+            Pick your road. Each one starts without a wallet.
+          </h2>
+          <ul className="lp-role-list">
+            {ROLE_ENTRIES.map((entry, i) => {
+              const inner = (
+                <>
+                  <span className="lp-role__idx numeric">
+                    {String(i + 1).padStart(2, '0')} / {entry.key}
+                  </span>
+                  <span>
+                    <span className="lp-role__want">{entry.want}</span>
+                    <span className="lp-role__detail">{entry.detail}</span>
+                  </span>
+                  <span className="lp-role__squares" aria-hidden="true">
+                    <i />
+                    <i />
+                    <i />
+                  </span>
+                  <span className="lp-role__go" aria-hidden="true">
+                    <ArrowRight />
+                  </span>
+                </>
+              );
+              return (
+                <li key={entry.key} data-reveal={String(i)}>
+                  {entry.path.startsWith('#') ? (
+                    <a className="lp-role" href={entry.path}>
+                      {inner}
+                    </a>
+                  ) : (
+                    <Link className="lp-role" to={entry.path}>
+                      {inner}
+                    </Link>
+                  )}
+                </li>
+              );
+            })}
+          </ul>
+        </div>
       </section>
 
-      {/* Role entry cards (landing section 2): route visitors in one click. */}
-      <RoleEntryCards />
-
-      {/* The problem (landing section 3): why the project exists. */}
-      <ProblemSection />
-
-      {/* How it works (landing section 4): The seven-step money path */}
-      <MoneyPath />
-
-      {/* Why Stellar (landing section 5) */}
-      <WhyStellar />
-
-      <ModesCompared />
-
-      <Verticals />
-
-      {/* Roles */}
-      <section id="roles" className="roles-section scroll-animate" aria-labelledby="roles-heading">
-        <div className="section-header">
-          <span className="eyebrow">Roles</span>
-          <h2 id="roles-heading">Four people, one programme.</h2>
+      {/* The problem */}
+      <section className="lp-section lp-problem lp-band-ink" aria-labelledby="lp-problem-title">
+        <div className="lp-wrap">
+          <p className="lp-eyebrow" data-reveal>
+            {PROBLEM_EYEBROW}
+          </p>
+          <h2 id="lp-problem-title" className="lp-h2 lp-h2--narrow" data-reveal="1">
+            {PROBLEM_HEADING.before} <span className="lp-strike">{PROBLEM_HEADING.struck}</span>{' '}
+            <span className="lp-problem__after">{PROBLEM_HEADING.after}</span>
+          </h2>
+          <ol className="lp-questions">
+            {PROBLEM_QUESTIONS.map((item, i) => (
+              <li key={item.n} data-reveal={String(i)}>
+                <div className="lp-question__n" aria-hidden="true">
+                  {item.n}
+                </div>
+                <p className="lp-question__q">{item.question}</p>
+                <small>{item.detail}</small>
+              </li>
+            ))}
+          </ol>
+          <p className="lp-problem__foot" data-reveal>
+            {PROBLEM_FOOT}
+          </p>
         </div>
+      </section>
 
-        <div className="role-grid">
-          {ROLES.map((role) => (
-            <article key={role.role} className="role-card">
-              <span className="eyebrow">{role.role}</span>
-              <h3>{role.does}</h3>
-              <p className="text-muted">{role.body}</p>
-              <nav className="role-links" aria-label={`${role.role} pages`}>
-                {role.links.map((link) => (
+      <HowItWorks />
+
+      <PaymentModes />
+
+      <Sectors />
+
+      {/* The people */}
+      <section className="lp-section lp-section--flush" aria-labelledby="lp-people-title">
+        <div className="lp-wrap">
+          <p className="lp-eyebrow" data-reveal>
+            The people
+          </p>
+          <h2 id="lp-people-title" className="lp-h2 lp-h2--mid" data-reveal="1">
+            Two jobs that are easy to confuse, kept apart.
+          </h2>
+          <div className="lp-jobs">
+            <div className="lp-job" data-reveal>
+              <span className="lp-job__k">Reviewer</span>
+              <h3>Sets the amount.</h3>
+              <p>
+                Votes on how much each applicant should get. The award is the median, so one generous or
+                stingy vote can't swing it.
+              </p>
+            </div>
+            <div className="lp-job lp-job--verifier" data-reveal="1">
+              <span className="lp-job__k">Verifier</span>
+              <h3>Unlocks the payment.</h3>
+              <p>
+                Signs that a condition was met. Each attestation unlocks exactly one tranche for one
+                recipient, once.
+              </p>
+            </div>
+          </div>
+          <div className="lp-others">
+            {PEOPLE.map((person, i) => (
+              <div key={person.who} data-reveal={String(i)}>
+                <h4>{person.who}</h4>
+                <p>{person.does}</p>
+                <span className="lp-others__wallet numeric">{person.wallet}</span>
+              </div>
+            ))}
+          </div>
+        </div>
+      </section>
+
+      {/* Why Stellar */}
+      <section className="lp-section lp-section--flush" aria-labelledby="lp-stellar-title">
+        <div className="lp-wrap">
+          <p className="lp-eyebrow" data-reveal>
+            Why Stellar
+          </p>
+          <h2 id="lp-stellar-title" className="lp-h2 lp-h2--mid" data-reveal="1">
+            Built where small payments are cheap and stablecoins are native.
+          </h2>
+          <div className="lp-stellar">
+            {STELLAR_POINTS.map((point, i) => (
+              <div key={point.title} data-reveal={String(i)}>
+                <span className={`lp-tag ${point.today ? 'lp-tag--now' : 'lp-tag--road'}`}>
+                  {point.today ? 'Today' : 'Roadmap · not available'}
+                </span>
+                <h4>{point.title}</h4>
+                <p>{point.body}</p>
+              </div>
+            ))}
+          </div>
+        </div>
+      </section>
+
+      {/* Guarantees and limits */}
+      <section className="lp-section lp-section--flush" id="limits" aria-labelledby="lp-limits-title">
+        <div className="lp-wrap">
+          <p className="lp-eyebrow" data-reveal>
+            Guarantees and limits
+          </p>
+          <h2 id="lp-limits-title" className="lp-h2 lp-h2--narrow" data-reveal="1">
+            What's promised, and what isn't.
+          </h2>
+          <div className="lp-claims-grid">
+            <ClaimList tone="guaranteed" heading="Guaranteed by the contracts" claims={GUARANTEES} />
+            <ClaimList tone="limit" heading="Limits, stated plainly" claims={LIMITS} />
+          </div>
+        </div>
+      </section>
+
+      <LiveIndex />
+
+      {/* For developers */}
+      <section className="lp-dev lp-band-ink" id="developers" aria-labelledby="lp-dev-title">
+        <div className="lp-wrap lp-dev__grid">
+          <div>
+            <p className="lp-eyebrow">For developers</p>
+            <h2 id="lp-dev-title" className="lp-h2">
+              Open contracts. Deploy without asking.
+            </h2>
+            <p className="lp-lead">
+              Anyone can deploy a programme. The registry admin only sets the protocol fee and treasury.
+              Lists come from an open indexer you can run yourself.
+            </p>
+            <div className="lp-cmd">
+              <code>
+                <span className="lp-cmd__prompt" aria-hidden="true">
+                  ${' '}
+                </span>
+                {INSTALL_COMMAND}
+              </code>
+              <CopyButton value={INSTALL_COMMAND} label="Copy install command" />
+            </div>
+            <div className="lp-dev__links">
+              <Link to="/about" className="btn-primary lp-btn">
+                Contract ids and build
+              </Link>
+              <Link to="/status" className="btn-secondary lp-btn">
+                Index status
+              </Link>
+            </div>
+            <nav className="lp-dev__docs" aria-label="Documentation">
+              {DOC_LINKS.map((link) => (
+                <a key={link.label} href={link.href} target="_blank" rel="noreferrer noopener">
+                  {link.label}
+                  <ArrowUpRight aria-hidden="true" />
+                </a>
+              ))}
+            </nav>
+          </div>
+          <ol className="lp-contracts">
+            {CONTRACTS.map((contract, i) => (
+              <li key={contract.name}>
+                <span className="lp-contracts__n numeric">{String(i + 1).padStart(2, '0')}</span>
+                <div>
+                  {contract.href ? (
+                    <a href={contract.href} target="_blank" rel="noreferrer noopener" className="numeric">
+                      {contract.name}
+                    </a>
+                  ) : (
+                    <b className="numeric">{contract.name}</b>
+                  )}
+                  <span>{contract.description}</span>
+                </div>
+              </li>
+            ))}
+          </ol>
+        </div>
+      </section>
+
+      {/* Closing call to action */}
+      <section className="lp-final" aria-labelledby="lp-final-title">
+        <div className="lp-wrap">
+          <div className="lp-final__squares" aria-hidden="true">
+            {[0, 1, 2, 3, 4].map((i) => (
+              <i key={i} style={{ animationDelay: `${i * 0.25}s` }} />
+            ))}
+          </div>
+          <h2 id="lp-final-title" className="lp-final__title" data-reveal>
+            See where the money went.
+          </h2>
+          <p className="lp-lead" data-reveal="1">
+            Every programme, every award, every release. Open to anyone, no wallet required.
+          </p>
+          <div className="lp-cta-row" data-reveal="2">
+            <Link to="/directory" className="btn-primary lp-btn">
+              Launch app
+              <ArrowRight aria-hidden="true" />
+            </Link>
+            <Link to="/attestations" className="btn-secondary lp-btn">
+              Look up an attestation
+            </Link>
+          </div>
+        </div>
+      </section>
+
+      <footer className="lp-footer">
+        <div className="lp-wrap">
+          <div className="lp-footer__grid">
+            <div>
+              <span className="lp-footer__brand">
+                <LogoMark />
+                Milepost
+              </span>
+              <p>Conditional grants on Stellar. Money moves at each milepost, and only at each milepost.</p>
+            </div>
+            {FOOTER_GROUPS.map((group) => (
+              <nav key={group.heading} aria-label={group.heading}>
+                <h3>{group.heading}</h3>
+                {group.links.map((link) => (
                   <Link key={link.path} to={link.path}>
                     {link.label}
                   </Link>
                 ))}
               </nav>
-            </article>
-          ))}
-        </div>
-
-        <p className="role-note">
-          <strong>Reviewers and verifiers are different jobs.</strong> Reviewers set the amount: each
-          votes on what an applicant should get, and the award is the median of their votes.
-          Verifiers unlock the payment: they confirm a condition was met, which releases one tranche
-          of an amount already set. Both work from the verifier dashboard, in separate sections.
-        </p>
-      </section>
-
-      {/* Guarantees and limits */}
-      <section className="limits-section scroll-animate" aria-labelledby="limits-heading">
-        <div className="section-header">
-          <span className="eyebrow">Guarantees and limits</span>
-          <h2 id="limits-heading">What the contracts promise, and what they don't.</h2>
-        </div>
-
-        <div className="claims-grid">
-          <ClaimCard heading="Guaranteed" tone="guaranteed" claims={GUARANTEES} />
-          <ClaimCard heading="Limits, stated" tone="limit" claims={LIMITS} />
-        </div>
-      </section>
-
-      {/* Live on testnet */}
-      <LiveIndex />
-
-      {/* For developers */}
-      <section id="developers" className="developers-section scroll-animate">
-        <div className="developers-intro">
-          <div className="section-header">
-            <span className="eyebrow">For developers</span>
-            <h2>Five contracts, typed bindings, a public index.</h2>
-          </div>
-
-          <div className="install-block">
-            <pre className="install-command">
-              <code>{INSTALL_COMMAND}</code>
-            </pre>
-            <CopyButton value={INSTALL_COMMAND} label="Copy install command" showLabel />
-          </div>
-
-          <nav className="doc-links" aria-label="Documentation">
-            {DOC_LINKS.map((link) => (
-              <a key={link.label} href={link.href} target="_blank" rel="noreferrer noopener">
-                {link.label}
-              </a>
             ))}
-          </nav>
-        </div>
-
-        <ul className="contract-list">
-          {CONTRACTS.map((contract) => (
-            <li key={contract.name} className="contract-row">
-              <code className="contract-name">{contract.name}</code>
-              <p className="text-muted">{contract.description}</p>
-            </li>
-          ))}
-          <li className="contract-row">
-            <a
-              className="contract-name"
-              href={INDEXER.href}
-              target="_blank"
-              rel="noreferrer noopener"
-            >
-              {INDEXER.name}
-            </a>
-            <p className="text-muted">{INDEXER.description}</p>
-          </li>
-        </ul>
-      </section>
-
-      {/* Footer */}
-      <footer className="landing-footer" role="contentinfo">
-        <div className="landing-footer-inner">
-          <span className="landing-footer-brand">Milepost</span>
-          <span className="landing-footer-note">Pre-audit · testnet only</span>
-          <nav className="landing-footer-links" aria-label="Footer">
-            <Link to="/about">
-              About deployment
-            </Link>
-            <a href={REPO_URL} target="_blank" rel="noreferrer noopener">
-              Repository
-            </a>
-            <a href={`${REPO_URL}/blob/main/SECURITY.md`} target="_blank" rel="noreferrer noopener">
-              Security policy
-            </a>
-            <a href={`${REPO_URL}/blob/main/LICENSE`} target="_blank" rel="noreferrer noopener">
-              Licence
-            </a>
-          </nav>
+          </div>
+          <div className="lp-footer__base">
+            <span>Stellar testnet · pre-audit · not for real funds</span>
+            <span className="numeric">build {APP_BUILD_VERSION}</span>
+          </div>
         </div>
       </footer>
     </div>

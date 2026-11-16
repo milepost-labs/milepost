@@ -61,6 +61,16 @@ the contracts and the index do not provide. The app follows the contracts.
   and contract names (`registry`, `program`, `attest`, `record`,
   `policy_spend`).
 
+On the landing page: the live section shows the figures the index publishes
+(programmes listed, freshness, last ledger, unhandled event types) and has no
+sample-data preview; the install command is the five `@milepost/*` packages;
+the registry is described without "the list of known programmes"; standing is
+not called permanent, because ledger entries expire unless extended; the fee is
+described as capped at 10%, with 2.5% only in the worked example; the footer
+lists every route the app serves and leaves out "Propose a programme" until
+that page exists; and the "play the steps" control for tall preview frames is
+not built.
+
 One fix was made to `prototypes/app.html` as delivered: the script's closing
 `})();` sat above the event handlers for the later screens, which left their
 buttons dead. It now closes after them.

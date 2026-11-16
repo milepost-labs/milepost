@@ -247,6 +247,22 @@
      against a fixed console-style background, not the page surface. */
   --code: var(--ink);
   --code-text: var(--bg);
+
+  /* Landing page type: display sizes that only the landing page uses. */
+  --text-landing-hero: clamp(2.75rem, 7.6vw, 6rem);     /* 44–96 */
+  --text-landing-h2: clamp(2.125rem, 4.6vw, 3.5rem);    /* 34–56 */
+  --text-landing-final: clamp(2.5rem, 6vw, 5rem);       /* 40–80 */
+  --text-landing-role: clamp(1.625rem, 3.6vw, 2.75rem); /* 26–44 */
+  --text-landing-sentence: clamp(1.875rem, 4.4vw, 3.375rem); /* 30–54 */
+  --text-landing-mode: clamp(2.75rem, 6vw, 4rem);       /* 44–64 */
+  --text-landing-numeral: 4.75rem;                      /* 76, the problem numerals */
+  --text-landing-lead: 1.1875rem;                       /* 19 */
+  --leading-landing-hero: 0.93;
+  --landing-max-width: 1180px;
+
+  /* The accent as text on an ink band. The band is ink in both themes, so it
+     is dark in light mode and light in dark mode; the accent flips with it. */
+  --accent-on-ink: #7be0ad;
 }
 
 [data-theme='dark'] {
@@ -261,6 +277,7 @@
   --accent-hover: #66dca6;
   --accent-ink: #04120b;
   --accent-soft: #1b3a2c;
+  --accent-on-ink: #0a6b47;
   --signal: #f3c443;
   --signal-ink: #1d1606;
   --money-locked: #4a524c;

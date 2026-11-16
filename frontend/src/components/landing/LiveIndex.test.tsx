@@ -55,7 +55,7 @@ describe('LiveIndex', () => {
     vi.mocked(fetchMeta).mockResolvedValue(meta(60 * 60 * 1000));
     renderSection();
 
-    expect(screen.getByText(/Reading meta.json and programmes.json/)).toBeTruthy();
+    expect(screen.getByText(/reading meta.json and programmes.json/)).toBeTruthy();
     expect(await screen.findByText((4_853_148).toLocaleString())).toBeTruthy();
     // Three distinct keys in unhandledEvents, not the sum of their counts.
     expect(screen.getByText('Event types not yet indexed').nextElementSibling?.textContent).toBe('3');
@@ -86,7 +86,7 @@ describe('LiveIndex', () => {
     renderSection();
 
     const alert = await screen.findByRole('alert');
-    expect(alert.textContent).toContain("Couldn't reach the index");
+    expect(alert.textContent).toContain("Couldn't reach the public index.");
     expect(alert.textContent).toContain('The index returned 503 for meta.json.');
     expect(alert.textContent).toContain('No figures are shown rather than guessed.');
     expect(screen.queryByText('Programmes indexed')).toBeNull();
@@ -102,5 +102,8 @@ describe('LiveIndex', () => {
 
     await screen.findByRole('alert');
     expect(screen.queryByText('Programmes indexed')).toBeNull();
+    // The way back is offered, and no sample figures stand in.
+    expect(screen.getByRole('button', { name: 'Try again' })).toBeTruthy();
+    expect(screen.queryByText(/sample data/i)).toBeNull();
   });
 });

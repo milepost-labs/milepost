@@ -114,6 +114,12 @@ a:hover {
   min-height: 70vh;
 }
 
+/* The landing page: no column and no page padding, so its bands reach the
+   edges and its footer ends the page. */
+.page-wrapper.page-wrapper--bleed {
+  padding-block: 0;
+}
+
 @media (max-width: 860px) {
   :root {
     --page-gutter: var(--space-4);
