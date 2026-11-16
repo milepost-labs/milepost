@@ -2,7 +2,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
 
-import { RecipientSignedOut, Standing, StandingPanel, StandingStats } from './Standing';
+import { Standing, StandingPanel, StandingStats } from './Standing';
 import { isTtlLow, standingStats } from '../lib/standing';
 
 const SUBJECT = 'GAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA';
@@ -184,7 +184,7 @@ describe('standing page', () => {
 
     renderPage();
 
-    expect(screen.getByRole('heading', { name: 'Sign in to see your standing' })).toBeTruthy();
+    expect(screen.getByText('Track your awards and release your money')).toBeTruthy();
 
     fireEvent.change(screen.getByLabelText('Recipient address'), {
       target: { value: LOOKED_UP_SUBJECT },
@@ -210,18 +210,20 @@ describe('TTL warning', () => {
 });
 
 describe('signed-out recipient explainer', () => {
-  it('explains what signing in shows and offers a way in', () => {
-    const onSignIn = vi.fn();
+  it('explains what signing in shows and offers a way in, with the lookup still there', () => {
+    wallet.address = null;
     render(
       <MemoryRouter>
-        <RecipientSignedOut onSignIn={onSignIn} />
+        <Standing />
       </MemoryRouter>,
     );
 
-    expect(screen.getByRole('heading', { name: 'Sign in to see your standing' })).toBeTruthy();
-    expect(screen.getByText('Your standing')).toBeTruthy();
+    expect(screen.getByRole('heading', { level: 1, name: 'Your standing' })).toBeTruthy();
+    expect(screen.getByText('Track your awards and release your money')).toBeTruthy();
+    expect(screen.queryByRole('navigation', { name: 'Recipient sections' })).toBeNull();
+    expect(screen.getByLabelText('Recipient address')).toBeTruthy();
 
-    fireEvent.click(screen.getByRole('button', { name: 'Sign in' }));
-    expect(onSignIn).toHaveBeenCalledTimes(1);
+    // The sheet itself is mocked out in this file; the way in is the button.
+    expect(screen.getByRole('button', { name: 'Sign in with Freighter' })).toBeTruthy();
   });
 });

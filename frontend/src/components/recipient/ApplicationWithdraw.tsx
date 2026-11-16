@@ -157,7 +157,8 @@ export function ApplicationWithdraw({ application, sampleDelayMs = SAMPLE_TX_DEL
       {view.kind === 'action' && (
         <>
           <Button
-            variant="secondary"
+            variant="danger"
+            size="sm"
             className="app-withdraw__trigger"
             onClick={() => setConfirmOpen(true)}
           >

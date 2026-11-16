@@ -5,7 +5,7 @@ import { useContractRead, useTransaction } from '../../hooks';
 import { formatAmount, validateAmount } from '../../lib/amount';
 import { explain, explainCode, type Explained } from '../../lib/errors';
 import { looksLikeContractId, truncateAddress } from '../../lib/format';
-import { isSampleProgrammeId } from '../../lib/programmeView';
+import { formatFigure, isSampleProgrammeId, programmeAsset } from '../../lib/programmeView';
 import { isPhase, phaseRequirement, type Phase } from '../../lib/phaseGate';
 import { sampleSendable, SAMPLE_TX_DELAY_MS } from '../../lib/fundingTx';
 import { AmountField, Button, Field } from '../ui';
@@ -15,7 +15,6 @@ import './AllocatedSpending.css';
 
 /** A payee is a Stellar account — a `G` address. */
 const PAYEE_ADDRESS = /^G[A-Z2-7]{55}$/;
-const ASSET = 'USDC';
 
 type PayeeCheck =
   | { status: 'idle' }
@@ -59,6 +58,7 @@ export function AllocatedSpending({ award, sampleDelayMs = SAMPLE_TX_DELAY_MS }:
 
   // Sample ids have the contract shape too, so shape alone cannot tell them apart.
   const isReal = looksLikeContractId(award.programmeId) && !isSampleProgrammeId(award.programmeId);
+  const ASSET = programmeAsset({ sample: !isReal });
   const recipient = wallet.address;
 
   const client = useMemo(
@@ -187,17 +187,20 @@ export function AllocatedSpending({ award, sampleDelayMs = SAMPLE_TX_DELAY_MS }:
   return (
     <div className="allocated-spending">
       <div className="allocated-spending__header">
-        <span className="allocated-spending__title">Held for you in escrow</span>
-        <span className="allocated-spending__amount">
+        <span className="ui-eyebrow">In escrow</span>
+        <span className="allocated-spending__amount numeric">
           {isReal && allocationRead.data === null && allocationRead.fetching ? (
             <PendingPulse label="Reading escrow balance" />
           ) : (
-            formatAmount(allocation, { asset: ASSET })
+            <>
+              {formatFigure(allocation)} <small>{ASSET}</small>
+            </>
           )}
         </span>
+        <span className="allocated-spending__title">
+          Held for you in escrow. Only a payee the programme&rsquo;s creator verified can receive it.
+        </span>
       </div>
-
-      {!isReal && <span className="allocated-spending__sample">Sample data</span>}
 
       {view.kind === 'role-gate' && (
         <div className="allocated-spending__gate">
@@ -239,13 +242,9 @@ export function AllocatedSpending({ award, sampleDelayMs = SAMPLE_TX_DELAY_MS }:
 
       {view.kind === 'form' && (
         <div className="allocated-spending__form">
-          <p className="allocated-spending__note">
-            Enter or paste a payee address. Escrow can only go to a payee the programme&rsquo;s
-            creator verified — check it before signing.
-          </p>
-
           <Field
             label="Payee address"
+            hint="The programme keeps no list of payees, so paste the address and check it before signing."
             placeholder="G…"
             value={payeeAddress}
             onChange={(event) => handlePayeeChange(event.target.value)}

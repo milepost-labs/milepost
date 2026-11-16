@@ -1,17 +1,18 @@
-import { useState, useId } from 'react';
+import { useState } from 'react';
 import { Link } from 'react-router-dom';
 import { Buffer } from 'buffer';
 import { useOpenProgrammes } from '../../hooks/useOpenProgrammes';
 import { useTransaction } from '../../hooks/useTransaction';
 import { useWallet } from '../../context/useWallet';
 import { useSoroban } from '../../context/useSoroban';
-import { parseAmount, formatAmount } from '../../lib/amount';
-import { isSampleProgrammeId } from '../../lib/programmeView';
+import { validateAmount } from '../../lib/amount';
+import { formatIn } from '../../lib/funding';
+import { isSampleProgrammeId, programmeAsset } from '../../lib/programmeView';
 import { SAMPLE_TX_DELAY_MS, sampleSendable, sampleOutcome } from '../../lib/fundingTx';
 import { useAnnouncer } from '../../context/useAnnouncer';
-import { Loading, ErrorState, TransactionOutcome } from '../state/AsyncStates';
-import { PendingPulse } from '../state/AsyncStates';
-import { TxExplorerLink } from '../ui';
+import { Empty, ErrorPanel, ErrorState, Loading } from '../state/AsyncStates';
+import { TxDone, TxPending } from '../state/TxStatus';
+import { AmountField, Button, CopyButton, Notice, SampleTag, Select, TextArea, TxExplorerLink } from '../ui';
 import './ApplyForm.css';
 
 interface ApplyFormProps {
@@ -58,9 +59,6 @@ export function ApplyForm({
   sampleDelayMs = SAMPLE_TX_DELAY_MS,
 }: ApplyFormProps) {
   const announce = useAnnouncer();
-  const amountFieldId = useId();
-  const notesFieldId = useId();
-  const helpId = useId();
 
   const { address } = useWallet();
   const { programmeAt } = useSoroban();
@@ -87,23 +85,11 @@ export function ApplyForm({
       ? selectedProgrammeId
       : allOpen[0]?.id ?? '';
 
-  // Amount validation using the project's existing parseAmount util.
-  const amountResult = amountInput.trim()
-    ? (() => {
-        try {
-          const v = parseAmount(amountInput);
-          return { ok: true as const, value: v };
-        } catch (e) {
-          return { ok: false as const, error: e instanceof Error ? e.message : 'Invalid amount' };
-        }
-      })()
-    : null;
+  const selected = allOpen.find((p) => p.id === effectiveSelection);
+  const asset = selected ? programmeAsset(selected) : 'USDC';
 
-  const amountError = amountResult && !amountResult.ok ? amountResult.error : '';
-  const isValid =
-    amountResult?.ok === true &&
-    Boolean(effectiveSelection) &&
-    notes.trim().length > 0;
+  const amountResult = amountInput.trim() ? validateAmount(amountInput, { asset }) : null;
+  const isValid = amountResult?.ok === true && Boolean(effectiveSelection) && notes.trim().length > 0;
 
   const tx = useTransaction<ApplyReceipt>({ contract: 'program' });
 
@@ -123,7 +109,7 @@ export function ApplyForm({
       const notesText = notes.trim();
       const metadataHash = await sha256Buffer(notesText);
       const metadataHashHex = toHex(metadataHash);
-      const amountFormatted = formatAmount(stroops, { asset: 'USDC' });
+      const amountFormatted = formatIn(stroops, programmeAsset(selectedProg));
       const progName = selectedProg.name;
       const progId = selectedProg.id;
 
@@ -192,235 +178,144 @@ export function ApplyForm({
   // tx.phase — receipt state drives the done view, not tx.phase.
   const showReceipt = receipt !== null && tx.phase !== 'error';
 
-  return (
-    <div className="apply-form-card">
-      {/* ── Form ── */}
-      {!tx.busy && !showReceipt && (
-        <form onSubmit={(e) => void handleSubmit(e)} noValidate>
-          <h2 className="apply-form__title">Apply for an award</h2>
+  const programmeOptions = [
+    ...real.map((p) => ({ value: p.id, label: p.name })),
+    ...samples.map((p) => ({ value: p.id, label: `${p.name} (sample)` })),
+  ];
 
-          {/* Programme selection */}
-          <fieldset className="apply-form__fieldset">
-            <legend className="apply-form__legend">
-              Programme · applications are only accepted while Open
-            </legend>
+  return (
+    <div className="apply">
+      <section className="apply__panel" aria-labelledby="apply-title">
+        {showReceipt && receipt ? (
+          <TxDone
+            title="Application submitted"
+            rows={[
+              { label: 'Asked for', value: receipt.amountFormatted },
+              { label: 'Programme', value: receipt.programmeName, text: true },
+              ...(receipt.txHash
+                ? [
+                    {
+                      label: 'Transaction',
+                      value: (
+                        <span className="apply__hash">
+                          <span title={receipt.txHash}>{shortHash(receipt.txHash)}</span>
+                          <CopyButton value={receipt.txHash} label="Copy transaction hash" />
+                          {/* A sample hash is a fixture the explorer has never seen. */}
+                          {!receipt.sample && <TxExplorerLink hash={receipt.txHash} />}
+                        </span>
+                      ),
+                    },
+                  ]
+                : []),
+              {
+                label: 'Application hash',
+                value: <span title={receipt.metadataHashHex}>{shortHash(receipt.metadataHashHex)}</span>,
+              },
+            ]}
+            actions={
+              <>
+                <Link to="/recipients/application-timeline" className="ui-button ui-button--ghost ui-button--md">
+                  Follow application
+                </Link>
+                <Button onClick={handleReset}>Apply to another</Button>
+              </>
+            }
+          >
+            <p>
+              {receipt.amountFormatted} requested from {receipt.programmeName}. The application hash is the
+              SHA-256 of your notes: keep the notes, they prove what you submitted.
+            </p>
+            {receipt.sample && (
+              <p className="apply__sample">
+                <SampleTag>Sample receipt</SampleTag>
+              </p>
+            )}
+          </TxDone>
+        ) : tx.busy ? (
+          <TxPending title="Submitting your application" phase={tx.phase} />
+        ) : (
+          <form className="apply__form" onSubmit={(e) => void handleSubmit(e)} noValidate>
+            <div>
+              <h2 id="apply-title" className="apply__title">
+                Apply for what you need
+              </h2>
+              <p className="apply__lead">Open programmes only. Reviewers can approve up to what you ask.</p>
+            </div>
 
             {loading && <Loading label="Reading open programmes" rows={2} />}
-
-            {!loading && Boolean(error) && (
-              <ErrorState error={error} contract="program" onRetry={refetch} />
-            )}
-
+            {!loading && Boolean(error) && <ErrorState error={error} contract="program" onRetry={refetch} />}
             {!loading && !error && allOpen.length === 0 && (
-              <p className="apply-form__empty">
-                No programmes are currently accepting applications.
-              </p>
+              <Empty
+                title="No programme is taking applications"
+                description="Applications are accepted only while a programme is Open. Check the directory for one that is."
+              />
             )}
 
             {!loading && !error && allOpen.length > 0 && (
-              <div
-                className="apply-form__programmes"
-                role="radiogroup"
-                aria-label="Open programmes"
-              >
-                {real.length > 0 && (
-                  <div className="apply-form__prog-group">
-                    {real.map((p) => {
-                      const isSelected = p.id === effectiveSelection;
-                      return (
-                        <button
-                          key={p.id}
-                          type="button"
-                          role="radio"
-                          aria-checked={isSelected}
-                          className={`programme-option${isSelected ? ' programme-option--selected' : ''}`}
-                          onClick={() => setSelectedProgrammeId(p.id)}
-                        >
-                          {p.name}
-                        </button>
-                      );
-                    })}
-                  </div>
-                )}
+              <>
+                <Select
+                  label="Programme"
+                  hint={samples.length > 0 ? 'Programmes marked (sample) are stand-ins for the design phase.' : undefined}
+                  value={effectiveSelection}
+                  options={programmeOptions}
+                  onChange={(event) => setSelectedProgrammeId(event.target.value)}
+                />
 
-                {samples.length > 0 && (
-                  <div className="apply-form__prog-group apply-form__prog-group--samples">
-                    <span
-                      className="apply-form__sample-label"
-                      aria-label="Sample programmes for demonstration"
-                    >
-                      Sample data
-                    </span>
-                    {samples.map((p) => {
-                      const isSelected = p.id === effectiveSelection;
-                      return (
-                        <button
-                          key={p.id}
-                          type="button"
-                          role="radio"
-                          aria-checked={isSelected}
-                          className={`programme-option${isSelected ? ' programme-option--selected' : ''}`}
-                          onClick={() => setSelectedProgrammeId(p.id)}
-                        >
-                          {p.name}
-                        </button>
-                      );
-                    })}
-                  </div>
-                )}
-              </div>
+                <AmountField
+                  label="How much do you need?"
+                  value={amountInput}
+                  onChange={setAmountInput}
+                  asset={asset}
+                  placeholder="0"
+                  hint="Ask for what you actually need. Reviewers can approve up to this amount, not more."
+                />
+
+                <TextArea
+                  label="Application notes"
+                  value={notes}
+                  onChange={(e) => setNotes(e.target.value)}
+                  placeholder="Describe what the funds are for and how they will be used."
+                  rows={4}
+                  aria-required="true"
+                  hint="Your notes are hashed in the browser, and the hash is stored on-chain as your application's commitment. Keep this text: you may need it later to prove what you submitted."
+                  error={notes.trim().length === 0 && amountInput.trim().length > 0 ? 'Notes are required.' : undefined}
+                />
+
+                <Notice tone="info">
+                  <strong>How your award is set:</strong> each reviewer approves an amount up to what you asked.
+                  Your award is the <strong>middle vote</strong> (the median), so one very low or very high vote
+                  can&rsquo;t decide it alone.
+                </Notice>
+
+                <Button type="submit" disabled={!isValid}>
+                  Submit application
+                </Button>
+
+                {tx.phase === 'error' && tx.error && <ErrorPanel explained={tx.error} onRetry={() => tx.reset()} />}
+              </>
             )}
-          </fieldset>
+          </form>
+        )}
+      </section>
 
-          {/* Amount */}
-          <div className="apply-form__field">
-            <label htmlFor={amountFieldId} className="apply-form__label">
-              How much do you need?
-            </label>
-            <div
-              className={`apply-form__input-wrap${amountError ? ' apply-form__input-wrap--invalid' : ''}`}
-            >
-              <input
-                id={amountFieldId}
-                type="text"
-                inputMode="decimal"
-                value={amountInput}
-                onChange={(e) => setAmountInput(e.target.value)}
-                placeholder="0"
-                aria-describedby={helpId}
-                className="apply-form__input"
-              />
-              <span className="apply-form__currency">USDC</span>
-            </div>
-            <span id={helpId} className="apply-form__help">
-              Ask for what you actually need. Reviewers can approve up to this
-              amount, not more. Your award is the middle of their votes.
-            </span>
-            <span role="alert" className="apply-form__error" aria-live="polite">
-              {amountError}
-            </span>
-          </div>
-
-          {/* Notes — hashed to produce metadata_hash */}
-          <div className="apply-form__field">
-            <label htmlFor={notesFieldId} className="apply-form__label">
-              Application notes
-            </label>
-            <textarea
-              id={notesFieldId}
-              className="apply-form__notes"
-              value={notes}
-              onChange={(e) => setNotes(e.target.value)}
-              placeholder="Describe what the funds are for and how they will be used."
-              rows={4}
-              aria-required="true"
-            />
-            <span className="apply-form__help">
-              Your notes are hashed in the browser. The hash is stored on-chain
-              as your application&rsquo;s commitment. Keep this text — you may
-              need it later to prove what you submitted.
-            </span>
-            {notes.trim().length === 0 && amountInput.trim().length > 0 && (
-              <span role="alert" className="apply-form__error" aria-live="polite">
-                Notes are required.
-              </span>
-            )}
-          </div>
-
-          <button
-            type="submit"
-            disabled={!isValid}
-            className="apply-form__submit-btn"
-          >
-            Submit application
-          </button>
-
-          {/* Inline error from a previous attempt */}
-          {tx.phase === 'error' && tx.error && (
-            <div className="apply-form__tx-error">
-              <TransactionOutcome
-                phase={tx.phase}
-                error={tx.error}
-                successTitle=""
-                onRetry={() => tx.reset()}
-              />
-            </div>
-          )}
-        </form>
-      )}
-
-      {/* ── Pending ── */}
-      {tx.busy && (
-        <div role="status" className="apply-pending" aria-live="polite">
-          <PendingPulse label="Submitting application" />
-          <span className="apply-pending__label">
-            Submitting your application…
-          </span>
-        </div>
-      )}
-
-      {/* ── Receipt ── */}
-      {showReceipt && receipt && (
-        <div className="apply-done" role="status">
-          <span className="apply-done__badge">
-            {receipt.sample ? 'Sample · ' : ''}✓ Application submitted
-          </span>
-
-          <span className="apply-done__summary">
-            {receipt.amountFormatted} requested from {receipt.programmeName}
-          </span>
-
-          <dl className="apply-done__details">
-            {receipt.txHash && (
-              <div className="apply-done__detail">
-                <dt>Transaction</dt>
-                <dd className="apply-done__tx">
-                  <span className="numeric apply-done__hash" title={receipt.txHash}>
-                    {shortHash(receipt.txHash)}
-                  </span>
-                  {/* A sample hash is a fixture the explorer has never seen. */}
-                  {!receipt.sample && <TxExplorerLink hash={receipt.txHash} />}
-                </dd>
-              </div>
-            )}
-            <div className="apply-done__detail">
-              <dt>Application hash</dt>
-              <dd
-                className="numeric apply-done__hash"
-                title={receipt.metadataHashHex}
-              >
-                {shortHash(receipt.metadataHashHex)}
-              </dd>
-            </div>
-          </dl>
-
-          <p className="apply-done__desc">
-            The hash above is the SHA-256 of the notes you submitted. Keep your
-            notes — they let you prove the commitment on-chain.
-          </p>
-
-          <p className="apply-done__desc">
-            When applications close, reviewers each approve an amount. Follow
-            it under Applications.
-          </p>
-
-          <div className="apply-done__actions">
-            <Link
-              to="/recipients/application-timeline"
-              className="apply-done__timeline-link"
-            >
-              Follow application
-            </Link>
-            <button
-              type="button"
-              className="apply-done__reset-btn"
-              onClick={handleReset}
-            >
-              Apply to another
-            </button>
-          </div>
-        </div>
-      )}
+      <aside className="apply__aside">
+        <h3>After you apply</h3>
+        <ol className="apply__steps">
+          <li>
+            <b>Review.</b> When applications close, each reviewer approves an amount up to what you asked.
+          </li>
+          <li>
+            <b>Award.</b> Once enough reviewers have voted, anyone can finalize it at the median vote.
+          </li>
+          <li>
+            <b>Tranches.</b> Each is released once a verifier confirms its condition.
+          </li>
+        </ol>
+        <p className="apply__aside-note">
+          You can withdraw an application while it has not been finalized. Follow it, or withdraw it, under{' '}
+          <Link to="/recipients/application-timeline">Applications</Link>.
+        </p>
+      </aside>
     </div>
   );
 }

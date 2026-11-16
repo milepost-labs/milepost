@@ -1,18 +1,20 @@
 import { useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { Buffer } from 'buffer';
+import { TriangleAlert } from 'lucide-react';
 import type { Award } from '@milepost/program';
 import type { RecipientAwardFixture } from '../../fixtures/recipientFixtures';
-import { formatAmount, describeAmount } from '../../lib/amount';
+import { describeAmount } from '../../lib/amount';
 import { looksLikeContractId, truncateAddress } from '../../lib/format';
-import { isSampleProgrammeId } from '../../lib/programmeView';
+import { formatIn } from '../../lib/funding';
+import { formatFigure, isSampleProgrammeId, programmeAsset, shortId } from '../../lib/programmeView';
 import { useAnnouncer } from '../../context/useAnnouncer';
 import { useWallet } from '../../context/useWallet';
 import { useSoroban } from '../../context/useSoroban';
 import { useTransaction } from '../../hooks/useTransaction';
 import { sampleSendable, SAMPLE_TX_DELAY_MS } from '../../lib/fundingTx';
-import { Field, Button, ModePill } from '../ui';
-import { ErrorPanel, TransactionOutcome } from '../state/AsyncStates';
+import { Button, CopyButton, Field, Modal, ModePill, Notice, SampleTag, TxExplorerLink } from '../ui';
+import { TxDone, TxFailed, TxPending } from '../state/TxStatus';
 import { AllocatedSpending } from './AllocatedSpending';
 import './AwardCard.css';
 
@@ -21,6 +23,8 @@ interface AwardCardProps {
   /** Overridable for tests: keep stand-in delay short. */
   sampleDelayMs?: number;
 }
+
+type TrancheState = 'released' | 'proven' | 'waiting' | 'locked';
 
 /**
  * Convert a 64-char hex string to a 32-byte Buffer.
@@ -32,13 +36,13 @@ function hexToBuffer(hex: string): Buffer | null {
   return Buffer.from(clean, 'hex');
 }
 
-/** Where the money lands for each mode, in plain language. */
+/** Where the money lands for each mode, in plain language, said before signing. */
 function modeDestination(mode: RecipientAwardFixture['mode'], payee: string | null): string {
   switch (mode) {
     case 'Direct':
       return payee
-        ? `Paid straight to payee ${truncateAddress(payee)} — the recipient never holds the funds.`
-        : 'Paid straight to the verified payee — the recipient never holds the funds.';
+        ? `Paid straight to payee ${truncateAddress(payee)}. You never hold the funds.`
+        : 'Paid straight to the verified payee. You never hold the funds.';
     case 'Allocated':
       return 'Held in escrow for you to direct to a verified payee when you are ready.';
     case 'Restricted':
@@ -48,28 +52,231 @@ function modeDestination(mode: RecipientAwardFixture['mode'], payee: string | nu
   }
 }
 
+/** The line under the award's name: where its money goes, and who chose that. */
+function modeLine(mode: RecipientAwardFixture['mode'], payee: string | null) {
+  switch (mode) {
+    case 'Direct':
+      return (
+        <>
+          Paid directly to payee{' '}
+          {payee ? <b className="numeric">{truncateAddress(payee)}</b> : 'chosen by the programme'}. You
+          never hold the money.
+        </>
+      );
+    case 'Allocated':
+      return 'Held in escrow for you. You choose a verified payee, and when.';
+    case 'Restricted':
+      return 'Paid into your smart wallet, behind a spending policy.';
+    case 'Open':
+      return 'Paid directly to your wallet. Nothing checks where it goes after release.';
+  }
+}
+
+const STATE_TITLE: Record<TrancheState, string> = {
+  released: 'Released',
+  proven: 'Proof received, ready to release',
+  waiting: 'Waiting on a verifier',
+  locked: 'Locked',
+};
+
+interface Released {
+  amount: bigint;
+  txHash: string;
+}
+
 /**
- * AwardCard — one award and its tranche tiles.
- *
- * Release is real for real programmes (56-char C… contract ids): it calls
- * `program.release({ recipient, attestation, attester })` through
- * `useTransaction`, re-reads `get_award` after confirmation so the tiles
- * reflect the chain, and shows the amount paid out in the success state.
- *
- * Sample programmes (fixture ids that are not contract addresses) keep the
- * stand-in path via `sampleSendable` so the layout can be judged without a
- * wallet.
+ * Releasing a tranche, in a sheet: where the money goes first, the proof for
+ * a deployed programme, then sending, then the receipt or the failure. A
+ * sample programme has no contract, so it skips the proof and stands in.
  */
-export function AwardCard({
-  award: initialAward,
-  sampleDelayMs = SAMPLE_TX_DELAY_MS,
-}: AwardCardProps) {
+function ReleaseSheet({
+  open,
+  onClose,
+  award,
+  asset,
+  isReal,
+  tranche,
+  onReleased,
+  sampleDelayMs,
+}: {
+  open: boolean;
+  onClose: () => void;
+  award: RecipientAwardFixture;
+  asset: string;
+  isReal: boolean;
+  /** Which tranche, counting from 1. */
+  tranche: number;
+  onReleased: (result: Released, fresh: RecipientAwardFixture | null) => void;
+  sampleDelayMs: number;
+}) {
   const announce = useAnnouncer();
   const { address } = useWallet();
   const { programmeAt } = useSoroban();
+  const tx = useTransaction<Released>({ contract: 'program' });
+  const [attestationHex, setAttestationHex] = useState('');
+  const [attesterInput, setAttesterInput] = useState('');
 
-  // On-chain award state: starts from the fixture/prop and is updated after
-  // each confirmed release so tiles reflect the chain, not a local counter.
+  const granted = BigInt(award.granted);
+  const trancheBase = award.tranches > 0 ? granted / BigInt(award.tranches) : 0n;
+
+  const attestationBuf = hexToBuffer(attestationHex);
+  const attestationError =
+    attestationHex.trim().length > 0 && attestationBuf === null ? 'Enter the 64-character hex attestation id.' : '';
+  const attester = attesterInput.trim();
+  const attesterOk = /^G[A-Z2-7]{55}$/.test(attester);
+  const attesterError = attester.length > 0 && !attesterOk ? 'Enter a valid Stellar address (starts with G).' : '';
+  const canRelease = !tx.busy && (!isReal || (attestationBuf !== null && attesterOk));
+
+  const release = async () => {
+    if (!canRelease) return;
+    const recipient = address ?? award.recipient;
+    const client = isReal ? programmeAt(award.programmeId) : null;
+    let fresh: RecipientAwardFixture | null = null;
+
+    const result = await tx.send(async () => {
+      if (!isReal) return sampleSendable(() => ({ amount: trancheBase, txHash: '' }), sampleDelayMs);
+
+      const assembled = await client!.release({ recipient, attestation: attestationBuf!, attester });
+      return {
+        signAndSend: async (options: Parameters<typeof assembled.signAndSend>[0]) => {
+          const sent = await assembled.signAndSend(options);
+          const amount = sent.result.unwrap();
+          const txHash = (sent as { sendTransactionResponse?: { hash?: string } }).sendTransactionResponse?.hash ?? '';
+          // Re-read the award so the signs reflect the chain, not a local counter.
+          try {
+            const read = (await client!.get_award({ recipient })).result.unwrap() as Award;
+            fresh = {
+              ...award,
+              granted: read.granted.toString(),
+              released: read.released.toString(),
+              tranches: read.tranches,
+              tranchesReleased: read.tranches_released,
+              payee: read.mode.tag === 'Direct' ? read.payee : null,
+              mode: read.mode.tag,
+            };
+          } catch {
+            fresh = null;
+          }
+          return { result: { amount, txHash } };
+        },
+      };
+    });
+
+    if (result !== null) {
+      announce(`Tranche ${tranche} released.`);
+      onReleased(result, fresh);
+    } else if (tx.error) {
+      announce(`Tranche not released. ${tx.error.message}`, 'alert');
+    }
+  };
+
+  const close = () => {
+    if (tx.busy) return;
+    tx.reset();
+    setAttestationHex('');
+    setAttesterInput('');
+    onClose();
+  };
+
+  const declined = tx.error !== null && tx.phase === 'idle';
+
+  return (
+    <Modal open={open} onClose={close} title={`Release tranche ${tranche}`} eyebrow={award.programmeName} busy={tx.busy}>
+      {tx.phase === 'success' && tx.result ? (
+        <TxDone
+          title={`Tranche ${tranche} released`}
+          rows={[
+            { label: 'Released', value: formatIn(tx.result.amount, asset) },
+            ...(tx.result.txHash
+              ? [
+                  {
+                    label: 'Transaction',
+                    value: (
+                      <span className="award-card__hash">
+                        <span title={tx.result.txHash}>{shortId(tx.result.txHash)}</span>
+                        <CopyButton value={tx.result.txHash} label="Copy transaction hash" />
+                        <TxExplorerLink hash={tx.result.txHash} />
+                      </span>
+                    ),
+                  },
+                ]
+              : []),
+          ]}
+          actions={<Button onClick={close}>Done</Button>}
+        >
+          <p>{modeDestination(award.mode, award.payee)}</p>
+          {!isReal && (
+            <p className="award-card__sample-note">
+              <SampleTag>Sample receipt</SampleTag>
+            </p>
+          )}
+        </TxDone>
+      ) : tx.phase === 'error' && tx.error ? (
+        <TxFailed title="Tranche not released" explained={tx.error} onRetry={() => void release()} />
+      ) : tx.busy ? (
+        <TxPending title={`Releasing tranche ${tranche}`} phase={tx.phase} />
+      ) : (
+        <div className="award-card__release">
+          <Notice tone="info">
+            <strong>Where this goes:</strong> {modeDestination(award.mode, award.payee)}
+          </Notice>
+          {isReal ? (
+            <>
+              <p className="award-card__release-intro">
+                Your verifier gives you the attestation id once they have signed. One attestation releases
+                one tranche, once.
+              </p>
+              <Field
+                label="Attestation id (hex)"
+                placeholder="64 characters, e.g. 3f1a…"
+                value={attestationHex}
+                onChange={(e) => setAttestationHex(e.target.value)}
+                error={attestationError}
+                autoComplete="off"
+                spellCheck={false}
+              />
+              <Field
+                label="Attester address"
+                placeholder="G…"
+                value={attesterInput}
+                onChange={(e) => setAttesterInput(e.target.value)}
+                error={attesterError}
+                autoComplete="off"
+                spellCheck={false}
+              />
+            </>
+          ) : (
+            <p className="award-card__release-intro">
+              A sample programme has no contract, so this release stands in for the real one.
+            </p>
+          )}
+          {declined && tx.error && (
+            <Notice tone="info">
+              {tx.error.message} {tx.error.action}
+            </Notice>
+          )}
+          <Button fullWidth disabled={!canRelease} onClick={() => void release()}>
+            Sign and release
+          </Button>
+        </div>
+      )}
+    </Modal>
+  );
+}
+
+/**
+ * One award: where its money goes, and its tranches as numbered milepost
+ * signs. A released tranche's sign is filled; one with its proof in is
+ * outlined and offers the release; the next one without a proof says it is
+ * waiting on a verifier; the rest are locked behind it.
+ *
+ * Release is real for deployed programmes: `program.release({ recipient,
+ * attestation, attester })` through `useTransaction`, then `get_award` is
+ * re-read so the signs reflect the chain. Sample programmes stand in.
+ */
+export function AwardCard({ award: initialAward, sampleDelayMs = SAMPLE_TX_DELAY_MS }: AwardCardProps) {
+  // On-chain award state: starts from the prop and is updated after each
+  // confirmed release so the signs reflect the chain, not a local counter.
   const [liveAward, setLiveAward] = useState<RecipientAwardFixture>(initialAward);
   // A new award from the caller replaces the local copy.
   const [seenAward, setSeenAward] = useState(initialAward);
@@ -77,384 +284,137 @@ export function AwardCard({
     setSeenAward(initialAward);
     setLiveAward(initialAward);
   }
+  // Which tranche the release sheet is for, fixed when it opens so the receipt
+  // still names it after the award moves on. Null while closed.
+  const [releasing, setReleasing] = useState<number | null>(null);
 
   // Sample ids have the contract shape too, so shape alone cannot tell them apart.
   const isReal = looksLikeContractId(initialAward.programmeId) && !isSampleProgrammeId(initialAward.programmeId);
-  const isSample = !isReal;
+  const asset = programmeAsset({ sample: !isReal });
 
-  // Release form state
-  const [attestationHex, setAttestationHex] = useState('');
-  const [attesterInput, setAttesterInput] = useState('');
-  const [formOpen, setFormOpen] = useState(false);
+  const granted = BigInt(liveAward.granted);
+  const released = BigInt(liveAward.released);
+  const { tranches, tranchesReleased } = liveAward;
+  const trancheBase = tranches > 0 ? granted / BigInt(tranches) : 0n;
+  const allReleased = tranchesReleased >= tranches;
 
-  const tx = useTransaction<{ amount: bigint; txHash: string }>({ contract: 'program' });
-
-  // Derived display values from live award state.
-  const grantedBigInt = BigInt(liveAward.granted);
-  const releasedBigInt = BigInt(liveAward.released);
-  const releasedCount = liveAward.tranchesReleased;
-  const tranches = liveAward.tranches;
-  const trancheBase = tranches > 0 ? grantedBigInt / BigInt(tranches) : 0n;
-
-  const tranchesList = useMemo(
+  const signs = useMemo(
     () =>
       Array.from({ length: tranches }, (_, i) => {
-        const isLast = i === tranches - 1;
-        const amount = isLast
-          ? grantedBigInt - trancheBase * BigInt(tranches - 1)
-          : trancheBase;
-        const isReleased = i < releasedCount;
-        const isNext = i === releasedCount;
-
-        let statusLabel = 'Locked';
-        let statusClass = 'tranche-tile--locked';
-
-        if (isReleased) {
-          statusLabel = 'Released';
-          statusClass = 'tranche-tile--released';
-        } else if (isNext) {
-          if (liveAward.attestationReady) {
-            statusLabel = 'Proof received';
-            statusClass = 'tranche-tile--proof-ready';
-          } else {
-            statusLabel = 'Waiting on verifier';
-            statusClass = 'tranche-tile--waiting';
-          }
-        }
-
-        return {
-          index: i + 1,
-          amount,
-          amountFormatted: formatAmount(amount, { asset: 'USDC' }),
-          statusLabel,
-          statusClass,
-        };
+        const amount = i === tranches - 1 ? granted - trancheBase * BigInt(tranches - 1) : trancheBase;
+        let state: TrancheState = 'locked';
+        if (i < tranchesReleased) state = 'released';
+        else if (i === tranchesReleased) state = liveAward.attestationReady ? 'proven' : 'waiting';
+        return { number: i + 1, amount, state };
       }),
-    [tranches, grantedBigInt, trancheBase, releasedCount, liveAward.attestationReady],
+    [tranches, granted, trancheBase, tranchesReleased, liveAward.attestationReady],
   );
 
-  // Validate the attestation hex and attester address.
-  const attestationBuf = hexToBuffer(attestationHex);
-  const attestationError =
-    attestationHex.trim().length > 0 && attestationBuf === null
-      ? 'Enter the 64-character hex attestation UID.'
-      : '';
-  const attesterError =
-    attesterInput.trim().length > 0 && !/^G[A-Z2-7]{55}$/.test(attesterInput.trim())
-      ? 'Enter a valid Stellar address (starts with G).'
-      : '';
-  const canRelease =
-    releasedCount < tranches &&
-    !tx.busy &&
-    (isSample ||
-      (attestationBuf !== null && /^G[A-Z2-7]{55}$/.test(attesterInput.trim())));
-
-  const handleRelease = async () => {
-    if (!canRelease) return;
-
-    const recipient = address ?? initialAward.recipient;
-    const progId = initialAward.programmeId;
-    const client = isReal ? programmeAt(progId) : null;
-    const nextTranche = releasedCount + 1;
-
-    const result = await tx.send(async () => {
-      if (isSample) {
-        return sampleSendable(() => ({ amount: trancheBase, txHash: '' }), sampleDelayMs);
-      }
-
-      const attBuf = attestationBuf!;
-      const attester = attesterInput.trim();
-
-      const assembled = await client!.release({
-        recipient,
-        attestation: attBuf,
-        attester,
-      });
-
-      return {
-        signAndSend: async (
-          options: Parameters<typeof assembled.signAndSend>[0],
-        ) => {
-          const sent = await assembled.signAndSend(options);
-          const amount = sent.result.unwrap();
-          const txHash =
-            (sent as { sendTransactionResponse?: { hash?: string } })
-              .sendTransactionResponse?.hash ?? '';
-
-          // Re-read the award so tiles reflect chain state, not a local counter.
-          try {
-            const fresh = await client!.get_award({ recipient });
-            const freshAward = fresh.result.unwrap() as Award;
-            setLiveAward({
-              ...initialAward,
-              granted: freshAward.granted.toString(),
-              released: freshAward.released.toString(),
-              tranches: freshAward.tranches,
-              tranchesReleased: freshAward.tranches_released,
-              payee:
-                freshAward.mode.tag === 'Direct'
-                  ? freshAward.payee
-                  : null,
-              mode: freshAward.mode.tag,
-            });
-          } catch {
-            // If the re-read fails, fall back to incrementing locally so the
-            // UI is not left in a stale confirmed-but-unchanged state.
-            setLiveAward((prev) => ({
-              ...prev,
-              released: (BigInt(prev.released) + amount).toString(),
-              tranchesReleased: prev.tranchesReleased + 1,
-            }));
-          }
-
-          return { result: { amount, txHash } };
-        },
-      };
-    });
-
-    if (result !== null) {
-      // A sample has no chain to re-read, so advance the stand-in locally.
-      if (isSample) {
-        setLiveAward((prev) => ({
+  const onReleased = (result: Released, fresh: RecipientAwardFixture | null) => {
+    setLiveAward(
+      (prev) =>
+        fresh ?? {
           ...prev,
           released: (BigInt(prev.released) + result.amount).toString(),
           tranchesReleased: prev.tranchesReleased + 1,
-        }));
-      }
-      announce(`Tranche ${nextTranche} released.`);
-      setFormOpen(false);
-      setAttestationHex('');
-      setAttesterInput('');
-    } else if (tx.error) {
-      announce(`Tranche not released. ${tx.error.message}`, 'alert');
-    }
+          // The proof that was just used is spent; the next needs its own.
+          attestationReady: false,
+        },
+    );
   };
 
-  const allReleased = releasedCount >= tranches;
-  const showReleaseForm = !allReleased && (formOpen || isSample);
-  const destination = modeDestination(liveAward.mode, liveAward.payee);
+  /** What the next sign says, and whether it offers the release. */
+  const nextNote = (state: TrancheState) => {
+    if (state === 'proven') return `${liveAward.condition}. Confirmed by your verifier. You can release it now.`;
+    if (isReal) return `${liveAward.condition}. Once your verifier signs, release it with their attestation id.`;
+    return `Waiting on your verifier: ${liveAward.condition.charAt(0).toLowerCase()}${liveAward.condition.slice(1)}.`;
+  };
 
   return (
     <article className="award-card" aria-labelledby={`award-${initialAward.programmeId}`}>
-      {/* Header */}
-      <div className="award-card__header">
+      <div className="award-card__head">
         <div className="award-card__title-group">
-          <Link
-            id={`award-${initialAward.programmeId}`}
-            to={`/programme/${encodeURIComponent(initialAward.programmeId)}`}
-            className="award-card__title"
-          >
-            {liveAward.programmeName}
-          </Link>
-          <span className="award-card__meta">
-            {releasedCount} of {tranches} tranches released ·{' '}
-            <span className="numeric" aria-label={describeAmount(releasedBigInt, 'USDC')}>
-              {formatAmount(releasedBigInt, { asset: 'USDC' })}
-            </span>{' '}
-            of{' '}
-            <span className="numeric" aria-label={describeAmount(grantedBigInt, 'USDC')}>
-              {formatAmount(grantedBigInt, { asset: 'USDC' })}
-            </span>
-          </span>
+          <div className="award-card__badges">
+            <ModePill mode={liveAward.mode} />
+            {!isReal && <SampleTag />}
+          </div>
+          <h3 className="award-card__name">
+            <Link id={`award-${initialAward.programmeId}`} to={`/programme/${encodeURIComponent(initialAward.programmeId)}`}>
+              {liveAward.programmeName}
+            </Link>
+          </h3>
+          <p className="award-card__mode-line">{modeLine(liveAward.mode, liveAward.payee)}</p>
         </div>
-        <div className="award-card__badges">
-          {initialAward.sample && (
-            <span className="award-card__sample">Sample data</span>
-          )}
-          <ModePill mode={liveAward.mode} />
+        <div className="award-card__amount">
+          <b className="numeric" aria-label={describeAmount(granted, asset)}>
+            {formatFigure(granted)} <small>{asset}</small>
+          </b>
+          <span>
+            <span className="numeric">{formatFigure(released)}</span> released · {tranchesReleased} of {tranches}{' '}
+            {tranches === 1 ? 'tranche' : 'tranches'}
+          </span>
         </div>
       </div>
 
-      {/* Tranche tiles */}
-      <ol className="award-card__tranches" aria-label="Tranches">
-        {tranchesList.map((t) => (
-          <li key={t.index} className={`tranche-tile ${t.statusClass}`}>
-            <span className="tranche-tile__num">Tranche {t.index}</span>
-            <span
-              className="tranche-tile__amount numeric"
-              aria-label={describeAmount(t.amount, 'USDC')}
-            >
-              {t.amountFormatted}
-            </span>
-            <span className="tranche-tile__status">{t.statusLabel}</span>
-          </li>
-        ))}
+      <ol className="award-card__posts" style={{ ['--posts' as string]: Math.min(tranches, 4) }} aria-label="Tranches">
+        {signs.map((sign) => {
+          const next = sign.number === tranchesReleased + 1;
+          return (
+            <li key={sign.number} className={`award-post award-post--${sign.state}`}>
+              <span className="award-post__sign numeric" aria-hidden="true">
+                {String(sign.number).padStart(2, '0')}
+              </span>
+              <h4 className="award-post__title">
+                <span className="visually-hidden">Tranche {sign.number}: </span>
+                {STATE_TITLE[sign.state]}
+              </h4>
+              <span className="award-post__amount numeric" aria-label={describeAmount(sign.amount, asset)}>
+                {formatIn(sign.amount, asset)}
+              </span>
+              {next && !allReleased && <p className="award-post__note">{nextNote(sign.state)}</p>}
+              {sign.state === 'locked' && <p className="award-post__note">After tranche {sign.number - 1}.</p>}
+              {next && !allReleased && (sign.state === 'proven' || isReal) && (
+                <Button size="sm" variant={sign.state === 'proven' ? 'primary' : 'ghost'} onClick={() => setReleasing(sign.number)}>
+                  Release tranche
+                </Button>
+              )}
+            </li>
+          );
+        })}
       </ol>
 
-      {/* Waiting-on-verifier banner (no proof yet) */}
-      {!allReleased && !liveAward.attestationReady && !formOpen && (
-        <div className="award-card__banner award-card__banner--waiting">
-          <span>
-            <strong>Waiting on your verifier.</strong>{' '}
-            {liveAward.condition
-              ? `Next condition: ${liveAward.condition}. `
-              : ''}
-            You&rsquo;ll be able to release it here once they confirm.
-          </span>
-        </div>
-      )}
+      {liveAward.mode === 'Allocated' && <AllocatedSpending award={liveAward} />}
 
-      {/* "Open release form" action for real programmes — permissionless */}
-      {!allReleased && isReal && !formOpen && (
-        <div className="award-card__banner award-card__banner--ready">
-          <span className="award-card__banner-text">
-            {liveAward.attestationReady
-              ? <><strong>Proof received:</strong> {liveAward.condition}. Ready to release.</>
-              : 'Have an attestation UID? You can submit a release.'}
-          </span>
-          <button
-            type="button"
-            className="award-card__release-btn"
-            onClick={() => setFormOpen(true)}
-          >
-            Release tranche
-          </button>
-        </div>
-      )}
-
-      {/* Release form (real programmes) or sample release banner */}
-      {showReleaseForm && (
-        <div className="award-card__release-form" role="region" aria-label="Release a tranche">
-          {/* Where-the-money-goes confirmation */}
-          <p className="award-card__release-destination">
-            <strong>Where this goes:</strong> {destination}
-          </p>
-
-          {isReal && (
-            <>
-              <div className="award-card__release-field">
-                <Field
-                  label="Attestation UID (hex)"
-                  placeholder="64-character hex, e.g. 3f1a…"
-                  value={attestationHex}
-                  onChange={(e) => setAttestationHex(e.target.value)}
-                  error={attestationError}
-                  autoComplete="off"
-                  spellCheck={false}
-                />
-              </div>
-              <div className="award-card__release-field">
-                <Field
-                  label="Attester address"
-                  placeholder="G…"
-                  value={attesterInput}
-                  onChange={(e) => setAttesterInput(e.target.value)}
-                  error={attesterError}
-                  autoComplete="off"
-                  spellCheck={false}
-                />
-              </div>
-            </>
-          )}
-
-          <div className="award-card__release-actions">
-            <Button
-              onClick={() => void handleRelease()}
-              disabled={!canRelease}
-              loading={tx.busy}
-            >
-              {isSample ? 'Release tranche' : 'Sign and release'}
-            </Button>
-            {isReal && (
-              <Button
-                variant="secondary"
-                onClick={() => {
-                  setFormOpen(false);
-                  setAttestationHex('');
-                  setAttesterInput('');
-                  tx.reset();
-                }}
-              >
-                Cancel
-              </Button>
-            )}
+      {liveAward.mode === 'Restricted' && (
+        <div className="award-card__policy">
+          <div className="award-card__policy-text">
+            <b>
+              <TriangleAlert aria-hidden="true" />
+              Released money goes to your own wallet
+            </b>
+            <p>
+              The spending policy constrains one signer, not the wallet: it limits that signer to {asset},
+              verified payees and a cap. If the policy isn&rsquo;t set up, there is no restriction at all.
+            </p>
           </div>
-
-          <TransactionOutcome
-            phase={tx.phase}
-            error={tx.error}
-            successTitle={`Tranche ${releasedCount} released`}
-            successDescription={
-              tx.result
-                ? `${formatAmount(tx.result.amount, { asset: 'USDC' })} released.`
-                : undefined
-            }
-            pendingTitle="Releasing tranche…"
-            pendingNote="Usually a few seconds."
-            onDismiss={() => tx.reset()}
-            onRetry={() => void handleRelease()}
-          />
+          <Link to="/policy" className="ui-button ui-button--primary ui-button--sm">
+            Check your spend policy
+          </Link>
         </div>
       )}
 
-      {/* Error panel outside the form (e.g. after form was closed) */}
-      {tx.phase === 'error' && tx.error && !showReleaseForm && (
-        <ErrorPanel explained={tx.error} onRetry={() => setFormOpen(true)} live={false} />
-      )}
-
-      {/* The form closes on success; the receipt stays until dismissed. */}
-      {tx.phase === 'success' && !showReleaseForm && (
-        <TransactionOutcome
-          phase={tx.phase}
-          error={null}
-          successTitle={`Tranche ${releasedCount} released`}
-          successDescription={
-            tx.result
-              ? `${formatAmount(tx.result.amount, { asset: 'USDC' })} released.`
-              : undefined
-          }
-          onDismiss={() => tx.reset()}
+      {releasing !== null && (
+        <ReleaseSheet
+          open
+          onClose={() => setReleasing(null)}
+          award={liveAward}
+          asset={asset}
+          isReal={isReal}
+          tranche={releasing}
+          onReleased={onReleased}
+          sampleDelayMs={sampleDelayMs}
         />
       )}
-
-      {/* Mode-specific spending actions */}
-      <div className="award-card__mode-spending">
-        {liveAward.mode === 'Allocated' && (
-          <AllocatedSpending award={liveAward} />
-        )}
-
-        {liveAward.mode === 'Restricted' && (
-          <>
-            <div className="award-card__spending-header">
-              <span className="award-card__spending-title">
-                Released money goes to your own wallet
-              </span>
-            </div>
-            <p className="award-card__spending-note">
-              The spending policy constrains one signer, not the wallet, limiting
-              onward spending to USDC, verified payees, and a cap.{' '}
-              <Link to="/policy">Check your spend policy</Link>. If the policy
-              isn&rsquo;t set up, there is no restriction at all.
-            </p>
-          </>
-        )}
-
-        {liveAward.mode === 'Direct' && (
-          <>
-            <div className="award-card__spending-header">
-              <span className="award-card__spending-title">Paid directly to payee</span>
-            </div>
-            <p className="award-card__spending-note">
-              Each award is paid straight to a verified payee chosen at award
-              time. The recipient never holds the money.
-            </p>
-          </>
-        )}
-
-        {liveAward.mode === 'Open' && (
-          <>
-            <div className="award-card__spending-header">
-              <span className="award-card__spending-title">
-                Paid directly to your wallet
-              </span>
-            </div>
-            <p className="award-card__spending-note">
-              Released money goes directly to your wallet with no spending
-              restrictions.
-            </p>
-          </>
-        )}
-      </div>
     </article>
   );
 }

@@ -1,0 +1,56 @@
+.recipient {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+
+/* The four sections as a segmented control: the current one raised. */
+.recipient__tabs {
+  display: inline-flex;
+  align-self: flex-start;
+  gap: var(--space-1);
+  max-width: 100%;
+  margin-bottom: var(--space-5);
+  padding: var(--space-1);
+  border-radius: var(--radius-pill);
+  background: var(--bg-sunken);
+  overflow-x: auto;
+}
+
+.recipient__tab {
+  display: inline-flex;
+  align-items: center;
+  min-height: 40px;
+  padding: 0 var(--space-4);
+  border-radius: var(--radius-pill);
+  font-size: var(--text-sm);
+  font-weight: var(--weight-semibold);
+  color: var(--ink-muted);
+  text-decoration: none;
+  white-space: nowrap;
+}
+
+.recipient__tab:hover {
+  color: var(--ink);
+  text-decoration: none;
+}
+
+.recipient__tab[aria-current='page'] {
+  background: var(--bg-raised);
+  color: var(--ink);
+  box-shadow: var(--shadow-1);
+}
+
+@media (max-width: 600px) {
+  .recipient__tabs {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    width: 100%;
+    border-radius: var(--radius-md);
+  }
+
+  .recipient__tab {
+    justify-content: center;
+    border-radius: var(--radius-sm);
+  }
+}

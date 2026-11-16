@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { render, screen, fireEvent, waitFor } from '@testing-library/react';
+import { render, screen, fireEvent, waitFor, within } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
 import { Buffer } from 'buffer';
 import { AwardCard } from './AwardCard';
@@ -170,12 +170,15 @@ describe('Recipient Issues Suite (#272, #273, #274, #275)', () => {
         </MemoryRouter>
       );
 
-      expect(screen.getByText('Tranche 1')).toBeDefined();
-      expect(screen.getByText('Released')).toBeDefined();
-      expect(screen.getByText('Tranche 2')).toBeDefined();
-      expect(screen.getByText('Proof received')).toBeDefined();
-      expect(screen.getByText('Tranche 3')).toBeDefined();
-      expect(screen.getByText('Locked')).toBeDefined();
+      // Each sign is a heading: its number for screen readers, then its state.
+      const tranches = screen.getAllByRole('heading', { level: 4 }).map((h) => h.textContent);
+      expect(tranches).toEqual([
+        'Tranche 1: Released',
+        'Tranche 2: Proof received, ready to release',
+        'Tranche 3: Locked',
+      ]);
+      // Only the proven tranche offers the release.
+      expect(screen.getAllByRole('button', { name: /release tranche/i })).toHaveLength(1);
     });
 
     it('distinguishes waiting-on-verifier from locked when proof is not ready', () => {
@@ -185,9 +188,11 @@ describe('Recipient Issues Suite (#272, #273, #274, #275)', () => {
           <AwardCard award={waitingAward} />
         </MemoryRouter>
       );
-      expect(screen.getByText('Waiting on verifier')).toBeDefined();
+      expect(screen.getByRole('heading', { name: /Tranche 2:\s*Waiting on a verifier/ })).toBeDefined();
       expect(screen.getByText(/Waiting on your verifier/i)).toBeDefined();
-      expect(screen.getByText('Locked')).toBeDefined();
+      expect(screen.getByRole('heading', { name: /Tranche 3:\s*Locked/ })).toBeDefined();
+      // A sample has no proof to release with, so nothing is offered.
+      expect(screen.queryByRole('button', { name: /release tranche/i })).toBeNull();
     });
 
     it('sample: announces successful tranche release', async () => {
@@ -198,8 +203,15 @@ describe('Recipient Issues Suite (#272, #273, #274, #275)', () => {
       );
 
       fireEvent.click(screen.getByRole('button', { name: /release tranche/i }));
-      expect(await screen.findByText(/Tranche 2 released/i)).toBeDefined();
+      const sheet = screen.getByRole('dialog', { name: 'Release tranche 2' });
+      fireEvent.click(within(sheet).getByRole('button', { name: /sign and release/i }));
+      expect(await within(sheet).findByText('Tranche 2 released')).toBeDefined();
+      expect(within(sheet).getByText('Sample receipt')).toBeDefined();
       expect(mockAnnounce).toHaveBeenCalledWith('Tranche 2 released.');
+
+      // The receipt still names tranche 2 after the award has moved on.
+      fireEvent.click(within(sheet).getByRole('button', { name: 'Done' }));
+      expect(screen.getByRole('heading', { name: /Tranche 2:\s*Released/ })).toBeDefined();
     });
 
     it('real: sends program.release with attestation Buffer and attester address', async () => {
@@ -215,7 +227,7 @@ describe('Recipient Issues Suite (#272, #273, #274, #275)', () => {
       fireEvent.click(screen.getByRole('button', { name: /release tranche/i }));
 
       // Fill in attestation UID and attester.
-      fireEvent.change(screen.getByLabelText(/attestation uid/i), {
+      fireEvent.change(screen.getByLabelText(/attestation id/i), {
         target: { value: ATTEST_HEX },
       });
       fireEvent.change(screen.getByLabelText(/attester address/i), {
@@ -227,7 +239,7 @@ describe('Recipient Issues Suite (#272, #273, #274, #275)', () => {
 
       fireEvent.click(screen.getByRole('button', { name: /sign and release/i }));
 
-      expect(await screen.findByText(/Tranche 2 released/i)).toBeDefined();
+      expect(await screen.findByText('Tranche 2 released')).toBeDefined();
       expect(programme.release).toHaveBeenCalledWith({
         recipient: RECIPIENT,
         attestation: expect.any(Buffer),
@@ -248,7 +260,7 @@ describe('Recipient Issues Suite (#272, #273, #274, #275)', () => {
       );
 
       fireEvent.click(screen.getByRole('button', { name: /release tranche/i }));
-      fireEvent.change(screen.getByLabelText(/attestation uid/i), {
+      fireEvent.change(screen.getByLabelText(/attestation id/i), {
         target: { value: ATTEST_HEX },
       });
       fireEvent.change(screen.getByLabelText(/attester address/i), {
@@ -271,7 +283,7 @@ describe('Recipient Issues Suite (#272, #273, #274, #275)', () => {
       );
 
       fireEvent.click(screen.getByRole('button', { name: /release tranche/i }));
-      fireEvent.change(screen.getByLabelText(/attestation uid/i), {
+      fireEvent.change(screen.getByLabelText(/attestation id/i), {
         target: { value: ATTEST_HEX },
       });
       fireEvent.change(screen.getByLabelText(/attester address/i), {
@@ -297,7 +309,7 @@ describe('Recipient Issues Suite (#272, #273, #274, #275)', () => {
       );
 
       fireEvent.click(screen.getByRole('button', { name: /release tranche/i }));
-      fireEvent.change(screen.getByLabelText(/attestation uid/i), {
+      fireEvent.change(screen.getByLabelText(/attestation id/i), {
         target: { value: ATTEST_HEX },
       });
       fireEvent.change(screen.getByLabelText(/attester address/i), {
@@ -353,7 +365,7 @@ describe('Recipient Issues Suite (#272, #273, #274, #275)', () => {
         </MemoryRouter>
       );
 
-      expect(await screen.findByText('Sample data')).toBeDefined();
+      expect((await screen.findAllByText('Sample data')).length).toBeGreaterThan(0);
       expect(screen.getByText(/Held for you in escrow/i)).toBeDefined();
       expect(screen.getByLabelText('Payee address')).toBeDefined();
     });
@@ -381,7 +393,7 @@ describe('Recipient Issues Suite (#272, #273, #274, #275)', () => {
       fireEvent.click(screen.getByRole('button', { name: 'Send to payee' }));
 
       expect(await screen.findByText('Sent to payee')).toBeDefined();
-      expect(screen.getByText(/100\.00 USDC to GBBBBB/)).toBeDefined();
+      expect(screen.getByText(/100\.00 XLM to GBBBBB/)).toBeDefined();
       await waitFor(() => expect(programme.allocation_of).toHaveBeenCalledTimes(2));
       expect(programme.spend).toHaveBeenCalledWith({
         recipient: RECIPIENT,
@@ -427,7 +439,7 @@ describe('Recipient Issues Suite (#272, #273, #274, #275)', () => {
       fireEvent.change(screen.getByLabelText('Amount'), { target: { value: '2,000' } });
       fireEvent.blur(screen.getByLabelText('Amount'));
 
-      expect(await screen.findByText(/More than your balance of 1,000\.00 USDC/)).toBeDefined();
+      expect(await screen.findByText(/More than your balance of 1,000\.00 XLM/)).toBeDefined();
       expect((screen.getByRole('button', { name: 'Send to payee' }) as HTMLButtonElement).disabled).toBe(true);
       expect(programme.spend).not.toHaveBeenCalled();
     });
@@ -537,29 +549,25 @@ describe('Recipient Issues Suite (#272, #273, #274, #275)', () => {
         </MemoryRouter>
       );
 
-      // Should show the title
-      expect(screen.getByText('Apply for an award')).toBeDefined();
+      expect(screen.getByRole('heading', { name: 'Apply for what you need' })).toBeDefined();
 
-      // Wait for the programme list to load (async phase reads complete)
-      // Only Open programmes should be listed in the radio group
-      expect(await screen.findByText(/Community resilience grants 2026/i)).toBeDefined();
-      expect(screen.getByText(/Smallholder inputs, long rains/i)).toBeDefined();
+      // Only Open programmes are offered; samples are marked as such.
+      expect(await screen.findByRole('option', { name: 'Community resilience grants 2026 (sample)' })).toBeDefined();
+      expect(screen.getByRole('option', { name: 'Smallholder inputs, long rains (sample)' })).toBeDefined();
       // SME supplier microgrants Q2 is in Settled phase, and Vocational bursaries is in Review, so neither should be listed
       expect(screen.queryByText(/Workforce skills grants, cohort 3/i)).toBeNull();
     });
 
-    it('explains the median rule before submitting', () => {
+    it('explains the median rule before submitting', async () => {
       render(
         <MemoryRouter>
           <ApplyForm />
         </MemoryRouter>
       );
 
-      expect(
-        screen.getByText(
-          /Reviewers can approve up to this amount, not more\. Your award is the middle of their votes\./i
-        )
-      ).toBeDefined();
+      expect(await screen.findByText(/Reviewers can approve up to this amount, not more\./i)).toBeDefined();
+      expect(screen.getByText(/How your award is set:/)).toBeDefined();
+      expect(screen.getByText('middle vote')).toBeDefined();
     });
 
     it('validates amount input and enables submit when valid', async () => {
@@ -581,6 +589,7 @@ describe('Recipient Issues Suite (#272, #273, #274, #275)', () => {
 
       // Invalid amount (zero).
       fireEvent.change(amountInput, { target: { value: '0' } });
+      fireEvent.blur(amountInput);
       expect(screen.getByText('Amount must be greater than zero')).toBeDefined();
       expect(submitBtn.disabled).toBe(true);
 
@@ -595,11 +604,11 @@ describe('Recipient Issues Suite (#272, #273, #274, #275)', () => {
       fireEvent.click(submitBtn);
 
       // Receipt appears once the stand-in resolves.
-      expect(await screen.findByText(/✓ Application submitted/i)).toBeDefined();
+      expect(await screen.findByText('Application submitted')).toBeDefined();
       expect(mockAnnounce).toHaveBeenCalledWith('Application submitted.');
     });
 
-    it('sample submission: uses the stand-in path and shows "Sample ·" in the receipt', async () => {
+    it('sample submission: uses the stand-in path and tags the receipt as a sample', async () => {
       render(
         <MemoryRouter>
           <ApplyForm sampleDelayMs={0} />
@@ -607,7 +616,7 @@ describe('Recipient Issues Suite (#272, #273, #274, #275)', () => {
       );
 
       // Wait for the sample programme list.
-      await screen.findByText(/Community resilience grants 2026/i);
+      await screen.findByRole('option', { name: /Community resilience grants 2026/ });
 
       fireEvent.change(screen.getByPlaceholderText('0'), { target: { value: '500' } });
       fireEvent.change(screen.getByRole('textbox', { name: /application notes/i }), {
@@ -616,14 +625,16 @@ describe('Recipient Issues Suite (#272, #273, #274, #275)', () => {
 
       fireEvent.click(screen.getByRole('button', { name: /submit application/i }));
 
-      // Receipt shows "Sample ·" prefix.
-      expect(await screen.findByText(/Sample · ✓ Application submitted/i)).toBeDefined();
+      // The receipt is tagged as a sample.
+      expect(await screen.findByText('Application submitted')).toBeDefined();
+      expect(screen.getByText('Sample receipt')).toBeDefined();
+      expect(screen.getByText('500 USDC')).toBeDefined();
 
       // programme.apply was never called — the sample path goes through sampleSendable.
       expect(programme.apply).not.toHaveBeenCalled();
 
       // The receipt shows a metadata hash (hex chars).
-      expect(screen.getByText(/Application hash/i)).toBeDefined();
+      expect(screen.getByText('Application hash')).toBeDefined();
       // A sample hash is a fixture, so it must not point at the explorer.
       expect(screen.queryByRole('link', { name: /view on explorer/i })).toBeNull();
     });
@@ -645,11 +656,9 @@ describe('Recipient Issues Suite (#272, #273, #274, #275)', () => {
         </MemoryRouter>
       );
 
-      // Wait for the real programme to appear.
-      expect(await screen.findByText('Live Grant Round')).toBeDefined();
-
-      // Select it.
-      fireEvent.click(screen.getByRole('radio', { name: 'Live Grant Round' }));
+      // Wait for the real programme to appear, listed first and unmarked.
+      expect(await screen.findByRole('option', { name: 'Live Grant Round' })).toBeDefined();
+      fireEvent.change(screen.getByLabelText('Programme'), { target: { value: REAL_PROGRAMME } });
 
       fireEvent.change(screen.getByPlaceholderText('0'), { target: { value: '1000' } });
       fireEvent.change(screen.getByRole('textbox', { name: /application notes/i }), {
@@ -658,7 +667,9 @@ describe('Recipient Issues Suite (#272, #273, #274, #275)', () => {
 
       fireEvent.click(screen.getByRole('button', { name: /submit application/i }));
 
-      expect(await screen.findByText(/✓ Application submitted/i)).toBeDefined();
+      expect(await screen.findByText('Application submitted')).toBeDefined();
+      // A deployed programme pays in XLM, so that is what was asked for.
+      expect(screen.getByText('1,000 XLM')).toBeDefined();
 
       // programme.apply was called with the wallet address, the correct stroops,
       // and a 32-byte Buffer.
@@ -672,7 +683,7 @@ describe('Recipient Issues Suite (#272, #273, #274, #275)', () => {
       expect(callArgs.metadata_hash).toHaveLength(32);
 
       // Receipt shows the tx hash and the metadata hash.
-      expect(screen.getByText(/Application hash/i)).toBeDefined();
+      expect(screen.getByText('Application hash')).toBeDefined();
       expect(screen.getByText(/TESTHASH/i)).toBeDefined();
 
       const explorer = screen.getByRole('link', { name: /view on explorer.*new tab/i });
@@ -697,8 +708,8 @@ describe('Recipient Issues Suite (#272, #273, #274, #275)', () => {
         </MemoryRouter>
       );
 
-      await screen.findByText('Live Grant Round');
-      fireEvent.click(screen.getByRole('radio', { name: 'Live Grant Round' }));
+      await screen.findByRole('option', { name: 'Live Grant Round' });
+      fireEvent.change(screen.getByLabelText('Programme'), { target: { value: REAL_PROGRAMME } });
       fireEvent.change(screen.getByPlaceholderText('0'), { target: { value: '500' } });
       fireEvent.change(screen.getByRole('textbox', { name: /application notes/i }), {
         target: { value: 'Second attempt notes.' },
@@ -714,7 +725,7 @@ describe('Recipient Issues Suite (#272, #273, #274, #275)', () => {
       expect(screen.queryByText(/something went wrong that we do not have/i)).toBeNull();
 
       // The form stays on screen so the recipient can see the error — no receipt shown.
-      expect(screen.queryByText(/✓ Application submitted/i)).toBeNull();
+      expect(screen.queryByText('Application submitted')).toBeNull();
     });
   });
 
@@ -798,10 +809,10 @@ describe('Recipient Issues Suite (#272, #273, #274, #275)', () => {
 
       expect(
         screen.getByText(
-          'Finalised — your award is 1,050.00 USDC, the median of 2 reviewer votes.'
+          'Finalised — your award is 1,050.00 XLM, the median of 2 reviewer votes.'
         )
       ).toBeDefined();
-      expect(screen.getByText('Median of the votes: 1,050.00 USDC')).toBeDefined();
+      expect(screen.getByText('Median of the votes: 1,050.00 XLM')).toBeDefined();
     });
 
     it('says a withdrawn application will not be reviewed or finalised', () => {
