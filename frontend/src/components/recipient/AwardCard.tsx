@@ -13,13 +13,16 @@ import { useWallet } from '../../context/useWallet';
 import { useSoroban } from '../../context/useSoroban';
 import { useTransaction } from '../../hooks/useTransaction';
 import { sampleSendable, SAMPLE_TX_DELAY_MS } from '../../lib/fundingTx';
-import { Button, CopyButton, Field, Modal, ModePill, Notice, SampleTag, TxExplorerLink } from '../ui';
+import { absoluteLink, REQUEST_NOTE_MAX, requestPath, type ReleaseReply } from '../../lib/verifyLinks';
+import { Button, CopyButton, Field, Modal, ModePill, Notice, SampleTag, TextArea, TxExplorerLink } from '../ui';
 import { TxDone, TxFailed, TxPending } from '../state/TxStatus';
 import { AllocatedSpending } from './AllocatedSpending';
 import './AwardCard.css';
 
 interface AwardCardProps {
   award: RecipientAwardFixture;
+  /** A verifier's reply link for this programme: fills in the release. */
+  reply?: ReleaseReply | null;
   /** Overridable for tests: keep stand-in delay short. */
   sampleDelayMs?: number;
 }
@@ -98,6 +101,7 @@ function ReleaseSheet({
   tranche,
   onReleased,
   sampleDelayMs,
+  reply,
 }: {
   open: boolean;
   onClose: () => void;
@@ -108,13 +112,14 @@ function ReleaseSheet({
   tranche: number;
   onReleased: (result: Released, fresh: RecipientAwardFixture | null) => void;
   sampleDelayMs: number;
+  reply: ReleaseReply | null;
 }) {
   const announce = useAnnouncer();
   const { address } = useWallet();
   const { programmeAt } = useSoroban();
   const tx = useTransaction<Released>({ contract: 'program' });
-  const [attestationHex, setAttestationHex] = useState('');
-  const [attesterInput, setAttesterInput] = useState('');
+  const [attestationHex, setAttestationHex] = useState(reply?.attestation ?? '');
+  const [attesterInput, setAttesterInput] = useState(reply?.attester ?? '');
 
   const granted = BigInt(award.granted);
   const trancheBase = award.tranches > 0 ? granted / BigInt(award.tranches) : 0n;
@@ -223,8 +228,9 @@ function ReleaseSheet({
           {isReal ? (
             <>
               <p className="award-card__release-intro">
-                Your verifier gives you the attestation id once they have signed. One attestation releases
-                one tranche, once.
+                {reply
+                  ? 'Filled in from your verifier’s reply link. The contract checks the attestation when you release.'
+                  : 'Your verifier gives you the attestation id once they have signed. One attestation releases one tranche, once.'}
               </p>
               <Field
                 label="Attestation id (hex)"
@@ -265,6 +271,51 @@ function ReleaseSheet({
 }
 
 /**
+ * A request link for the verifier: no transaction, just a link that opens
+ * their review of this recipient's claim. The note travels in the link only.
+ */
+function RequestSheet({
+  open,
+  onClose,
+  award,
+  tranche,
+}: {
+  open: boolean;
+  onClose: () => void;
+  award: RecipientAwardFixture;
+  tranche: number;
+}) {
+  const [note, setNote] = useState('');
+  const link = absoluteLink(
+    requestPath({ programmeId: award.programmeId, recipient: award.recipient, tranche, note }),
+  );
+  return (
+    <Modal open={open} onClose={onClose} title="Ask your verifier" eyebrow={award.programmeName}>
+      <div className="award-card__release">
+        <p className="award-card__release-intro">
+          Send this link to your verifier. It opens their review of tranche {tranche} with your address filled
+          in. They check the award on the chain before they sign, then send you a link back that fills in your
+          release.
+        </p>
+        <TextArea
+          label="A note for your verifier (optional)"
+          rows={3}
+          maxLength={REQUEST_NOTE_MAX}
+          value={note}
+          onChange={(event) => setNote(event.target.value)}
+          hint="It travels in the link, not on the chain. Don’t include personal details."
+        />
+        <Field label="Request link" value={link} readOnly className="award-card__link" spellCheck={false} />
+        <div className="award-card__sheet-actions">
+          <CopyButton value={link} label="Copy request link" showLabel />
+          <Button onClick={onClose}>Done</Button>
+        </div>
+      </div>
+    </Modal>
+  );
+}
+
+/**
  * One award: where its money goes, and its tranches as numbered milepost
  * signs. A released tranche's sign is filled; one with its proof in is
  * outlined and offers the release; the next one without a proof says it is
@@ -274,7 +325,7 @@ function ReleaseSheet({
  * attestation, attester })` through `useTransaction`, then `get_award` is
  * re-read so the signs reflect the chain. Sample programmes stand in.
  */
-export function AwardCard({ award: initialAward, sampleDelayMs = SAMPLE_TX_DELAY_MS }: AwardCardProps) {
+export function AwardCard({ award: initialAward, reply = null, sampleDelayMs = SAMPLE_TX_DELAY_MS }: AwardCardProps) {
   // On-chain award state: starts from the prop and is updated after each
   // confirmed release so the signs reflect the chain, not a local counter.
   const [liveAward, setLiveAward] = useState<RecipientAwardFixture>(initialAward);
@@ -287,6 +338,10 @@ export function AwardCard({ award: initialAward, sampleDelayMs = SAMPLE_TX_DELAY
   // Which tranche the release sheet is for, fixed when it opens so the receipt
   // still names it after the award moves on. Null while closed.
   const [releasing, setReleasing] = useState<number | null>(null);
+  const [asking, setAsking] = useState<number | null>(null);
+  // A reply link is spent once a release goes through.
+  const [replyUsed, setReplyUsed] = useState(false);
+  const activeReply = reply && reply.programmeId === initialAward.programmeId && !replyUsed ? reply : null;
 
   // Sample ids have the contract shape too, so shape alone cannot tell them apart.
   const isReal = looksLikeContractId(initialAward.programmeId) && !isSampleProgrammeId(initialAward.programmeId);
@@ -304,13 +359,14 @@ export function AwardCard({ award: initialAward, sampleDelayMs = SAMPLE_TX_DELAY
         const amount = i === tranches - 1 ? granted - trancheBase * BigInt(tranches - 1) : trancheBase;
         let state: TrancheState = 'locked';
         if (i < tranchesReleased) state = 'released';
-        else if (i === tranchesReleased) state = liveAward.attestationReady ? 'proven' : 'waiting';
+        else if (i === tranchesReleased) state = liveAward.attestationReady || activeReply ? 'proven' : 'waiting';
         return { number: i + 1, amount, state };
       }),
-    [tranches, granted, trancheBase, tranchesReleased, liveAward.attestationReady],
+    [tranches, granted, trancheBase, tranchesReleased, liveAward.attestationReady, activeReply],
   );
 
   const onReleased = (result: Released, fresh: RecipientAwardFixture | null) => {
+    setReplyUsed(true);
     setLiveAward(
       (prev) =>
         fresh ?? {
@@ -325,6 +381,7 @@ export function AwardCard({ award: initialAward, sampleDelayMs = SAMPLE_TX_DELAY
 
   /** What the next sign says, and whether it offers the release. */
   const nextNote = (state: TrancheState) => {
+    if (state === 'proven' && activeReply) return 'Your verifier signed and sent a reply link. You can release it now.';
     if (state === 'proven') return `${liveAward.condition}. Confirmed by your verifier. You can release it now.`;
     if (isReal) return `${liveAward.condition}. Once your verifier signs, release it with their attestation id.`;
     return `Waiting on your verifier: ${liveAward.condition.charAt(0).toLowerCase()}${liveAward.condition.slice(1)}.`;
@@ -374,9 +431,20 @@ export function AwardCard({ award: initialAward, sampleDelayMs = SAMPLE_TX_DELAY
               {next && !allReleased && <p className="award-post__note">{nextNote(sign.state)}</p>}
               {sign.state === 'locked' && <p className="award-post__note">After tranche {sign.number - 1}.</p>}
               {next && !allReleased && (sign.state === 'proven' || isReal) && (
-                <Button size="sm" variant={sign.state === 'proven' ? 'primary' : 'ghost'} onClick={() => setReleasing(sign.number)}>
-                  Release tranche
-                </Button>
+                <span className="award-post__actions">
+                  <Button
+                    size="sm"
+                    variant={sign.state === 'proven' ? 'primary' : 'ghost'}
+                    onClick={() => setReleasing(sign.number)}
+                  >
+                    Release tranche
+                  </Button>
+                  {isReal && sign.state === 'waiting' && (
+                    <Button size="sm" variant="secondary" onClick={() => setAsking(sign.number)}>
+                      Ask your verifier
+                    </Button>
+                  )}
+                </span>
               )}
             </li>
           );
@@ -413,7 +481,12 @@ export function AwardCard({ award: initialAward, sampleDelayMs = SAMPLE_TX_DELAY
           tranche={releasing}
           onReleased={onReleased}
           sampleDelayMs={sampleDelayMs}
+          reply={activeReply}
         />
+      )}
+
+      {asking !== null && (
+        <RequestSheet open onClose={() => setAsking(null)} award={liveAward} tranche={asking} />
       )}
     </article>
   );

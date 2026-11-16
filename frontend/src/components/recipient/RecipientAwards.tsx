@@ -1,5 +1,8 @@
 import { AwardCard } from './AwardCard';
-import { Link } from 'react-router-dom';
+import { Link, useSearchParams } from 'react-router-dom';
+import { Notice } from '../ui';
+import { parseReply } from '../../lib/verifyLinks';
+import { shortId } from '../../lib/programmeView';
 import { Empty, ErrorState, Loading } from '../state/AsyncStates';
 import { useRecipientAwards } from '../../hooks';
 import type { RecipientAwardFixture } from '../../fixtures/recipientFixtures';
@@ -19,6 +22,11 @@ export function RecipientAwards({ awards }: RecipientAwardsProps = {}) {
   // No point reading when the caller already has the entries.
   const read = useRecipientAwards({ enabled: awards === undefined });
   const entries = awards ?? read.awards;
+  // A verifier's reply link (`?release=…&attestation=…&attester=…`) fills in
+  // the matching award's release.
+  const [searchParams] = useSearchParams();
+  const reply = parseReply(searchParams);
+  const replyMatches = reply ? entries.some((a) => a.programmeId === reply.programmeId) : false;
 
   if (entries.length === 0) {
     if (awards === undefined && read.loading) {
@@ -42,8 +50,14 @@ export function RecipientAwards({ awards }: RecipientAwardsProps = {}) {
 
   return (
     <div className="recipient-awards">
+      {reply && !replyMatches && !read.loading && (
+        <Notice tone="warn">
+          This reply link is for programme <span className="numeric">{shortId(reply.programmeId)}</span>, and this
+          account has no award there. Check you signed in with the address you asked about.
+        </Notice>
+      )}
       {entries.map((award) => (
-        <AwardCard key={award.programmeId} award={award} />
+        <AwardCard key={award.programmeId} award={award} reply={reply} />
       ))}
     </div>
   );

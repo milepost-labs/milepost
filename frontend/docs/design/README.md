@@ -48,6 +48,15 @@ the contracts and the index do not provide. The app follows the contracts.
 - **Standing** holds programmes, total received, tranches and first and last
   seen. There is no count of revoked proofs and no "of N" total.
 - **The registry** keeps no list of programmes; the indexer builds it.
+- **The verifier's claims queue** has no source: the contracts and the index
+  keep no list of claims. Claims reach `/verifiers` two ways instead, both
+  built so they can be compared: a recipient's *request link* (copied from
+  their award, it opens the verifier's review panel and is remembered in
+  that browser), and the verifier's own *lookup* (programme + recipient).
+  Either way the panel reads the award, the schema definition (the
+  condition), the verifier role and the registry on the chain before
+  signing. After signing, a *reply link* fills in the recipient's release.
+  "Signed this month" and "votes to cast" are not shown; nothing counts them.
 - **Names** (sector, verifier, payee and reviewer labels) are not on the
   chain. Where a name appears it is the creator's label for an address, shown
   beside the address.

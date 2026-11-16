@@ -303,7 +303,7 @@ Rules that hold on this page:
 are not wired to real reads yet, and that is fine: build the screens with
 realistic stand-in data so the layout can be judged, and wire them up after the
 wave. Currently unwired are recipient payees, a verifier's own attestations
-(kept in browser storage in `VerifierDashboard.tsx`), a programme's verifier
+(only the ones signed in this browser are real, kept by `lib/verifyLinks.ts`), a programme's verifier
 roster, programme names, and the stale-index notice. Five of these depend on
 indexer event handlers that do not exist yet, so they cannot be wired now even
 in principle.

@@ -152,10 +152,6 @@
   color: var(--ink-muted);
 }
 
-.award-post .ui-button {
-  margin-top: var(--space-3);
-}
-
 /* Restricted: the honest warning, with the way to check. */
 .award-card__policy {
   display: flex;
@@ -265,7 +261,26 @@
     margin-top: var(--space-1);
   }
 
-  .award-post .ui-button {
+  .award-post__actions {
     justify-self: start;
   }
+}
+
+.award-post__actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+  margin-top: var(--space-3);
+}
+
+.award-card__link input {
+  font-family: var(--font-numeric);
+  font-size: var(--text-xs);
+}
+
+.award-card__sheet-actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: var(--space-3);
 }

@@ -1,791 +1,366 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useState } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
-import { Buffer } from 'buffer';
-import type { Application } from '@milepost/program';
+import { Search, Wallet } from 'lucide-react';
 import './VerifierDashboard.css';
-import { useSoroban } from '../context/useSoroban';
 import { useWallet } from '../context/useWallet';
-import { useAnnouncer } from '../context/useAnnouncer';
-import { useContractRead, useContractResult } from '../hooks/useContractRead';
 import { useProgrammeParam } from '../hooks/useProgrammeParam';
-import { useTransaction } from '../hooks/useTransaction';
+import { usePageTitle } from '../hooks/usePageTitle';
 import { DEMO_PROGRAMME_ID } from '../context/sorobanStore';
 import { looksLikeAddress, truncateAddress } from '../lib/format';
-import { explain } from '../lib/errors';
+import { formatAgo, shortId } from '../lib/programmeView';
 import { isProgrammeContractId } from '../lib/registryVerification';
-import { usePageTitle } from '../hooks/usePageTitle';
-import { formatAmount, validateAmount } from '../lib/amount';
-import { AmountField, Badge, Button, Field, SampleTag } from '../components/ui';
-import { ProgrammeParamNotice } from '../components/programme/ProgrammeParamNotice';
-import { ErrorPanel, PendingState, TransactionOutcome } from '../components/state/AsyncStates';
-import { AttestationRevoke } from '../components/verifier/AttestationRevoke';
-import { FIXTURE_REVIEW_APPLICANTS } from '../fixtures/reviewFixtures';
-import { fetchProgrammes } from '../lib/indexer';
 import {
-  FIXTURE_MY_ATTESTATIONS,
-  FIXTURE_VERIFIER_QUEUE,
-  type VerifierAttestation,
-  type VerifierQueueItem,
-} from '../fixtures/verifierFixtures';
+  claimKey,
+  forgetRequest,
+  loadRequests,
+  loadSigned,
+  parseRequest,
+  rememberRequest,
+  rememberSigned,
+  type SignedRecord,
+  type StoredRequest,
+} from '../lib/verifyLinks';
+import { Button, Field, Notice, PageHead, Segmented, Select, StatTile } from '../components/ui';
+import { Empty } from '../components/state/AsyncStates';
+import { SignInSheet } from '../components/layout/SignInSheet';
+import { ProgrammeParamNotice } from '../components/programme/ProgrammeParamNotice';
+import { ClaimReview, type Claim } from '../components/verifier/ClaimReview';
+import { ReviewerVotes } from '../components/verifier/ReviewerVotes';
+import { SignedAttestations } from '../components/verifier/SignedAttestations';
+import { useMyRoles, type RoleProgramme } from '../components/verifier/useMyRoles';
 
-type ItemStatus = 'idle' | 'pending' | 'error' | 'done' | 'declined';
+type ClaimSource = 'requests' | 'lookup';
+const OTHER = '__other';
+const REQUEST_PARAMS = ['programme', 'recipient', 'tranche', 'note'];
+
+/** The left-hand form for the verifier's own lookup: a programme and a recipient. */
+function LookupForm({ verifierOf, onOpen }: { verifierOf: RoleProgramme[]; onOpen: (claim: Claim) => void }) {
+  const [pick, setPick] = useState<string>('');
+  const [other, setOther] = useState('');
+  const [recipient, setRecipient] = useState('');
+  const [errors, setErrors] = useState<{ programme?: string; recipient?: string }>({});
+  const usingOther = verifierOf.length === 0 || pick === OTHER;
+  const selected = usingOther ? other.trim() : pick || verifierOf[0]?.id || '';
+
+  const open = () => {
+    const next: typeof errors = {};
+    if (!isProgrammeContractId(selected)) next.programme = 'Enter a valid programme contract address.';
+    if (!looksLikeAddress(recipient.trim())) next.recipient = 'Enter the recipient’s Stellar address (starts with G).';
+    setErrors(next);
+    if (next.programme || next.recipient) return;
+    onOpen({ programmeId: selected, recipient: recipient.trim(), tranche: null, note: '', source: 'lookup' });
+  };
+
+  return (
+    <form
+      className="verify-lookup"
+      onSubmit={(event) => {
+        event.preventDefault();
+        open();
+      }}
+    >
+      {verifierOf.length > 0 && (
+        <Select
+          label="Programme"
+          options={[
+            ...verifierOf.map((p) => ({ value: p.id, label: p.name ?? shortId(p.id) })),
+            { value: OTHER, label: 'Another programme…' },
+          ]}
+          value={pick || verifierOf[0].id}
+          onChange={(event) => setPick(event.target.value)}
+          hint="Programmes where this address is a verifier, checked on the chain."
+        />
+      )}
+      {usingOther && (
+        <Field
+          label="Programme address"
+          placeholder="C…"
+          value={other}
+          onChange={(event) => setOther(event.target.value)}
+          error={errors.programme}
+          autoComplete="off"
+          spellCheck={false}
+        />
+      )}
+      <Field
+        label="Recipient address"
+        placeholder="G…"
+        value={recipient}
+        onChange={(event) => setRecipient(event.target.value)}
+        error={errors.recipient}
+        hint="The person whose condition you checked."
+        autoComplete="off"
+        spellCheck={false}
+      />
+      <Button type="submit" variant="secondary" icon={<Search size={18} aria-hidden="true" />}>
+        Open claim
+      </Button>
+    </form>
+  );
+}
 
 /**
- * Verifier queue — the verifier's home screen.
+ * `/verifiers`: where a verifier confirms conditions, and where reviewers vote.
  *
- * Signing an attestation releases someone's money and cannot be undone, so the
- * card slows the decision down: expanding shows exactly what is being signed
- * (schema, recipient, ledger), an optional reference note, and a required
- * checkbox that gates the sign button. "Can't confirm" dismisses with no
- * transaction at all.
+ * Claims reach the review panel two ways, both live so they can be compared:
  *
- * The queue is a stand-in; the indexer does not publish it yet. Every entry is
- * tagged as sample data.
+ * - **Requests.** A recipient copies a request link from their award and sends
+ *   it. Opening it puts the claim in this browser's list and opens it.
+ * - **Look up.** The verifier picks a programme and pastes a recipient.
+ *
+ * Either way the panel reads everything from the chain before anything can be
+ * signed. There is no server and no on-chain queue.
  */
 export const VerifierDashboard = () => {
   usePageTitle('Verifier Dashboard');
-  const { address, connect } = useWallet();
-  const { attest, programmeAt } = useSoroban();
-  const announce = useAnnouncer();
+  const { address } = useWallet();
   const programmeParam = useProgrammeParam();
   const [searchParams, setSearchParams] = useSearchParams();
+  const roles = useMyRoles(address);
+  const [signInOpen, setSignInOpen] = useState(false);
 
-  const linkedProgrammeId =
-    programmeParam.status === 'valid' ? programmeParam.programmeId : null;
-  const [programmeInputOverride, setProgrammeInputOverride] = useState<string | null>(null);
-  const [programmeIdOverride, setProgrammeIdOverride] = useState<string | null>(null);
-  const [programmeError, setProgrammeError] = useState<string | null>(null);
-  const programmeInput = programmeInputOverride ?? linkedProgrammeId ?? '';
-  const programmeId = programmeIdOverride ?? linkedProgrammeId ?? DEMO_PROGRAMME_ID;
+  const linkRequest = parseRequest(searchParams);
+  const linkKey = linkRequest ? claimKey(linkRequest) : null;
+  const [mountedAt] = useState(() => Date.now());
+  const [stored, setStored] = useState<StoredRequest[]>(() => loadRequests());
 
-  const [statusById, setStatusById] = useState<Record<string, ItemStatus>>({});
-  const [openId, setOpenId] = useState<string | null>(null);
-  const [checked, setChecked] = useState(false);
-  const [reference, setReference] = useState('');
-  const [newlySigned, setNewlySigned] = useState<VerifierAttestation[]>([]);
-  const [revokedUids, setRevokedUids] = useState<ReadonlySet<string>>(() => new Set());
-  const [signingId, setSigningId] = useState<string | null>(null);
-  const [connecting, setConnecting] = useState(false);
-  const [applicantInput, setApplicantInput] = useState('');
-  const [selection, setSelection] = useState<{ programmeId: string; applicant: string } | null>(null);
-  const selectedApplicant =
-    selection && selection.programmeId === programmeId ? selection.applicant : '';
-  const [approvedInput, setApprovedInput] = useState('');
-  const [rememberedByProgramme, setRememberedByProgramme] = useState<
-    Record<string, typeof FIXTURE_REVIEW_APPLICANTS[string]>
-  >({});
-  const rememberedApplicants =
-    rememberedByProgramme[programmeId] ?? FIXTURE_REVIEW_APPLICANTS[programmeId] ?? [];
-  const [reviewFormError, setReviewFormError] = useState<string | null>(null);
-
-  const programme = useMemo(() => programmeAt(programmeId), [programmeAt, programmeId]);
-
-  const signTx = useTransaction<Buffer>({ contract: 'attest' });
-  const reviewTx = useTransaction<void>({
-    contract: 'program',
-    onSuccess: () => {
-      applicationRead.refetch();
-      setApprovedInput('');
-    },
-  });
-
-  const queue = useMemo(
-    () => FIXTURE_VERIFIER_QUEUE.filter((item) => (statusById[item.id] ?? 'idle') !== 'declined' && (statusById[item.id] ?? 'idle') !== 'done'),
-    [statusById],
-  );
-  const mine = useMemo(() => [...newlySigned, ...FIXTURE_MY_ATTESTATIONS], [newlySigned]);
-  const applicantValid = looksLikeAddress(selectedApplicant);
-  const isReviewerRead = useContractRead(
-    () => programme.is_reviewer({ addr: address ?? '' }),
-    [programme, address],
-    { contract: 'program', enabled: Boolean(address) },
-  );
-  const phaseRead = useContractResult(
-    () => programme.get_phase(),
-    [programme],
-    { contract: 'program' },
-  );
-  const applicationRead = useContractResult<Application>(
-    () => programme.get_application({ applicant: selectedApplicant }),
-    [programme, selectedApplicant],
-    { contract: 'program', enabled: applicantValid },
-  );
-
-  // Issues #430/#431: walk the indexed (advisory) programme list, re-check
-  // each on-chain, and keep only the ones where this address actually holds
-  // a role — the index is never trusted on its own for this.
-  type MyProgramme = { id: string; name: string | null; isVerifier: boolean; isReviewer: boolean; phase: string | null };
-  // The address is stored beside the list, so a signed-out reader never sees
-  // the previous account's roles: only a list read for the current address
-  // counts. Resetting state inside the effect would cascade a render instead.
-  const [loaded, setLoaded] = useState<{ address: string; list: MyProgramme[] } | null>(null);
+  // Remember a request link in this browser. The list shown merges it in
+  // directly, so nothing waits on the write.
   useEffect(() => {
-    if (!address) return;
-    let cancelled = false;
-    (async () => {
-      const indexed = await fetchProgrammes().catch(() => []);
-      const checked = await Promise.all(
-        indexed.map(async (p) => {
-          // A programme that cannot be read holds no role we can confirm.
-          try {
-            const programme = programmeAt(p.id);
-            const [ver, rev, phase] = await Promise.all([
-              programme.is_verifier({ addr: address }).then((r) => r.result).catch(() => false),
-              programme.is_reviewer({ addr: address }).then((r) => r.result).catch(() => false),
-              programme.get_phase().then((r) => r.result.unwrap().tag).catch(() => null),
-            ]);
-            return { id: p.id, name: p.name, isVerifier: ver, isReviewer: rev, phase: phase != null ? String(phase) : null };
-          } catch {
-            return { id: p.id, name: p.name, isVerifier: false, isReviewer: false, phase: null };
-          }
-        }),
-      );
-      if (!cancelled) setLoaded({ address, list: checked.filter((p) => p.isVerifier || p.isReviewer) });
-    })();
-    return () => {
-      cancelled = true;
-    };
-  }, [address, programmeAt]);
-  const myProgrammes = loaded && loaded.address === address ? loaded.list : null;
-  const verifierProgrammes = myProgrammes?.filter((p) => p.isVerifier) ?? [];
-  const reviewerProgrammes = useMemo(
-    () => (myProgrammes ?? []).filter((p) => p.isReviewer).sort((a, b) => (a.phase === 'Review' ? -1 : b.phase === 'Review' ? 1 : 0)),
-    [myProgrammes],
+    if (linkRequest) rememberRequest(linkRequest);
+    // Keyed on the claim, not the parsed object, which is new every render.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [linkKey, linkRequest?.tranche, linkRequest?.note]);
+
+  const requests: StoredRequest[] =
+    linkRequest && !stored.some((r) => claimKey(r) === linkKey)
+      ? [{ ...linkRequest, openedAt: mountedAt }, ...stored]
+      : stored.map((r) => (linkRequest && claimKey(r) === linkKey ? { ...r, ...linkRequest } : r));
+
+  const [source, setSource] = useState<ClaimSource>('requests');
+  const [selectedKey, setSelectedKey] = useState<string | null>(null);
+  const [lookupClaim, setLookupClaim] = useState<Claim | null>(null);
+
+  const selectedRequest =
+    requests.find((r) => claimKey(r) === selectedKey) ??
+    requests.find((r) => claimKey(r) === linkKey) ??
+    requests[0] ??
+    null;
+  const claim: Claim | null =
+    source === 'lookup' ? lookupClaim : selectedRequest ? { ...selectedRequest, source: 'request' } : null;
+
+  // Attestations signed in this browser, for this address.
+  const [signed, setSigned] = useState<{ address: string | null; list: SignedRecord[] }>(() => ({
+    address,
+    list: address ? loadSigned(address) : [],
+  }));
+  if (signed.address !== address) setSigned({ address, list: address ? loadSigned(address) : [] });
+
+  const dropRequest = (target: { programmeId: string; recipient: string }) => {
+    setStored(forgetRequest(target));
+    if (claimKey(target) === linkKey) {
+      const next = new URLSearchParams(searchParams);
+      for (const key of REQUEST_PARAMS) next.delete(key);
+      setSearchParams(next, { replace: true });
+    }
+    if (claimKey(target) === selectedKey) setSelectedKey(null);
+  };
+
+  const onDismiss = () => {
+    if (!claim) return;
+    if (claim.source === 'request') dropRequest(claim);
+    else setLookupClaim(null);
+  };
+
+  const programmeName = (id: string) => roles.all?.find((p) => p.id === id)?.name ?? null;
+
+  // The reviewer section starts on a `?programme=` link that isn't a request,
+  // then a programme in Review where this address reviews, then the seeded one.
+  const reviewerStart =
+    !linkRequest && programmeParam.status === 'valid' && programmeParam.programmeId
+      ? programmeParam.programmeId
+      : (roles.reviewerOf[0]?.id ?? DEMO_PROGRAMME_ID);
+
+  const head = (
+    <PageHead
+      eyebrow="Verify"
+      title="Waiting for your confirmation"
+      action={
+        <Link to="/attestations" className="ui-button ui-button--ghost ui-button--md">
+          Look up an attestation
+        </Link>
+      }
+    >
+      <p>Each signature unlocks exactly one tranche for one person. Only sign what you checked yourself.</p>
+    </PageHead>
   );
 
-  const phaseName = phaseRead.data?.tag ?? null;
-  const reviewGateReason = programmeParam.blocksProgramme
-    ? 'The programme link is not usable. Correct it above or clear it from the URL.'
-    : !address
-      ? 'Connect a reviewer wallet first.'
-    : phaseRead.loading && !phaseRead.data
-      ? 'Reading the programme phase…'
-      : phaseRead.error
-        ? explain(phaseRead.error, 'program').message
-        : phaseName !== 'Review'
-          ? `Voting is available only during Review. This programme is ${phaseName ?? 'not readable'}.`
-          : isReviewerRead.loading
-            ? 'Checking whether this wallet is a reviewer for the programme…'
-            : !isReviewerRead.data
-              ? 'The connected wallet is not a registered reviewer for this programme.'
-              : null;
+  if (!address) {
+    return (
+      <div className="verify">
+        {head}
+        {linkRequest && (
+          <Notice tone="info">
+            A recipient sent you a claim to confirm for{' '}
+            <b className="numeric">{truncateAddress(linkRequest.recipient)}</b>. Sign in with your verifier address
+            to review it.
+          </Notice>
+        )}
+        <Empty
+          title="Confirm conditions and unlock payments"
+          description="Sign in with the address a programme trusts as its verifier to review claims. Anyone can look up an attestation without signing in."
+          action={
+            <>
+              <Button icon={<Wallet size={18} aria-hidden="true" />} onClick={() => setSignInOpen(true)}>
+                Sign in with Freighter
+              </Button>
+              <Link to="/directory" className="ui-button ui-button--ghost ui-button--md">
+                Browse programmes
+              </Link>
+            </>
+          }
+        />
+        <SignInSheet open={signInOpen} onClose={() => setSignInOpen(false)} />
+      </div>
+    );
+  }
 
-  const openProgramme = (value: string) => {
-    setProgrammeError(null);
-    setProgrammeInputOverride(value);
-    setProgrammeIdOverride(value);
-    setSelection(null);
-    setApprovedInput('');
-    setReviewFormError(null);
-    const next = new URLSearchParams(searchParams);
-    next.set('programme', value);
-    setSearchParams(next, { replace: true });
-  };
-
-  const chooseProgramme = () => {
-    const value = programmeInput.trim();
-    if (!isProgrammeContractId(value)) {
-      setProgrammeError('Enter a valid programme contract address.');
-      return;
-    }
-    openProgramme(value);
-  };
-  const programmes = useMemo(() => {
-    const ids = new Set<string>();
-    for (const item of queue) ids.add(item.programmeId);
-    for (const item of mine) ids.add(item.programmeId);
-    return ids;
-  }, [queue, mine]);
-
-  const stats = [
-    { k: 'Waiting for you', v: String(queue.length) },
-    { k: 'Signed', v: String(mine.length) },
-    { k: 'Programmes', v: String(programmes.size) },
-  ];
-
-  const openItem = openId ? (queue.find((item) => item.id === openId) ?? null) : null;
-
-  const openClaim = (item: VerifierQueueItem) => {
-    setOpenId(item.id);
-    setChecked(false);
-    setReference('');
-    signTx.reset();
-  };
-
-  const closeClaim = () => {
-    setOpenId(null);
-    setChecked(false);
-    setReference('');
-    signTx.reset();
-  };
-
-  /** Dismiss with no transaction at all — the tranche stays locked. */
-  const declineClaim = (item: VerifierQueueItem) => {
-    setStatusById((prev) => ({ ...prev, [item.id]: 'declined' }));
-    if (openId === item.id) closeClaim();
-    announce('Marked as not confirmed. Nothing was sent; the tranche stays locked.');
-  };
-
-  const signClaim = async (item: VerifierQueueItem) => {
-    if (!address || !checked || signTx.busy) return;
-    setSigningId(item.id);
-    setStatusById((prev) => ({ ...prev, [item.id]: 'pending' }));
-    announce('Signing attestation.');
-
-    // Stand-in queue rows carry human schema names, not on-chain UIDs, so the
-    // sign attempt below carries a placeholder hash: the contract rejects it
-    // with SchemaNotFound and the error panel explains it. Swapping in the real
-    // queue (with real schema UIDs) is a change of source, not of flow.
-    const result = await signTx.send(async () => {
-      const tx = await attest.attest({
-        attester: address,
-        schema_uid: Buffer.alloc(32),
-        subject: item.subject,
-        data_hash: Buffer.alloc(32),
-        expires_at: undefined,
-      });
-      return {
-        signAndSend: async (options: Parameters<typeof tx.signAndSend>[0]) => {
-          const sent = await tx.signAndSend(options);
-          return { result: sent.result.unwrap() };
-        },
-      };
-    });
-
-    if (result !== null) {
-      const rawHex = result.toString('hex');
-      const uid = `att_${rawHex.slice(0, 12)}…${rawHex.slice(-4)}`;
-      setNewlySigned((prev) => [
-        {
-          uid,
-          rawUid: rawHex,
-          programmeId: item.programmeId,
-          programme: item.programme,
-          subject: item.subject,
-          schema: item.schema,
-          ledger: item.requestedLedger + 1,
-          used: false,
-        },
-        ...prev,
-      ]);
-      setStatusById((prev) => ({ ...prev, [item.id]: 'done' }));
-      setOpenId(null);
-      setChecked(false);
-      setReference('');
-      announce(`Attestation signed. ${item.subject} can now release tranche ${item.tranche}.`);
-    } else {
-      setStatusById((prev) => ({ ...prev, [item.id]: 'error' }));
-      const explained = signTx.error ? explain(signTx.error, 'attest') : null;
-      announce(explained ? `Attestation not signed. ${explained.message}` : 'Attestation not signed.', 'alert');
-    }
-    setSigningId(null);
-  };
-
-  const rememberApplicant = () => {
-    const applicant = applicantInput.trim();
-    setReviewFormError(null);
-    if (!looksLikeAddress(applicant)) {
-      setReviewFormError('Enter a valid applicant address.');
-      return;
-    }
-    setSelection({ programmeId, applicant });
-    setRememberedByProgramme((existing) => {
-      const current = existing[programmeId] ?? FIXTURE_REVIEW_APPLICANTS[programmeId] ?? [];
-      if (current.some((item) => item.address === applicant)) return existing;
-      return {
-        ...existing,
-        [programmeId]: [{ address: applicant, label: 'Manual applicant' }, ...current],
-      };
-    });
-    setApplicantInput('');
-  };
-
-  const selectApplicant = (applicant: string) => {
-    setSelection({ programmeId, applicant });
-    setApprovedInput('');
-    setReviewFormError(null);
-    reviewTx.reset();
-  };
-
-  const submitReview = async () => {
-    setReviewFormError(null);
-    if (reviewGateReason) {
-      setReviewFormError(reviewGateReason);
-      return;
-    }
-    if (!applicantValid) {
-      setReviewFormError('Choose or enter a valid applicant address.');
-      return;
-    }
-    const parsed = validateAmount(approvedInput, { asset: 'XLM' });
-    if (!parsed.ok) {
-      setReviewFormError(parsed.error);
-      return;
-    }
-    const application = applicationRead.data;
-    if (application && parsed.value > application.requested) {
-      setReviewFormError('The approved amount cannot exceed what the applicant requested.');
-      return;
-    }
-
-    const result = await reviewTx.send(async () => {
-      const tx = await programme.review({
-        reviewer: address!,
-        applicant: selectedApplicant,
-        approved: parsed.value,
-      });
-      return {
-        signAndSend: async (options: Parameters<typeof tx.signAndSend>[0]) => {
-          const sent = await tx.signAndSend(options);
-          return { result: sent.result.unwrap() };
-        },
-      };
-    });
-    if (result !== null) {
-      announce(`Review vote submitted for ${truncateAddress(selectedApplicant)}.`);
-    }
-  };
-
-  const signIn = async () => {
-    setConnecting(true);
-    try {
-      await connect();
-    } finally {
-      setConnecting(false);
-    }
-  };
-
-  const handleRevoked = (uid: string) => {
-    setRevokedUids((prev) => new Set(prev).add(uid));
-  };
-
-  const signError = signTx.error ? explain(signTx.error, 'attest') : null;
-  const application = applicationRead.data;
-  const reviewError = reviewTx.error ? explain(reviewTx.error, 'program') : null;
+  const inReview = roles.reviewerOf.filter((p) => p.phase === 'Review').length;
 
   return (
-    <div className="dashboard-container verifier-page">
-      <header className="verifier-page__head">
-        <div className="verifier-page__titles">
-          <h1 id="h-ver">Verify conditions</h1>
-          <p className="typo-text text-muted">
-            When you confirm a condition, you sign an attestation. Each one unlocks exactly one
-            tranche for one recipient, and can&apos;t be used twice.
-          </p>
-        </div>
-        <Link className="verifier-page__lookup" to="/attestations">
-          Look up an attestation →
-        </Link>
-      </header>
-
+    <div className="verify">
+      {head}
       <ProgrammeParamNotice state={programmeParam} />
 
-      {!address ? (
-        <section className="verifier-page__signin" aria-labelledby="verifier-signin">
-          <div className="verifier-page__signin-copy">
-            <h2 id="verifier-signin">Sign in with your verifier account</h2>
-            <p className="typo-text text-muted">
-              Use the account the programme registered as its verifier, in Freighter.
-            </p>
-            <Button onClick={signIn} loading={connecting} loadingLabel="Signing in…">
-              Sign in
-            </Button>
-          </div>
-          <ul className="verifier-page__signin-list">
-            <li>
-              <span className="verifier-page__signin-name">Claims waiting for you</span>
-              <span className="verifier-page__signin-hint">
-                Recipients whose next tranche needs your confirmation
-              </span>
-            </li>
-            <li>
-              <span className="verifier-page__signin-name">Attestations you&apos;ve signed</span>
-              <span className="verifier-page__signin-hint">
-                And whether each has released a tranche yet
-              </span>
-            </li>
-            <li>
-              <span className="verifier-page__signin-name">Programmes you verify for</span>
-              <span className="verifier-page__signin-hint">
-                With the condition each one asks you to check
-              </span>
-            </li>
-          </ul>
-        </section>
-      ) : (
-        <>
-          <div className="verifier-page__stats" role="list" aria-label="Verification summary">
-            {stats.map((s) => (
-              <div key={s.k} className="verifier-page__stat" role="listitem">
-                <span className="verifier-page__stat-label">{s.k}</span>
-                <span className="verifier-page__stat-value numeric">{s.v}</span>
-              </div>
-            ))}
-          </div>
+      <div className="ui-stat-tiles" role="list" aria-label="Verification summary">
+        <div role="listitem">
+          <StatTile label="Requests waiting" value={requests.length} hint="Opened in this browser" highlight />
+        </div>
+        <div role="listitem">
+          <StatTile
+            label="Verifier in"
+            value={roles.mine ? roles.verifierOf.length : '—'}
+            hint={roles.mine ? 'Programmes, checked on the chain' : 'Checking your roles…'}
+          />
+        </div>
+        <div role="listitem">
+          <StatTile
+            label="Reviewer in"
+            value={roles.mine ? roles.reviewerOf.length : '—'}
+            hint={roles.mine ? `${inReview} in Review now` : 'Checking your roles…'}
+          />
+        </div>
+        <div role="listitem">
+          <StatTile label="Signed here" value={signed.list.length} hint="Attestations from this browser" />
+        </div>
+      </div>
 
-          <section aria-labelledby="my-programmes">
-            <h2 id="my-programmes" className="verifier-page__section-title">
-              Your programmes
+      <div className="verify__grid">
+        <section className="verify__section verify__claims" aria-labelledby="claims-title">
+          <div className="verify__claims-head">
+            <h2 id="claims-title" className="verify__h2">
+              Claims to confirm
             </h2>
-            {myProgrammes === null ? (
-              <p className="typo-text text-muted">Checking your roles across known programmes…</p>
-            ) : (
-              <div className="verifier-page__grid">
-                <div>
-                  <h3>Programmes you verify for</h3>
-                  {verifierProgrammes.length === 0 ? (
-                    <p className="typo-text text-muted">None found among known programmes.</p>
-                  ) : (
-                    <ul>
-                      {verifierProgrammes.map((p) => (
-                        <li key={p.id}>{p.name ?? truncateAddress(p.id)} — {p.phase ?? 'unknown phase'}</li>
-                      ))}
-                    </ul>
-                  )}
-                </div>
-                <div>
-                  <h3>Programmes where you can vote</h3>
-                  {reviewerProgrammes.length === 0 ? (
-                    <p className="typo-text text-muted">None found among known programmes.</p>
-                  ) : (
-                    <ul>
-                      {reviewerProgrammes.map((p) => (
-                        <li key={p.id}>
-                          {p.name ?? truncateAddress(p.id)} — {p.phase ?? 'unknown phase'}
-                          {p.phase === 'Review' && (
-                            <button type="button" onClick={() => openProgramme(p.id)}>
-                              Review here
-                            </button>
-                          )}
-                        </li>
-                      ))}
-                    </ul>
-                  )}
-                </div>
-              </div>
-            )}
-          </section>
-
-          <div className="verifier-page__grid">
-            <section aria-labelledby="reviewer-vote">
-              <h2 id="reviewer-vote" className="verifier-page__section-title">
-                Vote on applications
-              </h2>
-              <div className="reviewer-panel">
-                <p className="reviewer-panel__copy">
-                  Reviewers approve an amount up to the applicant&apos;s request. The contract
-                  stores one vote per reviewer and lets you amend it before finalisation.
-                </p>
-                <div className="reviewer-panel__programme">
-                  <Field
-                    label="Programme address"
-                    hint="Reviewers act per programme. Choose one here or share ?programme= in the URL."
-                    value={programmeInput}
-                    onChange={(event) => {
-                      setProgrammeInputOverride(event.target.value);
-                      setProgrammeError(null);
-                    }}
-                    error={programmeError}
-                    placeholder="C…"
-                  />
-                  <Button variant="secondary" onClick={chooseProgramme}>
-                    Use programme
-                  </Button>
-                </div>
-
-                <div className="reviewer-panel__status">
-                  <Badge tone={phaseName === 'Review' ? 'success' : phaseName ? 'warning' : 'neutral'}>
-                    {phaseRead.loading ? 'Reading phase' : phaseName ?? 'Phase unavailable'}
-                  </Badge>
-                  <Badge tone={isReviewerRead.loading ? 'neutral' : isReviewerRead.data ? 'success' : 'danger'}>
-                    {isReviewerRead.loading
-                      ? 'Checking reviewer status'
-                      : isReviewerRead.data
-                        ? 'Reviewer wallet'
-                        : 'Not a reviewer'}
-                  </Badge>
-                  <span className="numeric" title={programmeId}>
-                    Programme {truncateAddress(programmeId, 6, 4)}
-                  </span>
-                </div>
-
-                {reviewGateReason && (
-                  <p className="reviewer-panel__gate" role="note">
-                    {reviewGateReason}
-                  </p>
-                )}
-
-                {reviewFormError && (
-                  <p className="reviewer-panel__error" role="alert">
-                    {reviewFormError}
-                  </p>
-                )}
-
-                <div className="reviewer-panel__add">
-                  <Field
-                    label="Applicant address"
-                    hint="Paste an applicant to load its current application and vote."
-                    value={applicantInput}
-                    onChange={(event) => setApplicantInput(event.target.value.trim())}
-                    placeholder="G…"
-                  />
-                  <Button variant="secondary" onClick={rememberApplicant}>
-                    Load applicant
-                  </Button>
-                </div>
-
-                {rememberedApplicants.length > 0 && (
-                  <ul className="reviewer-panel__queue" aria-label="Known applicants">
-                    {rememberedApplicants.map((applicant) => (
-                      <li key={applicant.address}>
-                        <button
-                          type="button"
-                          className={selectedApplicant === applicant.address ? 'reviewer-panel__applicant reviewer-panel__applicant--selected' : 'reviewer-panel__applicant'}
-                          onClick={() => selectApplicant(applicant.address)}
-                        >
-                          <span>{applicant.label}</span>
-                          <span className="numeric">{truncateAddress(applicant.address, 6, 4)}</span>
-                        </button>
-                      </li>
-                    ))}
-                  </ul>
-                )}
-
-                {selectedApplicant && (
-                  <div className="reviewer-panel__application">
-                    <div className="reviewer-panel__application-head">
-                      <span className="numeric" title={selectedApplicant}>
-                        {selectedApplicant}
-                      </span>
-                      <Button variant="secondary" size="sm" onClick={applicationRead.refetch} loading={applicationRead.fetching}>
-                        Refresh
-                      </Button>
-                    </div>
-                    {applicationRead.loading ? (
-                      <PendingState title="Loading application…" note="Reading the programme contract." />
-                    ) : applicationRead.error ? (
-                      <ErrorPanel explained={explain(applicationRead.error, 'program')} />
-                    ) : application ? (
-                      <>
-                        <dl className="reviewer-panel__facts">
-                          <div>
-                            <dt>Requested</dt>
-                            <dd className="numeric">{formatAmount(application.requested, { asset: 'XLM' })}</dd>
-                          </div>
-                          <div>
-                            <dt>Votes</dt>
-                            <dd className="numeric">{application.votes.length}</dd>
-                          </div>
-                          <div>
-                            <dt>Status</dt>
-                            <dd>{application.finalized ? 'Finalized' : application.withdrawn ? 'Withdrawn' : 'Open for review'}</dd>
-                          </div>
-                        </dl>
-                        <AmountField
-                          label="Approved amount"
-                          value={approvedInput}
-                          onChange={setApprovedInput}
-                          asset="XLM"
-                          balance={application.requested}
-                          hint="Cannot exceed the applicant's requested amount."
-                          disabled={application.finalized || application.withdrawn}
-                        />
-                        {reviewError && <ErrorPanel explained={reviewError} live />}
-                        <Button
-                          onClick={() => void submitReview()}
-                          loading={reviewTx.busy}
-                          disabled={
-                            application.finalized ||
-                            application.withdrawn ||
-                            Boolean(reviewGateReason)
-                          }
-                        >
-                          Submit review vote
-                        </Button>
-                        <TransactionOutcome phase={reviewTx.phase} error={reviewTx.error} successTitle="Review vote submitted" />
-                      </>
-                    ) : null}
-                  </div>
-                )}
-              </div>
-              <p className="verifier-page__sample-note">
-                <SampleTag /> Applicant shortcuts are sample until an
-                indexer supplies a reviewer queue.
-              </p>
-            </section>
-
-            <section aria-labelledby="verifier-queue">
-              <h2 id="verifier-queue" className="verifier-page__section-title">
-                Waiting for your confirmation
-              </h2>
-              {queue.length === 0 ? (
-                <div className="verifier-page__empty">
-                  <p className="typo-text">
-                    <strong>All done.</strong> Nothing waiting — new claims appear here when a
-                    recipient&apos;s next tranche needs you.
-                  </p>
-                </div>
-              ) : (
-                <ul className="verifier-page__queue">
-                  {queue.map((item) => {
-                    const isOpen = openId === item.id;
-                    const status = statusById[item.id] ?? 'idle';
-                    const pending = status === 'pending' && signingId === item.id;
-                    return (
-                      <li key={item.id}>
-                        <article
-                          className={`verifier-card${isOpen ? ' verifier-card--open' : ''}`}
-                          aria-label={`${item.condition}, ${item.programme}`}
-                        >
-                          <div className="verifier-card__top">
-                            <span className="verifier-card__titles">
-                              <span className="verifier-card__condition">{item.condition}</span>
-                              <span className="verifier-card__meta">
-                                {item.programme} · Tranche {item.tranche} of {item.tranches}
-                              </span>
-                            </span>
-                            <span className="verifier-card__subject numeric" title={item.subject}>
-                              {truncateAddress(item.subject, 6, 4)}
-                            </span>
-                          </div>
-
-                          {!isOpen ? (
-                            <div className="verifier-card__actions">
-                              <Button size="sm" onClick={() => openClaim(item)}>
-                                Review claim
-                              </Button>
-                              <Button variant="secondary" size="sm" onClick={() => declineClaim(item)}>
-                                Can&apos;t confirm
-                              </Button>
-                            </div>
-                          ) : (
-                            <div className="verifier-card__review">
-                              <dl className="verifier-card__facts">
-                                <div>
-                                  <dt>Schema</dt>
-                                  <dd className="numeric">{item.schema}</dd>
-                                </div>
-                                <div>
-                                  <dt>Recipient</dt>
-                                  <dd className="numeric" title={item.subject}>
-                                    {item.subject}
-                                  </dd>
-                                </div>
-                                <div>
-                                  <dt>Requested at ledger</dt>
-                                  <dd className="numeric">
-                                    {item.requestedLedger.toLocaleString()}
-                                  </dd>
-                                </div>
-                              </dl>
-
-                              <Field
-                                label="Reference (optional)"
-                                placeholder="e.g. register page, invoice number"
-                                value={reference}
-                                onChange={(event) => setReference(event.target.value)}
-                              />
-
-                              <label className="verifier-card__gate">
-                                <input
-                                  type="checkbox"
-                                  checked={checked}
-                                  onChange={(event) => setChecked(event.target.checked)}
-                                />
-                                <span className="verifier-card__box" aria-hidden="true">
-                                  {checked ? '✓' : ''}
-                                </span>
-                                <span>
-                                  I checked this myself and the condition is met. Signing releases
-                                  money and can&apos;t be undone.
-                                </span>
-                              </label>
-
-                              {status === 'error' && signError && openItem?.id === item.id && (
-                                <ErrorPanel explained={signError} live />
-                              )}
-                              {pending && (
-                                <PendingState title="Signing…" note="Check your wallet to approve." />
-                              )}
-
-                              <div className="verifier-card__actions">
-                                <Button variant="secondary" size="sm" onClick={closeClaim}>
-                                  Cancel
-                                </Button>
-                                <Button
-                                  size="sm"
-                                  disabled={!checked || pending}
-                                  loading={pending}
-                                  loadingLabel="Signing…"
-                                  onClick={() => signClaim(item)}
-                                >
-                                  Confirm and sign
-                                </Button>
-                              </div>
-                            </div>
-                          )}
-                        </article>
-                      </li>
-                    );
-                  })}
-                </ul>
-              )}
-              <p className="verifier-page__sample-note">
-                <SampleTag /> Sample queue for the design phase.
-              </p>
-            </section>
-
-            <section aria-labelledby="verifier-signed">
-              <h2 id="verifier-signed" className="verifier-page__section-title">
-                Signed by you
-              </h2>
-              {mine.length === 0 ? (
-                <div className="verifier-page__empty">
-                  <p className="typo-text text-muted">
-                    No attestations yet. Claims you confirm appear here.
-                  </p>
-                </div>
-              ) : (
-                <ul className="verifier-page__signed">
-                  {mine.map((m) => {
-                    const isRevoked = m.revoked || revokedUids.has(m.uid);
-                    return (
-                      <li key={m.uid} className="verifier-signed">
-                        <div className="verifier-signed__row">
-                          <span className="verifier-signed__uid numeric" title={m.uid}>
-                            {truncateAddress(m.uid, 8, 6)}
-                          </span>
-                          <Badge tone={isRevoked ? 'neutral' : m.used ? 'accent' : 'neutral'}>
-                            {isRevoked
-                              ? 'Revoked'
-                              : m.used
-                                ? 'Used to release a tranche'
-                                : 'Not used yet'}
-                          </Badge>
-                        </div>
-                        <span className="verifier-signed__meta">
-                          {m.programme} · {truncateAddress(m.subject, 6, 4)} · {m.schema} · ledger{' '}
-                          {m.ledger.toLocaleString()}
-                        </span>
-                        {!isRevoked && (
-                          <AttestationRevoke
-                            attestation={{ ...m, revoked: isRevoked }}
-                            onRevoked={handleRevoked}
-                          />
-                        )}
-                      </li>
-                    );
-                  })}
-                </ul>
-              )}
-              <p className="verifier-page__sample-note">
-                <SampleTag /> Sample queue and attestations for the
-                design phase.
-              </p>
-            </section>
+            <Segmented
+              label="Where claims come from"
+              value={source}
+              onChange={setSource}
+              options={[
+                { value: 'requests', label: 'Requests', count: requests.length },
+                { value: 'lookup', label: 'Look up a recipient' },
+              ]}
+            />
           </div>
-        </>
-      )}
+
+          {source === 'requests' ? (
+            requests.length === 0 ? (
+              <Empty
+                title="No requests yet"
+                description="A recipient can copy a request link from their award and send it to you. Opening it puts the claim here, in this browser only. You can also look up a recipient yourself."
+                action={
+                  <Button variant="secondary" onClick={() => setSource('lookup')}>
+                    Look up a recipient
+                  </Button>
+                }
+              />
+            ) : (
+              <ul className="claims" aria-label="Requests">
+                {requests.map((r) => {
+                  const key = claimKey(r);
+                  const current = selectedRequest !== null && claimKey(selectedRequest) === key;
+                  return (
+                    <li key={key}>
+                      <button
+                        type="button"
+                        className="claim"
+                        aria-current={current ? 'true' : undefined}
+                        onClick={() => setSelectedKey(key)}
+                      >
+                        <span className="claim__sign numeric" aria-hidden="true">
+                          {r.tranche !== null ? String(r.tranche).padStart(2, '0') : '··'}
+                        </span>
+                        <span className="claim__text">
+                          <b>{programmeName(r.programmeId) ?? shortId(r.programmeId)}</b>
+                          <span>
+                            <span className="numeric">{truncateAddress(r.recipient)}</span>
+                            {r.tranche !== null && ` · tranche ${r.tranche}`}
+                          </span>
+                          {r.note && <span className="claim__note">“{r.note}”</span>}
+                        </span>
+                        <span className="claim__age numeric">{formatAgo(Math.max(0, mountedAt - r.openedAt))}</span>
+                      </button>
+                    </li>
+                  );
+                })}
+              </ul>
+            )
+          ) : (
+            <LookupForm
+              verifierOf={roles.verifierOf}
+              onOpen={(next) => {
+                setLookupClaim(next);
+              }}
+            />
+          )}
+        </section>
+
+        <aside className="verify__aside" aria-label="Review">
+          {claim ? (
+            <ClaimReview
+              key={`${claim.source}:${claimKey(claim)}`}
+              claim={claim}
+              programmeName={programmeName(claim.programmeId)}
+              onSigned={(record) => setSigned({ address, list: rememberSigned(record) })}
+              onFinished={() => {
+                if (claim.source === 'request') dropRequest(claim);
+              }}
+              onDismiss={onDismiss}
+            />
+          ) : (
+            <div className="claim-review claim-review--idle">
+              <p className="claim-review__eyebrow">Review claim</p>
+              <p>
+                {source === 'lookup'
+                  ? 'Choose a programme and a recipient to open their claim here.'
+                  : 'Choose a request to review it here.'}{' '}
+                Every fact is read from the chain before you can sign.
+              </p>
+            </div>
+          )}
+        </aside>
+
+        <div className="verify__votes">
+          <ReviewerVotes
+            reviewerOf={roles.reviewerOf}
+            allProgrammes={roles.all}
+            initialProgrammeId={reviewerStart}
+          />
+        </div>
+
+        <div className="verify__signed">
+          <SignedAttestations records={signed.list} allProgrammes={roles.all} />
+        </div>
+      </div>
     </div>
   );
 };

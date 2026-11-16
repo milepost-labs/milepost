@@ -250,6 +250,58 @@ describe('Recipient Issues Suite (#272, #273, #274, #275)', () => {
       expect(mockAnnounce).toHaveBeenCalledWith('Tranche 2 released.');
     });
 
+    it('real, waiting on a verifier: offers a request link that names this claim', () => {
+      render(
+        <MemoryRouter>
+          <AwardCard award={{ ...realAward, attestationReady: false }} sampleDelayMs={0} />
+        </MemoryRouter>
+      );
+
+      fireEvent.click(screen.getByRole('button', { name: 'Ask your verifier' }));
+      const sheet = screen.getByRole('dialog');
+      const link = within(sheet).getByLabelText('Request link') as HTMLInputElement;
+      const url = new URL(link.value);
+      expect(url.pathname).toBe('/verifiers');
+      expect(url.searchParams.get('programme')).toBe(REAL_PROGRAMME);
+      expect(url.searchParams.get('recipient')).toBe(RECIPIENT);
+      expect(url.searchParams.get('tranche')).toBe('2');
+
+      fireEvent.change(within(sheet).getByLabelText(/A note for your verifier/), {
+        target: { value: 'Plot 14, Akinyele' },
+      });
+      expect(new URL((within(sheet).getByLabelText('Request link') as HTMLInputElement).value).searchParams.get('note')).toBe(
+        'Plot 14, Akinyele',
+      );
+      expect(within(sheet).getByRole('button', { name: 'Copy request link' })).toBeDefined();
+    });
+
+    it('real: a verifier’s reply link fills in the release', async () => {
+      programme = makeProgramme({ releaseResult: 'ok' });
+      render(
+        <MemoryRouter>
+          <AwardCard
+            award={{ ...realAward, attestationReady: false }}
+            reply={{ programmeId: REAL_PROGRAMME, attestation: ATTEST_HEX, attester: ATTESTER }}
+            sampleDelayMs={0}
+          />
+        </MemoryRouter>
+      );
+
+      expect(screen.getByText(/Your verifier signed and sent a reply link/)).toBeDefined();
+      expect(screen.queryByRole('button', { name: 'Ask your verifier' })).toBeNull();
+      fireEvent.click(screen.getByRole('button', { name: /release tranche/i }));
+      expect((screen.getByLabelText(/attestation id/i) as HTMLInputElement).value).toBe(ATTEST_HEX);
+      expect((screen.getByLabelText(/attester address/i) as HTMLInputElement).value).toBe(ATTESTER);
+
+      fireEvent.click(screen.getByRole('button', { name: /sign and release/i }));
+      expect(await screen.findByText('Tranche 2 released')).toBeDefined();
+      expect(programme.release).toHaveBeenCalledWith({
+        recipient: RECIPIENT,
+        attestation: Buffer.from(ATTEST_HEX, 'hex'),
+        attester: ATTESTER,
+      });
+    });
+
     it('real error 22 (AttestationAlreadyUsed): shows the specific explanation', async () => {
       programme = makeProgramme({ releaseResult: 'alreadyUsed' });
 
