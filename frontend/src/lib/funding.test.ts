@@ -8,6 +8,8 @@ import {
   feeBpsOf,
   formatBps,
   fundingTotals,
+  formatIn,
+  formatShare,
   splitContribution,
 } from './funding';
 import type { DirectoryProgramme } from './programmeView';
@@ -38,7 +40,7 @@ describe('contributionCard', () => {
     );
     expect(card.refundable).toBe(2_200_000_000n);
     expect(card.claimable).toBe(true);
-    expect(card.note).toBe('220 USDC refundable, your share of unawarded budget.');
+    expect(card.note).toBe("220 USDC refundable, your share of what wasn't paid out.");
   });
 
   it('is claimable only once a refund would succeed', () => {
@@ -52,7 +54,7 @@ describe('contributionCard', () => {
 
     const paidOut = contributionCard(contribution(), programme({ phase: 'Settled', refundable: '0' }));
     expect(paidOut.claimable).toBe(false);
-    expect(paidOut.note).toBe('Nothing to refund. Every unit was awarded.');
+    expect(paidOut.note).toBe('Nothing to refund. Every unit was paid out.');
 
     const cancelled = contributionCard(
       contribution(),
@@ -86,11 +88,30 @@ describe('fundingTotals', () => {
         programme({ phase: 'Cancelled', contributed: '5000000000', refundable: '4950000000' }),
       ),
     ];
-    expect(fundingTotals(cards)).toEqual({
+    const totals = fundingTotals(cards);
+    expect(totals).toMatchObject({
       contributed: 15_000_000_000n,
       programmes: 2,
       refundableNow: 4_950_000_000n,
+      refundablePrograms: 1,
     });
+    // Each funder's share of releases: the amount over everything contributed,
+    // times what was released.
+    expect(totals.released).toBe(cards.reduce((sum, card) => sum + card.releasedShare, 0n));
+  });
+
+  it("works out the funder's share and their share of what was released", () => {
+    const card = contributionCard(
+      contribution({ amount: '2500000000' }),
+      programme({ contributed: '10000000000', released: '4000000000' }),
+    );
+    // 250 of 1,000 is 25%, and 25% of 400 released is 100.
+    expect(card.share).toBe(2_500n);
+    expect(card.releasedShare).toBe(1_000_000_000n);
+    expect(formatShare(card.share)).toBe('25%');
+    expect(formatShare(1_333n)).toBe('13.33%');
+    expect(formatShare(4n)).toBe('0.04%');
+    expect(formatIn(9_900_000_000n, 'XLM')).toBe('990 XLM');
   });
 
   it('matches the fixture set', () => {

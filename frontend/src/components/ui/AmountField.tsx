@@ -1,5 +1,5 @@
 import { useState, type InputHTMLAttributes } from 'react';
-import { formatAmount, validateAmount } from '../../lib/amount';
+import { formatAmount, formatExact, validateAmount } from '../../lib/amount';
 import { Field } from './Field';
 import './ui.css';
 
@@ -15,6 +15,8 @@ export interface AmountFieldProps
   /** In stroops. When given, amounts above it are refused and it is shown as the hint. */
   balance?: bigint;
   hint?: string;
+  /** Offer a "Max" preset that fills in the whole balance. Needs `balance`. */
+  offerMax?: boolean;
 }
 
 /**
@@ -33,6 +35,7 @@ export function AmountField({
   presets,
   balance,
   hint,
+  offerMax = false,
   onBlur,
   ...rest
 }: AmountFieldProps) {
@@ -61,9 +64,9 @@ export function AmountField({
         hint={hint ?? balanceHint}
         error={error}
       />
-      {presets && presets.length > 0 && (
+      {((presets && presets.length > 0) || (offerMax && balance !== undefined)) && (
         <div className="ui-amount__presets" role="group" aria-label={`${label} presets`}>
-          {presets.map((preset) => (
+          {(presets ?? []).map((preset) => (
             <button
               key={preset}
               type="button"
@@ -77,6 +80,19 @@ export function AmountField({
               {preset}
             </button>
           ))}
+          {offerMax && balance !== undefined && (
+            <button
+              type="button"
+              className="ui-amount__preset"
+              aria-pressed={value === formatExact(balance)}
+              onClick={() => {
+                setTouched(true);
+                onChange(formatExact(balance));
+              }}
+            >
+              Max
+            </button>
+          )}
         </div>
       )}
     </div>

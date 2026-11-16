@@ -127,6 +127,9 @@
 }
 .ui-field__control input:focus { outline: none; }
 .ui-field__control:focus-within { box-shadow: inset 0 0 0 2px var(--accent); }
+/* The control draws the focus ring, so the global one on the input inside it
+   would be a second, square box. Specific enough to beat that global rule. */
+.ui-field .ui-field__control :is(input, select, textarea):is(:focus, :focus-visible) { outline: none; }
 .ui-field__suffix { padding-right: var(--space-4); color: var(--ink-muted); font-size: var(--text-sm); }
 .ui-field__message { font-size: var(--text-caption); color: var(--ink-muted); }
 .ui-field__message--error { color: var(--danger); font-weight: var(--weight-medium); }
@@ -312,6 +315,15 @@
   padding: var(--space-6) var(--space-6) 0;
 }
 .ui-modal__title { font-size: var(--text-sheet-title); line-height: var(--leading-heading); margin: 0; }
+.ui-modal__header .ui-eyebrow { margin: 0 0 var(--space-2); }
+/* A multi-step flow's progress: one bar per step, painted up to the current one. */
+.ui-modal__progress {
+  display: flex; gap: var(--space-1-5);
+  padding: var(--space-6) var(--space-6) 0;
+}
+.ui-modal__progress i { flex: 1; height: 4px; border-radius: var(--radius-pill); background: var(--line); }
+.ui-modal__progress i.is-on { background: var(--accent); }
+.ui-modal__progress + .ui-modal__header { padding-top: var(--space-4); }
 .ui-modal__close {
   border: 0; background: transparent; cursor: pointer;
   font-size: var(--text-xl); line-height: 1; color: var(--ink);
@@ -334,6 +346,7 @@
     border-radius: var(--radius-band) var(--radius-band) 0 0;
   }
   .ui-modal__header { padding: var(--space-5) var(--space-4) 0; }
+  .ui-modal__progress { padding: var(--space-5) var(--space-4) 0; }
   .ui-modal__body { padding: var(--space-5) var(--space-4); }
   .ui-modal__footer { padding: 0 var(--space-4) var(--space-5); }
 }

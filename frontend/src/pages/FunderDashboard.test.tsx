@@ -10,7 +10,12 @@ vi.mock('../context/useWallet', () => ({
   useWallet: () => ({ address: mocks.address, status: mocks.address ? 'connected' : 'disconnected', connect: vi.fn() }),
 }));
 vi.mock('../context/useAnnouncer', () => ({ useAnnouncer: () => mocks.announce }));
-vi.mock('../context/useSoroban', () => ({ useSoroban: () => ({ programmeAt: vi.fn() }) }));
+vi.mock('../context/useSoroban', () => ({
+  useSoroban: () => ({
+    programmeAt: vi.fn(),
+    registry: { is_programme: vi.fn(async () => ({ result: true })) },
+  }),
+}));
 vi.mock('../lib/indexer', async (importOriginal) => ({
   ...(await importOriginal<typeof import('../lib/indexer')>()),
   fetchProgrammes: vi.fn(async () => []),
@@ -48,26 +53,30 @@ describe('Funding dashboard', () => {
     mocks.announce.mockClear();
   });
 
-  it('explains what signing in would show when signed out, instead of empty panels', () => {
+  it('says what signing in would show when signed out, instead of empty panels', () => {
     mocks.address = null;
     renderPage();
-    expect(screen.getByRole('heading', { name: 'Sign in to see your funding' })).toBeTruthy();
-    const preview = screen.getByRole('list', { name: 'What signing in shows' });
-    expect(within(preview).getAllByRole('listitem')).toHaveLength(3);
-    expect(screen.queryByText('Your contributions')).toBeNull();
-    expect(screen.queryByText('Refundable now')).toBeNull();
+    expect(screen.getByRole('heading', { level: 1, name: 'Your funding' })).toBeTruthy();
+    expect(screen.getByText("See and manage what you've funded")).toBeTruthy();
+    expect(screen.getByText(/You can browse every programme without signing in\./)).toBeTruthy();
+    expect(screen.getByRole('link', { name: 'Browse programmes' }).getAttribute('href')).toBe('/directory');
+    expect(screen.queryByRole('region', { name: 'Your funding' })).toBeNull();
+    expect(screen.queryByRole('button', { name: 'Contribute' })).toBeNull();
 
-    fireEvent.click(screen.getByRole('button', { name: 'Sign in' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Sign in with Freighter' }));
     expect(screen.getByRole('dialog', { name: 'Connect your wallet' })).toBeTruthy();
   });
 
-  it('shows contributed, programmes and refundable-now totals', async () => {
+  it('shows contributed, released and refundable-now totals, in the asset once', async () => {
     renderPage();
     const stats = screen.getByRole('region', { name: 'Your funding' });
-    await waitFor(() => expect(within(stats).getByText('3,500 USDC')).toBeTruthy());
-    expect(within(stats).getByText('3')).toBeTruthy();
+    const tile = (label: string) => within(stats).getByText(label).parentElement as HTMLElement;
+    await waitFor(() => expect(tile('Contributed').textContent).toContain('3,500USDC'));
+    expect(tile('Contributed').textContent).toContain('Across 3 programmes');
     // 220 from SME microgrants + 495 from the cancelled flood programme.
-    expect(within(stats).getByText('715 USDC')).toBeTruthy();
+    expect(tile('Refundable now').textContent).toContain('715USDC');
+    expect(tile('Refundable now').textContent).toContain('From 2 programmes');
+    expect(tile('Released to people')).toBeTruthy();
   });
 
   it('offers a refund claim only on contributions where it is claimable', async () => {
@@ -81,27 +90,58 @@ describe('Funding dashboard', () => {
     expect(screen.getAllByRole('button', { name: 'Claim refund' })).toHaveLength(2);
   });
 
-  it('removes the claim once refunded and announces it', async () => {
+  it('claims a refund in a sheet, shows its receipt, and removes the claim', async () => {
     renderPage();
     await screen.findByRole('link', { name: 'Flood response cash transfers' });
     fireEvent.click(within(card('Flood response cash transfers')).getByRole('button', { name: 'Claim refund' }));
 
-    await waitFor(
-      () => expect(within(card('Flood response cash transfers')).getByText('Refunded 495 USDC.')).toBeTruthy(),
-      { timeout: 3000 },
-    );
+    const sheet = screen.getByRole('dialog', { name: 'Claim your refund' });
+    expect(within(sheet).getByText('Claiming your refund')).toBeTruthy();
+
+    expect(await within(sheet).findByText('Refund claimed', {}, { timeout: 3000 })).toBeTruthy();
+    expect(within(sheet).getByText(/495 USDC sent back to your wallet, in proportion/)).toBeTruthy();
+    expect(within(sheet).getByText('4,853,391')).toBeTruthy();
+    expect(mocks.announce).toHaveBeenCalledWith('Refund of 495 USDC sent to your wallet.');
+
+    fireEvent.click(within(sheet).getByRole('button', { name: 'Done' }));
+    expect(screen.queryByRole('dialog')).toBeNull();
+    expect(within(card('Flood response cash transfers')).getByText('Refunded 495 USDC.')).toBeTruthy();
     expect(within(card('Flood response cash transfers')).queryByRole('button', { name: 'Claim refund' })).toBeNull();
-    expect(mocks.announce).toHaveBeenCalledWith('Refund of 495 USDC sent to your account.');
-    expect(within(screen.getByRole('region', { name: 'Your funding' })).getByText('220 USDC')).toBeTruthy();
+    const stats = screen.getByRole('region', { name: 'Your funding' });
+    expect(within(stats).getByText('Refundable now').parentElement?.textContent).toContain('220USDC');
   });
 
-  it('shows each contribution with its programme, phase, amount and a status note', async () => {
+  it('shows each contribution with its programme, phase, share and a status line', async () => {
     renderPage();
     const sme = await screen.findByRole('link', { name: 'SME supplier microgrants Q2' });
     expect(sme.getAttribute('href')).toBe('/programme/CBAVXWACVVQIBYAZ2YCSIPWXA24E3NZ3CIRAWJ2UHEQUQP67POYS6GFM');
     const item = card('SME supplier microgrants Q2');
     expect(within(item).getByText('Settled')).toBeTruthy();
-    expect(within(item).getByText('2,000 USDC')).toBeTruthy();
-    expect(within(item).getByText('220 USDC refundable, your share of unawarded budget.')).toBeTruthy();
+    expect(within(item).getByText('You put in').nextElementSibling?.textContent).toBe('2,000');
+    expect(within(item).getByText('Your share')).toBeTruthy();
+    expect(within(item).getByText('220 USDC')).toBeTruthy();
+    expect(within(item).getByText(/your share of what wasn't paid out/)).toBeTruthy();
+    expect(within(item).getByRole('img', { name: /Money distribution/ })).toBeTruthy();
+  });
+
+  it('opens the contribute sheet from the page action', async () => {
+    renderPage();
+    fireEvent.click(screen.getByRole('button', { name: 'Contribute' }));
+    expect(screen.getByRole('dialog', { name: 'Fund this programme' })).toBeTruthy();
+    fireEvent.click(screen.getByRole('button', { name: 'Close' }));
+    expect(screen.queryByRole('dialog')).toBeNull();
+  });
+
+  it("opens the contribute sheet with the programme chosen when a programme's Contribute brought the reader here", async () => {
+    render(
+      <MemoryRouter initialEntries={['/funders?programme=CB7WB66VLFJUD2WHZYHQF7PHM72THVJYMLZ7YPW2XQKUOUUGKVTWVDXI']}>
+        <FunderDashboard />
+      </MemoryRouter>,
+    );
+    // Opens once the link checks out against the registry.
+    const sheet = await screen.findByRole('dialog', { name: 'Fund this programme' });
+    expect((within(sheet).getByLabelText('Programme') as HTMLSelectElement).selectedOptions[0].textContent).toBe(
+      'Smallholder inputs, long rains',
+    );
   });
 });

@@ -55,133 +55,6 @@
   color: var(--text-muted);
 }
 
-.fund-sample {
-  font-size: var(--text-xs);
-  color: var(--text-muted);
-}
-
-/* Contributions */
-.fund-contributions {
-  display: flex;
-  flex-direction: column;
-  gap: var(--space-3);
-  min-width: 0;
-}
-
-.fund-contributions__title {
-  margin: 0 0 var(--space-1);
-  font-size: var(--text-lg);
-  font-weight: var(--weight-extrabold);
-}
-
-.fund-contributions__list {
-  list-style: none;
-  margin: 0;
-  padding: 0;
-  display: flex;
-  flex-direction: column;
-  gap: var(--space-3);
-}
-
-.fund-card {
-  background: var(--surface);
-  border-radius: var(--radius-card);
-  padding: var(--space-4) var(--space-4-5);
-  display: flex;
-  flex-direction: column;
-  gap: var(--space-3);
-}
-
-.fund-card__head {
-  display: flex;
-  justify-content: space-between;
-  align-items: flex-start;
-  gap: var(--space-3);
-}
-
-.fund-card__name {
-  display: inline-flex;
-  align-items: center;
-  min-height: var(--tap-min);
-  font-size: var(--text-base);
-  font-weight: var(--weight-bold);
-  line-height: var(--leading-snug);
-  color: var(--text);
-}
-
-.fund-card__head .ui-badge--phase {
-  flex: none;
-  margin-top: var(--space-3);
-}
-
-.fund-card__body {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  flex-wrap: wrap;
-  gap: var(--space-3);
-}
-
-.fund-card__figures {
-  display: flex;
-  flex-direction: column;
-  gap: var(--space-1);
-}
-
-.fund-card__amount {
-  font-size: var(--text-body-lg);
-  font-weight: var(--weight-semibold);
-}
-
-.fund-card__note {
-  font-size: var(--text-caption);
-  line-height: var(--leading-body);
-  color: var(--text-muted);
-}
-
-/* "Refunds open after <date>" — shown while the release window is still running */
-.fund-card__refund-hint {
-  display: block;
-  font-size: var(--text-caption);
-  line-height: var(--leading-body);
-  color: var(--text-muted);
-}
-
-.fund-card__refund-hint-date {
-  font-family: var(--font-numeric);
-  font-variant-numeric: tabular-nums;
-}
-
-/*
- * "Refunded so far" — on-chain value from refunded_to(donor).
- * Shown as a pill so it reads as a secondary status alongside the main note,
- * not a second primary figure. Uses --refund-soft so it picks up the correct
- * tint in both light and dark themes.
- */
-.fund-card__refunded-so-far {
-  display: inline-flex;
-  align-items: baseline;
-  gap: var(--space-2);
-  margin-top: var(--space-1);
-  padding: var(--space-1) var(--space-3);
-  border-radius: var(--radius-full);
-  background: var(--refund-soft);
-  font-size: var(--text-caption);
-  line-height: var(--leading-body);
-}
-
-.fund-card__refunded-so-far-label {
-  color: var(--refund-strong);
-  font-weight: var(--weight-medium);
-  white-space: nowrap;
-}
-
-.fund-card__refunded-so-far-value {
-  color: var(--refund-strong);
-  font-weight: var(--weight-semibold);
-}
-
-/* Contribute panel */
 .fund-panel {
   background: var(--surface);
   border-radius: var(--radius-card-lg);
@@ -206,37 +79,6 @@
   margin: 0;
   font-size: var(--text-lg);
   font-weight: var(--weight-extrabold);
-}
-
-.fund-steps {
-  list-style: none;
-  margin: 0;
-  padding: 0;
-  display: flex;
-  gap: var(--space-1);
-}
-
-.fund-step {
-  font-size: var(--text-xs);
-  font-weight: var(--weight-bold);
-  border-radius: var(--radius-full);
-  padding: var(--space-1) var(--space-3);
-  background: var(--surface-raised);
-  color: var(--text-muted);
-}
-
-.fund-step--current {
-  background: var(--text);
-  color: var(--bg);
-}
-
-.fund-blocked {
-  margin: 0;
-  padding: var(--space-3) var(--space-4);
-  border-radius: var(--radius-row);
-  background: var(--warning-soft);
-  font-size: var(--text-sm);
-  line-height: var(--leading-body);
 }
 
 .fund-breakdown {
@@ -275,11 +117,6 @@
   gap: var(--space-1);
 }
 
-.fund-summary__label {
-  font-size: var(--text-caption);
-  color: var(--text-muted);
-}
-
 .fund-summary__confirmed {
   font-size: var(--text-caption);
   font-weight: var(--weight-bold);
@@ -295,22 +132,6 @@
 .fund-summary__to {
   font-size: var(--text-md);
   font-weight: var(--weight-semibold);
-}
-
-.fund-check {
-  margin: 0;
-  font-size: var(--text-caption);
-  line-height: var(--leading-body);
-  color: var(--text-muted);
-}
-
-.fund-check--ok {
-  color: var(--success-strong);
-}
-
-.fund-check--blocked,
-.fund-check--failed {
-  color: var(--warning-strong);
 }
 
 .fund-receipt__hash {

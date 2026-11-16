@@ -270,3 +270,60 @@
   color: var(--ink); font-size: var(--text-lg); line-height: 1;
   min-width: 44px; min-height: 44px;
 }
+
+/* A write's outcome, in a sheet: ring, title, one sentence, then the detail. */
+.state-tx {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--space-2);
+  padding: var(--space-4) 0 var(--space-2);
+  text-align: center;
+}
+.state-tx .state-ring { margin-bottom: var(--space-4); }
+.state-ring--done { animation: state-pop 0.5s cubic-bezier(0.2, 0.9, 0.3, 1.5); }
+@keyframes state-pop { from { transform: scale(0.6); } }
+.state-tx__title {
+  margin: 0;
+  font-family: var(--font-display);
+  font-size: var(--text-xl);
+  font-weight: var(--weight-display);
+  letter-spacing: var(--tracking-title);
+}
+.state-tx__note {
+  margin: 0;
+  max-width: 40ch;
+  font-size: var(--text-md);
+  line-height: var(--leading-body);
+  color: var(--ink-muted);
+}
+.state-tx__note p { margin: 0; }
+.state-tx__steps {
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  width: 100%;
+  max-width: 18.75rem;
+  margin: var(--space-5) auto 0;
+  padding: 0;
+  text-align: left;
+  font-size: var(--text-sm);
+}
+.state-tx__step { display: flex; align-items: center; gap: var(--space-3); color: var(--ink-muted); }
+.state-tx__step svg { width: 16px; height: 16px; flex: none; }
+.state-tx__step--done { color: var(--accent); }
+.state-tx__step--current { color: var(--ink); font-weight: var(--weight-semibold); }
+.state-tx__receipt { width: 100%; margin-top: var(--space-5); text-align: left; }
+.state-tx__actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-3);
+  width: 100%;
+  margin-top: var(--space-5);
+}
+.state-tx__actions > * { flex: 1 1 10rem; }
+.state-tx--failed .state-error { width: 100%; margin-top: var(--space-3); text-align: left; }
+@media (prefers-reduced-motion: reduce) {
+  .state-ring--done { animation: none; }
+}

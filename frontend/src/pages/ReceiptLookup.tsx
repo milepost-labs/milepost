@@ -19,7 +19,7 @@ import {
   type TxLookup,
 } from '../lib/txLookup';
 import { formatUsdc } from '../lib/programmeView';
-import './FundingPage.css';
+import './ReceiptLookup.css';
 import '../components/funder/Funding.css';
 
 type LookupState =

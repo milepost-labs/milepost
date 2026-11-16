@@ -1,10 +1,15 @@
 import { useCallback, useEffect, useId, useRef, type ReactNode } from 'react';
+import { createPortal } from 'react-dom';
 import './ui.css';
 
 export interface ModalProps {
   open: boolean;
   onClose: () => void;
   title: string;
+  /** A small label above the title: the flow this sheet belongs to. */
+  eyebrow?: string;
+  /** Where a multi-step flow has got to, drawn as a row of bars above the title. */
+  progress?: { current: number; total: number };
   children: ReactNode;
   footer?: ReactNode;
   /**
@@ -22,7 +27,7 @@ export interface ModalProps {
  * Every confirmation in this app guards a signature, so a modal that loses
  * focus or cannot be dismissed by keyboard is not a cosmetic problem.
  */
-export function Modal({ open, onClose, title, children, footer, busy = false }: ModalProps) {
+export function Modal({ open, onClose, title, eyebrow, progress, children, footer, busy = false }: ModalProps) {
   const dialogRef = useRef<HTMLDivElement>(null);
   const returnFocusTo = useRef<HTMLElement | null>(null);
   const busyRef = useRef(busy);
@@ -118,7 +123,9 @@ export function Modal({ open, onClose, title, children, footer, busy = false }: 
 
   if (!open) return null;
 
-  return (
+  // Rendered at the end of the document, so no page's own stacking (an
+  // animated page creates one) can put the sticky header above the sheet.
+  return createPortal(
     <div
       className="ui-modal__backdrop"
       onClick={() => !busy && onClose()}
@@ -133,10 +140,20 @@ export function Modal({ open, onClose, title, children, footer, busy = false }: 
         tabIndex={-1}
         onClick={(event) => event.stopPropagation()}
       >
+        {progress && (
+          <div className="ui-modal__progress" aria-hidden="true">
+            {Array.from({ length: progress.total }, (_, i) => (
+              <i key={i} className={i <= progress.current ? 'is-on' : undefined} />
+            ))}
+          </div>
+        )}
         <header className="ui-modal__header">
-          <h2 className="ui-modal__title" id={titleId}>
-            {title}
-          </h2>
+          <div>
+            {eyebrow && <p className="ui-eyebrow">{eyebrow}</p>}
+            <h2 className="ui-modal__title" id={titleId}>
+              {title}
+            </h2>
+          </div>
           <button
             type="button"
             className="ui-modal__close"
@@ -150,6 +167,7 @@ export function Modal({ open, onClose, title, children, footer, busy = false }: 
         <div className="ui-modal__body">{children}</div>
         {footer && <footer className="ui-modal__footer">{footer}</footer>}
       </div>
-    </div>
+    </div>,
+    document.body,
   );
 }

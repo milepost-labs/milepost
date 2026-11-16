@@ -67,12 +67,13 @@ describe('Modal (issue #252)', () => {
 
   it('closes on backdrop click but not while a transaction is busy', () => {
     const onClose = vi.fn();
-    const { container, rerender } = render(
+    const { rerender } = render(
       <Modal open onClose={onClose} title="Confirm">
         <p>Body</p>
       </Modal>,
     );
-    const backdrop = () => container.querySelector('.ui-modal__backdrop') as HTMLElement;
+    // The sheet renders at the end of the document, not inside the component.
+    const backdrop = () => document.body.querySelector('.ui-modal__backdrop') as HTMLElement;
 
     fireEvent.click(backdrop());
     expect(onClose).toHaveBeenCalledTimes(1);

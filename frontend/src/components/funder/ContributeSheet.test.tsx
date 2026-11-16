@@ -4,12 +4,14 @@ import { MemoryRouter } from 'react-router-dom';
 import { chainFor } from '../../fixtures/programmes';
 import { explainCode } from '../../lib/errors';
 import { mergeProgrammes, type DirectoryProgramme } from '../../lib/programmeView';
-import { ContributeFlow } from './ContributeFlow';
+import { ContributeSheet } from './ContributeSheet';
 
 const mocks = vi.hoisted(() => ({
   announce: vi.fn(),
   getPhase: vi.fn(),
   contribute: vi.fn(),
+  getConfig: vi.fn(),
+  totalContributed: vi.fn(),
   signTransaction: vi.fn(),
   // The balance the contribute flow is told about. `ready` with the figure is
   // the normal case; tests switch it to fail or to load.
@@ -26,7 +28,12 @@ vi.mock('../../context/useWallet', () => ({
 }));
 vi.mock('../../context/useSoroban', () => ({
   useSoroban: () => ({
-    programmeAt: () => ({ get_phase: mocks.getPhase, contribute: mocks.contribute }),
+    programmeAt: () => ({
+      get_phase: mocks.getPhase,
+      contribute: mocks.contribute,
+      get_config: mocks.getConfig,
+      total_contributed: mocks.totalContributed,
+    }),
   }),
 }));
 // The token-contract read has its own tests; here the flow only needs the result.
@@ -54,7 +61,9 @@ function renderFlow(options: { linked?: string; withReal?: boolean } = {}) {
   const programmes = [...(options.withReal ? [real] : []), ...mergeProgrammes([])];
   return render(
     <MemoryRouter>
-      <ContributeFlow
+      <ContributeSheet
+        open
+        onClose={() => {}}
         programmes={programmes}
         linkedProgrammeId={options.linked ?? null}
         sampleDelayMs={0}
@@ -67,6 +76,10 @@ function renderFlow(options: { linked?: string; withReal?: boolean } = {}) {
 beforeEach(() => {
   mocks.balance.balance = 52_500_000_000n;
   mocks.balance.status = 'ready';
+  // A deployed programme's terms are read from its contract: a 2.5% fee, and
+  // 3,000 already contributed.
+  mocks.getConfig.mockResolvedValue({ result: { unwrap: () => ({ fee_bps: 250 }) } });
+  mocks.totalContributed.mockResolvedValue({ result: 30_000_000_000n });
 });
 
 const amountInput = () => screen.getByLabelText('Amount');
@@ -76,8 +89,13 @@ function enterAmount(value: string) {
   fireEvent.blur(amountInput());
 }
 
-const pick = (name: string) => fireEvent.click(screen.getByRole('radio', { name }));
-const continueButton = () => screen.getByRole('button', { name: 'Continue' }) as HTMLButtonElement;
+const programmeSelect = () => screen.getByLabelText('Programme') as HTMLSelectElement;
+const pick = (name: string) => {
+  const option = Array.from(programmeSelect().options).find((o) => o.textContent === name);
+  fireEvent.change(programmeSelect(), { target: { value: option!.value } });
+};
+const continueButton = () => screen.getByRole('button', { name: 'Review contribution' }) as HTMLButtonElement;
+const signButton = () => screen.getByRole('button', { name: 'Confirm in Freighter' });
 
 async function toConfirm(programme: string, amount = '100') {
   pick(programme);
@@ -86,13 +104,14 @@ async function toConfirm(programme: string, amount = '100') {
   await screen.findByText(/the programme is Open\./);
 }
 
-describe('ContributeFlow — amount step', () => {
+describe('ContributeSheet — amount step', () => {
   beforeEach(() => vi.clearAllMocks());
 
   it('offers only Open programmes', () => {
     renderFlow();
-    const options = screen.getAllByRole('radio').map((radio) => radio.closest('label')?.textContent);
+    const options = Array.from(programmeSelect().options).map((option) => option.textContent);
     expect(options).toEqual(['Community resilience grants 2026', 'Smallholder inputs, long rains']);
+    expect(screen.getByRole('dialog', { name: 'Fund this programme' })).toBeTruthy();
   });
 
   it('refuses an amount above the balance before anything is signed', () => {
@@ -127,6 +146,24 @@ describe('ContributeFlow — amount step', () => {
     expect(screen.queryByText('1,010 USDC')).toBeNull();
   });
 
+  it('works out a deployed programme from its own contract, not the stand-in figures', async () => {
+    renderFlow({ withReal: true });
+    pick('Real testnet programme');
+    enterAmount('1,000');
+    // 2.5% from get_config, in the programme's own asset.
+    expect(await screen.findByText(/Protocol fee \(2.5%\)/)).toBeTruthy();
+    expect(screen.getByText('− 25 XLM')).toBeTruthy();
+    expect(screen.getByText('975 XLM')).toBeTruthy();
+    // 1,000 of 3,000 + 1,000 contributed.
+    expect(screen.getByText('25%')).toBeTruthy();
+  });
+
+  it('offers the whole balance as Max', () => {
+    renderFlow();
+    fireEvent.click(screen.getByRole('button', { name: 'Max' }));
+    expect((amountInput() as HTMLInputElement).value).toBe('5250');
+  });
+
   it('disables contributing to a linked programme outside Open and names the phase', () => {
     renderFlow({ linked: VOCATIONAL });
     enterAmount('100');
@@ -138,13 +175,11 @@ describe('ContributeFlow — amount step', () => {
 
   it('preselects a linked Open programme', () => {
     renderFlow({ linked: SMALLHOLDER });
-    expect((screen.getByRole('radio', { name: 'Smallholder inputs, long rains' }) as HTMLInputElement).checked).toBe(
-      true,
-    );
+    expect(programmeSelect().selectedOptions[0].textContent).toBe('Smallholder inputs, long rains');
   });
 });
 
-describe('ContributeFlow — confirm, receipt and failure', () => {
+describe('ContributeSheet — confirm, receipt and failure', () => {
   beforeEach(() => vi.clearAllMocks());
 
   it('confirms a contribution and shows the receipt, announced politely', async () => {
@@ -152,12 +187,15 @@ describe('ContributeFlow — confirm, receipt and failure', () => {
     await toConfirm('Community resilience grants 2026');
     expect(screen.getByText('Sample chain read: the programme is Open.')).toBeTruthy();
     expect(screen.getByText('100 USDC')).toBeTruthy();
+    expect(screen.getByRole('dialog', { name: 'Confirm' })).toBeTruthy();
 
-    fireEvent.click(screen.getByRole('button', { name: 'Confirm and sign' }));
+    fireEvent.click(signButton());
 
     expect(await screen.findByText('Contribution confirmed')).toBeTruthy();
     expect(screen.getByText('4,853,391')).toBeTruthy();
     expect(screen.getByText(/Your money stays locked in the programme/)).toBeTruthy();
+    expect(screen.getByText('Sample receipt')).toBeTruthy();
+    expect(screen.getByRole('dialog', { name: 'Receipt' })).toBeTruthy();
     // A sample hash is a fixture, so it must not point at the explorer.
     expect(screen.queryByRole('link', { name: /view on explorer/i })).toBeNull();
     await waitFor(() =>
@@ -170,7 +208,7 @@ describe('ContributeFlow — confirm, receipt and failure', () => {
   it('shows a contract refusal through the error panel, says nothing moved, and announces it', async () => {
     renderFlow();
     await toConfirm('Smallholder inputs, long rains');
-    fireEvent.click(screen.getByRole('button', { name: 'Confirm and sign' }));
+    fireEvent.click(signButton());
 
     expect(await screen.findByText("Contribution didn't go through")).toBeTruthy();
     expect(screen.getByText(explainCode('program', 2).message)).toBeTruthy();
@@ -180,7 +218,7 @@ describe('ContributeFlow — confirm, receipt and failure', () => {
     );
 
     fireEvent.click(screen.getByRole('button', { name: 'Try again' }));
-    expect(await screen.findByRole('button', { name: 'Confirm and sign' })).toBeTruthy();
+    expect(await screen.findByRole('button', { name: 'Confirm in Freighter' })).toBeTruthy();
   });
 
   it('re-reads the phase on-chain right before signing and refuses if it has left Open', async () => {
@@ -189,7 +227,7 @@ describe('ContributeFlow — confirm, receipt and failure', () => {
     await toConfirm('Real testnet programme');
     expect(screen.getByText('Checked on-chain just now: the programme is Open.')).toBeTruthy();
 
-    fireEvent.click(screen.getByRole('button', { name: 'Confirm and sign' }));
+    fireEvent.click(signButton());
 
     expect(await screen.findByText('Nothing was transferred · program error 2')).toBeTruthy();
     expect(mocks.getPhase).toHaveBeenCalledTimes(2);
@@ -208,13 +246,14 @@ describe('ContributeFlow — confirm, receipt and failure', () => {
     renderFlow({ withReal: true });
     await toConfirm('Real testnet programme', '250');
 
-    fireEvent.click(screen.getByRole('button', { name: 'Confirm and sign' }));
+    fireEvent.click(signButton());
 
     expect(await screen.findByText('Contribution confirmed')).toBeTruthy();
     expect(mocks.contribute).toHaveBeenCalledWith({ donor: 'GDONOR', amount: 2_500_000_000n });
     expect(signAndSend).toHaveBeenCalledWith({ signTransaction: mocks.signTransaction });
     expect(screen.getByText('5,000,123')).toBeTruthy();
-    expect(screen.queryByText('Sample receipt for the design phase.')).toBeNull();
+    expect(screen.queryByText('Sample receipt')).toBeNull();
+    expect(screen.getByRole('link', { name: 'Receipt lookup' }).getAttribute('href')).toBe(`/funders/receipt?hash=${'ab'.repeat(32)}`);
 
     const explorer = screen.getByRole('link', { name: /view on explorer.*new tab/i });
     expect(explorer.getAttribute('href')).toBe(`https://stellar.expert/explorer/testnet/tx/${'ab'.repeat(32)}`);
@@ -231,7 +270,7 @@ describe('ContributeFlow — confirm, receipt and failure', () => {
     });
     renderFlow({ withReal: true });
     await toConfirm('Real testnet programme');
-    fireEvent.click(screen.getByRole('button', { name: 'Confirm and sign' }));
+    fireEvent.click(signButton());
 
     expect(await screen.findByText('Could not reach the network.')).toBeTruthy();
     expect(screen.queryByText(/Nothing was transferred/)).toBeNull();
@@ -252,10 +291,10 @@ describe('ContributeFlow — confirm, receipt and failure', () => {
     });
     renderFlow({ withReal: true });
     await toConfirm('Real testnet programme');
-    fireEvent.click(screen.getByRole('button', { name: 'Confirm and sign' }));
+    fireEvent.click(signButton());
 
     expect(await screen.findByText(/You declined the signature/)).toBeTruthy();
-    expect(screen.getByRole('button', { name: 'Confirm and sign' })).toBeTruthy();
+    expect(signButton()).toBeTruthy();
     expect(screen.queryByText("Contribution didn't go through")).toBeNull();
   });
 });

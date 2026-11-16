@@ -7,7 +7,19 @@
 import type { FixtureChainRead } from '../fixtures/programmes';
 import type { FixtureContribution } from '../fixtures/funding';
 import { phaseRequirement, type Phase } from './phaseGate';
-import { formatUsdc, shortId, type DirectoryProgramme } from './programmeView';
+import { formatFigure, programmeAsset, shortId, type DirectoryProgramme } from './programmeView';
+
+/** An amount with its asset, trailing zeros dropped: "990 USDC", "12.5 XLM". */
+export function formatIn(stroops: bigint, asset: string): string {
+  return `${formatFigure(stroops)} ${asset}`;
+}
+
+/** A share held in basis points, as a percentage: "12.5%", "0.04%". */
+export function formatShare(bps: bigint): string {
+  const whole = bps / 100n;
+  const rest = (bps % 100n).toString().padStart(2, '0').replace(/0+$/, '');
+  return rest ? `${whole}.${rest}%` : `${whole}%`;
+}
 
 export const BPS_DENOMINATOR = 10_000n;
 /** Used when a programme's fee cannot be derived from its figures. */
@@ -17,7 +29,16 @@ export interface ContributionCard {
   programmeId: string;
   name: string;
   phase: Phase;
+  /** The programme's asset; every amount on the card is in it. */
+  asset: string;
+  /** The programme's figures, for the money row. Null when the programme is unknown. */
+  chain: FixtureChainRead | null;
+  sample: boolean;
   amount: bigint;
+  /** This funder's share of everything contributed, in basis points. */
+  share: bigint;
+  /** This funder's share of what has been released to recipients, in stroops. */
+  releasedShare: bigint;
   /** This funder's share of the refundable pool, in stroops. */
   refundable: bigint;
   /** True only when a refund claim would succeed right now. */
@@ -97,22 +118,30 @@ export function contributionCard(
   const contributed = chain ? BigInt(chain.contributed) : 0n;
   const pool = chain ? BigInt(chain.refundable) : 0n;
   const refundable = contributed > 0n ? (amount * pool) / contributed : 0n;
+  const share = contributed > 0n ? (amount * BPS_DENOMINATOR) / contributed : 0n;
+  const releasedShare = contributed > 0n && chain ? (amount * BigInt(chain.released || '0')) / contributed : 0n;
+  const asset = programme ? programmeAsset(programme) : 'USDC';
   const phase: Phase = chain?.phase ?? 'Open';
   const refunded = refundedHere || contribution.refunded;
   const claimable = !refunded && refundable > 0n && (phase === 'Cancelled' || phase === 'Settled');
 
   let note: string;
-  if (refunded) note = `Refunded ${formatUsdc(refundable)}.`;
-  else if (claimable) note = `${formatUsdc(refundable)} refundable, your share of unawarded budget.`;
+  if (refunded) note = `Refunded ${formatIn(refundable, asset)}.`;
+  else if (claimable) note = `${formatIn(refundable, asset)} refundable, your share of what wasn't paid out.`;
   else if (phase === 'Open') note = 'Still open. Refunds, if any, come after the release window.';
   else if (phase === 'Review') note = 'In review. Your share is settled once awards are final.';
-  else note = 'Nothing to refund. Every unit was awarded.';
+  else note = 'Nothing to refund. Every unit was paid out.';
 
   return {
     programmeId: contribution.programmeId,
     name: programme?.name ?? shortId(contribution.programmeId),
     phase,
+    asset,
+    chain: chain ?? null,
+    sample: programme?.sample ?? true,
     amount,
+    share,
+    releasedShare,
     refundable,
     claimable,
     refunded,
@@ -124,13 +153,19 @@ export function contributionCard(
 export interface FundingTotals {
   contributed: bigint;
   programmes: number;
+  /** Your share of what has been released to recipients so far. */
+  released: bigint;
   refundableNow: bigint;
+  /** How many programmes the refundable figure comes from. */
+  refundablePrograms: number;
 }
 
 export function fundingTotals(cards: ContributionCard[]): FundingTotals {
   return {
     contributed: cards.reduce((sum, card) => sum + card.amount, 0n),
     programmes: new Set(cards.map((card) => card.programmeId)).size,
+    released: cards.reduce((sum, card) => sum + card.releasedShare, 0n),
+    refundablePrograms: cards.filter((card) => card.claimable).length,
     refundableNow: cards.filter((card) => card.claimable).reduce((sum, card) => sum + card.refundable, 0n),
   };
 }
