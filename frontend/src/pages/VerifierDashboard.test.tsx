@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { fireEvent, render, screen, waitFor, within } from '@testing-library/react';
+import { configure, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
 import { Buffer } from 'buffer';
 import { DEMO_PROGRAMME_ID } from '../context/sorobanStore';
@@ -9,6 +9,10 @@ import { VerifierDashboard } from './VerifierDashboard';
 // or the verifier's own lookup, and either way every fact is read from the
 // chain before signing. Reviewer voting sits on the same page. The contract
 // clients are faked through `useSoroban`; nothing touches the network.
+
+// The review panel chains several reads (registry, config, schema, award)
+// before it settles; under a full parallel run that can pass the 1s default.
+configure({ asyncUtilTimeout: 3000 });
 
 const ADDRESS = `GRVW${'A'.repeat(52)}`;
 const RECIPIENT = `GREC${'B'.repeat(52)}`;

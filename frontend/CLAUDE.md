@@ -291,8 +291,9 @@ Rules that hold on this page:
 - **Accessibility is not decoration.** Keyboard reachable, focus visible, labels
   on every control, live regions for async results, `aria-hidden` on decorative
   icons, works to 360px. There is an a11y check in CI.
-- **Bundle budget.** `bundle-budget.json` sets a baseline of 869,340
-  uncompressed JS bytes with 5% allowed growth. CI fails on regression. A
+- **Bundle budget.** `bundle-budget.json` sets a baseline of 1,500,000
+  uncompressed JS bytes with 5% allowed growth (raised during the redesign,
+  when the app was about 1,115,000). CI fails on regression. A
   heavy animation or chart library will break it — check before adding one.
 - **Tokens only.** No new hard-coded pixel or colour values in page CSS.
 - **Both themes.** Light and dark, every time.

@@ -1,877 +1,362 @@
-import { useMemo, useState, type FormEvent } from 'react';
-import {
-  AlertTriangle,
-  ArrowRight,
-  CheckCircle,
-  Globe,
-  Landmark,
-  Lock,
-  Search,
-  ShieldCheck,
-  Wallet,
-} from 'lucide-react';
-import { contract, type Award, type Mode } from '@milepost/program';
-import {
-  useAnnounceTransaction,
-  useContractRead,
-  useContractResult,
-  useIndexedList,
-  useProgrammeParam,
-  useTransaction,
-} from '../hooks';
-import { ProgrammeParamNotice } from '../components/programme/ProgrammeParamNotice';
-import { useWallet } from '../context/useWallet';
-import { useAnnouncer } from '../context/useAnnouncer';
+import { useMemo, useState } from 'react';
+import type { ProgrammeConfig } from '@milepost/program';
 import { useSoroban } from '../context/useSoroban';
-import { fetchProgrammes } from '../lib/indexer';
-import { AsyncView, Loading } from '../components/state/AsyncStates';
-import { PausedBanner } from '../components/programme/PausedBanner';
-import { Badge, Button, Card, Field, PhaseBadge, Select, Stat, SampleTag } from '../components/ui';
-import { formatAmount } from '../lib/amount';
-import { explainCode } from '../lib/errors';
-import { FIXTURE_CHAIN, FIXTURE_PROGRAMMES, chainFor } from '../fixtures/programmes';
+import { useWallet } from '../context/useWallet';
+import { useContractRead, useContractResult } from '../hooks/useContractRead';
+import { useIndexedList } from '../hooks/useIndexedList';
+import { useProgrammeParam } from '../hooks/useProgrammeParam';
+import { usePageTitle } from '../hooks/usePageTitle';
+import { fetchAwards, fetchProgrammes } from '../lib/indexer';
+import { explain } from '../lib/errors';
+import { formatDate, looksLikeAddress } from '../lib/format';
+import { formatFigure, programmeAsset, shortId } from '../lib/programmeView';
+import { FIXTURE_PROGRAMMES, chainFor, isSampleProgrammeId } from '../fixtures/programmes';
 import { FIXTURE_REVIEW_APPLICATIONS, medianForQuorum } from '../fixtures/finalizeFixtures';
+import { Button, Field, Notice, PageHead, PhaseBadge, SampleTag, Select } from '../components/ui';
+import { ErrorPanel } from '../components/state/AsyncStates';
+import { PausedBanner } from '../components/programme/PausedBanner';
+import { ProgrammeParamNotice } from '../components/programme/ProgrammeParamNotice';
+import { ChainRow, SampleRow, type RowContext, type RowFacts } from '../components/finalize/FinalizeRows';
+import { FinalizeSheet, type FinalizeTarget } from '../components/finalize/FinalizeSheet';
 import './FinalizeAwards.css';
 
-interface ModeOption {
-  tag: Mode['tag'];
-  icon: typeof Landmark;
-  label: string;
-  summary: string;
-  consequence: string;
-}
+/** The sample programme whose applications stand in for the unwired list. */
+const SAMPLE_REVIEW_ID = 'CCOIACASOVO3ZQLXWWJFGZAU3Y545AGPXLBP4NYHYD77RDCBPXRVZ37C';
 
-const MODE_OPTIONS: ModeOption[] = [
-  {
-    tag: 'Direct',
-    icon: Landmark,
-    label: 'Direct',
-    summary: 'Paid straight to a verified payee you choose now — an approved wallet, business, or service provider.',
-    consequence:
-      'The recipient never holds the money and never chooses who receives it. Equally unbypassable as Allocated; the difference is the recipient loses choice.',
-  },
-  {
-    tag: 'Allocated',
-    icon: ShieldCheck,
-    label: 'Allocated',
-    summary: 'Held in escrow, meaning locked programme funds; the recipient directs it to a verified payee later.',
-    consequence:
-      'The strongest guarantee available: funds can never reach anyone unverified because they never leave escrow until directed. Equally unbypassable as Direct, but the recipient keeps choice.',
-  },
-  {
-    tag: 'Restricted',
-    icon: Lock,
-    label: 'Restricted',
-    summary: 'Paid into the recipient’s smart wallet, gated by a spend policy, or wallet spending rule.',
-    consequence:
-      'Weaker than it looks: the policy constrains one signer, not the wallet. This screen only checks the policy is installed — at release, not now.',
-  },
-  {
-    tag: 'Open',
-    icon: Globe,
-    label: 'Open',
-    summary: 'Paid to the recipient with no restriction on onward spending.',
-    consequence: 'No guardrails at all. The recipient can spend the award however they like.',
-  },
-];
-
-const truncate = (addr: string) => `${addr.slice(0, 5)}…${addr.slice(-4)}`;
-
-/** Programme whose review applications stand in for the unwired list. */
-const REVIEW_PROGRAMME_ID = 'CCOIACASOVO3ZQLXWWJFGZAU3Y545AGPXLBP4NYHYD77RDCBPXRVZ37C';
-
-export interface FinalizeProgrammeOption {
+interface ProgrammeOption {
   id: string;
   name: string | null;
-  sample?: boolean;
+  sample: boolean;
+}
+
+function sampleFacts(): Map<string, RowFacts> {
+  return new Map(
+    FIXTURE_REVIEW_APPLICATIONS.map((a) => [
+      a.applicant,
+      { requested: BigInt(a.requested), votes: a.votes.map(BigInt), finalized: false, withdrawn: false, award: null },
+    ]),
+  );
 }
 
 /**
- * Finalize board (Screen 10, Finalize).
+ * `/finalize`: turn reviewers' votes into awards.
  *
- * Finalisation is permissionless on purpose: anyone may call it once quorum is
- * reached, so no privileged party can strand an applicant. When a programme is
- * oversubscribed the order finalisations arrive in decides who is funded — the
- * contract guarantees the budget is never exceeded (`InsufficientBudget`, 14)
- * but not fairness of ordering. Both facts belong on this screen, before acting.
+ * Finalizing is permissionless on purpose, so no one can strand an applicant
+ * by not pressing a button, and the page says so first. When the programme
+ * is oversubscribed, whoever finalizes first decides who is funded: the
+ * contract protects the budget (`InsufficientBudget`) but not the order, and
+ * the page says that before anyone acts, with the figures when it can.
  *
- * The application rows below are `FIXTURE_REVIEW_APPLICATIONS` — the contracts
- * keep no "all applications" list, so a real list would come from an indexer
- * handler that does not exist yet. The median shown per row uses the same
- * lookup the contract performs at `finalize` (sorted votes at `(quorum-1)/2`,
- * the lower middle for an even count). The single-applicant flow further down
- * this page performs the real on-chain finalization with mode and payee choice.
+ * The contracts keep no list of applications and the index does not publish
+ * them yet, so the rows are the programme's indexed awards (already
+ * finalized) plus applicants added here, each read on the chain. Sample
+ * programmes show tagged stand-in applications. Each award is finalized in a
+ * sheet that asks for the payment mode and the payee that mode needs.
  */
-function FinalizeBoard({
-  selectedId,
-  onSelectProgramme,
-  programmes,
-}: {
-  selectedId: string;
-  onSelectProgramme: (id: string) => void;
-  programmes: FinalizeProgrammeOption[];
-}) {
-  const { address } = useWallet();
-  const announce = useAnnouncer();
-  const programmeParam = useProgrammeParam();
-  const [finState, setFinState] = useState<Record<string, 'pending' | 'done' | 'error'>>({});
-
-  const selected = programmes.find((p) => p.id === selectedId) ?? programmes[0] ?? {
-    id: selectedId,
-    name: selectedId,
-    sample: true,
-  };
-  const isSample = selected.sample ?? Boolean(FIXTURE_CHAIN[selected.id]);
-  const chain = chainFor(selected.id);
-  const quorum = chain.quorum;
-  const isReview = chain.phase === 'Review';
-  const apps = useMemo(
-    () => (selected.id === REVIEW_PROGRAMME_ID && isReview ? FIXTURE_REVIEW_APPLICATIONS : []),
-    [selected.id, isReview],
-  );
-
-  const medians = useMemo(() => {
-    const map = new Map<string, bigint | null>();
-    for (const app of apps) {
-      map.set(app.applicant, medianForQuorum(app.votes.map((v) => BigInt(v)), quorum));
-    }
-    return map;
-  }, [apps, quorum]);
-
-  const budget = BigInt(chain.contributed) - BigInt(chain.fee);
-  const finalizedSum = apps.reduce(
-    (sum, app) =>
-      sum + (finState[app.applicant] === 'done' ? (medians.get(app.applicant) ?? 0n) : 0n),
-    0n,
-  );
-  const awarded = BigInt(chain.awarded) + finalizedSum;
-  const remaining = budget - awarded;
-  const wanted = apps.reduce((sum, app) => {
-    const median = medians.get(app.applicant) ?? null;
-    return sum + (median !== null && finState[app.applicant] !== 'done' ? median : 0n);
-  }, 0n);
-  const oversubscribed = wanted > remaining;
-
-  const finalizeRow = (applicant: string, median: bigint) => {
-    if (!address || finState[applicant] === 'pending' || finState[applicant] === 'done') return;
-    if (median > remaining) {
-      setFinState((prev) => ({ ...prev, [applicant]: 'error' }));
-      const explained = explainCode('program', 14);
-      announce(`Finalize failed. ${explained.message}`, 'alert');
-      return;
-    }
-    setFinState((prev) => ({ ...prev, [applicant]: 'pending' }));
-    window.setTimeout(() => {
-      setFinState((prev) => ({ ...prev, [applicant]: 'done' }));
-      announce(`Award finalized at ${formatAmount(median, { asset: 'XLM' })}.`);
-    }, 1300);
-  };
-
-  return (
-    <section className="finalize-board" aria-label="Finalize awards">
-      <ProgrammeParamNotice state={programmeParam} />
-      <p className="finalize-board__note">
-        Anyone can finalize, so no one can strand an applicant by not pressing a button. You
-        don&rsquo;t need an admin account.
-      </p>
-
-      <Select
-        label="Programme"
-        value={selected.id}
-        onChange={(event) => onSelectProgramme(event.target.value)}
-        options={programmes.map((p) => ({
-          value: p.id,
-          label: `${p.name ?? p.id}${p.sample ? ` · ${chainFor(p.id).phase}` : ''}`,
-        }))}
-      />
-
-      {!isSample ? (
-        <p className="finalize-board__phase" role="status">
-          Real programme awards are finalized by loading an applicant below.
-        </p>
-      ) : !isReview ? (
-        <p className="finalize-board__phase" role="status">
-          Finalizing is available only during Review. This programme is {chain.phase}.
-        </p>
-      ) : (
-        <>
-          <div className="finalize-budget">
-            <div className="finalize-budget__line">
-              <span>
-                <strong>Budget</strong>{' '}
-                <span className="numeric">{formatAmount(budget, { asset: 'XLM' })}</span>
-              </span>
-              <span className="finalize-budget__split">
-                Awarded <span className="numeric">{formatAmount(awarded, { asset: 'XLM' })}</span>
-                {' · '}Left <span className="numeric">{formatAmount(remaining, { asset: 'XLM' })}</span>
-              </span>
-            </div>
-            <div className="finalize-budget__bar" aria-hidden="true">
-              <span
-                className="finalize-budget__awarded"
-                style={{ width: `${budget > 0n ? Number((awarded * 100n) / budget) : 0}%` }}
-              />
-              <span
-                className="finalize-budget__left"
-                style={{
-                  width: `${budget > 0n && remaining > 0n ? Number((remaining * 100n) / budget) : 0}%`,
-                }}
-              />
-            </div>
-            {oversubscribed && (
-              <p className="finalize-board__oversub" role="status">
-                <AlertTriangle size={16} aria-hidden="true" />
-                Awards ready to finalize total {formatAmount(wanted, { asset: 'XLM' })}, but only{' '}
-                {formatAmount(remaining, { asset: 'XLM' })} is left. Whoever finalizes first is
-                funded first. The budget is protected; the order is not.
-              </p>
-            )}
-          </div>
-
-          {apps.length === 0 ? (
-            <p className="finalize-board__phase" role="status">
-              No applications to finalize.
-            </p>
-          ) : (
-            <ul className="finalize-rows">
-              {apps.map((app) => {
-                const votes = app.votes.map((v) => BigInt(v));
-                const median = medians.get(app.applicant) ?? null;
-                const ready = median !== null;
-                const state = finState[app.applicant];
-                const needs = quorum - votes.length;
-                const gated = !ready || state === 'pending' || state === 'done' || !address;
-                const reason = state === 'done'
-                  ? 'Finalized. The award is fixed.'
-                  : state === 'error'
-                    ? explainCode('program', 14).message
-                    : median === null
-                      ? `Needs ${needs} more vote${needs === 1 ? '' : 's'} before anyone can finalize.`
-                      : !address
-                        ? 'Sign in to finalize. Anyone can.'
-                        : `Award will be ${formatAmount(median, { asset: 'XLM' })}, the median of reviewer votes.`;
-                return (
-                  <li key={app.applicant} className="finalize-row">
-                    <span className="finalize-row__who">
-                      <span className="numeric finalize-row__applicant" title={app.applicant}>
-                        {truncate(app.applicant)}
-                      </span>
-                      <span className="finalize-row__asked">
-                        Asked {formatAmount(BigInt(app.requested), { asset: 'XLM' })}
-                      </span>
-                    </span>
-                    <span className="finalize-row__votes">
-                      <span className="finalize-row__votes-count">
-                        {votes.length} of {quorum} votes
-                      </span>
-                      <span className="numeric finalize-row__votes-list">
-                        {votes.map((v) => formatAmount(v, { asset: 'XLM' }).replace(' XLM', '')).join(' · ')}
-                      </span>
-                    </span>
-                    <span className="finalize-row__median">
-                      <span className="detail-label">Median</span>
-                      <span className="numeric finalize-row__median-value">
-                        {median !== null ? formatAmount(median, { asset: 'XLM' }) : '—'}
-                      </span>
-                    </span>
-                    <Button
-                      disabled={gated}
-                      loading={state === 'pending'}
-                      loadingLabel="Finalizing…"
-                      onClick={() => {
-                        if (median !== null) finalizeRow(app.applicant, median);
-                      }}
-                    >
-                      {state === 'done' ? 'Finalized' : 'Finalize'}
-                    </Button>
-                    <span
-                      className={`finalize-row__reason${state === 'error' ? ' finalize-row__reason--error' : ''}`}
-                      role={state === 'error' ? 'alert' : undefined}
-                    >
-                      {reason}
-                      {state === 'error' && (
-                        <> Nothing was transferred · program error 14.</>
-                      )}
-                    </span>
-                  </li>
-                );
-              })}
-            </ul>
-          )}
-          <p className="finalize-board__sample">
-            <SampleTag /> Sample applications for the design phase.
-          </p>
-        </>
-      )}
-    </section>
-  );
-}
-
 export const FinalizeAwards = () => {
-  const programmeParam = useProgrammeParam();
+  usePageTitle('Finalize awards');
   const { programmeAt } = useSoroban();
-  const wallet = useWallet();
+  const { address } = useWallet();
+  const programmeParam = useProgrammeParam();
   const listRead = useIndexedList(() => fetchProgrammes(), []);
 
-  // Review-phase programmes first: only they can be finalized.
-  const programmes: FinalizeProgrammeOption[] = useMemo(() => {
-    const list: FinalizeProgrammeOption[] = [];
+  const programmes: ProgrammeOption[] = useMemo(() => {
     const seen = new Set<string>();
-
-    // Real indexed programmes
-    if (listRead.data) {
-      for (const p of listRead.data) {
-        if (p?.id && !seen.has(p.id)) {
-          seen.add(p.id);
-          list.push({ id: p.id, name: p.name ?? p.id, sample: false });
-        }
-      }
+    const list: ProgrammeOption[] = [];
+    const push = (p: ProgrammeOption) => {
+      if (seen.has(p.id)) return;
+      seen.add(p.id);
+      list.push(p);
+    };
+    for (const p of listRead.data ?? []) push({ id: p.id, name: p.name, sample: false });
+    if (programmeParam.status === 'valid' && programmeParam.programmeId) {
+      push({ id: programmeParam.programmeId, name: null, sample: isSampleProgrammeId(programmeParam.programmeId) });
     }
+    for (const f of FIXTURE_PROGRAMMES) push({ id: f.id, name: f.name, sample: true });
+    return list;
+  }, [listRead.data, programmeParam.status, programmeParam.programmeId]);
 
-    // Parameter programme if provided
-    if (programmeParam.status === 'valid' && programmeParam.programmeId && !seen.has(programmeParam.programmeId)) {
-      seen.add(programmeParam.programmeId);
-      list.push({
-        id: programmeParam.programmeId,
-        name: programmeParam.programmeId,
-        sample: Boolean(FIXTURE_CHAIN[programmeParam.programmeId]),
-      });
-    }
-
-    // Fixtures
-    for (const f of FIXTURE_PROGRAMMES) {
-      if (!seen.has(f.id)) {
-        seen.add(f.id);
-        list.push({ id: f.id, name: f.name, sample: true });
-      }
-    }
-
-    return list.sort((a, b) => {
-      const aPhase = FIXTURE_CHAIN[a.id]?.phase ?? 'Open';
-      const bPhase = FIXTURE_CHAIN[b.id]?.phase ?? 'Open';
-      const rank = (ph: string) => (ph === 'Review' ? 0 : 1);
-      return rank(aPhase) - rank(bPhase);
-    });
-  }, [listRead.data, programmeParam]);
-
-  const [userSelectedId, setUserSelectedId] = useState<string | null>(null);
+  const [chosen, setChosen] = useState<string | null>(null);
   const selectedId =
-    userSelectedId ??
-    (programmeParam.status === 'valid' && programmeParam.programmeId
-      ? programmeParam.programmeId
-      : REVIEW_PROGRAMME_ID);
-
-  const selected = programmes.find((p) => p.id === selectedId) ?? programmes[0] ?? {
+    chosen ??
+    (programmeParam.status === 'valid' && programmeParam.programmeId ? programmeParam.programmeId : null) ??
+    programmes.find((p) => !p.sample)?.id ??
+    SAMPLE_REVIEW_ID;
+  const selected = programmes.find((p) => p.id === selectedId) ?? {
     id: selectedId,
-    name: selectedId,
-    sample: Boolean(FIXTURE_CHAIN[selectedId]),
+    name: null,
+    sample: isSampleProgrammeId(selectedId),
   };
-
-  const isSample = selected.sample ?? Boolean(FIXTURE_CHAIN[selected.id]);
-  const sampleChain = chainFor(selected.id);
-  const sampleBudget = BigInt(sampleChain.contributed) - BigInt(sampleChain.fee);
-  const sampleAwarded = BigInt(sampleChain.awarded);
-  const sampleRemaining = sampleBudget - sampleAwarded;
-
+  const sample = selected.sample;
+  const asset = programmeAsset({ sample });
   const programme = useMemo(() => programmeAt(selected.id), [programmeAt, selected.id]);
 
-  // Overview reads — enabled only for real on-chain programmes
-  const budget = useContractResult(() => programme.budget(), [programme], { enabled: !isSample });
-  const config = useContractResult(() => programme.get_config(), [programme], { enabled: !isSample });
-  const phase = useContractResult(() => programme.get_phase(), [programme], { enabled: !isSample });
-
-  // Application and its award, keyed on the address the user submitted. Both
-  // start disabled, so their first load is driven by `applicant` becoming
-  // non-empty.
-  const [applicantInput, setApplicantInput] = useState('');
-  const [applicant, setApplicant] = useState('');
-  const application = useContractResult(
-    () => programme.get_application({ applicant }),
-    [programme, applicant],
-    { enabled: applicant !== '' },
-  );
-  const award = useContractResult(
-    () => programme.get_award({ recipient: applicant }),
-    [programme, applicant],
-    { enabled: applicant !== '' && application.data?.finalized === true },
-  );
-
-  const [modeTag, setModeTag] = useState<Mode['tag'] | null>(null);
-  const [payeeInput, setPayeeInput] = useState('');
-  // The address whose payee status the contract was last asked about. Kept
-  // separate from the input so an edit does not silently re-check.
-  const [payeeToVerify, setPayeeToVerify] = useState('');
-  const payeeCheck = useContractRead(
-    () => programme.is_payee({ payee: payeeToVerify }),
-    [programme, payeeToVerify],
-    { enabled: payeeToVerify !== '' },
-  );
-
-  const [settledAward, setSettledAward] = useState<Award | null>(null);
-
-  const finalizeTx = useTransaction<contract.Result<Award>>({
+  // Real programme reads. Sample programmes read nothing.
+  const configRead = useContractResult<ProgrammeConfig>(() => programme.get_config(), [programme], {
     contract: 'program',
-    onSuccess: (result) => {
-      setSettledAward(result.unwrap());
-      application.refetch();
-    },
+    enabled: !sample,
   });
-  useAnnounceTransaction({
-    phase: finalizeTx.phase,
-    error: finalizeTx.error,
-    pending: 'Finalizing the award…',
-    success: settledAward
-      ? `Award finalized at ${formatAmount(settledAward.granted, { asset: 'XLM' })}.`
-      : 'Award finalized.',
+  const phaseRead = useContractResult(() => programme.get_phase(), [programme], { contract: 'program', enabled: !sample });
+  const budgetRead = useContractResult(() => programme.budget(), [programme], { contract: 'program', enabled: !sample });
+  const grantedRead = useContractRead(() => programme.total_granted(), [programme], {
+    contract: 'program',
+    enabled: !sample,
   });
+  const pausedRead = useContractRead(() => programme.is_paused(), [programme], { contract: 'program', enabled: !sample });
+  const awardsRead = useIndexedList(() => fetchAwards(selected.id), [selected.id], { enabled: !sample });
 
-  const quorum = isSample ? sampleChain.quorum : (config.data?.quorum ?? 0);
-  const votes = application.data?.votes ?? [];
-  // A quorum of 0 means the config has not been read yet, not that no votes
-  // are needed: the contract refuses to construct a programme without one.
-  const quorumReached = application.data != null && quorum > 0 && votes.length >= quorum;
-  const granted = quorumReached ? (votes[Math.floor((quorum - 1) / 2)] ?? null) : null;
-  const currentBudget = isSample ? sampleBudget : budget.data;
-  const remainingAfter = currentBudget != null && granted != null ? currentBudget - granted : null;
-  const insufficient = remainingAfter != null && remainingAfter < 0n;
+  // Sample figures and rows, finalized locally.
+  const chain = chainFor(selected.id);
+  const [sampleRows, setSampleRows] = useState(sampleFacts);
 
-  // Minimum award from config — 0n means no minimum is set.
-  const minimumAward = isSample ? 0n : (config.data?.minimum_award ?? 0n);
-  const belowMinimum =
-    minimumAward > 0n && granted !== null && granted < minimumAward;
+  // Applicants added on this page, per programme, and a counter that makes
+  // rows re-read after a finalize.
+  const [added, setAdded] = useState<Record<string, string[]>>({});
+  const [applicantInput, setApplicantInput] = useState('');
+  const [applicantError, setApplicantError] = useState<string | null>(null);
+  const [version, setVersion] = useState(0);
+  const [target, setTarget] = useState<FinalizeTarget | null>(null);
 
-  const selectedMode = modeTag ? ({ tag: modeTag, values: undefined } satisfies Mode) : null;
-  const needsVerifiedPayee = selectedMode?.tag === 'Direct';
-  const payee = needsVerifiedPayee ? payeeToVerify : applicant;
-  const payeeReady = !needsVerifiedPayee || payeeCheck.data === true;
+  const quorum = sample ? chain.quorum : (configRead.data?.quorum ?? 0);
+  const minimum = sample ? 0n : (configRead.data?.minimum_award ?? 0n);
+  const phase = sample ? chain.phase : (phaseRead.data?.tag ?? null);
+  const sampleAwarded = [...sampleRows.values()].reduce((s, r) => s + (r.award?.granted ?? 0n), 0n);
+  const budget = sample ? BigInt(chain.contributed) - BigInt(chain.fee) : (budgetRead.data ?? null);
+  const awarded = sample ? BigInt(chain.awarded) + sampleAwarded : (grantedRead.data ?? null);
+  const left = budget !== null && awarded !== null ? budget - awarded : null;
 
-  // The applicant and payee reads start disabled, and the hook's `loading` flag
-  // only covers the initial mount. A read that just became enabled is in flight
-  // with neither data nor error yet — treat that as loading.
-  const applicationPending =
-    applicant !== '' && application.data === null && application.error === null;
-  const payeePending = payeeToVerify !== '' && payeeCheck.data === null && payeeCheck.error === null;
+  const sampleList = sample && selected.id === SAMPLE_REVIEW_ID ? [...sampleRows.entries()] : [];
+  const pendingSampleTotal = sampleList.reduce((sum, [, facts]) => {
+    const a = !facts.finalized ? medianForQuorum(facts.votes, quorum) : null;
+    return sum + (a ?? 0n);
+  }, 0n);
+  const oversubscribed = sample && left !== null && pendingSampleTotal > left;
 
-  const submitApplicant = (event: FormEvent) => {
-    event.preventDefault();
-    const address = applicantInput.trim();
-    if (!address) return;
-    setApplicant(address);
-    setModeTag(null);
-    setPayeeInput('');
-    setPayeeToVerify('');
-    setSettledAward(null);
+  const gate = (() => {
+    if (!address) return 'Sign in to finalize. Anyone can.';
+    if (!sample && pausedRead.data) return 'Paused by the creator.';
+    if (phase === 'Open') {
+      return configRead.data
+        ? `Finalizing opens when review starts, on ${formatDate(configRead.data.apply_deadline)}.`
+        : 'Finalizing opens when review starts.';
+    }
+    if (phase === 'Cancelled') return 'The programme was cancelled.';
+    if (phase === null) return 'Reading the programme…';
+    return null;
+  })();
+
+  const ctx: RowContext = {
+    quorum,
+    asset,
+    left: left ?? 0n,
+    minimum,
+    gate: gate ?? (left === null ? 'Reading the budget…' : null),
+    onFinalize: (applicant, award) =>
+      setTarget({
+        programmeId: selected.id,
+        applicant,
+        award,
+        asset,
+        left: left ?? 0n,
+        sample,
+        policy: configRead.data?.policy ?? null,
+      }),
   };
 
-  const finalize = () => {
-    if (!selectedMode || !application.data || !payeeReady) return;
-    void finalizeTx.send(() => programme.finalize({ applicant, payee, mode: selectedMode }));
+  const indexed = (awardsRead.data ?? []).map((a) => a.recipient);
+  const extra = (added[selected.id] ?? []).filter((a) => !indexed.includes(a));
+  const realRows = [...extra, ...indexed];
+
+  const addApplicant = () => {
+    const value = applicantInput.trim();
+    if (!looksLikeAddress(value)) {
+      setApplicantError('Enter the applicant’s Stellar address.');
+      return;
+    }
+    setApplicantError(null);
+    setApplicantInput('');
+    if (realRows.includes(value)) return;
+    setAdded((prev) => ({ ...prev, [selected.id]: [value, ...(prev[selected.id] ?? [])] }));
   };
+
+  const onFinalized = (award: { granted: bigint; mode: string }) => {
+    if (!target) return;
+    if (target.sample) {
+      setSampleRows((prev) => {
+        const next = new Map(prev);
+        const row = next.get(target.applicant);
+        if (row) next.set(target.applicant, { ...row, finalized: true, award });
+        return next;
+      });
+    } else {
+      setVersion((v) => v + 1);
+      budgetRead.refetch();
+      grantedRead.refetch();
+    }
+  };
+
+  const awardedPct = budget && budget > 0n && awarded !== null ? Number((awarded * 1000n) / budget) / 10 : 0;
+  const readError = !sample ? (configRead.error ?? budgetRead.error ?? phaseRead.error) : null;
 
   return (
-    <div className="finalize-page">
-      <PausedBanner client={programme} />
-
-      <header className="finalize-header animate-fade-up">
-        <h2>Finalize awards</h2>
-        <p className="typo-text text-muted">
-          Settle applications with enough reviewer votes into awards. The payment mode you pick decides whether released money can reach an unverified destination.
+    <div className="finalize">
+      <PageHead eyebrow="Admin" title="Finalize awards">
+        <p>
+          <b>Anyone can do this</b>, with or without a role. Finalizing turns the reviewers’ votes into an award, so no
+          applicant waits on one person pressing a button.
         </p>
-      </header>
+      </PageHead>
+      <ProgrammeParamNotice state={programmeParam} />
+      {!sample && <PausedBanner client={programme} />}
 
-      <FinalizeBoard
-        selectedId={selected.id}
-        onSelectProgramme={setUserSelectedId}
-        programmes={programmes}
-      />
-
-      <section
-        className="finalize-stats animate-fade-up"
-        style={{ animationDelay: '100ms' }}
-        aria-label="Programme figures"
-      >
-        <Card>
-          <Stat
-            label="Remaining budget"
-            value={
-              isSample ? (
-                formatAmount(sampleRemaining, { asset: 'XLM' })
-              ) : (
-                <AsyncView {...budget} onRetry={budget.refetch}>
-                  {(value) => formatAmount(value, { asset: 'XLM' })}
-                </AsyncView>
-              )
-            }
-            numeric
+      <div className="finalize__top">
+        <section className="finalize__budget" aria-label="Programme and budget">
+          <Select
+            label="Programme"
+            value={selected.id}
+            onChange={(event) => {
+              setChosen(event.target.value);
+              setApplicantError(null);
+            }}
+            options={programmes.map((p) => ({
+              value: p.id,
+              label: `${p.name ?? shortId(p.id)}${p.sample ? ' · sample' : ''}`,
+            }))}
           />
-        </Card>
-        <Card>
-          <Stat
-            label="Programme phase"
-            value={
-              isSample ? (
-                <PhaseBadge phase={sampleChain.phase} />
-              ) : (
-                <AsyncView {...phase} onRetry={phase.refetch}>
-                  {(value) => <PhaseBadge phase={value.tag} />}
-                </AsyncView>
-              )
-            }
-          />
-        </Card>
-        <Card>
-          <Stat
-            label="Reviewer votes needed"
-            value={
-              isSample ? (
-                `${sampleChain.quorum} votes`
-              ) : (
-                <AsyncView {...config} onRetry={config.refetch}>
-                  {(value) => `${value.quorum} votes`}
-                </AsyncView>
-              )
-            }
-            numeric
-          />
-        </Card>
-        <Card>
-          <Stat
-            label="Minimum award"
-            value={
-              isSample ? (
-                'None'
-              ) : (
-                <AsyncView {...config} onRetry={config.refetch}>
-                  {(value) =>
-                    value.minimum_award > 0n
-                      ? formatAmount(value.minimum_award, { asset: 'XLM' })
-                      : 'None'
-                  }
-                </AsyncView>
-              )
-            }
-            numeric
-          />
-        </Card>
-      </section>
-
-      <section className="finalize-panel animate-fade-up" style={{ animationDelay: '200ms' }}>
-        <Card>
-          <div className="finalize-panel__heading">
-            <h2>Find an application</h2>
-            <p className="typo-text text-muted">
-              Only applications with enough reviewer votes can be finalised. Paste an applicant address to load it.
-            </p>
+          <div className="finalize__status">
+            {phase && <PhaseBadge phase={phase} />}
+            {quorum > 0 && <span className="finalize__quorum">Quorum {quorum}</span>}
+            {minimum > 0n && (
+              <span className="finalize__quorum">
+                Minimum award {formatFigure(minimum)} {asset}
+              </span>
+            )}
+            {sample && <SampleTag />}
           </div>
+          <div
+            className="finalize__bar"
+            role="img"
+            aria-label={
+              budget !== null && awarded !== null
+                ? `${formatFigure(awarded)} of ${formatFigure(budget)} ${asset} awarded`
+                : 'Budget not read yet'
+            }
+          >
+            <i style={{ width: `${Math.min(100, awardedPct)}%` }} />
+          </div>
+          <div className="finalize__figures">
+            <span>
+              <b className="numeric">{awarded !== null ? formatFigure(awarded) : '—'}</b> awarded
+            </span>
+            <span>
+              <b className="numeric">{left !== null ? formatFigure(left) : '—'}</b> of{' '}
+              <span className="numeric">{budget !== null ? formatFigure(budget) : '—'}</span> {asset} left
+            </span>
+          </div>
+        </section>
 
-          <form className="lookup-form" onSubmit={submitApplicant}>
-            <div className="lookup-form__field">
-              <Field
-                label="Applicant address"
-                value={applicantInput}
-                onChange={(event) => setApplicantInput(event.target.value)}
-                placeholder="G…"
-                spellCheck={false}
-              />
-            </div>
-            <Button
-              type="submit"
-              icon={<Search size={18} />}
-              loading={applicationPending || application.fetching}
-              loadingLabel="Loading…"
-              disabled={!applicantInput.trim()}
-            >
-              Load application
-            </Button>
-          </form>
+        {oversubscribed && left !== null ? (
+          <Notice tone="risk" role="note">
+            <span>
+              <b>This programme is oversubscribed.</b> The awards ready to finalize total{' '}
+              {formatFigure(pendingSampleTotal)} {asset} against {formatFigure(left)} left. The budget is protected and
+              can’t be exceeded, but <b>whoever finalizes first decides who gets funded</b>. Once the money runs out, the
+              rest can’t be finalized.
+            </span>
+          </Notice>
+        ) : (
+          <Notice tone="info" role="note">
+            <span>
+              <b>Order matters when money is short.</b> If the ready awards add up to more than is left, whoever
+              finalizes first decides who gets funded. The budget itself can’t be exceeded.
+            </span>
+          </Notice>
+        )}
+      </div>
 
-          {applicationPending ? (
-            <Loading rows={2} />
-          ) : (
-            <AsyncView
-              {...application}
-              onRetry={application.refetch}
-              empty={{
-                title: 'No application loaded yet',
-                description: 'Paste an applicant address above and press Load.',
+      {readError ? <ErrorPanel explained={explain(readError, 'program')} /> : null}
+
+      <section className="finalize__list" aria-labelledby="fin-applications">
+        <h2 id="fin-applications" className="finalize__h2">
+          Applications
+        </h2>
+        <table className="ui-table fin-table">
+          <thead>
+            <tr>
+              <th scope="col">Applicant</th>
+              <th scope="col" className="numeric-col">
+                Asked
+              </th>
+              <th scope="col">Votes (quorum {quorum || '—'})</th>
+              <th scope="col" className="numeric-col">
+                Award
+              </th>
+              <th scope="col">
+                <span className="visually-hidden">Action</span>
+              </th>
+            </tr>
+          </thead>
+          <tbody>
+            {sample
+              ? sampleList.map(([applicant, facts]) => (
+                  <SampleRow key={applicant} applicant={applicant} facts={facts} ctx={ctx} />
+                ))
+              : realRows.map((applicant) => (
+                  <ChainRow
+                    key={applicant}
+                    programmeId={selected.id}
+                    applicant={applicant}
+                    label={indexed.includes(applicant) ? undefined : 'Added here'}
+                    ctx={ctx}
+                    version={version}
+                  />
+                ))}
+          </tbody>
+        </table>
+        {(sample ? sampleList.length === 0 : realRows.length === 0) && (
+          <p className="finalize__empty">
+            {sample
+              ? 'This sample programme has no applications to show.'
+              : 'No applications listed yet. Add an applicant below to read their application.'}
+          </p>
+        )}
+
+        {!sample && (
+          <div className="finalize__add">
+            <Field
+              label="Applicant address"
+              placeholder="G…"
+              value={applicantInput}
+              onChange={(event) => {
+                setApplicantInput(event.target.value);
+                setApplicantError(null);
               }}
-            >
-              {(app) => (
-                <>
-                  <div className="application-card">
-                    <div className="application-card__header">
-                      <h3>Application</h3>
-                      <Badge tone={app.finalized ? 'success' : quorumReached ? 'warning' : 'neutral'}>
-                        {app.finalized ? 'Finalized' : quorumReached ? 'Enough votes in' : 'Awaiting votes'}
-                      </Badge>
-                    </div>
-                    <div className="application-card__grid">
-                      <div>
-                        <span className="detail-label">Applicant</span>
-                        <span className="detail-value mono" title={applicant}>{truncate(applicant)}</span>
-                      </div>
-                      <div>
-                        <span className="detail-label">Requested</span>
-                        <span className="detail-value">{formatAmount(app.requested, { asset: 'XLM' })}</span>
-                      </div>
-                      <div>
-                        <span className="detail-label">Votes</span>
-                        <span className="detail-value">{app.votes.length} / {quorum} needed</span>
-                      </div>
-                      <div>
-                        <span className="detail-label">Computed award</span>
-                        <span className="detail-value">{granted !== null ? formatAmount(granted, { asset: 'XLM' }) : '—'}</span>
-                      </div>
-                    </div>
-                  </div>
+              error={applicantError ?? undefined}
+              hint="The contract keeps no list of applications, and the index lists only finalized awards. Add an applicant to read theirs."
+              autoComplete="off"
+              spellCheck={false}
+            />
+            <Button variant="secondary" onClick={addApplicant}>
+              Add applicant
+            </Button>
+          </div>
+        )}
 
-                  {app.finalized && (
-                    <>
-                      <p className="notice">
-                        This application has already been settled. Load another applicant to finalise more awards.
-                      </p>
-                      {settledAward ? (
-                        <AwardResultCard title="Award finalised" award={settledAward} />
-                      ) : (
-                        <AsyncView
-                          {...award}
-                          onRetry={award.refetch}
-                          empty={{ title: 'No award recorded for this application.' }}
-                        >
-                          {(a) => <AwardResultCard title="Already finalised into an award" award={a} />}
-                        </AsyncView>
-                      )}
-                    </>
-                  )}
-
-                  {!app.finalized && !quorumReached && (
-                    <p className="notice notice--blocked">
-                      Not enough reviewers have voted yet — this application needs {quorum} votes before it can be finalised.
-                    </p>
-                  )}
-
-                  {!app.finalized && quorumReached && (
-                    <div className="finalize-flow">
-                      <div className="finalize-flow__heading">
-                        <h3>Choose how the award is paid</h3>
-                        <p className="typo-text text-muted">
-                          The payment mode decides where released money may go. Allocated and Direct both require a verified payee; they differ in who chooses that payee.
-                        </p>
-                      </div>
-
-                      <div className="mode-grid">
-                        {MODE_OPTIONS.map((option) => {
-                          const Icon = option.icon;
-                          const active = modeTag === option.tag;
-                          return (
-                            <button
-                              key={option.tag}
-                              type="button"
-                              className={`mode-card ${active ? 'mode-card--active' : ''}`}
-                              onClick={() => {
-                                setModeTag(option.tag);
-                                setPayeeToVerify('');
-                              }}
-                            >
-                              <div className="mode-card__icon"><Icon size={22} /></div>
-                              <div className="mode-card__body">
-                                <h4>{option.label}</h4>
-                                <p className="mode-card__summary">{option.summary}</p>
-                                <p className="mode-card__consequence">{option.consequence}</p>
-                              </div>
-                            </button>
-                          );
-                        })}
-                      </div>
-
-                      {selectedMode && needsVerifiedPayee && (
-                        <div className="payee-section">
-                          <h4>Verified payee</h4>
-                          <p className="typo-text text-muted">
-                            Direct awards are paid straight to a verified destination, called a payee. The payee must be one this programme has verified before the award can be finalized.
-                          </p>
-                          <div className="payee-row">
-                            <Field
-                              label="Verified payee address"
-                              value={payeeInput}
-                              onChange={(event) => {
-                                setPayeeInput(event.target.value);
-                                setPayeeToVerify('');
-                              }}
-                              placeholder="G…"
-                              spellCheck={false}
-                            />
-                            <Button
-                              variant="secondary"
-                              icon={<ShieldCheck size={18} />}
-                              loading={payeePending}
-                              loadingLabel="Verifying…"
-                              disabled={!payeeInput.trim()}
-                              onClick={() => setPayeeToVerify(payeeInput.trim())}
-                            >
-                              Verify payee
-                            </Button>
-                          </div>
-                          {payeeCheck.data === true && (
-                            <p className="notice notice--ok">
-                              <CheckCircle size={16} /> {truncate(payeeToVerify)} is a verified payee for this programme.
-                            </p>
-                          )}
-                          {payeeToVerify !== '' && payeeCheck.data === false && (
-                            <p className="notice notice--blocked">
-                              <AlertTriangle size={16} /> This address is not a verified payee. Only the programme creator can verify a payee.
-                            </p>
-                          )}
-                        </div>
-                      )}
-
-                      {selectedMode && !needsVerifiedPayee && (
-                        <div className="payee-section">
-                          <h4>Payee</h4>
-                          <p className="typo-text text-muted">
-                            With {selectedMode.tag}, the award is paid to the recipient themselves, so the payee is the applicant.
-                          </p>
-                          <div className="payee-row">
-                            <span className="detail-value mono" title={applicant}>{truncate(applicant)}</span>
-                          </div>
-                        </div>
-                      )}
-
-                      {granted !== null && budget.data !== null && (
-                        <div className={`budget-note ${insufficient || belowMinimum ? 'budget-note--error' : 'budget-note--ok'}`}>
-                          <div>
-                            <span className="detail-label">Computed award (middle vote)</span>
-                            <span className="detail-value">{formatAmount(granted, { asset: 'XLM' })}</span>
-                          </div>
-                          <div>
-                            <span className="detail-label">Remaining budget after award</span>
-                            <span className="detail-value">{formatAmount(remainingAfter!, { asset: 'XLM' })}</span>
-                          </div>
-                          {minimumAward > 0n && (
-                            <div>
-                              <span className="detail-label">Programme minimum award</span>
-                              <span className="detail-value">{formatAmount(minimumAward, { asset: 'XLM' })}</span>
-                            </div>
-                          )}
-                        </div>
-                      )}
-
-                      {insufficient && (
-                        <p className="notice notice--blocked">
-                          <AlertTriangle size={16} /> This award exceeds the remaining budget. Awards settle in the order they are finalised — first finalised, first funded.
-                        </p>
-                      )}
-
-                      {belowMinimum && granted !== null && (
-                        <div className="notice notice--blocked" role="alert">
-                          <p style={{ margin: '0 0 0.5rem', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-                            <AlertTriangle size={16} />
-                            <strong>Award is below the programme minimum and cannot be finalised.</strong>
-                          </p>
-                          <p style={{ margin: '0 0 0.25rem', fontSize: '0.875rem' }}>
-                            Middle reviewer vote: <strong>{formatAmount(granted, { asset: 'XLM' })}</strong>
-                            {' '}&mdash; Minimum: <strong>{formatAmount(minimumAward, { asset: 'XLM' })}</strong>
-                            {' '}&mdash; Shortfall: <strong>{formatAmount(minimumAward - granted, { asset: 'XLM' })}</strong>
-                          </p>
-                          <p style={{ margin: 0, fontSize: '0.875rem', color: 'var(--color-muted)' }}>
-                            The application is unchanged and stays finalisable — if reviewers add higher votes and the middle vote rises above the minimum, this call will succeed.
-                          </p>
-                        </div>
-                      )}
-
-                      {wallet.status !== 'connected' && (
-                        <p className="notice">
-                          <Wallet size={16} /> Connect a wallet above to sign the finalise transaction.
-                        </p>
-                      )}
-
-                      <div className="finalize-actions">
-                        <Button
-                          icon={<ArrowRight size={18} />}
-                          loading={finalizeTx.busy}
-                          loadingLabel="Finalising…"
-                          disabled={!payeeReady || insufficient || belowMinimum || wallet.status !== 'connected'}
-                          onClick={finalize}
-                        >
-                          Finalize award
-                        </Button>
-                        {!payeeReady && needsVerifiedPayee && (
-                          <span className="hint">Select and verify a payee first.</span>
-                        )}
-                      </div>
-
-                      {finalizeTx.error && (() => {
-                        const err = finalizeTx.error;
-                        // BelowMinimumAward (38) gets its own breakdown — the generic
-                        // message is enough for every other error.
-                        const isBelowMin = err.code === 38;
-                        return (
-                          <div
-                            className={`notice ${err.kind === 'none' ? '' : 'notice--blocked'}`}
-                          >
-                            <p style={{ margin: 0, fontWeight: 600 }}>
-                              {err.message}
-                            </p>
-                            {isBelowMin && granted !== null && minimumAward > 0n && (
-                              <p style={{ margin: '0.5rem 0 0.25rem', fontSize: '0.875rem' }}>
-                                Middle reviewer vote: <strong>{formatAmount(granted, { asset: 'XLM' })}</strong>
-                                {' '}&mdash; Minimum: <strong>{formatAmount(minimumAward, { asset: 'XLM' })}</strong>
-                                {' '}&mdash; Shortfall: <strong>{formatAmount(minimumAward - granted, { asset: 'XLM' })}</strong>
-                              </p>
-                            )}
-                            {err.action && (
-                              <p style={{ margin: '0.25rem 0 0', fontSize: '0.875rem', color: 'var(--color-muted)' }}>
-                                {err.action}
-                              </p>
-                            )}
-                          </div>
-                        );
-                      })()}
-
-                      {settledAward && !app.finalized && (
-                        <AwardResultCard title="Award finalised" award={settledAward} />
-                      )}
-                    </div>
-                  )}
-                </>
-              )}
-            </AsyncView>
+        <p className="finalize__fine">
+          The award is the vote at the middle of the lowest {quorum || 'quorum'} votes, as the contract computes it, and
+          never more than was asked. The payment mode is chosen per award when you finalize.
+          {sample && (
+            <>
+              {' '}
+              <SampleTag /> Sample applications stand in until the index publishes them.
+            </>
           )}
-        </Card>
+        </p>
       </section>
+
+      {target && (
+        <FinalizeSheet target={target} onClose={() => setTarget(null)} onFinalized={onFinalized} />
+      )}
     </div>
   );
 };
-
-function AwardResultCard({ title, award }: { title: string; award: Award }) {
-  return (
-    <div className="award-result">
-      <div className="award-result__header">
-        <CheckCircle size={20} />
-        <h4>{title}</h4>
-      </div>
-      <div className="application-card__grid">
-        <div>
-          <span className="detail-label">Recipient</span>
-          <span className="detail-value mono" title={award.recipient}>{truncate(award.recipient)}</span>
-        </div>
-        <div>
-          <span className="detail-label">Granted</span>
-          <span className="detail-value">{formatAmount(award.granted, { asset: 'XLM' })}</span>
-        </div>
-        <div>
-          <span className="detail-label">Mode</span>
-          <span className="detail-value">{award.mode.tag}</span>
-        </div>
-        <div>
-          <span className="detail-label">Payee</span>
-          <span className="detail-value mono" title={award.payee}>{truncate(award.payee)}</span>
-        </div>
-        <div>
-          <span className="detail-label">Tranches</span>
-          <span className="detail-value">{award.tranches}</span>
-        </div>
-      </div>
-    </div>
-  );
-}

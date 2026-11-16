@@ -36,7 +36,6 @@ under 4.5:1 as small text on paper: `--refund-strong` for refund wording and
 The prototypes were drawn from a written brief, so a few screens show things
 the contracts and the index do not provide. The app follows the contracts.
 
-- **Finalize** takes a payee as well as a mode for each award.
 - **Attestations** store a hash of their data, not readable fields; their ids
   are 32-byte hex; they can expire. "Used" is recorded per programme.
 - **A schema** is one definition string with `revocable`, `restricted` and an
@@ -65,6 +64,13 @@ the contracts and the index do not provide. The app follows the contracts.
   read from the chain, and any other asset contract is checked by reading
   its `name()`. A restricted schema needs its authority among the
   verifiers, which the People step asks for.
+- **Finalize** lists the programme's indexed awards plus applicants added on
+  the page, each read on the chain: there is no list of applications to
+  show. Phases Review and Settled both allow finalizing. The payee follows
+  the contract per mode: Direct a verified payee (checked live), Allocated
+  none yet, Restricted the recipient's smart wallet (its spend policy is
+  checked and warned about, enforced at release), Open the recipient. The
+  oversubscription warning has figures only when the rows are known.
 - **Names** (sector, verifier, payee and reviewer labels) are not on the
   chain. Where a name appears it is the creator's label for an address, shown
   beside the address.
