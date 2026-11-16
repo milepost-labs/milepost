@@ -70,15 +70,13 @@ export function ProtocolConfigCard() {
         ))}
       </dl>
       <p className="protocol-config__foot">
-        Read from the registry. Treasury and fee come from configuration rather than the
-        caller, so a creator cannot pay a fee to themselves.
+        Read from the registry. The admin sets the fee and treasury, and a change applies only to
+        programmes deployed after it. They can’t touch yours.
       </p>
 
       {!isAdmin && wallet.address && (
         <p className="protocol-config__note" role="note">
-          You are viewing in read-only mode. Connected wallet (
-          <AddressChip address={wallet.address} copyLabel="Copy your address" />) is not the
-          registry admin ({<AddressChip address={admin} copyLabel="Copy registry admin address" />}).
+          You are viewing in read-only mode: only the registry admin can change these.
         </p>
       )}
 

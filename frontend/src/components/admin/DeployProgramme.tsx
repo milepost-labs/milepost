@@ -1,65 +1,81 @@
-import { useMemo, useState } from 'react';
-import { useSearchParams } from 'react-router-dom';
+import { useId, useMemo, useState, type ReactNode } from 'react';
+import { Link, useSearchParams } from 'react-router-dom';
 import { Buffer } from 'buffer';
+import { ArrowLeft, ArrowRight, Check, Rocket } from 'lucide-react';
+import type { Schema } from '@milepost/attest';
+import type { Config } from '@milepost/registry';
 import { useSoroban } from '../../context/useSoroban';
 import { useWallet } from '../../context/useWallet';
 import { useAnnouncer } from '../../context/useAnnouncer';
-import { useContractResult, useTransaction } from '../../hooks';
-import type { Schema } from '@milepost/attest';
-import { looksLikeAddress } from '../../lib/format';
-import { formatDateTime } from '../../lib/format';
-import { explain, extractCode } from '../../lib/errors';
-import { tryParseAmount } from '../../lib/amount';
-import { Button, DateField, Field, RadioGroup, TextArea } from '../ui';
-import { ErrorPanel, PendingState, Success } from '../state/AsyncStates';
+import { useContractResult } from '../../hooks/useContractRead';
+import { useTransaction } from '../../hooks/useTransaction';
+import { useKeyedRead } from '../../hooks/useKeyedRead';
+import { DEMO_PROGRAMME_ID } from '../../context/sorobanStore';
+import { explain, explainCode, extractCode } from '../../lib/errors';
+import { formatDate, looksLikeContractId, truncateAddress } from '../../lib/format';
+import { fetchTokenName, parseTokenName } from '../../lib/token';
 import {
-  DEPLOY_MODES,
-  isHex32Bytes,
-  parseProposalParam,
-  quorumError,
-  tranchesError,
-  type DeployMode,
-} from '../../fixtures/adminFixtures';
+  cleanHex,
+  createArgs,
+  detailsErrors,
+  isHex32,
+  peopleErrors,
+  timelineErrors,
+  type DeployDraft,
+} from '../../lib/deployRules';
+import { parseProposalParam } from '../../fixtures/adminFixtures';
+import { Button, CopyButton, DisabledReason, Modal, Notice } from '../ui';
+import { ErrorPanel } from '../state/AsyncStates';
+import { TxDone, TxFailed, TxPending } from '../state/TxStatus';
+import { DetailsStep, OTHER, PeopleStep, ReviewStep, TimelineStep } from './DeploySteps';
 import './DeployProgramme.css';
-
-const MODE_DESCRIPTIONS: Record<DeployMode, string> = {
-  Direct: 'Paid straight to a payee set at award time. Accountable but paternalistic.',
-  Allocated: 'Held in escrow; recipient picks a verified payee. Strongest guarantee.',
-  Restricted:
-    "Recipient's wallet, limited by a policy signer. Only as strong as that setup.",
-  Open: 'Paid to the recipient with no restriction on onward spending.',
-};
 
 const STEPS = ['Details', 'People', 'Timeline', 'Review & deploy'] as const;
 
-function parseAddressList(text: string): string[] {
-  return text
-    .split(/[\n,]+/)
-    .map((part) => part.trim())
-    .filter((part) => part !== '');
+type Form = Omit<DeployDraft, 'token' | 'schema'>;
+
+const SCHEMA_NOT_FOUND = 1;
+
+function blankForm(prefill: { name?: string; tranches?: number } | null): Form {
+  return {
+    name: prefill?.name ?? '',
+    minAward: '',
+    tranches: prefill?.tranches ?? 3,
+    metadataHash: '',
+    reviewers: [],
+    verifiers: [],
+    quorum: 1,
+    applyDeadline: null,
+    reviewDeadline: null,
+    releaseDeadline: null,
+    sweepDeadline: null,
+  };
+}
+
+function firstError(errors: Record<string, string | undefined>): string | null {
+  return Object.values(errors).find((e): e is string => Boolean(e)) ?? null;
 }
 
 /**
- * Deploy a programme through the registry — thirteen arguments plus the
- * creator, including four ordered deadlines and a quorum bounded by the
- * reviewer count.
+ * Deploy a programme through the registry, as a four-step wizard: Details,
+ * People, Timeline, Review & deploy. One `registry.create` call at the end
+ * deploys a new `program` contract with the signer as its creator.
  *
- * Every constructor constraint from `contracts/program/src/lib.rs` is enforced
- * where it is entered, before anything is signed: deadlines run
- * apply < review < release < sweep and all lie in the future; quorum is 1–16
- * and no greater than the reviewer count; at least one verifier (or no tranche
- * could ever release); the schema UID must be well-formed (existence itself is
- * checked on-chain and reported with the programme's SchemaNotFound). Contract
- * rejections that still slip through are shown through `explain()`.
+ * Every rule the constructor enforces is checked on the step where its value
+ * is entered (see `lib/deployRules.ts`), and Continue says which one is still
+ * unmet. The asset and the schema are confirmed on the chain as they are
+ * chosen; the testnet pilot's asset and schema are offered first, read from
+ * the seeded programme rather than written into the app. The deploy runs in a
+ * sheet like every other write.
  *
- * Mode is recorded as the programme's planned default (proposals carry one);
- * the contracts choose the mode per award at `finalize`, so all four modes —
- * including Open — are selectable here without changing what is sent on-chain.
+ * Payment mode is not part of a deploy: each award gets its mode at finalize.
  */
-export function DeployProgramme() {
-  const { registry, attest } = useSoroban();
+export function DeployProgramme({ aside }: { aside?: ReactNode }) {
+  const { registry, attest, demoProgramme, rpcUrl } = useSoroban();
   const wallet = useWallet();
   const announce = useAnnouncer();
+  const titleId = useId();
+  const reasonId = useId();
   const [searchParams] = useSearchParams();
 
   const proposalParam = searchParams.get('proposal');
@@ -68,496 +84,330 @@ export function DeployProgramme() {
   const badProposal = proposalParam !== null && !proposal.ok;
 
   const [step, setStep] = useState(0);
-  const [name, setName] = useState(prefill?.name ?? '');
-  const [mode, setMode] = useState<DeployMode>(prefill?.mode ?? 'Allocated');
-  const [schemaInput, setSchemaInput] = useState('');
-  const [reviewersText, setReviewersText] = useState('');
-  const [verifiersText, setVerifiersText] = useState('');
-  const [quorumInput, setQuorumInput] = useState('3');
-  const [tranchesInput, setTranchesInput] = useState(
-    prefill ? String(prefill.tranches) : '3',
-  );
-  const [applyDeadline, setApplyDeadline] = useState<number | null>(null);
-  const [reviewDeadline, setReviewDeadline] = useState<number | null>(null);
-  const [releaseDeadline, setReleaseDeadline] = useState<number | null>(null);
-  const [sweepDeadline, setSweepDeadline] = useState<number | null>(null);
+  const [form, setForm] = useState<Form>(() => blankForm(prefill));
+  const [assetChoice, setAssetChoice] = useState('');
   const [tokenInput, setTokenInput] = useState('');
-  const [minAwardInput, setMinAwardInput] = useState('');
-  const [metadataInput, setMetadataInput] = useState('');
-  const [deployedAddress, setDeployedAddress] = useState<string | null>(null);
+  const [schemaChoice, setSchemaChoice] = useState('');
+  const [schemaInput, setSchemaInput] = useState('');
+  const [sheetOpen, setSheetOpen] = useState(false);
+  const [nowSeconds] = useState(() => Math.floor(Date.now() / 1000));
 
-  const deployTx = useTransaction<string>({ contract: 'registry' });
+  // The testnet pilot's asset and schema, offered as the first choice.
+  const pilotRead = useKeyedRead(DEMO_PROGRAMME_ID, async () => {
+    const config = (await demoProgramme.get_config()).result.unwrap();
+    const schemaHex = Buffer.from(config.schema).toString('hex');
+    const [tokenName, definition] = await Promise.all([
+      fetchTokenName(config.token, rpcUrl).then((r) => parseTokenName(r.result)).catch(() => null),
+      attest.get_schema({ uid: Buffer.from(config.schema) }).then((r) => r.result.unwrap().definition).catch(() => null),
+    ]);
+    return {
+      token: config.token,
+      tokenLabel: tokenName ? `${tokenName.code}${tokenName.isNative ? ' (native)' : ''}` : truncateAddress(config.token),
+      schema: schemaHex,
+      schemaLabel: definition ?? `${schemaHex.slice(0, 8)}…`,
+    };
+  });
+  const pilot = pilotRead.data;
 
-  // Step 1 validation — where the terms are entered.
-  const nameError = name.trim() === '' ? 'Give the programme a name.' : null;
-  const schemaError = !isHex32Bytes(schemaInput)
-    ? 'Enter the schema UID as a 32-byte hex string (64 characters). It must already exist in attest.'
+  const effectiveAsset = assetChoice || pilot?.token || OTHER;
+  const token = effectiveAsset === OTHER ? tokenInput : effectiveAsset;
+  const effectiveSchema = schemaChoice || pilot?.schema || OTHER;
+  const schema = effectiveSchema === OTHER ? schemaInput : effectiveSchema;
+
+  const tokenRead = useKeyedRead(looksLikeContractId(token) ? token : null, (id) =>
+    fetchTokenName(id, rpcUrl).then((r) => parseTokenName(r.result)),
+  );
+  const schemaRead = useKeyedRead<Schema>(isHex32(schema) ? cleanHex(schema) : null, (uid) =>
+    attest.get_schema({ uid: Buffer.from(uid, 'hex') }).then((r) => r.result.unwrap()),
+  );
+  const feeRead = useContractResult<Config>(() => registry.get_config(), [registry], { contract: 'registry' });
+
+  const schemaMissing = schemaRead.status === 'error' && extractCode(schemaRead.error) === SCHEMA_NOT_FOUND;
+  const schemaFacts = schemaRead.status === 'ok' ? schemaRead.data : null;
+  const assetCode = tokenRead.status === 'ok' ? tokenRead.data.code : null;
+
+  const draft: DeployDraft = { ...form, token, schema };
+  const update = (patch: Partial<DeployDraft>) => setForm((prev) => ({ ...prev, ...patch }));
+
+  const detailErrs = detailsErrors(draft, {
+    tokenKnown: tokenRead.status === 'ok' ? true : tokenRead.status === 'error' ? false : null,
+    schemaFound: schemaRead.status === 'ok' ? true : schemaRead.status === 'error' ? false : null,
+  });
+  const peopleErrs = peopleErrors(draft, schemaFacts);
+  const timelineErrs = timelineErrors(draft, nowSeconds);
+  const stepReasons = [firstError(detailErrs), firstError(peopleErrs), firstError(timelineErrs)];
+  const valid = [...stepReasons.map((r) => r === null), stepReasons.every((r) => r === null)];
+  const reachable = (i: number) => valid.slice(0, i).every(Boolean);
+
+  const tx = useTransaction<string>({
+    contract: 'registry',
+    onError: (error) => announce(`Programme not deployed. ${error.message}`, 'alert'),
+  });
+
+  // Constructor refusals come from the programme being deployed, so its codes
+  // describe them; registry codes 2 and 3 (fee, not initialised) keep theirs.
+  const deployError = tx.error
+    ? tx.error.code !== undefined && tx.error.code !== 2 && tx.error.code !== 3
+      ? explainCode('program', tx.error.code)
+      : tx.error
     : null;
 
-  // Confirm the schema exists before letting the user past this step. The
-  // programme constructor requires it, so a well-formed UID that attest has
-  // never seen must block here rather than fail at deploy time (issue #411).
-  const schemaUid = useMemo(() => {
-    if (!isHex32Bytes(schemaInput)) return null;
-    return Buffer.from(schemaInput.trim().replace(/^0x/i, ''), 'hex');
-  }, [schemaInput]);
-
-  const schemaRead = useContractResult<Schema>(
-    () => attest.get_schema({ uid: schemaUid as Buffer }),
-    [attest, schemaUid],
-    { enabled: schemaUid !== null, contract: 'attest' },
-  );
-  // Error 1 is `SchemaNotFound` — a real answer, not a lookup failure.
-  const schemaNotFound = schemaRead.error !== null && extractCode(schemaRead.error) === 1;
-  const schemaLookupError =
-    schemaRead.error !== null && !schemaNotFound ? explain(schemaRead.error, 'attest') : null;
-  const schemaConfirmed = schemaUid !== null && schemaRead.data !== null && !schemaRead.error;
-
-  // Step 2 validation — where the people are entered.
-  const reviewers = useMemo(() => parseAddressList(reviewersText), [reviewersText]);
-  const verifiers = useMemo(() => parseAddressList(verifiersText), [verifiersText]);
-  const reviewersError =
-    reviewers.length === 0
-      ? 'A programme needs at least one reviewer.'
-      : reviewers.some((a) => !looksLikeAddress(a))
-        ? 'Every reviewer must be a valid Stellar address, one per line.'
-        : null;
-  const verifiersError =
-    verifiers.length === 0
-      ? 'A programme needs at least one verifier, or no tranche could ever be released.'
-      : verifiers.some((a) => !looksLikeAddress(a))
-        ? 'Every verifier must be a valid Stellar address, one per line.'
-        : null;
-  const quorumFormatError = quorumError(quorumInput);
-  const quorumParsed = Number(quorumInput);
-  const quorumCountError =
-    !quorumFormatError && Number.isInteger(quorumParsed) && quorumParsed > reviewers.length && reviewers.length > 0
-      ? `Quorum cannot exceed the reviewer count (${reviewers.length}).`
-      : null;
-  const quorumFinalError = quorumFormatError ?? quorumCountError;
-  const tranchesFinalError = tranchesError(tranchesInput);
-
-  // Step 3 validation — the deadlines, shown and checked as a sequence.
-  const [nowSeconds] = useState(() => Math.floor(Date.now() / 1000));
-  const deadlineFor = (label: string, value: number | null): string | null => {
-    if (value === null) return `Set ${label}.`;
-    if (value <= nowSeconds) return `${label} must be in the future.`;
-    return null;
-  };
-  const applyError = deadlineFor('the applications deadline', applyDeadline);
-  const reviewError = deadlineFor('the review deadline', reviewDeadline);
-  const releaseError = deadlineFor('the release deadline', releaseDeadline);
-  const sweepError = deadlineFor('the sweep deadline', sweepDeadline);
-  const orderError =
-    !applyError && !reviewError && !releaseError && !sweepError
-      ? 'The deadlines must run in order: applications, then review, then release, then sweep.'
-      : null;
-  const sequenceError =
-    applyDeadline !== null &&
-    reviewDeadline !== null &&
-    releaseDeadline !== null &&
-    sweepDeadline !== null &&
-    !(applyDeadline < reviewDeadline && reviewDeadline < releaseDeadline && releaseDeadline < sweepDeadline)
-      ? orderError
-      : null;
-
-  // Step 4 validation — funds.
-  const tokenError = !looksLikeAddress(tokenInput) ? 'Enter the Stellar asset contract address being distributed.' : null;
-  const minAwardParsed = minAwardInput.trim() === '' ? { ok: true as const, value: 0n } : tryParseAmount(minAwardInput);
-  const minAwardError = !minAwardParsed.ok ? minAwardParsed.error : null;
-  const metadataError =
-    metadataInput.trim() !== '' && !isHex32Bytes(metadataInput)
-      ? 'Enter the metadata hash as a 32-byte hex string, or leave it empty.'
-      : null;
-
-  const stepValid = [
-    !nameError && !schemaError && schemaConfirmed,
-    !reviewersError && !verifiersError && !quorumFinalError && !tranchesFinalError,
-    !applyError && !reviewError && !releaseError && !sweepError && !sequenceError,
-    !tokenError && !minAwardError && !metadataError,
-  ];
-  const allValid = stepValid.every(Boolean);
-
-  const hint = !wallet.address
-    ? 'Sign in to deploy. Your address becomes the programme creator — who can pause, cancel, and manage payees and verifiers.'
-    : name.trim() === ''
-      ? 'Give the programme a name.'
-      : 'The registry deploys it and becomes its admin of record. Terms can\u2019t be changed afterwards.';
-
   const deploy = async () => {
-    if (!wallet.address || !allValid || !minAwardParsed.ok) return;
-    const quorum = Number(quorumInput);
-    const tranches = Number(tranchesInput);
-    const clean = (v: string) => v.trim().replace(/^0x/i, '');
+    if (!wallet.address || !valid[3]) return;
+    setSheetOpen(true);
     announce('Deploying programme.');
-
-    const result = await deployTx.send(async () => {
-      type SignOptions = {
-        signTransaction: (xdr: string) => Promise<{ signedTxXdr: string; signerAddress: string }>;
-      };
-      const tx = await (registry.create as unknown as (args: Record<string, unknown>) => Promise<{
-        signAndSend: (options: SignOptions) => Promise<{ result: { unwrap: () => string } }>;
-      }>)({
-        creator: wallet.address as string,
-        token: tokenInput.trim(),
-        schema: Buffer.from(clean(schemaInput), 'hex'),
-        apply_deadline: BigInt(applyDeadline as number),
-        review_deadline: BigInt(reviewDeadline as number),
-        release_deadline: BigInt(releaseDeadline as number),
-        sweep_deadline: BigInt(sweepDeadline as number),
-        quorum,
-        tranches,
-        metadata_hash: Buffer.from(metadataInput.trim() === '' ? '00'.repeat(32) : clean(metadataInput), 'hex'),
-        reviewers,
-        verifiers,
-        name: name.trim(),
-        minimum_award: minAwardParsed.value,
-      });
+    const args = createArgs(draft, wallet.address);
+    const address = await tx.send(async () => {
+      const assembled = await registry.create(args);
       return {
-        signAndSend: async (options: SignOptions) => {
-          const sent = await tx.signAndSend(options);
+        signAndSend: async (options: Parameters<typeof assembled.signAndSend>[0]) => {
+          const sent = await assembled.signAndSend(options);
           return { result: sent.result.unwrap() };
         },
       };
     });
-
-    if (result !== null) {
-      setDeployedAddress(result);
-      announce('Programme deployed.');
-    } else {
-      announce('Programme not deployed.', 'alert');
-    }
+    if (address) announce('Programme deployed.');
   };
 
-  // Constructor rejections come from the programme being deployed (deadlines,
-  // quorum, verifiers, schema), so program codes describe them best; pure
-  // registry failures (fee, not initialised) keep the registry meaning.
-  const deployError = deployTx.error
-    ? (() => {
-        const code = extractCode(deployTx.error);
-        return explain(deployTx.error, code === 2 || code === 3 ? 'registry' : 'program');
-      })()
-    : null;
+  const closeSheet = () => {
+    if (tx.busy) return;
+    setSheetOpen(false);
+    if (tx.phase !== 'success') tx.reset();
+  };
 
-  const reset = () => {
-    deployTx.reset();
-    setDeployedAddress(null);
+  const startOver = () => {
+    tx.reset();
+    setSheetOpen(false);
+    setForm(blankForm(null));
+    setAssetChoice('');
+    setTokenInput('');
+    setSchemaChoice('');
+    setSchemaInput('');
     setStep(0);
   };
 
-  if (deployTx.phase === 'success' && deployedAddress !== null) {
-    return (
-      <div className="deploy">
-        <Success
-          title="✓ Programme deployed"
-          live={false}
-          description={
-            <>
-              <p className="deploy__summary numeric">
-                {name.trim()} · {mode} · quorum {quorumInput} · {tranchesInput} tranches
-              </p>
-              <p className="deploy__address numeric" title={deployedAddress}>
-                {deployedAddress}
-              </p>
-              <p className="typo-text text-muted">
-                It opens for contributions and applications now. It will appear in the public
-                index after the next indexer run, usually within a few hours.
-              </p>
-            </>
-          }
-          action={
-            <Button variant="secondary" onClick={reset}>
-              Deploy another
-            </Button>
-          }
-        />
+  const schemaPanel =
+    schemaRead.status === 'ok' ? (
+      <div className="deploy-schema">
+        <span className="deploy-schema__title">
+          <Check size={16} aria-hidden="true" /> Schema found
+        </span>
+        <dl>
+          <div>
+            <dt>Definition</dt>
+            <dd>{schemaRead.data.definition}</dd>
+          </div>
+          <div>
+            <dt>Revocable</dt>
+            <dd>{schemaRead.data.revocable ? 'Yes' : 'No'}</dd>
+          </div>
+          <div>
+            <dt>Restricted</dt>
+            <dd>
+              {schemaRead.data.restricted
+                ? `Yes. Only ${truncateAddress(schemaRead.data.authority)} may sign under it`
+                : 'No'}
+            </dd>
+          </div>
+        </dl>
       </div>
-    );
-  }
+    ) : schemaRead.status === 'loading' ? (
+      <p className="deploy-schema__note">Checking the schema…</p>
+    ) : schemaMissing ? (
+      <Notice tone="warn" role="alert">
+        No schema with this id exists. <Link to="/schemas/register">Register it first</Link>, or check the id.
+      </Notice>
+    ) : schemaRead.status === 'error' ? (
+      <ErrorPanel explained={explain(schemaRead.error, 'attest')} live={false} />
+    ) : null;
 
-  const deadlines = [
-    { n: 1, label: 'Applications close', value: applyDeadline, onChange: setApplyDeadline, error: applyError },
-    { n: 2, label: 'Review closes', value: reviewDeadline, onChange: setReviewDeadline, error: reviewError },
-    { n: 3, label: 'Release closes', value: releaseDeadline, onChange: setReleaseDeadline, error: releaseError },
-    { n: 4, label: 'Sweep opens', value: sweepDeadline, onChange: setSweepDeadline, error: sweepError },
-  ];
+  const feeLine = feeRead.data ? `The protocol takes ${feeRead.data.fee_bps / 100}% of each contribution.` : null;
+  const schemaLabel = schemaFacts?.definition ?? (schema ? `${cleanHex(schema).slice(0, 8)}…` : '—');
+  const reason = !wallet.address && step === 3 ? 'Sign in to deploy. Your address becomes the creator.' : stepReasons[step] ?? null;
+
+  const content = [
+    <DetailsStep
+      key="details"
+      titleId={titleId}
+      draft={draft}
+      update={update}
+      errors={detailErrs}
+      pilot={pilot}
+      assetChoice={effectiveAsset}
+      setAssetChoice={setAssetChoice}
+      tokenInput={tokenInput}
+      setTokenInput={setTokenInput}
+      assetCode={assetCode}
+      tokenState={tokenRead.status}
+      schemaChoice={effectiveSchema}
+      setSchemaChoice={setSchemaChoice}
+      schemaInput={schemaInput}
+      setSchemaInput={setSchemaInput}
+      schemaPanel={schemaPanel}
+    />,
+    <PeopleStep
+      key="people"
+      titleId={titleId}
+      draft={draft}
+      update={update}
+      errors={peopleErrs}
+      restrictedAuthority={schemaFacts?.restricted ? schemaFacts.authority : null}
+    />,
+    <TimelineStep key="timeline" titleId={titleId} draft={draft} update={update} errors={timelineErrs} nowSeconds={nowSeconds} />,
+    <ReviewStep
+      key="review"
+      titleId={titleId}
+      draft={draft}
+      assetCode={assetCode}
+      schemaLabel={schemaLabel}
+      feeLine={feeLine}
+      goTo={setStep}
+    />,
+  ][step];
+
+  const deployed = tx.phase === 'success' ? tx.result : null;
 
   return (
-    <div className="deploy">
-      <h2 className="deploy__title">New programme</h2>
-
-      {prefill && (
-        <div className="deploy__proposal" role="note">
-          <span className="deploy__proposal-title">Pre-filled from a funder&apos;s proposal</span>
-          <span className="deploy__proposal-row">
-            <span>From</span>
-            <span>{prefill.contact || prefill.funder || '—'}</span>
-          </span>
-          {prefill.amount && (
-            <span className="deploy__proposal-row">
-              <span>Plans to fund</span>
-              <span>{prefill.amount} XLM</span>
-            </span>
-          )}
-          {prefill.purpose && (
-            <span className="deploy__proposal-row">
-              <span>What it pays for</span>
-              <span>{prefill.purpose}</span>
-            </span>
-          )}
-          {prefill.condition && (
-            <span className="deploy__proposal-row">
-              <span>Condition</span>
-              <span>{prefill.condition}</span>
-            </span>
-          )}
-          {prefill.verifier && (
-            <span className="deploy__proposal-row">
-              <span>Verifier</span>
-              <span>{prefill.verifier}</span>
-            </span>
-          )}
-          <span className="deploy__proposal-foot">
-            Check the terms with them before deploying. Deployed terms can&apos;t be changed.
-          </span>
-        </div>
-      )}
-      {badProposal && (
-        <div className="deploy__bad-proposal" role="alert">
-          This proposal link is damaged and couldn&apos;t be read. Ask the funder to send it
-          again.
-        </div>
-      )}
-
-      <ol className="deploy__steps" aria-label="Deploy steps">
-        {STEPS.map((label, i) => (
-          <li key={label} className={i === step ? 'deploy__step deploy__step--current' : 'deploy__step'} aria-current={i === step ? 'step' : undefined}>
-            <span className="deploy__step-n numeric" aria-hidden="true">{i + 1}</span> {label}
-          </li>
-        ))}
-      </ol>
-
-      {step === 0 && (
-        <div className="deploy__pane">
-          <Field
-            label="Name"
-            placeholder="e.g. Health worker stipends 2027"
-            value={name}
-            onChange={(event) => setName(event.target.value)}
-            error={name.trim() !== '' ? null : undefined}
-            hint={name.trim() === '' ? 'Give the programme a name.' : undefined}
-          />
-          <RadioGroup
-            label="Mode · where released money goes"
-            name="deploy-mode"
-            value={mode}
-            onChange={setMode}
-            options={DEPLOY_MODES.map((m) => ({ value: m, label: m, description: MODE_DESCRIPTIONS[m] }))}
-            hint="The planned default for awards under this programme. Each award still picks its mode at finalize."
-          />
-          <Field
-            label="Attestation schema UID"
-            placeholder="32-byte hex (64 characters)"
-            value={schemaInput}
-            onChange={(event) => setSchemaInput(event.target.value)}
-            error={schemaInput !== '' ? (schemaError ?? undefined) : undefined}
-            hint={
-              schemaInput === ''
-                ? 'The schema tranches release against. It must already exist in attest — it is checked before you continue.'
-                : undefined
-            }
-            spellCheck={false}
-          />
-
-          {schemaUid !== null && (
-            <div className="deploy__schema" aria-live="polite">
-              {schemaRead.loading && (
-                <p className="deploy__schema-note">Checking the schema in attest…</p>
-              )}
-              {schemaNotFound && (
-                <p className="deploy__schema-missing" role="alert">
-                  No schema with this UID exists in attest. Register the schema first, or check
-                  the UID — a programme cannot be deployed against a schema that does not exist.
-                </p>
-              )}
-              {schemaConfirmed && schemaRead.data && (
-                <div className="deploy__schema-found">
-                  <span className="deploy__schema-title">Schema found</span>
-                  <span className="deploy__schema-row">
-                    <span>Definition</span>
-                    <span>{schemaRead.data.definition}</span>
+    <div className="deploy-wizard">
+      <nav className="deploy-rail" aria-label="Deploy steps">
+        <ol>
+          {STEPS.map((label, i) => {
+            const done = i < step && valid[i];
+            return (
+              <li key={label}>
+                <button
+                  type="button"
+                  className={done ? 'is-done' : undefined}
+                  aria-current={i === step ? 'step' : undefined}
+                  disabled={!reachable(i)}
+                  onClick={() => setStep(i)}
+                >
+                  <span className="deploy-rail__n numeric" aria-hidden="true">
+                    {done ? <Check size={16} /> : i + 1}
                   </span>
-                  <span className="deploy__schema-row">
-                    <span>Revocable</span>
-                    <span>{schemaRead.data.revocable ? 'Yes' : 'No'}</span>
-                  </span>
-                  <span className="deploy__schema-row">
-                    <span>Restricted</span>
-                    <span>
-                      {schemaRead.data.restricted
-                        ? 'Yes — only its authority may sign under it'
-                        : 'No'}
-                    </span>
-                  </span>
-                </div>
-              )}
-              {schemaLookupError && (
-                <p className="deploy__schema-missing" role="alert">
-                  Could not check the schema: {schemaLookupError.message}
-                </p>
-              )}
-            </div>
-          )}
-        </div>
-      )}
-
-      {step === 1 && (
-        <div className="deploy__pane">
-          <div className="deploy__duo">
-            <Field
-              label="Reviewer quorum"
-              inputMode="numeric"
-              value={quorumInput}
-              onChange={(event) => setQuorumInput(event.target.value)}
-              error={quorumFinalError ?? undefined}
-              hint={quorumFinalError ? undefined : 'Whole number from 1 to 16 (MAX_QUORUM), no more than the reviewer count.'}
-            />
-            <Field
-              label="Tranches per award"
-              inputMode="numeric"
-              value={tranchesInput}
-              onChange={(event) => setTranchesInput(event.target.value)}
-              error={tranchesFinalError ?? undefined}
-            />
-          </div>
-          <TextArea
-            label="Reviewers (one address per line)"
-            value={reviewersText}
-            onChange={(event) => setReviewersText(event.target.value)}
-            error={reviewersText !== '' ? (reviewersError ?? undefined) : undefined}
-            hint={
-              reviewersText === ''
-                ? 'At least one reviewer. Quorum is bounded by this list.'
-                : reviewersError ? undefined : `${reviewers.length} reviewer${reviewers.length === 1 ? '' : 's'}`
-            }
-            rows={3}
-            spellCheck={false}
-          />
-          <TextArea
-            label="Verifiers (one address per line)"
-            value={verifiersText}
-            onChange={(event) => setVerifiersText(event.target.value)}
-            error={verifiersText !== '' ? (verifiersError ?? undefined) : undefined}
-            hint={
-              verifiersText === ''
-                ? 'At least one verifier, or no tranche could ever be released.'
-                : verifiersError ? undefined : `${verifiers.length} verifier${verifiers.length === 1 ? '' : 's'}`
-            }
-            rows={3}
-            spellCheck={false}
-          />
-        </div>
-      )}
-
-      {step === 2 && (
-        <div className="deploy__pane">
-          <ol className="deploy__sequence" aria-label="Programme deadlines in order">
-            {deadlines.map((d) => (
-              <li key={d.label} className="deploy__sequence-item">
-                <span className="deploy__sequence-n numeric" aria-hidden="true">{d.n}</span>
-                <div className="deploy__sequence-field">
-                  <DateField
-                    label={d.label}
-                    value={d.value}
-                    onChange={d.onChange}
-                    error={d.error ?? undefined}
-                    hint={d.value !== null && !d.error ? formatDateTime(d.value) : undefined}
-                  />
-                </div>
+                  <span className="deploy-rail__label">{label}</span>
+                  {done && <span className="visually-hidden">{' '}(done)</span>}
+                </button>
               </li>
-            ))}
-          </ol>
-          {sequenceError && (
-            <p className="ui-field__message ui-field__message--error" role="alert">
-              {sequenceError}
-            </p>
+            );
+          })}
+        </ol>
+      </nav>
+
+      <section className="deploy-panel" aria-labelledby={titleId}>
+        {prefill && step === 0 && (
+          <Notice tone="info">
+            <span className="deploy-proposal">
+              <strong>Pre-filled from a funder’s proposal.</strong> Check the terms with them before deploying.
+              <span>
+                From {prefill.contact || prefill.funder || 'a funder'}
+                {prefill.amount && ` · plans to fund ${prefill.amount}`}
+                {prefill.mode && ` · asks for ${prefill.mode} awards (set at finalize)`}
+              </span>
+              {prefill.purpose && <span>Pays for: {prefill.purpose}</span>}
+              {prefill.condition && <span>Condition: {prefill.condition}</span>}
+              {prefill.verifier && <span>Verifier: {prefill.verifier}</span>}
+            </span>
+          </Notice>
+        )}
+        {badProposal && (
+          <Notice tone="warn" role="alert">
+            This proposal link is damaged and couldn’t be read. Ask the funder to send it again.
+          </Notice>
+        )}
+
+        {content}
+
+        <div className="deploy-nav">
+          {step > 0 ? (
+            <Button variant="ghost" icon={<ArrowLeft size={18} aria-hidden="true" />} onClick={() => setStep(step - 1)}>
+              Back
+            </Button>
+          ) : (
+            <span />
+          )}
+          {step < STEPS.length - 1 ? (
+            <Button
+              disabled={!valid[step]}
+              aria-describedby={reason ? reasonId : undefined}
+              onClick={() => setStep(step + 1)}
+            >
+              Continue <ArrowRight size={18} aria-hidden="true" />
+            </Button>
+          ) : (
+            <Button
+              icon={<Rocket size={18} aria-hidden="true" />}
+              disabled={!valid[3] || !wallet.address || tx.busy}
+              aria-describedby={reason ? reasonId : undefined}
+              onClick={() => void deploy()}
+            >
+              Deploy programme
+            </Button>
           )}
         </div>
-      )}
-
-      {step === 3 && (
-        <div className="deploy__pane">
-          <Field
-            label="Asset contract"
-            placeholder="C…"
-            value={tokenInput}
-            onChange={(event) => setTokenInput(event.target.value)}
-            error={tokenInput !== '' ? (tokenError ?? undefined) : undefined}
-            hint={tokenInput === '' ? 'The Stellar asset contract being distributed.' : undefined}
-            spellCheck={false}
-          />
-          <Field
-            label="Minimum award (optional, XLM)"
-            placeholder="0"
-            value={minAwardInput}
-            onChange={(event) => setMinAwardInput(event.target.value)}
-            error={minAwardError ?? undefined}
-            inputMode="decimal"
-            suffix="XLM"
-          />
-          <Field
-            label="Metadata hash (optional)"
-            placeholder="32-byte hex, empty for none"
-            value={metadataInput}
-            onChange={(event) => setMetadataInput(event.target.value)}
-            error={metadataInput !== '' ? (metadataError ?? undefined) : undefined}
-            spellCheck={false}
-          />
-          <div className="deploy__review" role="note" aria-label="Deploy summary">
-            <span className="deploy__review-title">Review</span>
-            <span className="deploy__proposal-row"><span>Programme</span><span>{name.trim() || '—'}</span></span>
-            <span className="deploy__proposal-row"><span>Mode (planned)</span><span>{mode}</span></span>
-            <span className="deploy__proposal-row"><span>Quorum</span><span className="numeric">{quorumInput} of {reviewers.length} reviewers</span></span>
-            <span className="deploy__proposal-row"><span>Tranches</span><span className="numeric">{tranchesInput}</span></span>
-            <span className="deploy__proposal-row"><span>Verifiers</span><span className="numeric">{verifiers.length}</span></span>
-            <span className="deploy__proposal-row">
-              <span>Deadlines</span>
-              <span className="numeric">
-                {[applyDeadline, reviewDeadline, releaseDeadline, sweepDeadline].every((d) => d !== null)
-                  ? [applyDeadline, reviewDeadline, releaseDeadline, sweepDeadline].map((d) => formatDateTime(d as number)).join(' → ')
-                  : '—'}
-              </span>
-            </span>
+        {reason && (
+          <div className="deploy-nav__reason">
+            <DisabledReason id={reasonId}>{reason}</DisabledReason>
           </div>
-        </div>
-      )}
-
-      <p className="deploy__hint">{hint}</p>
-
-      {deployTx.busy && <PendingState title="Deploying through the registry…" />}
-      {deployError && <ErrorPanel explained={deployError} />}
-
-      <div className="deploy__nav">
-        {step > 0 && (
-          <Button variant="secondary" onClick={() => setStep((s) => s - 1)} disabled={deployTx.busy}>
-            Back
-          </Button>
         )}
-        {step < STEPS.length - 1 ? (
-          <Button onClick={() => setStep((s) => s + 1)} disabled={!stepValid[step] || deployTx.busy}>
-            Next
-          </Button>
-        ) : (
-          <Button
-            onClick={deploy}
-            disabled={!allValid || !wallet.address || deployTx.busy}
-            loading={deployTx.busy}
-            loadingLabel="Deploying…"
+      </section>
+
+      {aside && <aside className="deploy-aside">{aside}</aside>}
+
+      <Modal
+        open={sheetOpen}
+        onClose={closeSheet}
+        busy={tx.busy}
+        eyebrow="Deploy"
+        title={deployed ? 'Programme deployed' : 'Deploy programme'}
+      >
+        {deployed ? (
+          <TxDone
+            title="Programme deployed"
+            rows={[
+              { label: 'Name', value: draft.name.trim(), text: true },
+              {
+                label: 'Address',
+                value: (
+                  <span className="deploy-sheet__address">
+                    <span title={deployed}>{truncateAddress(deployed, 8, 6)}</span>
+                    <CopyButton value={deployed} label="Copy programme address" />
+                  </span>
+                ),
+              },
+            ]}
+            actions={
+              <>
+                <Button variant="secondary" onClick={startOver}>
+                  Deploy another
+                </Button>
+                <Link className="ui-button ui-button--primary ui-button--md" to={`/programme/${encodeURIComponent(deployed)}`}>
+                  Open its page
+                </Link>
+              </>
+            }
           >
-            Deploy programme
-          </Button>
+            <p>
+              It takes contributions and applications until{' '}
+              {form.applyDeadline !== null ? formatDate(form.applyDeadline) : 'its first deadline'}. The index lists it
+              after its next run, usually within a few hours.
+            </p>
+          </TxDone>
+        ) : deployError && !tx.busy ? (
+          <TxFailed
+            title="Programme not deployed"
+            explained={deployError}
+            onRetry={() => void deploy()}
+            actions={
+              <Button variant="secondary" onClick={closeSheet}>
+                Close
+              </Button>
+            }
+          />
+        ) : (
+          <TxPending title={`Deploying ${draft.name.trim() || 'the programme'}`} phase={tx.phase} />
         )}
-      </div>
+      </Modal>
     </div>
   );
 }

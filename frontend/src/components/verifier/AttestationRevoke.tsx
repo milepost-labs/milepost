@@ -69,8 +69,8 @@ export function AttestationRevoke({
 
   return (
     <>
-      <Button variant="danger" size="sm" onClick={() => setOpen(true)}>
-        Revoke<span className="visually-hidden"> {label}</span>
+      <Button variant="danger" size="sm" aria-label={`Revoke ${label}`} onClick={() => setOpen(true)}>
+        Revoke
       </Button>
       <Modal open={open} onClose={close} busy={tx.busy} eyebrow="Verify" title="Revoke attestation">
         {tx.phase === 'success' ? (

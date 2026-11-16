@@ -19,9 +19,11 @@ function renderAt(path: string) {
   );
 }
 
+const SHELLED = ADMIN_SECTIONS.filter((s) => !s.ownHead);
+
 describe('AdminLayout', () => {
   it('lists all five admin screens as links under one heading', () => {
-    renderAt('/admin');
+    renderAt('/finalize');
     expect(screen.getAllByRole('heading', { level: 1 })).toHaveLength(1);
     expect(screen.getByRole('heading', { name: 'Run programmes' })).toBeTruthy();
     const nav = screen.getByRole('navigation', { name: 'Admin sections' });
@@ -35,7 +37,14 @@ describe('AdminLayout', () => {
     ]);
   });
 
-  it.each(ADMIN_SECTIONS)('marks only $label as current at $to', ({ to, label }) => {
+  it('leaves a rebuilt screen to its own page head', () => {
+    renderAt('/admin');
+    expect(screen.getByText('Deploy programme screen')).toBeTruthy();
+    expect(screen.queryByRole('heading', { name: 'Run programmes' })).toBeNull();
+    expect(screen.queryByRole('navigation', { name: 'Admin sections' })).toBeNull();
+  });
+
+  it.each(SHELLED)('marks only $label as current at $to', ({ to, label }) => {
     renderAt(to);
     expect(screen.getByText(`${label} screen`)).toBeTruthy();
     const current = screen

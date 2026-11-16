@@ -57,6 +57,14 @@ the contracts and the index do not provide. The app follows the contracts.
   condition), the verifier role and the registry on the chain before
   signing. After signing, a *reply link* fills in the recipient's release.
   "Signed this month" and "votes to cast" are not shown; nothing counts them.
+- **The deploy wizard** has no payment-mode choice: `registry.create` takes
+  no mode, and each award gets its mode at finalize, so a "planned mode"
+  would be thrown away. The step shows the four modes ranked instead.
+  Reviewers and verifiers are addresses without names until the metadata
+  store exists. The asset and schema offered first are the testnet pilot's,
+  read from the chain, and any other asset contract is checked by reading
+  its `name()`. A restricted schema needs its authority among the
+  verifiers, which the People step asks for.
 - **Names** (sector, verifier, payee and reviewer labels) are not on the
   chain. Where a name appears it is the creator's label for an address, shown
   beside the address.

@@ -1,6 +1,5 @@
-.admin-page__grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(min(100%, 24rem), 1fr));
-  gap: var(--space-4-5);
-  align-items: start;
+.registry-admin {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
 }
