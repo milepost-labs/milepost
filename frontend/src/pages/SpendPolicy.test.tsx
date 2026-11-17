@@ -1,5 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { MemoryRouter } from 'react-router-dom';
 import { SpendPolicy } from './SpendPolicy';
 
 // Issues #409/#410 — configuring the policy and managing its payees. The
@@ -30,6 +31,12 @@ vi.mock('../context/useSoroban', () => ({
 }));
 
 vi.mock('../context/useAnnouncer', () => ({ useAnnouncer: () => vi.fn() }));
+
+// The policy's asset is named by reading its token contract; keep that off the network.
+vi.mock('../lib/token', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('../lib/token')>()),
+  fetchTokenName: vi.fn(async () => ({ result: 'USDC:GISSUER' })),
+}));
 
 function unwrap<T>(value: T) {
   return Promise.resolve({ result: { unwrap: () => value } });
@@ -67,7 +74,11 @@ function makePolicy(steward = STEWARD) {
 }
 
 async function renderPage() {
-  render(<SpendPolicy />);
+  render(
+    <MemoryRouter>
+      <SpendPolicy />
+    </MemoryRouter>,
+  );
   await screen.findByRole('heading', { name: 'Checks' });
 }
 
@@ -104,7 +115,7 @@ describe('SpendPolicy configure', () => {
     await renderPage();
     fillConfigureForm('500', '0');
 
-    expect(screen.getByText('Enter a whole number of days from 1 to 365.')).toBeTruthy();
+    expect(screen.getAllByText('Enter a whole number of days from 1 to 365.').length).toBeGreaterThan(0);
     const button = screen.getByRole('button', { name: 'Update policy' });
     expect(button.hasAttribute('disabled')).toBe(true);
   });
@@ -176,5 +187,30 @@ describe('SpendPolicy payees', () => {
 
     expect(screen.getAllByText(/Only the policy steward/).length).toBeGreaterThan(0);
     expect(screen.getByRole('button', { name: 'Add payee' }).hasAttribute('disabled')).toBe(true);
+  });
+});
+
+describe('SpendPolicy for a wallet with no policy', () => {
+  beforeEach(() => {
+    state.address = STEWARD;
+    state.policy = makePolicy();
+    // What the published binding returns for NotConfigured: an error with no message.
+    state.policy.get_policy.mockImplementation(() =>
+      Promise.resolve({
+        result: {
+          unwrap: () => {
+            throw new Error('');
+          },
+        },
+      }) as never,
+    );
+    state.policy.is_installed.mockImplementation(() => Promise.resolve({ result: false }));
+  });
+
+  it('says there is no policy, offers to install one, and shows no error', async () => {
+    await renderPage();
+    expect(await screen.findByText('This wallet has no spend policy. Money sent to it can go anywhere.')).toBeTruthy();
+    expect(screen.getByRole('button', { name: 'Install policy signer' })).toBeTruthy();
+    expect(screen.queryByText(/Something went wrong/)).toBeNull();
   });
 });

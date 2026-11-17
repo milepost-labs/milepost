@@ -1,292 +1,253 @@
+/* /policy: the warning, a wallet to check, its summary and tiles, checks beside
+   the payee check, then the steward's forms. */
 .spend-policy {
   display: flex;
   flex-direction: column;
   gap: var(--space-5);
+  min-width: 0;
 }
 
-.spend-policy__header {
-  display: flex;
-  flex-direction: column;
-  gap: var(--space-2);
-  max-width: 66ch;
-}
-
-.spend-policy__header h1 {
-  margin: 0;
-  font-size: var(--text-h1);
-  font-weight: var(--weight-extrabold);
-  letter-spacing: var(--tracking-heading);
-}
-
-.spend-policy__header p {
-  margin: 0;
-  font-size: var(--text-base);
-  line-height: var(--leading-body);
-}
-
-.spend-policy__signin {
-  background: var(--surface);
-  border-radius: var(--radius-hero);
-  padding: var(--space-6);
-  display: flex;
-  flex-direction: column;
-  align-items: flex-start;
-  gap: var(--space-3);
-  max-width: 640px;
-}
-
-.spend-policy__signin-title {
-  font-size: var(--text-xl);
-  font-weight: var(--weight-extrabold);
-}
-
-.spend-policy__signin-body {
-  font-size: var(--text-md);
-  line-height: var(--leading-relaxed);
-  color: var(--text-muted);
-}
-
-.spend-policy__signin-button,
-.spend-policy__setup {
-  cursor: pointer;
-  border: 0;
-  border-radius: var(--radius-full);
-  padding: var(--space-3) var(--space-5);
-  font-size: var(--text-md);
-  font-weight: var(--weight-bold);
-  background: var(--accent);
-  color: var(--accent-contrast);
-  min-height: var(--tap-min);
-  box-sizing: border-box;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-}
-
-.spend-policy__setup:disabled {
-  opacity: 0.6;
-  cursor: not-allowed;
-}
-
-.spend-policy__alert {
-  background: var(--refund-soft);
-  border-radius: var(--radius-card-lg);
-  padding: var(--space-4) var(--space-5);
-  display: flex;
-  align-items: center;
-  gap: var(--space-3);
-  flex-wrap: wrap;
-}
-
-.spend-policy__alert-text {
-  flex: 1;
-  min-width: 240px;
-  display: flex;
-  flex-direction: column;
-  gap: var(--space-1);
-}
-
-.spend-policy__alert-text b {
-  font-size: var(--text-base);
-  color: var(--refund);
-}
-
-.spend-policy__alert-text span {
-  font-size: var(--text-sm);
-  line-height: var(--leading-body);
-}
-
-.spend-policy__grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(min(100%, 340px), 1fr));
-  gap: var(--space-4);
-  align-items: start;
-}
-
-.spend-policy__card {
-  background: var(--surface);
-  border-radius: var(--radius-hero);
-  padding: var(--space-5);
-  display: flex;
-  flex-direction: column;
-  gap: var(--space-3);
-}
-
-.spend-policy__card h2 {
-  margin: 0;
-  font-size: var(--text-lg);
-  font-weight: var(--weight-extrabold);
-}
-
-.spend-policy__card h3 {
-  margin: var(--space-1) 0 0;
-  font-size: var(--text-md);
-  font-weight: var(--weight-bold);
-}
-
-.spend-policy__check {
-  display: flex;
-  align-items: center;
-  gap: var(--space-3);
-  font-size: var(--text-base);
-}
-
-.spend-policy__check-mark {
-  flex: none;
-  width: 26px;
-  height: 26px;
-  border-radius: var(--radius-chip);
-  font-weight: var(--weight-extrabold);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-}
-
-.spend-policy__check-mark--ok {
-  background: var(--success-soft);
-  color: var(--success);
-}
-
-.spend-policy__check-mark--missing {
-  background: var(--refund-soft);
-  color: var(--refund);
-}
-
-.spend-policy__track {
-  height: 12px;
-  border-radius: var(--radius-sm);
-  background: var(--surface-raised);
-  overflow: hidden;
-}
-
-.spend-policy__track span {
-  display: block;
-  height: 100%;
-  background: var(--accent);
-}
-
-.spend-policy__cap-row {
-  display: flex;
-  justify-content: space-between;
-  gap: var(--space-3);
-  flex-wrap: wrap;
-  font-size: var(--text-sm);
-}
-
-.spend-policy__cap-row-muted {
-  color: var(--text-muted);
-}
-
-.spend-policy__limitation {
-  font-size: var(--text-xs);
-  color: var(--text-muted);
-  max-width: 66ch;
-}
-
-.spend-policy__announce {
-  margin: 0;
-  font-size: var(--text-caption);
-  color: var(--accent-strong);
-  min-height: 18px;
+.spend-policy .ui-page-head {
+  margin-bottom: 0;
 }
 
 .spend-policy__lookup,
-.spend-policy__payee-check {
+.spend-policy__inline {
   display: flex;
   flex-wrap: wrap;
-  align-items: flex-end;
+  align-items: flex-start;
   gap: var(--space-3);
-  max-width: var(--page-measure-narrow);
+}
+
+.spend-policy__lookup {
+  padding: var(--space-5);
+  border-radius: var(--radius-md);
+  background: var(--bg-raised);
 }
 
 .spend-policy__lookup .ui-field,
-.spend-policy__payee-check .ui-field {
-  flex: 1 1 var(--field-min-width);
+.spend-policy__inline .ui-field {
+  flex: 1 1 16rem;
   min-width: 0;
+}
+
+.spend-policy__lookup > .ui-button,
+.spend-policy__inline > .ui-button {
+  margin-top: var(--space-6);
 }
 
 .spend-policy__target {
   margin: 0;
   font-size: var(--text-sm);
-  color: var(--text-muted);
+  color: var(--ink-muted);
 }
 
-.spend-policy__summary {
-  margin: 0;
-  padding: var(--space-4) var(--space-5);
-  border-radius: var(--radius-card-lg);
-  font-size: var(--text-base);
-  line-height: var(--leading-body);
-  background: var(--success-soft);
-  max-width: 66ch;
+.spend-policy__grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 24rem);
+  gap: var(--space-6);
+  align-items: start;
 }
 
-.spend-policy__summary--none,
-.spend-policy__summary--unprotected,
-.spend-policy__summary--no-rules {
-  background: var(--refund-soft);
-  color: var(--refund);
-  font-weight: var(--weight-semibold);
-}
-
-.spend-policy__payee-result {
-  margin: 0;
-  font-size: var(--text-sm);
-  overflow-wrap: anywhere;
-}
-
-/* Configure + payee management (issues #409, #410) */
-.spend-policy__form {
+.spend-policy__panel {
   display: flex;
   flex-direction: column;
+  gap: var(--space-4);
+  min-width: 0;
+  padding: var(--space-5);
+  border-radius: var(--radius-md);
+  background: var(--bg-raised);
+}
+
+.spend-policy__panel-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
   gap: var(--space-3);
 }
 
-.spend-policy__review,
-.spend-policy__current {
+.spend-policy h2 {
   margin: 0;
-  font-size: var(--text-sm);
-  line-height: var(--leading-body);
-  color: var(--text-muted);
+  font-family: var(--font-display);
+  font-size: var(--text-lg);
+  font-weight: var(--weight-display);
+  letter-spacing: var(--tracking-tight);
 }
 
-.spend-policy__readonly {
+.spend-policy__lead {
+  margin: calc(var(--space-2) * -1) 0 0;
+  font-size: var(--text-sm);
+  line-height: var(--leading-body);
+  color: var(--ink-muted);
+}
+
+.spend-policy__checks {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.spend-policy__checks li {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: var(--space-3);
+  padding: var(--space-3) 0;
+  box-shadow: inset 0 1px 0 var(--line);
+}
+
+.spend-policy__checks li > span:first-child {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+  min-width: 0;
+  font-size: var(--text-sm);
+}
+
+.spend-policy__checks li > span:first-child span {
+  font-size: var(--text-caption);
+  color: var(--ink-muted);
+}
+
+.spend-policy__on,
+.spend-policy__off {
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+  gap: var(--space-1);
+  padding: var(--space-1) var(--space-2);
+  border-radius: var(--radius-pill);
+  font-size: var(--text-xs);
+  font-weight: var(--weight-semibold);
+}
+
+.spend-policy__on {
+  background: var(--accent-soft);
+  color: var(--accent);
+}
+
+.spend-policy__off {
+  background: var(--danger-soft);
+  color: var(--danger);
+}
+
+.spend-policy__meter-row {
+  display: flex;
+  justify-content: space-between;
+  gap: var(--space-2);
+  margin-bottom: var(--space-2);
+  font-size: var(--text-sm);
+}
+
+.spend-policy__track {
+  height: 10px;
+  overflow: hidden;
+  border-radius: var(--radius-pill);
+  background: var(--money-unawarded);
+}
+
+.spend-policy__track span {
+  display: block;
+  height: 100%;
+  border-radius: var(--radius-pill);
+  background: var(--accent);
+}
+
+.spend-policy__aside {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-5);
+  min-width: 0;
+  padding: var(--space-5);
+  border-radius: var(--radius-md);
+  background: var(--bg-sunken);
+}
+
+.spend-policy__aside section {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+
+.spend-policy__aside p {
   margin: 0;
   font-size: var(--text-sm);
   line-height: var(--leading-body);
-  color: var(--text-muted);
+  color: var(--ink-muted);
+}
+
+.spend-policy__aside b {
+  color: var(--ink);
+}
+
+.spend-policy__payee-result {
+  color: var(--ink) !important;
+}
+
+.spend-policy__steward {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: var(--space-6);
+  align-items: start;
+}
+
+.spend-policy__form {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+}
+
+.spend-policy__two {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: var(--space-4);
+  align-items: start;
+}
+
+.spend-policy__current {
+  margin: 0;
+  font-size: var(--text-caption);
+  color: var(--ink-muted);
 }
 
 .spend-policy__actions {
   display: flex;
+  flex-direction: column;
+  align-items: flex-start;
   gap: var(--space-2);
-  flex-wrap: wrap;
 }
 
 .spend-policy__session {
-  display: flex;
-  flex-direction: column;
-  gap: var(--space-2);
-}
-
-.spend-policy__session h3 {
-  margin: 0;
-  font-size: var(--text-md);
-  font-weight: var(--weight-bold);
-}
-
-.spend-policy__session-list {
-  list-style: none;
   margin: 0;
   padding: 0;
-  display: flex;
-  flex-direction: column;
-  gap: var(--space-2);
+  list-style: none;
 }
 
-.spend-policy__session-row {
+.spend-policy__session li {
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
   gap: var(--space-2);
-  flex-wrap: wrap;
+  padding: var(--space-2) 0;
+  box-shadow: inset 0 1px 0 var(--line);
+  font-size: var(--text-sm);
+}
+
+@media (max-width: 1080px) {
+  .spend-policy__grid,
+  .spend-policy__steward {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
+@media (max-width: 640px) {
+  .spend-policy__two {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
+/* Fields on the sunken aside sit on the raised ground, or they disappear. */
+.spend-policy__aside .ui-field__control,
+.spend-policy__aside .ui-button--secondary {
+  background: var(--bg-raised);
 }
