@@ -41,6 +41,7 @@ export const SECTION_PAGES: Record<NavSectionKey, SectionPage[]> = {
   fund: [
     { path: '/funders', label: 'My funding' },
     { path: '/funders/receipt', label: 'Receipt lookup' },
+    { path: '/funders/propose', label: 'Propose a programme' },
   ],
   'get-funded': [
     { path: '/recipients', label: 'My awards' },
@@ -89,6 +90,7 @@ export const APP_ROUTES: AppRoute[] = [
   { path: '/programme', label: 'Programme detail', title: 'Programme Detail', section: 'programmes' },
   { path: '/funders', label: 'Funders', title: 'Funder Dashboard', section: 'fund' },
   { path: '/funders/receipt', label: 'Receipt lookup', title: 'Contribution Receipt', section: 'fund' },
+  { path: '/funders/propose', label: 'Propose a programme', title: 'Propose a programme', section: 'fund' },
   { path: '/recipients', label: 'Recipients', title: 'Recipient Dashboard', section: 'get-funded' },
   { path: '/recipients/standing', label: 'Standing', title: 'Recipient Standing', section: 'get-funded' },
   { path: '/recipients/award-progress', label: 'Award progress', title: 'Award Progress', section: 'get-funded' },

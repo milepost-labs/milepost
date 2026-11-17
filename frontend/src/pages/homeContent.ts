@@ -569,6 +569,7 @@ export const FOOTER_GROUPS: FooterGroup[] = [
     links: [
       { label: 'Attestation lookup', path: '/attestations' },
       { label: 'Receipt lookup', path: '/funders/receipt' },
+      { label: 'Propose a programme', path: '/funders/propose' },
       { label: 'Standing', path: '/recipients/standing' },
       { label: 'Award progress', path: '/recipients/award-progress' },
       { label: 'Application timeline', path: '/recipients/application-timeline' },

@@ -15,8 +15,8 @@ export interface CopyButtonProps {
   value: string;
   /** Accessible label, e.g. "Copy address" or "Copy transaction hash". */
   label?: string;
-  /** Shows "Copy"/"Copied" as visible text next to the icon, for a button
-   * that stands alone rather than sitting inline next to other text. */
+  /** Shows the label (then "Copied") as visible text next to the icon, for a
+   * button that stands alone rather than sitting inline next to other text. */
   showLabel?: boolean;
 }
 
@@ -46,7 +46,7 @@ export function CopyButton({ value, label = 'Copy', showLabel = false }: CopyBut
         title={copied ? 'Copied!' : label}
       >
         {copied ? <Check size={14} aria-hidden="true" /> : <Copy size={14} aria-hidden="true" />}
-        {showLabel && <span aria-hidden="true">{copied ? 'Copied' : 'Copy'}</span>}
+        {showLabel && <span aria-hidden="true">{copied ? 'Copied' : label}</span>}
       </button>
       <span role="status" className="visually-hidden">
         {copied ? 'Copied to clipboard' : ''}

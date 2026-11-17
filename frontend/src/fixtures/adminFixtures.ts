@@ -80,7 +80,9 @@ export function parseProposalParam(
 ): { ok: true; proposal: ProposalPrefill } | { ok: false; reason: 'missing' | 'damaged' } {
   if (!raw) return { ok: false, reason: 'missing' };
   try {
-    const json = atob(decodeURIComponent(raw));
+    // Base64 of UTF-8, so names and notes outside Latin-1 survive the trip.
+    const bytes = Uint8Array.from(atob(decodeURIComponent(raw)), (c) => c.charCodeAt(0));
+    const json = new TextDecoder().decode(bytes);
     const parsed: unknown = JSON.parse(json);
     if (typeof parsed !== 'object' || parsed === null) return { ok: false, reason: 'damaged' };
     const record = parsed as Record<string, unknown>;
@@ -113,6 +115,18 @@ export function parseProposalParam(
   } catch {
     return { ok: false, reason: 'damaged' };
   }
+}
+
+/**
+ * The `?proposal=` value for a proposal: base64 of its UTF-8 JSON, so the
+ * deploy wizard can pre-fill from a link a funder sends. The inverse of
+ * `parseProposalParam`.
+ */
+export function proposalParam(proposal: ProposalPrefill): string {
+  const bytes = new TextEncoder().encode(JSON.stringify(proposal));
+  let binary = '';
+  for (const b of bytes) binary += String.fromCharCode(b);
+  return encodeURIComponent(btoa(binary));
 }
 
 /** Quorum must be a whole number from 1 to MAX_QUORUM (16). */
