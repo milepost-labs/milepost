@@ -8,14 +8,10 @@ import { useWallet } from '../context/useWallet';
 import { DEMO_PROGRAMME_ID } from '../context/sorobanStore';
 import { useContractResult, useIndexedList, useProgrammeParam, useTransaction } from '../hooks';
 import { ProgrammeParamNotice } from '../components/programme/ProgrammeParamNotice';
-import {
-  ErrorPanel,
-  ErrorState,
-  Loading,
-  PendingState,
-  TransactionOutcome,
-} from '../components/state/AsyncStates';
-import { Button, Field, Select } from '../components/ui';
+import { ErrorPanel, ErrorState, Loading } from '../components/state/AsyncStates';
+import { Button, DisabledReason, Field, Notice, PageHead, SampleTag, Select } from '../components/ui';
+import { RefreshCw } from 'lucide-react';
+import { usePageTitle } from '../hooks/usePageTitle';
 import { FIXTURE_PROGRAMMES } from '../fixtures/programmes';
 import { fetchAwards, fetchProgrammes } from '../lib/indexer';
 import { readProgrammeLifetimes, type EntryLifetimeRow } from '../lib/entryTtl';
@@ -81,6 +77,7 @@ const EXTEND_TARGETS: ExtendTarget[] = [
  * "Sample data" tag, and cannot be extended: there is no contract behind them.
  */
 export const Keepalive = () => {
+  usePageTitle('Keepalive');
   const announce = useAnnouncer();
   const programmeParam = useProgrammeParam();
   const { rpcUrl, programmeAt, attest, record } = useSoroban();
@@ -148,10 +145,6 @@ export const Keepalive = () => {
   const [extendRows, setExtendRows] = useState<
     Record<string, { state: ExtendState; error?: Explained }>
   >({});
-  const [outcome, setOutcome] = useState<{
-    key: string;
-    contract: KeepaliveTarget['contract'];
-  } | null>(null);
 
   const currentKey = useRef<string | null>(null);
   const lastError = useRef<Explained | null>(null);
@@ -212,7 +205,6 @@ export const Keepalive = () => {
     currentKey.current = item.key;
     lastError.current = null;
     setExtendRows((previous) => ({ ...previous, [item.key]: { state: 'pending' } }));
-    setOutcome({ key: item.key, contract: item.target.contract });
 
     const tx =
       item.target.contract === 'attest'
@@ -248,7 +240,6 @@ export const Keepalive = () => {
   /** Extend every target that can be extended, carrying on past failures. */
   const extendAll = async () => {
     setBulkRunning(true);
-    setOutcome(null);
     let extended = 0;
     let failed = 0;
     for (const item of extendable) {
@@ -264,143 +255,163 @@ export const Keepalive = () => {
     );
   };
 
-  const activeTx =
-    outcome?.contract === 'attest' ? attestTx : outcome?.contract === 'record' ? recordTx : programTx;
+  const rows = lifetimes.data?.rows ?? null;
+  const lowCount = isSample
+    ? FIXTURE_TTL.filter((e) => e.liveForDays < TTL_WARNING_DAYS).length
+    : (rows ?? []).filter((r) => r.liveForDays !== null && r.liveForDays < TTL_WARNING_DAYS).length;
 
   return (
     <div className="keepalive-page">
-      <header className="keepalive-page__header">
-        <h1>Keepalive</h1>
-        <p className="typo-text text-muted">
-          Entry lifetimes for one programme. Anything close to expiry can be extended before the
-          network archives it.
+      <PageHead
+        eyebrow="Admin"
+        title="Keepalive"
+        action={
+          !isSample && extendable.length > 1 ? (
+            <Button
+              icon={<RefreshCw size={18} aria-hidden="true" />}
+              onClick={() => void extendAll()}
+              loading={bulkRunning}
+              loadingLabel="Extending…"
+            >
+              Extend all {extendable.length}
+            </Button>
+          ) : undefined
+        }
+      >
+        <p>
+          Data on Stellar is archived unless someone pays a small fee to extend it. See how long a programme’s stored
+          entries have left, and extend them. Anyone can do this; the fee comes from your wallet.
         </p>
-      </header>
+      </PageHead>
 
       <ProgrammeParamNotice state={programmeParam} />
 
-      <p className="keepalive-page__note">
-        The network archives stored entries that nobody extends. Anyone can extend them, and
-        the network fee for the extension is paid from your own wallet. An archived award or
-        contribution can&rsquo;t be released or refunded until it&rsquo;s restored.
-      </p>
+      <div className="keepalive-page__programme">
+        <Select
+          label="Programme"
+          value={programmeId}
+          onChange={(event) => {
+            setSelectedProgrammeId(event.target.value);
+            setExtendRows({});
+                  }}
+          options={programmeOptions}
+        />
+      </div>
 
-      <Select
-        label="Programme"
-        value={programmeId}
-        onChange={(event) => {
-          setSelectedProgrammeId(event.target.value);
-          setExtendRows({});
-          setOutcome(null);
-        }}
-        options={programmeOptions}
-      />
+      {(isSample || rows) &&
+        (lowCount > 0 ? (
+          <Notice tone="warn" role="status">
+            <span>
+              <strong>
+                {lowCount} {lowCount === 1 ? 'entry' : 'entries'} under {TTL_WARNING_DAYS} days.
+              </strong>{' '}
+              An archived award or contribution can’t be released or refunded until it’s restored, which costs more.
+            </span>
+          </Notice>
+        ) : (
+          <Notice tone="ok" role="status">
+            <span>Everything read here has more than {TTL_WARNING_DAYS} days left.</span>
+          </Notice>
+        ))}
 
       {!isSample && (
         <>
-          <RealLifetimes
-            loading={awards.fetching || lifetimes.loading}
-            error={lifetimes.error}
-            rows={lifetimes.data?.rows ?? null}
-            unchecked={lifetimes.data?.unchecked ?? []}
-            onRetry={lifetimes.refetch}
-          />
-
-          <h2 className="keepalive-page__subhead">Extend</h2>
-
-          <div className="keepalive-page__targets">
-            <Field
-              label="Subject address"
-              hint="The recipient or donor whose entries you are extending."
-              placeholder="G…"
-              value={subjectInput}
-              onChange={(event) => setSubjectOverride(event.target.value)}
+          <section className="keepalive-page__panel" aria-labelledby="ttl-heading">
+            <h2 id="ttl-heading">Entry lifetimes</h2>
+            <RealLifetimes
+              loading={awards.fetching || lifetimes.loading}
+              error={lifetimes.error}
+              rows={rows}
+              unchecked={lifetimes.data?.unchecked ?? []}
+              onRetry={lifetimes.refetch}
             />
-            <Field
-              label="Attestation id"
-              hint="Only needed for the single-attestation row: a 32-byte hex id."
-              placeholder="0x…"
-              value={attestationInput}
-              onChange={(event) => setAttestationInput(event.target.value)}
-            />
-          </div>
+          </section>
 
-          {blockedReason && (
-            <p className="keepalive-page__blocked" role="note">
-              {blockedReason}
+          <section className="keepalive-page__panel" aria-labelledby="extend-heading">
+            <h2 id="extend-heading">Extend</h2>
+            <p className="keepalive-page__fine">
+              Each keepalive extends the entries it names by about {TTL_EXTENDED_DAYS} days.
             </p>
-          )}
-
-          <ul className="ttl-rows">
-            {EXTEND_TARGETS.map((item) => {
-              const row = extendRows[item.key];
-              const entryState = row?.state ?? 'idle';
-              const reason = targetReason(item);
-              return (
-                <li key={item.key} className="ttl-row">
-                  <span className="ttl-row__text">
-                    <span className="ttl-row__label">{item.label}</span>
-                    <span className="ttl-row__note">{item.note}</span>
-                  </span>
-                  <Button
-                    variant="secondary"
-                    disabled={entryState === 'pending' || Boolean(reason)}
-                    loading={entryState === 'pending'}
-                    loadingLabel="Extending…"
-                    onClick={() => void extendTarget(item)}
-                  >
-                    {entryState === 'done' ? 'Extend again' : 'Extend'}
-                  </Button>
-                  {reason && entryState === 'idle' && !blockedReason && (
-                    <span className="ttl-row__warning" role="note">
-                      {reason}
-                    </span>
-                  )}
-                  {entryState === 'pending' && (
-                    <PendingState title="Extending…" note="Check your wallet to approve." live={false} />
-                  )}
-                  {entryState === 'done' && (
-                    <span className="ttl-row__warning ttl-row__warning--done" role="status">
-                      Extended — about {TTL_EXTENDED_DAYS} days left.
-                    </span>
-                  )}
-                  {entryState === 'error' && row?.error && (
-                    <div className="ttl-row__error">
-                      <ErrorPanel explained={row.error} live={false} />
-                    </div>
-                  )}
-                </li>
-              );
-            })}
-          </ul>
-
-          {extendable.length > 1 && (
-            <div className="keepalive-page__bulk">
-              <Button onClick={() => void extendAll()} loading={bulkRunning} loadingLabel="Extending…">
-                Extend all {extendable.length}
-              </Button>
-              <p className="typo-text text-muted keepalive-page__bulk-list">
-                {extendable.map((item) => item.label).join(' · ')}
-              </p>
+            <div className="keepalive-page__targets">
+              <Field
+                label="Subject address"
+                hint="The recipient or donor whose entries you are extending."
+                placeholder="G…"
+                value={subjectInput}
+                onChange={(event) => setSubjectOverride(event.target.value)}
+                autoComplete="off"
+                spellCheck={false}
+              />
+              <Field
+                label="Attestation id"
+                hint="Only for the single-attestation row: 64 hex characters."
+                placeholder="0x…"
+                value={attestationInput}
+                onChange={(event) => setAttestationInput(event.target.value)}
+                autoComplete="off"
+                spellCheck={false}
+              />
             </div>
-          )}
+            {blockedReason && <DisabledReason>{blockedReason}</DisabledReason>}
 
-          {outcome && !bulkRunning && (
-            <TransactionOutcome
-              phase={activeTx.phase}
-              error={activeTx.error}
-              successTitle={`${EXTEND_TARGETS.find((item) => item.key === outcome.key)?.label ?? 'Entry'} extended`}
-            />
-          )}
+            <ul className="ttl-rows">
+              {EXTEND_TARGETS.map((item) => {
+                const row = extendRows[item.key];
+                const entryState = row?.state ?? 'idle';
+                const reason = targetReason(item);
+                return (
+                  <li key={item.key} className="ttl-row">
+                    <span className="ttl-row__text">
+                      <span className="ttl-row__label">{item.label}</span>
+                      <span className="ttl-row__note">{item.note}</span>
+                    </span>
+                    <Button
+                      variant={entryState === 'done' ? 'ghost' : 'secondary'}
+                      size="sm"
+                      disabled={entryState === 'pending' || Boolean(reason)}
+                      loading={entryState === 'pending'}
+                      loadingLabel="Extending…"
+                      onClick={() => void extendTarget(item)}
+                    >
+                      {entryState === 'done' ? 'Extend again' : 'Extend'}
+                    </Button>
+                    {reason && entryState === 'idle' && !blockedReason && (
+                      <span className="ttl-row__status" role="note">
+                        {reason}
+                      </span>
+                    )}
+                    {entryState === 'pending' && (
+                      <span className="ttl-row__status">Approve it in Freighter. Nothing changes until the network confirms.</span>
+                    )}
+                    {entryState === 'done' && (
+                      <span className="ttl-row__status ttl-row__status--done" role="status">
+                        Extended — about {TTL_EXTENDED_DAYS} days left.
+                      </span>
+                    )}
+                    {entryState === 'error' && row?.error && (
+                      <div className="ttl-row__error">
+                        <ErrorPanel explained={row.error} live={false} />
+                      </div>
+                    )}
+                  </li>
+                );
+              })}
+            </ul>
+            {extendable.length > 1 && (
+              <p className="keepalive-page__fine">Extend all: {extendable.map((item) => item.label).join(' · ')}</p>
+            )}
+          </section>
         </>
       )}
 
       {isSample && (
-        <>
-          <p className="keepalive-page__blocked" role="note">
-            This is a sample programme. Open Keepalive from a real programme to extend its entries.
+        <section className="keepalive-page__panel" aria-labelledby="ttl-sample">
+          <h2 id="ttl-sample">
+            Entry lifetimes <SampleTag />
+          </h2>
+          <p className="keepalive-page__fine" role="note">
+            This is a sample programme, so there’s nothing to extend. These lifetimes are not read from the chain.
           </p>
-
           <ul className="ttl-rows">
             {FIXTURE_TTL.map((entry) => {
               const low = entry.liveForDays < TTL_WARNING_DAYS;
@@ -408,39 +419,42 @@ export const Keepalive = () => {
                 <li key={entry.key} className={`ttl-row${low ? ' ttl-row--low' : ''}`}>
                   <span className="ttl-row__text">
                     <span className="ttl-row__label">{entry.label}</span>
-                    <span className="ttl-row__note">
-                      {entry.note} · ~{entry.liveForDays} days left
-                    </span>
+                    <span className="ttl-row__note">{entry.note}</span>
                   </span>
-                  <Button variant="secondary" disabled>
+                  <Lifetime days={entry.liveForDays} />
+                  <Button variant="secondary" size="sm" disabled>
                     Extend
                   </Button>
-                  <div className="ttl-row__bar" aria-hidden="true">
-                    <span
-                      className={`ttl-row__fill${low ? ' ttl-row__fill--low' : ''}`}
-                      style={{ width: `${Math.min(100, Math.round((entry.liveForDays / TTL_EXTENDED_DAYS) * 100))}%` }}
-                    />
-                  </div>
-                  {low && (
-                    <span className="ttl-row__warning" role="status">
-                      Under {TTL_WARNING_DAYS} days.
-                    </span>
-                  )}
                 </li>
               );
             })}
           </ul>
-
-          <p className="keepalive-page__sample">Sample data: these lifetimes are not read from the chain.</p>
-        </>
+        </section>
       )}
 
-      <p className="typo-text text-muted">
-        Extending a single attestation also works from its <Link to="/attestations">lookup page</Link>.
+      <p className="keepalive-page__fine">
+        Extending costs a network fee in XLM, paid by you. A single attestation can also be found on its{' '}
+        <Link to="/attestations">lookup page</Link>.
       </p>
     </div>
   );
 };
+
+/** Days left, with a bar against a full extension and a warning colour under the threshold. */
+function Lifetime({ days }: { days: number | null }) {
+  const low = days !== null && days < TTL_WARNING_DAYS;
+  return (
+    <span className={`ttl-life${low ? ' ttl-life--low' : ''}`}>
+      <span className="ttl-life__days numeric">
+        {days === null ? 'Not found' : `${days} days`}
+        {low && <span className="ttl-life__warn"> · under {TTL_WARNING_DAYS}, extend soon</span>}
+      </span>
+      <span className="ttl-life__bar" aria-hidden="true">
+        <span style={{ width: `${days === null ? 0 : Math.min(100, Math.round((days / TTL_EXTENDED_DAYS) * 100))}%` }} />
+      </span>
+    </span>
+  );
+}
 
 function RealLifetimes({
   loading,
@@ -463,35 +477,20 @@ function RealLifetimes({
     <>
       <ul className="ttl-rows">
         {rows.map((row) => {
-          const days = row.liveForDays;
-          const low = days !== null && days < TTL_WARNING_DAYS;
+          const low = row.liveForDays !== null && row.liveForDays < TTL_WARNING_DAYS;
           return (
             <li key={row.key} className={`ttl-row${low ? ' ttl-row--low' : ''}`}>
               <span className="ttl-row__text">
                 <span className="ttl-row__label">{row.label}</span>
-                <span className="ttl-row__note">
-                  {row.note} · {days === null ? 'not found on chain' : `~${days} days left`}
-                </span>
+                <span className="ttl-row__note">{row.note}</span>
               </span>
-              <div className="ttl-row__bar" aria-hidden="true">
-                <span
-                  className={`ttl-row__fill${low ? ' ttl-row__fill--low' : ''}`}
-                  style={{
-                    width: `${days === null ? 0 : Math.min(100, Math.round((days / TTL_EXTENDED_DAYS) * 100))}%`,
-                  }}
-                />
-              </div>
-              {low && (
-                <span className="ttl-row__warning" role="status">
-                  Under {TTL_WARNING_DAYS} days — extend soon.
-                </span>
-              )}
+              <Lifetime days={row.liveForDays} />
             </li>
           );
         })}
       </ul>
       {unchecked.length > 0 && (
-        <p className="keepalive-page__unchecked">
+        <p className="keepalive-page__fine">
           Not checked: {unchecked.join(' and ')}. Their entries are keyed by contributor and
           applicant addresses that are not published, so they can&rsquo;t be looked up from here.
         </p>

@@ -71,6 +71,22 @@ the contracts and the index do not provide. The app follows the contracts.
   none yet, Restricted the recipient's smart wallet (its spend policy is
   checked and warned about, enforced at release), Open the recipient. The
   oversubscription warning has figures only when the rows are known.
+- **Propose a programme** has no GitHub-issue button and no fixed proposals
+  address: email opens the sender's mail app with no recipient. Instead it
+  makes a deploy link (`/admin?proposal=…`) that opens the deploy wizard
+  pre-filled.
+- **Receipt lookup** rebuilds contributions only, and shows the protocol fee
+  as a rate, because the contract takes it from the programme's total rather
+  than from each payment.
+- **Index status** has no run history: `meta.json` doesn't publish one. It
+  lists the event types the index doesn't handle yet instead.
+- **Standing writers** (`/admin/standing`) checks whether a contract is a
+  writer and explains that the registry, as the record's admin, makes every
+  programme it deploys one; the prototype's recipient lookup lives at
+  `/recipients/standing`. **Keepalive** works one programme at a time, with
+  real lifetimes, rather than a table of every programme. **Payees** shows
+  only the payees changed in this tab for a real programme, because the
+  contract can confirm a payee but can't list them.
 - **Names** (sector, verifier, payee and reviewer labels) are not on the
   chain. Where a name appears it is the creator's label for an address, shown
   beside the address.
@@ -90,8 +106,7 @@ sample-data preview; the install command is the five `@milepost/*` packages;
 the registry is described without "the list of known programmes"; standing is
 not called permanent, because ledger entries expire unless extended; the fee is
 described as capped at 10%, with 2.5% only in the worked example; the footer
-lists every route the app serves and leaves out "Propose a programme" until
-that page exists; and the "play the steps" control for tall preview frames is
+lists every route the app serves; and the "play the steps" control for tall preview frames is
 not built.
 
 One fix was made to `prototypes/app.html` as delivered: the script's closing

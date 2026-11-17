@@ -5,9 +5,12 @@ import { useSoroban } from '../context/useSoroban';
 import { useWallet } from '../context/useWallet';
 import { useAnnouncer } from '../context/useAnnouncer';
 import { useContractResult, useProgrammeParam, useTransaction } from '../hooks';
-import { AddressChip, Badge, Button, Card, Field, RadioGroup, TextArea, SampleTag } from '../components/ui';
+import { AddressChip, Badge, Button, DisabledReason, Field, Notice, PageHead, RadioGroup, TextArea, SampleTag } from '../components/ui';
 import { ProgrammeParamNotice } from '../components/programme/ProgrammeParamNotice';
-import { Empty, ErrorPanel, ErrorState, PendingState, TransactionOutcome } from '../components/state/AsyncStates';
+import { Empty, ErrorPanel, ErrorState, PendingState } from '../components/state/AsyncStates';
+import { TxSheet } from '../components/state/TxSheet';
+import { usePageTitle } from '../hooks/usePageTitle';
+import { truncateAddress } from '../lib/format';
 import { FIXTURE_PROGRAMMES } from '../fixtures/programmes';
 import { FIXTURE_PAYEES, type PayeeFixture } from '../fixtures/payeeFixtures';
 import {
@@ -67,6 +70,7 @@ function loadCandidates(programmeId: string): PayeeFixture[] {
  * payees are out of scope.
  */
 export const PayeeManagement = () => {
+  usePageTitle('Payees');
   const { programmeAt } = useSoroban();
   const wallet = useWallet();
   const programmeParam = useProgrammeParam();
@@ -198,23 +202,9 @@ export const PayeeManagement = () => {
   const [labelInput, setLabelInput] = useState('');
   const [addError, setAddError] = useState<string | null>(null);
 
-  const tx = useTransaction({
-    contract: 'program',
-    onSuccess: () => {
-      const addr = addressInput.trim();
-      const lbl = labelInput.trim() || 'Verified payee';
-      remember({ address: addr, label: lbl });
-      setSessionChanges((prev) => ({
-        ...prev,
-        [sessionKey]: [
-          { address: addr, label: lbl, action: 'added' },
-          ...(prev[sessionKey] ?? []).filter((c) => c.address !== addr),
-        ],
-      }));
-      setAddressInput('');
-      setLabelInput('');
-    },
-  });
+  // The single verify or remove in flight, shown in a sheet.
+  const [single, setSingle] = useState<{ kind: 'verify' | 'remove'; address: string; label: string } | null>(null);
+  const tx = useTransaction({ contract: 'program' });
 
   const handleVerify = (event: FormEvent) => {
     event.preventDefault();
@@ -228,11 +218,26 @@ export const PayeeManagement = () => {
       return;
     }
     setAddError(null);
-    void tx.send(() => programme.allow_payee({ payee: address }));
+    const lbl = labelInput.trim() || 'Verified payee';
+    setSingle({ kind: 'verify', address, label: lbl });
+    void tx.send(() => programme.allow_payee({ payee: address })).then((res) => {
+      if (res === null) return;
+      remember({ address, label: lbl });
+      setSessionChanges((prev) => ({
+        ...prev,
+        [sessionKey]: [
+          { address, label: lbl, action: 'added' },
+          ...(prev[sessionKey] ?? []).filter((c) => c.address !== address),
+        ],
+      }));
+      setAddressInput('');
+      setLabelInput('');
+    });
   };
 
   const handleRevoke = (address: string) => {
     if (!programme || !programmeId) return;
+    setSingle({ kind: 'remove', address, label: '' });
     void tx.send(() => programme.deny_payee({ payee: address })).then((res) => {
       if (res !== null) {
         setSessionChanges((prev) => ({
@@ -359,45 +364,56 @@ export const PayeeManagement = () => {
 
   const bulkCounts = useMemo(() => countBulkAddresses(bulkResults), [bulkResults]);
 
+  const creatorReason = !wallet.address
+    ? 'Sign in with the creator’s address to verify or remove payees.'
+    : !isCreator
+      ? 'Only the programme’s creator can verify or remove payees.'
+      : null;
+
   return (
     <div className="payee-mgmt">
-      <header className="payee-mgmt__header">
-        <h1>Payee management</h1>
-        <p className="typo-text text-muted">
-          Direct and Allocated awards can only pay a verified payee — verifying one is a
-          prerequisite for money moving at all. A payee is a wallet, business or institution: a
-          school, clinic or supplier, so it gets a label here, not only an address.
+      <PageHead eyebrow="Admin" title="Payees">
+        <p>
+          Verified payees are who Direct awards pay and who recipients can choose in Allocated mode. Only the
+          programme’s creator can change this list.
         </p>
-      </header>
+      </PageHead>
 
       <ProgrammeParamNotice state={programmeParam} />
 
-      <Card title="Programme">
-        <div className="payee-mgmt__programme">
-          <Field
-            label="Programme address"
-            value={programmeInput}
-            onChange={(event) => {
-              setProgrammeInputOverride(event.target.value);
-              setProgrammeError(null);
-            }}
-            error={programmeError}
-            hint="The funding round whose payees you're managing. Open this page from a programme to fill it in."
-          />
-          <Button onClick={handleLookupProgramme}>Look up</Button>
-        </div>
+      <form
+        className="payee-mgmt__programme"
+        onSubmit={(event) => {
+          event.preventDefault();
+          handleLookupProgramme();
+        }}
+      >
+        <Field
+          label="Programme address"
+          value={programmeInput}
+          onChange={(event) => {
+            setProgrammeInputOverride(event.target.value);
+            setProgrammeError(null);
+          }}
+          error={programmeError}
+          hint="Open this page from a programme to fill it in."
+          autoComplete="off"
+          spellCheck={false}
+        />
+        <Button type="submit" variant="secondary">
+          Look up
+        </Button>
         {config.data && (
           <p className="payee-mgmt__creator">
-            Creator{' '}
-            <AddressChip address={config.data.creator} copyLabel="Copy creator address" />
+            Creator <AddressChip address={config.data.creator} copyLabel="Copy creator address" />
           </p>
         )}
-      </Card>
+      </form>
 
       {!programme || programmeParam.blocksProgramme ? (
         <Empty
           title="Choose a programme"
-          description="Paste a programme contract address above, or open Payee management from the programme’s page. Nothing is preselected."
+          description="Paste a programme contract address above, or open Payees from the programme’s page. Nothing is preselected."
         />
       ) : config.error ? (
         <ErrorState error={config.error} contract="program" onRetry={config.refetch} />
@@ -405,280 +421,307 @@ export const PayeeManagement = () => {
         <PendingState title="Reading the programme…" note="Checking who created it and whether you can manage its payees." />
       ) : (
         <>
-      {!wallet.address && (
-        <Empty
-          title="Sign in to verify or remove a payee"
-          description="Anyone can check whether an address is verified. Only the programme's creator can verify or remove one."
-          action={<Button onClick={() => void wallet.connect()}>Sign in</Button>}
-        />
-      )}
-
-      <Card title="Check a payee address">
-        <p className="payee-mgmt__consequence">
-          Any address can be checked with <span className="numeric">is_payee</span> to confirm whether it is currently verified on-chain.
-        </p>
-        <div className="payee-mgmt__check-form">
-          <Field
-            label="Check payee address"
-            placeholder="G..."
-            value={checkInput}
-            onChange={(event) => {
-              setCheckInput(event.target.value);
-              setCheckError(null);
-            }}
-            error={checkError}
-          />
-          <Button
-            variant="secondary"
-            onClick={() => void handleCheckAddress()}
-            loading={checkLoading}
-            disabled={!checkInput.trim()}
-          >
-            Check address
-          </Button>
-        </div>
-        {checkResult && (
-          <div className="payee-mgmt__check-result" role="status">
-            <AddressChip address={checkResult.address} copyLabel="Copy checked address" />
-            <Badge tone={checkResult.verified ? 'success' : 'danger'}>
-              {checkResult.verified ? 'Verified on-chain' : 'Not verified'}
-            </Badge>
-          </div>
-        )}
-      </Card>
-
-      <Card title="Verify a payee">
-        <p className="payee-mgmt__consequence">
-          Verifying an address lets the programme pay it directly under Direct mode, or lets a
-          recipient in Allocated mode direct escrow to it. Allocations already directed to a
-          payee are untouched if it is later removed — removing stops future payments, it does
-          not claw back past ones.
-        </p>
-        {wallet.address && !isCreator && (
-          <p className="payee-mgmt__readonly" role="note">
-            Only the programme&rsquo;s creator can verify or remove a payee. You can still check
-            any address below.
-          </p>
-        )}
-        <form onSubmit={handleVerify} className="payee-mgmt__form">
-          <Field
-            label="Payee address"
-            placeholder="G..."
-            value={addressInput}
-            onChange={(event) => {
-              setAddressInput(event.target.value);
-              setAddError(null);
-            }}
-            error={addError}
-          />
-          <Field
-            label="Label"
-            placeholder="e.g. Riverside Clinic"
-            hint="Shown in this app only — the contract stores the address, not a name."
-            value={labelInput}
-            onChange={(event) => setLabelInput(event.target.value)}
-          />
-          <Button type="submit" loading={tx.busy} disabled={!canSubmit}>
-            Verify payee
-          </Button>
-        </form>
-        <TransactionOutcome
-          phase={tx.phase}
-          error={tx.error}
-          successTitle="Payee verified"
-          successDescription="The address can now receive Direct payments or be chosen from escrow."
-        />
-      </Card>
-
-      <Card title="Verify or remove payees in bulk">
-        <p className="payee-mgmt__consequence">
-          A programme paying fifty schools needs fifty payees verified. Paste one address per
-          line below; each is validated and checked against the current on-chain status before
-          anything is sent. Duplicates and addresses already in the state you're asking for are
-          skipped, not rejected — they simply won't be included in what gets sent.
-        </p>
-        {wallet.address && !isCreator && (
-          <p className="payee-mgmt__readonly" role="note">
-            Only the programme&rsquo;s creator can verify or remove payees.
-          </p>
-        )}
-        <div className="payee-mgmt__bulk-form">
-          <RadioGroup
-            label="Action"
-            name="bulk-mode"
-            value={bulkMode}
-            onChange={(value) => {
-              setBulkMode(value);
-              setBulkResults(null);
-            }}
-            options={[
-              { value: 'verify', label: 'Verify', description: 'Allow these addresses to receive payments.' },
-              { value: 'remove', label: 'Remove', description: 'Revoke payment eligibility for these addresses.' },
-            ]}
-          />
-          <TextArea
-            label="Payee addresses"
-            hint="One Stellar address per line."
-            placeholder={'G...\nG...\nG...'}
-            rows={6}
-            value={bulkText}
-            onChange={(event) => {
-              setBulkText(event.target.value);
-              setBulkResults(null);
-            }}
-          />
-          <Button
-            variant="secondary"
-            onClick={() => void handleCheckBulk()}
-            loading={bulkChecking}
-            disabled={parseBulkAddresses(bulkText).length === 0}
-          >
-            Check addresses
-          </Button>
-
-          {bulkResults && (
-            // The pasted list is deliberately not a live region — reading sixty
-            // addresses back is noise. The summary line carries the polite
-            // announcement of what the check found; batch progress goes
-            // through the shared announcer (issue #482).
-            <div className="payee-mgmt__bulk-results">
-              <ul className="payee-mgmt__bulk-list">
-                {bulkResults.map((entry) => {
-                  const tone =
-                    entry.status === 'eligible'
-                      ? 'success'
-                      : entry.status === 'invalid'
-                      ? 'danger'
-                      : 'neutral';
-                  const text =
-                    entry.status === 'eligible'
-                      ? bulkMode === 'verify'
-                        ? 'Will be verified'
-                        : 'Will be removed'
-                      : entry.status === 'invalid'
-                      ? 'Not a valid address'
-                      : entry.status === 'duplicate'
-                      ? 'Duplicate in this list'
-                      : entry.status === 'already-verified'
-                      ? 'Already verified — skipped'
-                      : 'Not currently verified — skipped';
-                  return (
-                    <li key={entry.address} className="payee-mgmt__bulk-row">
-                      <code className="mono">{entry.address}</code>
-                      <Badge tone={tone}>{text}</Badge>
-                    </li>
-                  );
-                })}
-              </ul>
-              <p className="payee-mgmt__bulk-summary" aria-live="polite">
-                {bulkCheckSummary(bulkCounts, bulkMode, batches.length)}
-              </p>
-              <Button
-                variant={bulkMode === 'remove' ? 'danger' : 'primary'}
-                onClick={() => void handleSendBulk()}
-                loading={bulkSending}
-                disabled={!isCreator || eligibleAddresses.length === 0}
-              >
-                {bulkMode === 'verify' ? 'Verify' : 'Remove'} {eligibleAddresses.length} payee
-                {eligibleAddresses.length === 1 ? '' : 's'}
+          {!wallet.address ? (
+            <Notice tone="info">
+              <span>
+                <strong>Sign in to verify or remove a payee.</strong> Anyone can check an address. Only the programme’s
+                creator can change the list.
+              </span>
+              <Button size="sm" variant="secondary" onClick={() => void wallet.connect()}>
+                Sign in
               </Button>
-              {bulkProgress && (
-                <p className="payee-mgmt__bulk-progress">
-                  Sending batch {Math.min(bulkProgress.done + 1, bulkProgress.total)} of {bulkProgress.total}
-                  {bulkProgress.done > 0 && ` (${bulkProgress.done} done)`}…
-                </p>
-              )}
-            </div>
+            </Notice>
+          ) : (
+            !isCreator &&
+            config.data && (
+              <Notice tone="warn" role="note">
+                <span>
+                  <strong>You’re not this programme’s creator.</strong> Only the programme&rsquo;s creator can verify or
+                  remove payees: <span className="numeric">{truncateAddress(config.data.creator)}</span>. You can still
+                  check any address.
+                </span>
+              </Notice>
+            )
           )}
-          {/* Announced by the shared announcer the moment a batch fails, so
-              the panel stays visual (`live={false}`) and the reason is read
-              once, alongside how much of the run landed. */}
-          {bulkTx.error && <ErrorPanel explained={bulkTx.error} live={false} />}
-        </div>
-      </Card>
 
-      <Card title={isSample ? 'Verified payees (Sample data)' : 'Payees changed this session'}>
-        {isSample ? (
-          candidates.length === 0 ? (
-            <Empty
-              title="No payees checked yet"
-              description="Verifying a payee is what makes Direct and Allocated payments possible — until at least one address is verified, no tranche in those modes can be paid out."
-            />
-          ) : (
-            <ul className="payee-mgmt__list">
-              {candidates.map((candidate) => {
-                const status = statusByAddress[candidate.address] ?? 'checking';
-                const tone =
-                  status === 'verified' ? 'success' : status === 'error' ? 'warning' : status === 'checking' ? 'neutral' : 'danger';
-                const label =
-                  status === 'verified'
-                    ? 'Verified'
-                    : status === 'checking'
-                    ? 'Checking…'
-                    : status === 'error'
-                    ? 'Could not check'
-                    : 'Not verified';
-                return (
-                  <li key={candidate.address} className="payee-mgmt__row">
-                    <div className="payee-mgmt__row-info">
-                      <span className="payee-mgmt__row-label">{candidate.label}</span>
-                      <AddressChip address={candidate.address} copyLabel="Copy payee address" />
-                    </div>
-                    <div className="payee-mgmt__row-actions">
-                      <SampleTag />
-                      <Badge tone={tone}>{label}</Badge>
-                      {isCreator && status === 'verified' && (
-                        <Button
-                          variant="secondary"
-                          onClick={() => handleRevoke(candidate.address)}
-                          loading={tx.busy}
-                        >
-                          Remove
-                        </Button>
-                      )}
-                    </div>
-                  </li>
-                );
-              })}
-            </ul>
-          )
-        ) : (
-          currentSessionChanges.length === 0 ? (
-            <Empty
-              title="No payees changed this session"
-              description="Real programmes show no fixture payees. Addresses added or removed this session in this browser are listed here and labelled as session-only."
-            />
-          ) : (
-            <ul className="payee-mgmt__list">
-              {currentSessionChanges.map((entry) => (
-                <li key={entry.address} className="payee-mgmt__row">
-                  <div className="payee-mgmt__row-info">
-                    <span className="payee-mgmt__row-label">{entry.label}</span>
-                    <AddressChip address={entry.address} copyLabel="Copy payee address" />
-                  </div>
-                  <div className="payee-mgmt__row-actions">
-                    <Badge tone="neutral">Session-only</Badge>
-                    <Badge tone={entry.action === 'added' ? 'success' : 'danger'}>
-                      {entry.action === 'added' ? 'Verified' : 'Removed'}
+          <div className="payee-mgmt__grid">
+            <section className="payee-mgmt__panel" aria-labelledby="payee-list">
+              <h2 id="payee-list">
+                {isSample ? 'Verified payees' : 'Payees changed in this tab'} {isSample && <SampleTag />}
+              </h2>
+              {isSample ? (
+                candidates.length === 0 ? (
+                  <p className="payee-mgmt__fine">
+                    No payees yet. Until one is verified, no Direct or Allocated tranche can be paid.
+                  </p>
+                ) : (
+                  <ul className="payee-mgmt__list">
+                    {candidates.map((candidate) => {
+                      const status = statusByAddress[candidate.address] ?? 'checking';
+                      const tone =
+                        status === 'verified' ? 'success' : status === 'error' ? 'warning' : status === 'checking' ? 'neutral' : 'danger';
+                      const label =
+                        status === 'verified'
+                          ? 'Verified'
+                          : status === 'checking'
+                            ? 'Checking…'
+                            : status === 'error'
+                              ? 'Could not check'
+                              : 'Not verified';
+                      return (
+                        <li key={candidate.address}>
+                          <span className="payee-mgmt__who">
+                            <b>{candidate.label}</b>
+                            <AddressChip address={candidate.address} copyLabel="Copy payee address" />
+                          </span>
+                          <span className="payee-mgmt__row-actions">
+                            <Badge tone={tone}>{label}</Badge>
+                            {isCreator && status === 'verified' && (
+                              <Button size="sm" variant="danger" onClick={() => handleRevoke(candidate.address)}>
+                                Remove
+                              </Button>
+                            )}
+                          </span>
+                        </li>
+                      );
+                    })}
+                  </ul>
+                )
+              ) : currentSessionChanges.length === 0 ? (
+                <p className="payee-mgmt__fine">
+                  The contract can’t list a programme’s payees, only confirm one at a time. Payees you verify or remove
+                  here are listed for this tab; check any other address below.
+                </p>
+              ) : (
+                <ul className="payee-mgmt__list">
+                  {currentSessionChanges.map((entry) => (
+                    <li key={entry.address}>
+                      <span className="payee-mgmt__who">
+                        <b>{entry.label}</b>
+                        <AddressChip address={entry.address} copyLabel="Copy payee address" />
+                      </span>
+                      <span className="payee-mgmt__row-actions">
+                        <Badge tone="neutral">Session-only</Badge>
+                        <Badge tone={entry.action === 'added' ? 'success' : 'danger'}>
+                          {entry.action === 'added' ? 'Verified' : 'Removed'}
+                        </Badge>
+                        {isCreator && entry.action === 'added' && (
+                          <Button size="sm" variant="danger" onClick={() => handleRevoke(entry.address)}>
+                            Remove
+                          </Button>
+                        )}
+                      </span>
+                    </li>
+                  ))}
+                </ul>
+              )}
+              <p className="payee-mgmt__fine">
+                Removing a payee doesn’t touch money already paid. Escrowed Allocated money can’t go to them afterwards.
+              </p>
+
+              <div className="payee-mgmt__check">
+                <h3>Check an address</h3>
+                <div className="payee-mgmt__row">
+                  <Field
+                    label="Check payee address"
+                    placeholder="G…"
+                    value={checkInput}
+                    onChange={(event) => {
+                      setCheckInput(event.target.value);
+                      setCheckError(null);
+                    }}
+                    error={checkError}
+                    autoComplete="off"
+                    spellCheck={false}
+                  />
+                  <Button
+                    variant="secondary"
+                    onClick={() => void handleCheckAddress()}
+                    loading={checkLoading}
+                    disabled={!checkInput.trim()}
+                  >
+                    Check address
+                  </Button>
+                </div>
+                {checkResult && (
+                  <p className="payee-mgmt__check-result" role="status">
+                    <AddressChip address={checkResult.address} copyLabel="Copy checked address" />
+                    <Badge tone={checkResult.verified ? 'success' : 'danger'}>
+                      {checkResult.verified ? 'Verified on-chain' : 'Not verified'}
                     </Badge>
-                    {isCreator && entry.action === 'added' && (
-                      <Button
-                        variant="secondary"
-                        onClick={() => handleRevoke(entry.address)}
-                        loading={tx.busy}
-                      >
-                        Remove
-                      </Button>
-                    )}
+                  </p>
+                )}
+              </div>
+            </section>
+
+            <aside className="payee-mgmt__aside" aria-labelledby="payee-add">
+              <h2 id="payee-add">Verify a payee</h2>
+              <form onSubmit={handleVerify} className="payee-mgmt__form">
+                <Field
+                  label="Label"
+                  placeholder="e.g. Riverside Clinic"
+                  hint="Shown in this app only. The contract stores the address, not a name."
+                  value={labelInput}
+                  onChange={(event) => setLabelInput(event.target.value)}
+                  disabled={!isCreator}
+                />
+                <Field
+                  label="Payee address"
+                  placeholder="G…"
+                  value={addressInput}
+                  onChange={(event) => {
+                    setAddressInput(event.target.value);
+                    setAddError(null);
+                  }}
+                  error={addError}
+                  hint="Check it with the payee directly. A payment to a wrong address can’t be reversed."
+                  disabled={!isCreator}
+                  autoComplete="off"
+                  spellCheck={false}
+                />
+                <Button type="submit" fullWidth disabled={!canSubmit || tx.busy}>
+                  Verify payee
+                </Button>
+                {creatorReason && <DisabledReason>{creatorReason}</DisabledReason>}
+              </form>
+            </aside>
+          </div>
+
+          <section className="payee-mgmt__panel" aria-labelledby="payee-bulk">
+            <h2 id="payee-bulk">Verify or remove payees in bulk</h2>
+            <p className="payee-mgmt__fine">
+              A programme paying fifty schools needs fifty payees verified. Paste one address per line; each is checked
+              against its current status before anything is sent. Duplicates and addresses already in the state you ask
+              for are skipped, not rejected.
+            </p>
+            {wallet.address && !isCreator && (
+              <p className="payee-mgmt__fine" role="note">
+                Only the programme&rsquo;s creator can verify or remove payees.
+              </p>
+            )}
+            <div className="payee-mgmt__bulk-form">
+              <RadioGroup
+                label="Action"
+                name="bulk-mode"
+                value={bulkMode}
+                onChange={(value) => {
+                  setBulkMode(value);
+                  setBulkResults(null);
+                }}
+                options={[
+                  { value: 'verify', label: 'Verify', description: 'Allow these addresses to receive payments.' },
+                  { value: 'remove', label: 'Remove', description: 'Stop these addresses receiving payments.' },
+                ]}
+              />
+              <TextArea
+                label="Payee addresses"
+                hint="One Stellar address per line."
+                placeholder={'G…\nG…\nG…'}
+                rows={6}
+                value={bulkText}
+                onChange={(event) => {
+                  setBulkText(event.target.value);
+                  setBulkResults(null);
+                }}
+                spellCheck={false}
+              />
+              <div>
+                <Button
+                  variant="secondary"
+                  onClick={() => void handleCheckBulk()}
+                  loading={bulkChecking}
+                  disabled={parseBulkAddresses(bulkText).length === 0}
+                >
+                  Check addresses
+                </Button>
+              </div>
+
+              {bulkResults && (
+                // Not a live region: reading sixty addresses back is noise. The
+                // summary speaks; batch progress goes through the shared announcer.
+                <div className="payee-mgmt__bulk-results">
+                  <ul className="payee-mgmt__bulk-list">
+                    {bulkResults.map((entry) => {
+                      const tone = entry.status === 'eligible' ? 'success' : entry.status === 'invalid' ? 'danger' : 'neutral';
+                      const text =
+                        entry.status === 'eligible'
+                          ? bulkMode === 'verify'
+                            ? 'Will be verified'
+                            : 'Will be removed'
+                          : entry.status === 'invalid'
+                            ? 'Not a valid address'
+                            : entry.status === 'duplicate'
+                              ? 'Duplicate in this list'
+                              : entry.status === 'already-verified'
+                                ? 'Already verified — skipped'
+                                : 'Not currently verified — skipped';
+                      return (
+                        <li key={entry.address}>
+                          <code className="numeric">{entry.address}</code>
+                          <Badge tone={tone}>{text}</Badge>
+                        </li>
+                      );
+                    })}
+                  </ul>
+                  <p className="payee-mgmt__bulk-summary" aria-live="polite">
+                    {bulkCheckSummary(bulkCounts, bulkMode, batches.length)}
+                  </p>
+                  <div>
+                    <Button
+                      variant={bulkMode === 'remove' ? 'danger' : 'primary'}
+                      onClick={() => void handleSendBulk()}
+                      loading={bulkSending}
+                      disabled={!isCreator || eligibleAddresses.length === 0}
+                    >
+                      {bulkMode === 'verify' ? 'Verify' : 'Remove'} {eligibleAddresses.length} payee
+                      {eligibleAddresses.length === 1 ? '' : 's'}
+                    </Button>
                   </div>
-                </li>
-              ))}
-            </ul>
-          )
-        )}
-      </Card>
+                  {bulkProgress && (
+                    <p className="payee-mgmt__fine payee-mgmt__bulk-progress">
+                      Sending batch {Math.min(bulkProgress.done + 1, bulkProgress.total)} of {bulkProgress.total}
+                      {bulkProgress.done > 0 && ` (${bulkProgress.done} done)`}…
+                    </p>
+                  )}
+                </div>
+              )}
+              {/* The shared announcer reads a failed batch once, so this panel stays quiet. */}
+              {bulkTx.error && <ErrorPanel explained={bulkTx.error} live={false} />}
+            </div>
+          </section>
         </>
       )}
+
+      <TxSheet
+        open={single !== null}
+        onClose={() => {
+          setSingle(null);
+          tx.reset();
+        }}
+        tx={tx}
+        eyebrow="Payees"
+        pendingTitle={single?.kind === 'remove' ? 'Removing the payee' : 'Verifying the payee'}
+        doneTitle={single?.kind === 'remove' ? 'Payee removed' : 'Payee verified'}
+        doneText={
+          single?.kind === 'remove'
+            ? 'Future payments can’t go to this address. Money already paid stays where it is.'
+            : 'The address can now receive Direct payments or be chosen from escrow.'
+        }
+        doneRows={single ? [{ label: 'Address', value: truncateAddress(single.address, 6, 6) }] : undefined}
+        failTitle={single?.kind === 'remove' ? 'Payee not removed' : 'Payee not verified'}
+        onRetry={
+          single
+            ? () => {
+                if (!programme) return;
+                void tx.send(() =>
+                  single.kind === 'remove'
+                    ? programme.deny_payee({ payee: single.address })
+                    : programme.allow_payee({ payee: single.address }),
+                );
+              }
+            : undefined
+        }
+      />
     </div>
   );
 };

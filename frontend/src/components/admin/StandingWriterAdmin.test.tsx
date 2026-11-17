@@ -1,5 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { MemoryRouter } from 'react-router-dom';
 import { StandingWriterAdmin } from './StandingWriterAdmin';
 
 // Issue #341 — rebuilt on the current UI kit / useSoroban, same
@@ -39,7 +40,11 @@ vi.mock('../../context/useSoroban', () => ({
 }));
 
 function renderPanel() {
-  return render(<StandingWriterAdmin />);
+  return render(
+    <MemoryRouter>
+      <StandingWriterAdmin />
+    </MemoryRouter>,
+  );
 }
 
 describe('StandingWriterAdmin', () => {

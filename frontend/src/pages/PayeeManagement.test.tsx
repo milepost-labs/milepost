@@ -340,7 +340,7 @@ describe('PayeeManagement bulk verify/remove', () => {
   it('hides bulk controls behind the creator gate for a non-creator wallet', async () => {
     mocks.address = 'GNOTCREATOREXAMPLEEXAMPLEEXAMPLEEXAMPLEEXAMPLEEXAMPLEEXA';
     await renderPage();
-    await screen.findByText(/Only the programme.s creator can verify or remove payees/);
+    expect((await screen.findAllByText(/Only the programme.s creator can verify or remove payees/)).length).toBeGreaterThan(0);
     fireEvent.change(screen.getByLabelText('Payee addresses'), { target: { value: VALID_A } });
     fireEvent.click(screen.getByRole('button', { name: 'Check addresses' }));
     await screen.findByText('Will be verified');
@@ -438,7 +438,7 @@ describe('Issue #439 - Real vs Sample programmes payee management', () => {
 
     // Must not show invented fixture payees
     expect(screen.queryByText('Real Programme Fixture')).toBeNull();
-    expect(screen.getByText('No payees changed this session')).toBeDefined();
+    expect(screen.getByText(/Payees you verify or remove here are listed for this tab/)).toBeDefined();
 
     // Check single address
     const checkInput = screen.getByLabelText('Check payee address');
