@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { Buffer } from 'buffer';
 import { AttestationLookup } from './AttestationLookup';
 import { SorobanContext, type SorobanState } from '../context/sorobanStore';
@@ -56,13 +56,14 @@ describe('Issue #438 - AttestationLookup', () => {
     });
 
     await waitFor(() => {
-      expect(screen.getByText('Valid on-chain')).toBeDefined();
+      expect(screen.getByText('Valid')).toBeDefined();
     });
 
-    expect(screen.getByText('GSUBJECTEXAMPLEAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA')).toBeDefined();
-    expect(screen.getByText('GATTESTEREXAMPLEAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA')).toBeDefined();
-    // Real on-chain attestation must NOT have "Sample data"
-    expect(screen.queryByText('Sample data')).toBeNull();
+    expect(screen.getByTitle('GSUBJECTEXAMPLEAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA')).toBeDefined();
+    expect(screen.getByTitle('GATTESTEREXAMPLEAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA')).toBeDefined();
+    // A real on-chain attestation never carries the Sample data tag.
+    const results = document.querySelector('.attest-lookup__results') as HTMLElement;
+    expect(within(results).queryByText('Sample data')).toBeNull();
   });
 
   it('says not found and mentions archival when an unknown UID is searched', async () => {

@@ -18,7 +18,10 @@ export function useKeyedRead<T>(key: string | null, read: (key: string) => Promi
   useEffect(() => {
     if (key === null) return;
     let cancelled = false;
-    read(key).then(
+    // Through a promise, so a reader that throws synchronously still lands as an error.
+    Promise.resolve()
+      .then(() => read(key))
+      .then(
       (data) => {
         if (!cancelled) setSettled({ key, data, error: null, ok: true });
       },

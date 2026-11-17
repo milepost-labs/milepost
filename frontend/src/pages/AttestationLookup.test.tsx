@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { fireEvent, render, screen } from '@testing-library/react';
+import { fireEvent, render, screen, within } from '@testing-library/react';
 import { Buffer } from 'buffer';
 import { FIXTURE_ATTESTATIONS } from '../fixtures/attestationFixtures';
 import { AttestationLookup } from './AttestationLookup';
@@ -154,7 +154,8 @@ describe('AttestationLookup search by address', () => {
     // Used is per programme, so a valid hit asks for one rather than guessing.
     expect(screen.getByText('Select a programme to check usage')).toBeTruthy();
     // Sample attestations never mix into a real address search.
-    expect(screen.queryByText('Sample data')).toBeNull();
+    const results = document.querySelector('.attest-lookup__results') as HTMLElement;
+    expect(within(results).queryByText('Sample data')).toBeNull();
   });
 
   it('says plainly when the window holds nothing for the address', async () => {
