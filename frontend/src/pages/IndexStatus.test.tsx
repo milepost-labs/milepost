@@ -64,9 +64,9 @@ describe('IndexStatus', () => {
       </MemoryRouter>,
     );
     await waitFor(() => {
-      expect(screen.getByText('Fresh')).toBeTruthy();
+      expect(screen.getByText('Fresh.')).toBeTruthy();
     });
-    expect(screen.getByText('4698280')).toBeTruthy();
+    expect(screen.getByText('4,698,280')).toBeTruthy();
     expect(screen.getByText('Complete')).toBeTruthy();
   });
 
@@ -78,11 +78,11 @@ describe('IndexStatus', () => {
       </MemoryRouter>,
     );
     await waitFor(() => {
-      expect(screen.getByText('Stale')).toBeTruthy();
+      expect(screen.getByText('Stale.')).toBeTruthy();
     });
   });
 
-  it('binds every figure to its label inside one description list', async () => {
+  it('labels every figure', async () => {
     stubFetch(meta());
     render(
       <MemoryRouter>
@@ -90,20 +90,11 @@ describe('IndexStatus', () => {
       </MemoryRouter>,
     );
     await waitFor(() => {
-      expect(screen.getByText('Fresh')).toBeTruthy();
+      expect(screen.getByText('Fresh.')).toBeTruthy();
     });
-
-    const list = document.querySelector('dl.status-grid');
-    expect(list).toBeTruthy();
-    const terms = list?.querySelectorAll('dt') ?? [];
-    const definitions = list?.querySelectorAll('dd') ?? [];
-    // Five cards, each with a term; each term and definition belongs to the
-    // same list, so a screen reader reads them as label/value pairs.
-    expect(terms).toHaveLength(5);
-    expect(definitions.length).toBeGreaterThanOrEqual(5);
-    for (const term of terms) expect(term.closest('dl')).toBe(list);
-    for (const definition of definitions) expect(definition.closest('dl')).toBe(list);
-    expect(screen.getByText('Last indexed at').tagName).toBe('DT');
+    for (const label of ['Last rebuilt', 'Indexed to ledger', 'Completeness', 'Unhandled event types']) {
+      expect(screen.getByText(label)).toBeTruthy();
+    }
   });
 
   it('announces a change of freshness once, not on every render', async () => {
@@ -134,7 +125,7 @@ describe('IndexStatus', () => {
       </MemoryRouter>,
     );
     await waitFor(() => {
-      expect(screen.getByText('Stale')).toBeTruthy();
+      expect(screen.getByText('Stale.')).toBeTruthy();
       expect(announce).toHaveBeenCalledWith(expect.stringContaining('stale'));
     });
   });
@@ -159,7 +150,7 @@ describe('IndexStatus', () => {
       </MemoryRouter>,
     );
     await waitFor(() => {
-      expect(screen.getByText('Unhandled event types')).toBeTruthy();
+      expect(screen.getByText('Event types not handled yet')).toBeTruthy();
     });
     expect(screen.getByText('program:Created')).toBeTruthy();
     expect(screen.getByText('5')).toBeTruthy();

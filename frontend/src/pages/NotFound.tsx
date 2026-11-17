@@ -1,32 +1,36 @@
 import { Link, useLocation } from 'react-router-dom';
+import { usePageTitle } from '../hooks/usePageTitle';
+import '../components/state/AsyncStates.css';
 import './NotFound.css';
 
+/** Any path the app doesn't serve: the three-squares art, and a way back to the programmes. */
 export const NotFound = () => {
+  usePageTitle('Not found');
   const location = useLocation();
   const route = `${location.pathname}${location.search}`;
 
   return (
-    <div className="not-found">
-      <section className="not-found__card" aria-labelledby="not-found-heading">
-        <span className="not-found__marks" aria-hidden="true">
-          <span className="not-found__mark not-found__mark--accent" />
-          <span className="not-found__mark not-found__mark--locked" />
-          <span className="not-found__mark not-found__mark--locked" />
-        </span>
-        <h1 id="not-found-heading">This page doesn't exist</h1>
-        <p className="typo-text text-muted">
-          Nothing lives at <span className="not-found__route">{route}</span>. If you followed a
-          link to a programme, it may not be in the public index yet.
-        </p>
-        <div className="not-found__actions">
-          <Link to="/directory" className="not-found__action not-found__action--primary">
-            Browse programmes
-          </Link>
-          <Link to="/" className="not-found__action not-found__action--secondary">
-            Home
-          </Link>
-        </div>
-      </section>
-    </div>
+    <section className="not-found" aria-labelledby="not-found-heading">
+      {/* Two empty squares and one tinted, as on every empty state. */}
+      <span className="state-empty__art" aria-hidden="true">
+        <i />
+        <i />
+        <i />
+      </span>
+      <p className="not-found__eyebrow numeric">404</p>
+      <h1 id="not-found-heading">There’s no milepost here</h1>
+      <p className="not-found__text">
+        Nothing lives at <span className="not-found__route numeric">{route}</span>. The link may be out of date, or a
+        programme you followed may not be in the public index yet.
+      </p>
+      <div className="not-found__actions">
+        <Link to="/directory" className="ui-button ui-button--primary ui-button--md">
+          Go to programmes
+        </Link>
+        <Link to="/" className="ui-button ui-button--ghost ui-button--md">
+          Home
+        </Link>
+      </div>
+    </section>
   );
 };
