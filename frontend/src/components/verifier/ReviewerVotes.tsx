@@ -295,7 +295,7 @@ export function ReviewerVotes({ reviewerOf, allProgrammes, initialProgrammeId }:
         As a reviewer: set amounts
       </h2>
       <p className="verify__lead">
-        You approve up to what each applicant asked, and the award is the median of the votes. This is separate from
+        You approve up to what each applicant asked, and the award is the middle vote once the quorum is in. This is separate from
         verifying: reviewers set amounts, verifiers unlock payments.
       </p>
 

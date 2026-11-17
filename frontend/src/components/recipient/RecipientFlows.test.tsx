@@ -610,7 +610,7 @@ describe('Recipient Issues Suite (#272, #273, #274, #275)', () => {
       expect(screen.queryByText(/Workforce skills grants, cohort 3/i)).toBeNull();
     });
 
-    it('explains the median rule before submitting', async () => {
+    it('explains the award rule before submitting', async () => {
       render(
         <MemoryRouter>
           <ApplyForm />
@@ -811,7 +811,7 @@ describe('Recipient Issues Suite (#272, #273, #274, #275)', () => {
       expect(screen.getByText('Tranches')).toBeDefined();
     });
 
-    it('emphasizes current Review stage with Now and explains median rule on Award set', () => {
+    it('emphasizes current Review stage with Now and explains the award rule on Award set', () => {
       const mockApplications: RecipientApplicationFixture[] = [
         {
           programmeId: 'PROG-TIMELINE-2',
@@ -833,13 +833,13 @@ describe('Recipient Issues Suite (#272, #273, #274, #275)', () => {
       // Emphasized tag "Now" for Review phase
       expect(screen.getByText('· Now')).toBeDefined();
 
-      // Median rule explanation
+      // Award rule explanation
       expect(
-        screen.getByText(/The award will be the median, not the lowest or the average\./i)
+        screen.getByText(/The award will be the middle vote, never an average/i)
       ).toBeDefined();
     });
 
-    it('says a finalised application carries the median award', () => {
+    it('says a finalised application carries the award the contract settled on', () => {
       const mockApplications: RecipientApplicationFixture[] = [
         {
           programmeId: 'PROG-TIMELINE-3',
@@ -848,7 +848,7 @@ describe('Recipient Issues Suite (#272, #273, #274, #275)', () => {
           requested: '12000000000',
           submittedAt: 1774000000,
           votes: ['9000000000', '12000000000'],
-          quorum: 3,
+          quorum: 2,
           finalized: true,
         },
       ];
@@ -861,10 +861,10 @@ describe('Recipient Issues Suite (#272, #273, #274, #275)', () => {
 
       expect(
         screen.getByText(
-          'Finalised — your award is 1,050.00 XLM, the median of 2 reviewer votes.'
+          'Finalised — your award is 900.00 XLM, the middle vote of 2 reviewer votes.'
         )
       ).toBeDefined();
-      expect(screen.getByText('Median of the votes: 1,050.00 XLM')).toBeDefined();
+      expect(screen.getByText('Middle vote: 900.00 XLM')).toBeDefined();
     });
 
     it('says a withdrawn application will not be reviewed or finalised', () => {

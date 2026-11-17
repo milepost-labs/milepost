@@ -235,7 +235,7 @@ export const Home = () => {
               <span className="lp-job__k">Reviewer</span>
               <h3>Sets the amount.</h3>
               <p>
-                Votes on how much each applicant should get. The award is the median, so one generous or
+                Votes on how much each applicant should get. The award is the middle vote, so one generous or
                 stingy vote can't swing it.
               </p>
             </div>

@@ -70,11 +70,11 @@ export function HowItWorks() {
                 <p>{item.body}</p>
                 {item.example && <p className="lp-step__example numeric">{item.example}</p>}
                 {item.votes && (
-                  <ul className="lp-votes" aria-label="Example votes; the award is the median">
+                  <ul className="lp-votes" aria-label="Example votes from a quorum of five; the award is the middle one">
                     {item.votes.map((vote, k) => (
                       <li key={k} className={vote.median ? 'is-median' : undefined}>
                         {vote.amount}
-                        {vote.median && <span className="visually-hidden"> (the median)</span>}
+                        {vote.median && <span className="visually-hidden"> (the award)</span>}
                       </li>
                     ))}
                   </ul>

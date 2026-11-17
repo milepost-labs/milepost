@@ -6,7 +6,7 @@ import { useContractResult } from '../../hooks/useContractRead';
 import { explain } from '../../lib/errors';
 import { truncateAddress } from '../../lib/format';
 import { formatFigure } from '../../lib/programmeView';
-import { medianForQuorum } from '../../fixtures/finalizeFixtures';
+import { awardFromVotes } from '../../lib/awardRule';
 import { Button, DisabledReason, SampleTag } from '../ui';
 import { ErrorPanel } from '../state/AsyncStates';
 
@@ -50,7 +50,7 @@ function RowView({
   label?: string;
 }) {
   const { quorum, asset, left, minimum } = ctx;
-  const award = medianForQuorum(facts.votes, quorum);
+  const award = awardFromVotes(facts.votes, quorum);
   const usedIndex = quorum > 0 ? Math.floor((quorum - 1) / 2) : -1;
   const missing = Math.max(0, quorum - facts.votes.length);
 

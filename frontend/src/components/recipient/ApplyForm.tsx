@@ -283,8 +283,9 @@ export function ApplyForm({
 
                 <Notice tone="info">
                   <strong>How your award is set:</strong> each reviewer approves an amount up to what you asked.
-                  Your award is the <strong>middle vote</strong> (the median), so one very low or very high vote
-                  can&rsquo;t decide it alone.
+                  Your award is the <strong>middle vote</strong> once enough have voted, so one very low or very
+                  high vote can&rsquo;t decide it alone. It is never an average, and votes beyond the quorum can
+                  only lower it.
                 </Notice>
 
                 <Button type="submit" disabled={!isValid}>
@@ -305,7 +306,7 @@ export function ApplyForm({
             <b>Review.</b> When applications close, each reviewer approves an amount up to what you asked.
           </li>
           <li>
-            <b>Award.</b> Once enough reviewers have voted, anyone can finalize it at the median vote.
+            <b>Award.</b> Once enough reviewers have voted, anyone can finalize it at the middle vote.
           </li>
           <li>
             <b>Tranches.</b> Each is released once a verifier confirms its condition.

@@ -52,9 +52,9 @@ export const TermsTab: FC<TermsTabProps> = ({
     },
     {
       k: 'Award rule',
-      v: 'Median of reviewer votes',
+      v: 'Middle vote once the quorum is in',
       explanation:
-        'After enough reviewers have voted, the submitted amounts are sorted and the middle value is selected to protect against outlier votes.',
+        'The votes are kept sorted from lowest, and the award is the middle of the first quorum of them: the lower middle for an even quorum, never an average. One outlier can’t decide it, and votes beyond the quorum can only lower it.',
     },
     {
       k: 'Unpaid money',

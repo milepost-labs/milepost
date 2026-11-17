@@ -380,7 +380,7 @@ export function PeopleStep({
         error={errors.quorum}
         help={`Votes needed before an award can be finalized. 1 to ${MAX_QUORUM}, and no more than your ${
           draft.reviewers.length || 'listed'
-        } reviewer${draft.reviewers.length === 1 ? '' : 's'}. The award is the median of the votes.`}
+        } reviewer${draft.reviewers.length === 1 ? '' : 's'}. The award is the middle vote, and votes beyond the quorum can only lower it.`}
       />
 
       <AddressList

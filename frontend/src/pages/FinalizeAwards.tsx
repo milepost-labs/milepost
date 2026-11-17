@@ -11,7 +11,8 @@ import { explain } from '../lib/errors';
 import { formatDate, looksLikeAddress } from '../lib/format';
 import { formatFigure, programmeAsset, shortId } from '../lib/programmeView';
 import { FIXTURE_PROGRAMMES, chainFor, isSampleProgrammeId } from '../fixtures/programmes';
-import { FIXTURE_REVIEW_APPLICATIONS, medianForQuorum } from '../fixtures/finalizeFixtures';
+import { FIXTURE_REVIEW_APPLICATIONS } from '../fixtures/finalizeFixtures';
+import { awardFromVotes } from '../lib/awardRule';
 import { Button, Field, Notice, PageHead, PhaseBadge, SampleTag, Select } from '../components/ui';
 import { ErrorPanel } from '../components/state/AsyncStates';
 import { PausedBanner } from '../components/programme/PausedBanner';
@@ -127,7 +128,7 @@ export const FinalizeAwards = () => {
 
   const sampleList = sample && selected.id === SAMPLE_REVIEW_ID ? [...sampleRows.entries()] : [];
   const pendingSampleTotal = sampleList.reduce((sum, [, facts]) => {
-    const a = !facts.finalized ? medianForQuorum(facts.votes, quorum) : null;
+    const a = !facts.finalized ? awardFromVotes(facts.votes, quorum) : null;
     return sum + (a ?? 0n);
   }, 0n);
   const oversubscribed = sample && left !== null && pendingSampleTotal > left;
@@ -343,8 +344,9 @@ export const FinalizeAwards = () => {
         )}
 
         <p className="finalize__fine">
-          The award is the vote at the middle of the lowest {quorum || 'quorum'} votes, as the contract computes it, and
-          never more than was asked. The payment mode is chosen per award when you finalize.
+          The award is the middle vote once the quorum is in, never an average: the contract sorts the votes from lowest
+          and takes the middle of the first {quorum || 'quorum'}, so votes beyond the quorum can only lower it. It is never
+          more than was asked. The payment mode is chosen per award when you finalize.
           {sample && (
             <>
               {' '}

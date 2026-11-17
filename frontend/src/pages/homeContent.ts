@@ -81,7 +81,7 @@ export interface HowStep {
   body: string;
   /** A worked line in mono under the body. */
   example?: string;
-  /** Example reviewer votes; the median is marked. */
+  /** Example reviewer votes, as many as the quorum; the one the award takes is marked. */
   votes?: { amount: string; median?: boolean }[];
   board: {
     /** How many of the 40 squares are in each state, in drawing order. */
@@ -136,7 +136,7 @@ export const HOW_STEPS: HowStep[] = [
   },
   {
     title: 'Review',
-    body: 'Each reviewer approves an amount, up to what was asked.',
+    body: 'Each reviewer approves an amount, up to what was asked. Here the quorum is five.',
     votes: [
       { amount: '4,200' },
       { amount: '4,500' },
@@ -157,14 +157,14 @@ export const HOW_STEPS: HowStep[] = [
   },
   {
     title: 'Finalize',
-    body: 'The award is the median of the votes once the quorum is in. Anyone can press it, and the budget can never be exceeded.',
+    body: 'The award is the middle vote once the quorum is in, never an average. Anyone can press it, and the budget can never be exceeded.',
     board: {
       released: 0,
       locked: 28,
       unawarded: 12,
       refundable: 0,
       figure: '6,825 awarded',
-      lead: 'Awards set at the median vote.',
+      lead: 'Awards set at the middle vote.',
       caption: '6,825 is now awarded but locked. Nothing has left the programme.',
     },
   },
@@ -517,7 +517,7 @@ export interface ContractLine {
 /** The contracts under their real names. The registry keeps no list of programmes. */
 export const CONTRACTS: ContractLine[] = [
   { name: 'registry', description: 'Deploys programmes and holds the protocol fee and treasury.' },
-  { name: 'program', description: 'Contributions, applications, votes, median awards, tranches, refunds.' },
+  { name: 'program', description: 'Contributions, applications, votes, middle-vote awards, tranches, refunds.' },
   { name: 'attest', description: 'Schemas and the signed proofs verifiers issue, with revocation.' },
   { name: 'record', description: "The recipient's non-transferable record of totals." },
   { name: 'policy_spend', description: 'The smart-wallet policy behind Restricted mode.' },

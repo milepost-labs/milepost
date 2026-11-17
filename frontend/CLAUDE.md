@@ -63,9 +63,14 @@ unavailable, rather than letting a transaction fail.**
    Equal splits are not funding.
 3. **Review** — each reviewer approves some amount **up to** `requested`.
    Approving more returns `ExceedsRequested` (11).
-4. **Finalize** — the award is the **median** of reviewer votes. Not the minimum
-   (one cautious reviewer dictates), not the mean (one outlier drags it). Needs
-   `quorum` votes, which is capped at `MAX_QUORUM` (16).
+4. **Finalize** — the award is the **middle vote**. Not the minimum (one
+   cautious reviewer dictates), not the mean (one outlier drags it). Needs
+   `quorum` votes, which is capped at `MAX_QUORUM` (16). Exactly: votes are
+   kept sorted from lowest and the award is `votes[(quorum - 1) / 2]`, so it is
+   the median when exactly `quorum` have voted, the lower middle for an even
+   quorum (never an average), and votes beyond the quorum can only lower it.
+   `lib/awardRule.ts` is the one copy of this rule; say "middle vote", not
+   "median", in copy.
 5. **Attest** — a verifier signs a claim that a condition was met.
 6. **Release** — one valid proof unlocks one tranche. Re-using it returns
    `AttestationAlreadyUsed` (22).

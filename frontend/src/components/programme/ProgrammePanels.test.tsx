@@ -265,7 +265,7 @@ describe('Issue #266 - VerifiersTab component', () => {
 });
 
 describe('Issue #267 - TermsTab component', () => {
-  it('explains the median rule, refund and sweep behavior, mode note, and provides keepalive link', () => {
+  it('explains the award rule, refund and sweep behavior, mode note, and provides keepalive link', () => {
     render(
       <MemoryRouter>
         <TermsTab
@@ -276,10 +276,10 @@ describe('Issue #267 - TermsTab component', () => {
       </MemoryRouter>,
     );
 
-    // Median rule explanation
-    expect(screen.getByText('Median of reviewer votes')).toBeDefined();
+    // Award rule explanation
+    expect(screen.getByText('Middle vote once the quorum is in')).toBeDefined();
     expect(
-      screen.getByText(/submitted amounts are sorted and the middle value is selected/),
+      screen.getByText(/votes beyond the quorum can only lower it/),
     ).toBeDefined();
 
     // Refund and sweep rule
