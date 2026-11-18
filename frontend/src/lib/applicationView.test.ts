@@ -32,6 +32,12 @@ describe('effectiveQuorum', () => {
     expect(effectiveQuorum(0)).toBe(1);
     expect(effectiveQuorum(-4)).toBe(1);
   });
+
+  it('falls back to one when the quorum is not a finite number', () => {
+    // A bad chain read should not print "0 of NaN" or "0 of Infinity".
+    expect(effectiveQuorum(Number.NaN)).toBe(1);
+    expect(effectiveQuorum(Number.POSITIVE_INFINITY)).toBe(1);
+  });
 });
 
 describe('votesInLabel', () => {
@@ -90,6 +96,37 @@ describe('applicationStatus', () => {
       'In review — applications are still open, and no reviewer has voted yet.',
     );
   });
+
+  it('reports an open programme that already has votes in', () => {
+    expect(
+      applicationStatus(
+        application({ phase: 'Open', votes: ['12000000000', '9000000000'], quorum: 5 }),
+      ),
+    ).toBe('In review — applications are still open, with 2 of 5 reviewer votes in.');
+  });
+
+  it('does not invent an award when a finalised application never reached its quorum', () => {
+    // The contract cannot finalize before the quorum is in, so this state means
+    // the read is inconsistent: say it was finalised, but do not print a number.
+    expect(
+      applicationStatus(
+        application({
+          phase: 'Settled',
+          finalized: true,
+          votes: ['9000000000'],
+          quorum: 5,
+        }),
+      ),
+    ).toBe('Finalised — an award has been set for this application.');
+  });
+
+  it('uses the singular when a single reviewer settled the award', () => {
+    expect(
+      applicationStatus(
+        application({ phase: 'Settled', finalized: true, votes: ['9000000000'], quorum: 1 }),
+      ),
+    ).toBe('Finalised — your award is 900.00 USDC, the middle vote of 1 reviewer vote.');
+  });
 });
 
 describe('applicationSteps', () => {
@@ -123,5 +160,49 @@ describe('applicationSteps', () => {
     expect(steps.find((step) => step.title === 'Award set')?.desc).toBe(
       'Needs 5 votes. The award will be the middle vote, never an average, and votes beyond 5 can only lower it.',
     );
+  });
+
+  it('leaves review pending until applications close', () => {
+    const review = applicationSteps(application({ phase: 'Open', votes: [] })).find(
+      (step) => step.title === 'Review',
+    );
+    expect(review?.status).toBe('pending');
+    expect(review?.tag).toBe('Next');
+    expect(review?.desc).toBe('Starts when applications close.');
+  });
+
+  it('shows the votes already in while applications are still open', () => {
+    const review = applicationSteps(
+      application({ phase: 'Open', votes: ['12000000000', '9000000000'], quorum: 5 }),
+    ).find((step) => step.title === 'Review');
+    expect(review?.status).toBe('pending');
+    expect(review?.desc).toBe('2 of 5 reviewer votes in. Applications are still open.');
+  });
+
+  it('closes review when the programme settled without finalising the application', () => {
+    const review = applicationSteps(
+      application({ phase: 'Settled', votes: ['9000000000'], quorum: 5 }),
+    ).find((step) => step.title === 'Review');
+    expect(review?.status).toBe('done');
+    expect(review?.tag).toBe('Closed');
+    expect(review?.desc).toBe('1 of 5 reviewer votes in.');
+  });
+
+  it('stops review when the programme was cancelled', () => {
+    const review = applicationSteps(application({ phase: 'Cancelled' })).find(
+      (step) => step.title === 'Review',
+    );
+    expect(review?.status).toBe('pending');
+    expect(review?.tag).toBe('Stopped');
+    expect(review?.desc).toBe('The programme was cancelled.');
+  });
+
+  it('marks the award done without naming one when the vote count never reached quorum', () => {
+    const award = applicationSteps(
+      application({ phase: 'Settled', finalized: true, votes: ['9000000000'], quorum: 5 }),
+    ).find((step) => step.title === 'Award set');
+    expect(award?.status).toBe('done');
+    expect(award?.tag).toBe('Done');
+    expect(award?.desc).toBe('Award set.');
   });
 });
