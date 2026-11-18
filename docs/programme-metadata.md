@@ -20,13 +20,19 @@ compatibility), so this list may grow.
 
 | Field            | Required | Type            | Meaning                                                                 |
 | ---------------- | -------- | --------------- | ----------------------------------------------------------------------- |
-| `schema_version` | yes      | string (semver) | Version of *this document spec*. Bump the major on breaking changes.     |
+| `schema_version` | yes      | string (semver) | Version of *this document spec*: `1.1.0` adds `labels`. Bump the major on breaking changes. |
 | `name`           | yes      | string          | Human-readable programme name.                                          |
 | `description`    | yes      | string          | What the programme funds and on what terms, in plain language.          |
 | `vertical`       | yes      | string          | One of `education`, `health`, `agriculture`, `vocational`, `humanitarian`, `sme`. Free-form otherwise. |
 | `language`       | no       | string (BCP 47) | Primary language of the document, e.g. `en`, `sw`.                      |
 | `contact`        | yes      | object          | `{ "name": string, "email": string, "url"?: string }` — who stands behind the programme. |
 | `links`          | no       | array of object | `[ { "label": string, "url": string } ]` — supporting material.         |
+| `labels`         | no       | array of object | `[ { "address": string, "role": "reviewer" \| "verifier" \| "payee", "label": string } ]` — the creator's names for addresses. Added in 1.1.0. |
+
+A label is the creator's claim about an address, nothing more: the chain knows
+only the address. Clients show a label beside its address, never instead of it,
+and read the address's current role from the programme rather than trusting the
+label for it.
 
 Required fields MUST be present and non-empty. A document missing a required
 field is malformed and must not be treated as valid metadata.
@@ -78,14 +84,29 @@ is for clients building or checking the commitment.
 ```ts
 import { createHash } from "node:crypto";
 
+// Keys sorted at every depth, inside arrays too, with no whitespace.
+function canonicalize(value: unknown): string {
+  if (Array.isArray(value)) return `[${value.map(canonicalize).join(",")}]`;
+  if (value !== null && typeof value === "object") {
+    const obj = value as Record<string, unknown>;
+    return `{${Object.keys(obj)
+      .sort()
+      .map((k) => `${JSON.stringify(k)}:${canonicalize(obj[k])}`)
+      .join(",")}}`;
+  }
+  return JSON.stringify(value);
+}
+
 function metadataHash(doc: unknown): string {
-  const canonical = JSON.stringify(doc, Object.keys(doc).sort());
-  return createHash("sha256").update(canonical).digest("hex");
+  return createHash("sha256").update(canonicalize(doc)).digest("hex");
 }
 ```
 
-`JSON.stringify` with a replacer that returns `Object.keys(value).sort()`
-produces sorted keys and no whitespace, satisfying the canonical rule.
+Don't use `JSON.stringify(doc, Object.keys(doc).sort())`: an array replacer is
+a list of keys to *keep* at every depth, so nested keys that aren't also
+top-level keys are silently dropped (`contact.email` in the example below), and
+the hash comes out wrong. The app's implementation is
+`frontend/src/lib/metadata.ts`; its tests check the worked example's hash.
 
 ## Worked example
 
@@ -126,10 +147,33 @@ it must obtain exactly this value to consider the commitment satisfied.
 
 ## Retrieval expectations
 
-The document is expected to live at a URL communicated out of band — typically
-surfaced by the registry or the funder's own site, or in a content-addressed
-store (IPFS / Arweave) keyed by this very hash. The contract gives no hint of
-location; only the hash is on-chain.
+The contract gives no hint of location; only the hash is on-chain. Milepost's
+app keeps documents in its own content-addressed store, and also lets a reader
+paste the address of a document hosted anywhere else (a funder's site, IPFS,
+Arweave).
+
+### The Milepost store
+
+`/api/metadata` on the app's own domain (a Vercel function in
+`frontend/api/metadata.ts`, backed by Vercel Blob):
+
+- `POST /api/metadata` with a document as the body. The store validates it
+  against this spec, canonicalizes it, and keeps the canonical bytes under
+  their own SHA-256. It answers `{ "hash": "<64 hex>" }`, `201` the first time
+  and `200` after. The same document always gets the same hash, and nothing
+  stored can be overwritten.
+- `GET /api/metadata?hash=<64 hex>` answers the stored canonical bytes, or
+  `404`. Responses are cached as immutable.
+
+The store accepts only the fields in the table above, up to 16 KB, with `https`
+links only. It refuses anything else, so it holds programme descriptions and
+nothing more. It is for what a creator chooses to publish about a programme:
+never put anything about recipients in a document.
+
+The app works out the hash itself before publishing and refuses an answer that
+differs, and it checks every document it fetches against the programme's
+commitment before showing it. A store that served the wrong bytes would be
+caught, not believed.
 
 A client resolving metadata MUST:
 

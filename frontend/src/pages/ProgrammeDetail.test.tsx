@@ -3,6 +3,7 @@ import { fireEvent, render, screen, within } from '@testing-library/react';
 import { MemoryRouter, Route, Routes } from 'react-router-dom';
 import { Buffer } from 'buffer';
 import { ProgrammeDetail } from './ProgrammeDetail';
+import { canonicalize, metadataHash } from '../lib/metadata';
 import { FIXTURE_PROGRAMMES } from '../fixtures/programmes';
 
 // Issue #342 — the programme detail page. One page shows a real programme's
@@ -76,6 +77,9 @@ function makeProgramme() {
   return {
     options: { contractId: REAL_ID },
     is_paused: vi.fn(async () => ({ result: false })),
+    is_verifier: vi.fn(async () => ({ result: true })),
+    is_reviewer: vi.fn(async () => ({ result: false })),
+    is_payee: vi.fn(async () => ({ result: false })),
     get_config: vi.fn(() => unwrap(makeConfig())),
     get_phase: vi.fn(() => unwrap({ tag: 'Open' })),
     budget: vi.fn(() => unwrap(79200000000n)),
@@ -96,13 +100,10 @@ let programme = makeProgramme();
 let registry = makeRegistry();
 let indexed: { id: string; name: string | null; creator: string | null; createdLedger: number | null }[] = [];
 
-vi.mock('../context/useSoroban', () => ({
-  useSoroban: () => ({
-    programmeAt: () => programme,
-    registry,
-    rpcUrl: RPC_URL,
-  }),
-}));
+vi.mock('../context/useSoroban', () => {
+  const soroban = () => ({ programmeAt: () => programme, registry, rpcUrl: RPC_URL });
+  return { useSoroban: soroban, useOptionalSoroban: soroban };
+});
 
 vi.mock('../lib/indexer', async (importOriginal) => ({
   ...(await importOriginal<typeof import('../lib/indexer')>()),
@@ -132,6 +133,8 @@ function renderProgramme(path: string) {
 const moneyReady = () => screen.findByText('Budget 7,920.00 XLM');
 
 beforeEach(() => {
+  // The description store answers "none here" unless a test says otherwise.
+  vi.stubGlobal('fetch', async () => new Response('{}', { status: 404 }));
   programme = makeProgramme();
   registry = makeRegistry();
   indexed = [];
@@ -193,7 +196,8 @@ describe('ProgrammeDetail — a deployed programme', () => {
     ).toBeTruthy();
     expect(screen.getByRole('tablist', { name: 'Programme details' })).toBeTruthy();
     expect(screen.getByRole('tab', { selected: true })).toBeTruthy();
-    expect(screen.getByLabelText('Metadata document URL')).toBeTruthy();
+    // The committed description is looked up in the store; with none there, a URL can be pasted.
+    expect(await screen.findByLabelText('Document address')).toBeTruthy();
     // Renders the whole page with every read; slow on a loaded CI runner.
   }, 20_000);
 
@@ -358,74 +362,99 @@ describe('ProgrammeDetail — when a read fails', () => {
   });
 });
 
-describe('ProgrammeDetail — the metadata document', () => {
-  it('only displays a document that hashes to the on-chain commitment', async () => {
-    const doc = {
-      schema_version: '1.0.0',
-      name: 'Riverside horticulture grants',
-      description: 'Support for smallholder horticulture in the riverside districts.',
-      vertical: 'agriculture',
-      contact: { name: 'Amina Okafor', email: 'amina@example.org' },
-    };
-    // Sorted, compact JSON — the canonical form both the app and the docs use.
-    const canonical =
-      '{"contact":{"email":"amina@example.org","name":"Amina Okafor"},"description":"Support for smallholder horticulture in the riverside districts.","name":"Riverside horticulture grants","schema_version":"1.0.0","vertical":"agriculture"}';
-    const digest = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(canonical));
-    const hash = Array.from(new Uint8Array(digest))
-      .map((byte) => byte.toString(16).padStart(2, '0'))
-      .join('');
-    programme.get_config.mockImplementation(() =>
-      unwrap(makeConfig({ metadata_hash: Buffer.from(hash, 'hex') })),
-    );
+describe('ProgrammeDetail — the description', () => {
+  const doc = {
+    schema_version: '1.1.0',
+    name: 'Riverside horticulture grants',
+    description: 'Support for smallholder horticulture in the riverside districts.',
+    vertical: 'agriculture',
+    contact: { name: 'Amina Okafor', email: 'amina@example.org' },
+    labels: [{ address: `GVER${'A'.repeat(52)}`, role: 'verifier', label: 'Riverside extension office' }],
+  };
 
-    const fetchMock = vi.fn();
+  /** Serve `stored` from the store for any hash, and `byUrl` for pasted addresses. */
+  function stubFetch(stored: string | null, byUrl: Record<string, () => Response> = {}) {
+    const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
+      const url = String(input);
+      if (url.startsWith('/api/metadata')) {
+        return stored === null ? new Response('{}', { status: 404 }) : new Response(stored, { status: 200 });
+      }
+      const handler = byUrl[url];
+      if (!handler) throw new TypeError('Failed to fetch');
+      return handler();
+    });
     vi.stubGlobal('fetch', fetchMock);
+    return fetchMock;
+  }
 
+  async function commitTo(document: unknown) {
+    const hash = await metadataHash(document);
+    programme.get_config.mockImplementation(() => unwrap(makeConfig({ metadata_hash: Buffer.from(hash, 'hex') })));
+    return hash;
+  }
+
+  it('shows the committed description from the store, once it hashes to the commitment', async () => {
+    const hash = await commitTo(doc);
+    const fetchMock = stubFetch(canonicalize(doc));
     renderProgramme(`/programme/${REAL_ID}`);
-    const urlField = await screen.findByLabelText('Metadata document URL');
-    const verify = () => screen.getByRole('button', { name: 'Fetch & verify' }) as HTMLButtonElement;
-    expect(verify().disabled).toBe(true);
 
-    // 1. The document the programme committed to is fetched and displayed.
-    fetchMock.mockResolvedValueOnce({ ok: true, text: async () => JSON.stringify(doc) });
-    fireEvent.change(urlField, { target: { value: 'https://example.org/grants.json' } });
-    fireEvent.click(verify());
-    expect(await screen.findByText('Verified against on-chain commitment.')).toBeTruthy();
-    expect(fetchMock).toHaveBeenCalledWith('https://example.org/grants.json');
-    expect(screen.getByText(/Amina Okafor/)).toBeTruthy();
+    expect(await screen.findByText(doc.description)).toBeTruthy();
+    expect(screen.getByText(/Written by the creator, checked against the hash on the chain/)).toBeTruthy();
+    expect(fetchMock).toHaveBeenCalledWith(`/api/metadata?hash=${hash}`);
+    expect(screen.getByText('amina@example.org')).toBeTruthy();
+    expect(screen.getByText(/1 reviewer and verifier name/)).toBeTruthy();
+
+    // The creator's name for a verifier sits beside its address, and its role is read now.
+    fireEvent.click(screen.getByRole('tab', { name: 'Verifiers' }));
+    expect(await screen.findByText('Riverside extension office')).toBeTruthy();
+    expect(await screen.findByText('Holds the role now')).toBeTruthy();
+  });
+
+  it('refuses a stored document that does not match, and shows nothing from it', async () => {
+    await commitTo(doc);
+    stubFetch(canonicalize({ ...doc, description: 'Someone else’s words.' }));
+    renderProgramme(`/programme/${REAL_ID}`);
+
+    expect(await screen.findByText(/Refused: the document doesn’t match/)).toBeTruthy();
+    expect(screen.queryByText('Someone else’s words.')).toBeNull();
+    expect(screen.queryByText(/Written by the creator/)).toBeNull();
+  });
+
+  it('falls back to a pasted address when the store has no document, held to the same check', async () => {
+    await commitTo(doc);
+    stubFetch(null, {
+      'https://example.org/grants.json': () => new Response(JSON.stringify(doc)),
+      'https://example.org/changed.json': () => new Response(JSON.stringify({ ...doc, description: 'Changed.' })),
+      'https://example.org/broken.json': () => new Response('not json'),
+      'https://example.org/down.json': () => new Response('', { status: 500 }),
+    });
+    renderProgramme(`/programme/${REAL_ID}`);
+
+    expect(await screen.findByText(/has no document for this hash/)).toBeTruthy();
+    const field = screen.getByLabelText('Document address');
+    const go = (url: string) => {
+      fireEvent.change(field, { target: { value: url } });
+      fireEvent.click(screen.getByRole('button', { name: 'Fetch and check' }));
+    };
+
+    go('https://example.org/grants.json');
+    expect(await screen.findByText(/This document hashes to the programme’s commitment/)).toBeTruthy();
     expect(screen.getByText('amina@example.org')).toBeTruthy();
 
-    // 2. A document that does not hash to the commitment is refused, with both
-    // hashes shown so the mismatch can be checked.
-    fetchMock.mockResolvedValueOnce({
-      ok: true,
-      text: async () => JSON.stringify({ ...doc, description: 'Changed.' }),
-    });
-    fireEvent.change(urlField, { target: { value: 'https://example.org/changed.json' } });
-    fireEvent.click(verify());
-    expect(await screen.findByText('Hash mismatch — document refused.')).toBeTruthy();
-    expect(screen.getByText('Fetched document hash')).toBeTruthy();
-    expect(screen.getByText('On-chain commitment')).toBeTruthy();
+    go('https://example.org/changed.json');
+    expect(await screen.findByText(/Refused: the document doesn’t match/)).toBeTruthy();
 
-    // 3. Broken JSON and a missing required field each say exactly what is wrong.
-    fetchMock.mockResolvedValueOnce({ ok: true, text: async () => 'not json' });
-    fireEvent.change(urlField, { target: { value: 'https://example.org/broken.json' } });
-    fireEvent.click(verify());
-    expect(await screen.findByText('Document is malformed.')).toBeTruthy();
-    expect(screen.getByText(/The document is not valid JSON\./)).toBeTruthy();
+    go('https://example.org/broken.json');
+    expect(await screen.findByText('The document is not valid JSON.', { exact: false })).toBeTruthy();
 
-    fetchMock.mockResolvedValueOnce({ ok: true, text: async () => JSON.stringify({ schema_version: '1.0.0' }) });
-    fireEvent.change(urlField, { target: { value: 'https://example.org/partial.json' } });
-    fireEvent.click(verify());
-    expect(await screen.findByText(/Required field "name" is missing or empty\./)).toBeTruthy();
+    go('https://example.org/down.json');
+    expect(await screen.findByText(/The server answered 500/)).toBeTruthy();
+    expect(screen.getByText(/The programme works without it/)).toBeTruthy();
+  });
 
-    // 4. An unreachable document leaves the commitment visible and says the
-    // programme still works.
-    fetchMock.mockResolvedValueOnce({ ok: false, status: 500, statusText: 'Server Error' });
-    fireEvent.change(urlField, { target: { value: 'https://example.org/down.json' } });
-    fireEvent.click(verify());
-    expect(await screen.findByText('Metadata unavailable.')).toBeTruthy();
-    expect(screen.getByText(/Server returned 500 Server Error\./)).toBeTruthy();
-    expect(screen.getByText(/only the human-readable description is missing/)).toBeTruthy();
+  it('says plainly when no description was committed', async () => {
+    programme.get_config.mockImplementation(() => unwrap(makeConfig({ metadata_hash: Buffer.alloc(32) })));
+    renderProgramme(`/programme/${REAL_ID}`);
+    expect(await screen.findByText(/No description was committed/)).toBeTruthy();
   });
 });

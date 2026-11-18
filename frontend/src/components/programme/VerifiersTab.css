@@ -102,3 +102,24 @@
   font-size: var(--text-caption);
   color: var(--ink-muted);
 }
+
+.verifiers-tab__named {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+}
+
+.verifiers-tab__named-title {
+  margin: 0;
+  font-size: var(--text-md);
+  font-weight: var(--weight-semibold);
+}
+
+.verifiers-tab__role {
+  display: inline-flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-2);
+  font-size: var(--text-sm);
+  color: var(--ink-muted);
+}

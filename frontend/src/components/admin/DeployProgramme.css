@@ -443,3 +443,103 @@
     grid-row: 2;
   }
 }
+
+/* The public description and per-address names. */
+.deploy-describe {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+  margin: 0;
+  padding: var(--space-4);
+  border: 0;
+  border-radius: var(--radius-md);
+  background: var(--bg-sunken);
+}
+
+.deploy-describe legend {
+  padding: 0;
+  margin-bottom: var(--space-2);
+  float: left;
+}
+
+.deploy-describe .ui-field__control {
+  background: var(--bg-raised);
+}
+
+.deploy-describe__toggle {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--space-3);
+  clear: both;
+  cursor: pointer;
+}
+
+.deploy-describe__toggle input {
+  flex: none;
+  width: 20px;
+  height: 20px;
+  margin: 0;
+  accent-color: var(--accent);
+}
+
+.deploy-describe__toggle > span {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+  font-size: var(--text-sm);
+  line-height: var(--leading-body);
+}
+
+.deploy-describe__toggle > span span {
+  color: var(--ink-muted);
+}
+
+.deploy-step__note {
+  margin: 0;
+  font-size: var(--text-caption);
+  line-height: var(--leading-body);
+  color: var(--ink-muted);
+}
+
+.deploy-addresses__name {
+  flex: 1;
+  min-width: 0;
+  min-height: 36px;
+  padding: 0 var(--space-3);
+  border: 0;
+  border-radius: var(--radius-sm);
+  background: var(--bg-raised);
+  color: var(--ink);
+  font: inherit;
+  font-size: var(--text-sm);
+}
+
+.deploy-addresses__list li:has(.deploy-addresses__name) {
+  justify-content: flex-start;
+}
+
+.deploy-sheet__failed {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+}
+
+.deploy-sheet__actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: var(--space-2);
+}
+
+@media (max-width: 640px) {
+  /* The address and its remove button on one line, the name under them. */
+  .deploy-addresses__list li:has(.deploy-addresses__name) {
+    flex-wrap: wrap;
+    padding-block: var(--space-2);
+  }
+
+  .deploy-addresses__name {
+    order: 3;
+    flex-basis: 100%;
+  }
+}

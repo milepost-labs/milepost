@@ -1,6 +1,7 @@
 import { Buffer } from 'buffer';
 import { looksLikeAddress, looksLikeContractId } from './format';
 import { tryParseAmount } from './amount';
+import { METADATA_SCHEMA_VERSION, type AddressLabel, type ProgrammeMetadata } from './metadata';
 
 /**
  * The rules `registry.create` and the programme constructor enforce, checked
@@ -26,8 +27,17 @@ export interface DeployDraft {
   tranches: number;
   /** 64-character hex, or empty. */
   schema: string;
-  /** 64-character hex, or empty for none. */
+  /** 64-character hex, or empty for none. Used only when no description is published. */
   metadataHash: string;
+  /** Publish a description to the metadata store and commit its hash. */
+  describe: boolean;
+  description: string;
+  /** One of `VERTICALS`. */
+  vertical: string;
+  contactName: string;
+  contactEmail: string;
+  /** The creator's names for reviewer and verifier addresses. Empty means unnamed. */
+  labels: Record<string, string>;
   reviewers: string[];
   verifiers: string[];
   quorum: number;
@@ -101,7 +111,9 @@ export function parseMinAward(input: string, tranches: number): { ok: true; valu
 export function detailsErrors(
   draft: DeployDraft,
   checks: { tokenKnown: boolean | null; schemaFound: boolean | null },
-): Partial<Record<'name' | 'token' | 'minAward' | 'schema' | 'metadataHash', string>> {
+): Partial<
+  Record<'name' | 'token' | 'minAward' | 'schema' | 'metadataHash' | 'description' | 'vertical' | 'contactName' | 'contactEmail', string>
+> {
   const errors: ReturnType<typeof detailsErrors> = {};
   if (draft.name.trim() === '') errors.name = 'Give the programme a name.';
   if (!looksLikeContractId(draft.token.trim())) errors.token = 'Enter the asset’s contract address (starts with C).';
@@ -112,7 +124,13 @@ export function detailsErrors(
   if (!isHex32(draft.schema)) errors.schema = 'Enter the schema id: 64 hex characters.';
   else if (checks.schemaFound === false) errors.schema = 'No schema with this id exists. Register it first.';
   else if (checks.schemaFound === null) errors.schema = 'Checking the schema…';
-  if (draft.metadataHash.trim() !== '' && !isHex32(draft.metadataHash)) {
+  if (draft.describe) {
+    if (draft.description.trim() === '') errors.description = 'Describe what the programme funds.';
+    else if (draft.description.length > 2000) errors.description = 'Keep the description under 2,000 characters.';
+    if (draft.vertical.trim() === '') errors.vertical = 'Choose a sector.';
+    if (draft.contactName.trim() === '') errors.contactName = 'Say who stands behind the programme.';
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(draft.contactEmail.trim())) errors.contactEmail = 'Enter a contact email address.';
+  } else if (draft.metadataHash.trim() !== '' && !isHex32(draft.metadataHash)) {
     errors.metadataHash = 'Enter 64 hex characters, or leave it empty.';
   }
   return errors;
@@ -155,8 +173,36 @@ export function timelineErrors(
   return errors;
 }
 
-/** The arguments for `registry.create`, once every step is valid. */
-export function createArgs(draft: DeployDraft, creator: string) {
+/**
+ * The description document a deploy publishes: the spec's required fields and
+ * the creator's names for reviewers and verifiers. Names are optional.
+ */
+export function buildMetadata(draft: DeployDraft): ProgrammeMetadata {
+  const labels: AddressLabel[] = [];
+  for (const [role, list] of [
+    ['reviewer', draft.reviewers],
+    ['verifier', draft.verifiers],
+  ] as const) {
+    for (const address of list) {
+      const label = draft.labels[address]?.trim();
+      if (label) labels.push({ address, role, label: label.slice(0, 80) });
+    }
+  }
+  return {
+    schema_version: METADATA_SCHEMA_VERSION,
+    name: draft.name.trim(),
+    description: draft.description.trim(),
+    vertical: draft.vertical,
+    contact: { name: draft.contactName.trim(), email: draft.contactEmail.trim() },
+    ...(labels.length > 0 ? { labels } : {}),
+  };
+}
+
+/**
+ * The arguments for `registry.create`, once every step is valid. `metadataHash`
+ * is the published description's hash; without one, the manual hash (or zero).
+ */
+export function createArgs(draft: DeployDraft, creator: string, metadataHash?: string) {
   const min = parseMinAward(draft.minAward, draft.tranches);
   if (!min.ok) throw new Error(min.error);
   return {
@@ -169,7 +215,10 @@ export function createArgs(draft: DeployDraft, creator: string) {
     sweep_deadline: BigInt(draft.sweepDeadline ?? 0),
     quorum: draft.quorum,
     tranches: draft.tranches,
-    metadata_hash: Buffer.from(draft.metadataHash.trim() === '' ? '00'.repeat(32) : cleanHex(draft.metadataHash), 'hex'),
+    metadata_hash: Buffer.from(
+      metadataHash ?? (draft.describe || draft.metadataHash.trim() === '' ? '00'.repeat(32) : cleanHex(draft.metadataHash)),
+      'hex',
+    ),
     reviewers: draft.reviewers,
     verifiers: draft.verifiers,
     name: draft.name.trim(),

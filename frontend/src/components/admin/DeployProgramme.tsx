@@ -14,7 +14,9 @@ import { DEMO_PROGRAMME_ID } from '../../context/sorobanStore';
 import { explain, explainCode, extractCode } from '../../lib/errors';
 import { formatDate, looksLikeContractId, truncateAddress } from '../../lib/format';
 import { fetchTokenName, parseTokenName } from '../../lib/token';
+import { publishMetadata } from '../../lib/metadata';
 import {
+  buildMetadata,
   cleanHex,
   createArgs,
   detailsErrors,
@@ -36,12 +38,18 @@ type Form = Omit<DeployDraft, 'token' | 'schema'>;
 
 const SCHEMA_NOT_FOUND = 1;
 
-function blankForm(prefill: { name?: string; tranches?: number } | null): Form {
+function blankForm(prefill: { name?: string; tranches?: number; purpose?: string } | null): Form {
   return {
     name: prefill?.name ?? '',
     minAward: '',
     tranches: prefill?.tranches ?? 3,
     metadataHash: '',
+    describe: true,
+    description: prefill?.purpose ?? '',
+    vertical: '',
+    contactName: '',
+    contactEmail: '',
+    labels: {},
     reviewers: [],
     verifiers: [],
     quorum: 1,
@@ -152,11 +160,33 @@ export function DeployProgramme({ aside }: { aside?: ReactNode }) {
       : tx.error
     : null;
 
-  const deploy = async () => {
+  // Publishing the description comes first, so its hash can go on the chain.
+  const [publish, setPublish] = useState<{ state: 'idle' | 'publishing' | 'failed' | 'done'; error?: string; hash?: string }>({
+    state: 'idle',
+  });
+
+  const deploy = async (withoutDescription = false) => {
     if (!wallet.address || !valid[3]) return;
     setSheetOpen(true);
+    tx.reset();
+    let hash: string | undefined;
+    if (draft.describe && !withoutDescription) {
+      setPublish({ state: 'publishing' });
+      announce('Publishing the description.');
+      try {
+        hash = await publishMetadata(buildMetadata(draft));
+        setPublish({ state: 'done', hash });
+      } catch (error) {
+        const reason = error instanceof Error ? error.message : 'The description store did not answer.';
+        setPublish({ state: 'failed', error: reason });
+        announce(`Description not published. ${reason}`, 'alert');
+        return;
+      }
+    } else {
+      setPublish({ state: 'idle' });
+    }
     announce('Deploying programme.');
-    const args = createArgs(draft, wallet.address);
+    const args = createArgs(draft, wallet.address, hash);
     const address = await tx.send(async () => {
       const assembled = await registry.create(args);
       return {
@@ -170,13 +200,17 @@ export function DeployProgramme({ aside }: { aside?: ReactNode }) {
   };
 
   const closeSheet = () => {
-    if (tx.busy) return;
+    if (tx.busy || publish.state === 'publishing') return;
     setSheetOpen(false);
-    if (tx.phase !== 'success') tx.reset();
+    if (tx.phase !== 'success') {
+      tx.reset();
+      setPublish({ state: 'idle' });
+    }
   };
 
   const startOver = () => {
     tx.reset();
+    setPublish({ state: 'idle' });
     setSheetOpen(false);
     setForm(blankForm(null));
     setAssetChoice('');
@@ -357,15 +391,40 @@ export function DeployProgramme({ aside }: { aside?: ReactNode }) {
       <Modal
         open={sheetOpen}
         onClose={closeSheet}
-        busy={tx.busy}
+        busy={tx.busy || publish.state === 'publishing'}
         eyebrow="Deploy"
         title={deployed ? 'Programme deployed' : 'Deploy programme'}
       >
-        {deployed ? (
+        {publish.state === 'publishing' ? (
+          <TxPending
+            title="Publishing the description"
+            note="It’s stored under its hash, and that hash goes on the chain, so anyone can check the words are yours."
+          />
+        ) : publish.state === 'failed' ? (
+          <div className="deploy-sheet__failed">
+            <Notice tone="risk" role="alert">
+              <span>
+                <strong>The description wasn’t published.</strong> {publish.error} Nothing has been deployed yet.
+              </span>
+            </Notice>
+            <div className="deploy-sheet__actions">
+              <Button variant="ghost" onClick={closeSheet}>
+                Close
+              </Button>
+              <Button variant="secondary" onClick={() => void deploy(true)}>
+                Deploy without a description
+              </Button>
+              <Button onClick={() => void deploy()}>Try again</Button>
+            </div>
+          </div>
+        ) : deployed ? (
           <TxDone
             title="Programme deployed"
             rows={[
               { label: 'Name', value: draft.name.trim(), text: true },
+              ...(publish.hash
+                ? [{ label: 'Description', value: <span title={publish.hash}>{publish.hash.slice(0, 10)}…</span> }]
+                : []),
               {
                 label: 'Address',
                 value: (

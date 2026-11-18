@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { Buffer } from 'buffer';
-import { addAddresses, createArgs, detailsErrors, parseMinAward, peopleErrors, timelineErrors, type DeployDraft } from './deployRules';
+import { addAddresses, buildMetadata, createArgs, detailsErrors, parseMinAward, peopleErrors, timelineErrors, type DeployDraft } from './deployRules';
+import { validateMetadata } from './metadata';
 
 const A = `GAAA${'A'.repeat(52)}`;
 const B = `GBBB${'B'.repeat(52)}`;
@@ -14,6 +15,12 @@ function draft(overrides: Partial<DeployDraft> = {}): DeployDraft {
     tranches: 3,
     schema: 'ab'.repeat(32),
     metadataHash: '',
+    describe: false,
+    description: '',
+    vertical: '',
+    contactName: '',
+    contactEmail: '',
+    labels: {},
     reviewers: [A],
     verifiers: [B],
     quorum: 1,
@@ -74,5 +81,27 @@ describe('createArgs', () => {
     expect(args.metadata_hash.equals(Buffer.alloc(32))).toBe(true);
     expect(args.schema.toString('hex')).toBe('ab'.repeat(32));
     expect(args.apply_deadline).toBe(BigInt(NOW + 1));
+  });
+});
+
+describe('the published description', () => {
+  it('needs a description, sector and contact when publishing one', () => {
+    const errors = detailsErrors(draft({ describe: true }), { tokenKnown: true, schemaFound: true });
+    expect(Object.keys(errors).sort()).toEqual(['contactEmail', 'contactName', 'description', 'vertical']);
+  });
+
+  it('builds a valid document with the names given, and commits its hash', () => {
+    const d = draft({
+      describe: true,
+      description: 'Monthly stipends.',
+      vertical: 'health',
+      contactName: 'Kano Health Trust',
+      contactEmail: 'grants@kano.example',
+      labels: { [B]: 'District clinic lead' },
+    });
+    const doc = buildMetadata(d);
+    expect(validateMetadata(doc).ok).toBe(true);
+    expect(doc.labels).toEqual([{ address: B, role: 'verifier', label: 'District clinic lead' }]);
+    expect(createArgs(d, A, 'ab'.repeat(32)).metadata_hash.toString('hex')).toBe('ab'.repeat(32));
   });
 });

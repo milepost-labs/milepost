@@ -1,6 +1,7 @@
 import { execSync } from 'node:child_process'
-import { defineConfig } from 'vitest/config'
+import { defineConfig, type Plugin } from 'vitest/config'
 import react from '@vitejs/plugin-react'
+import { handleMetadataRequest, memoryBackend } from './src/lib/metadataStore.js'
 
 // The commit the app was built from, shown on /about. CI sets GITHUB_SHA;
 // a local build asks git, and falls back to "dev" outside a checkout.
@@ -17,9 +18,38 @@ function buildVersion(): string {
   return sha ? sha.slice(0, 7) : 'dev'
 }
 
+// `npm run dev` has no Vercel functions, so serve the metadata store from
+// memory with the same handler as `api/metadata.ts`. Documents last until the
+// dev server stops.
+function devMetadataStore(): Plugin {
+  const backend = memoryBackend()
+  return {
+    name: 'milepost-dev-metadata-store',
+    apply: 'serve',
+    configureServer(server) {
+      server.middlewares.use('/api/metadata', (req, res) => {
+        const chunks: Buffer[] = []
+        req.on('data', (chunk: Buffer) => chunks.push(chunk))
+        req.on('end', async () => {
+          const body = req.method === 'POST' ? Buffer.concat(chunks).toString('utf8') : undefined
+          const request = new Request(`http://localhost${req.originalUrl ?? req.url ?? '/api/metadata'}`, {
+            method: req.method,
+            headers: { 'content-type': req.headers['content-type'] ?? 'application/json' },
+            body,
+          })
+          const response = await handleMetadataRequest(request, backend)
+          res.statusCode = response.status
+          response.headers.forEach((value: string, key: string) => res.setHeader(key, value))
+          res.end(await response.text())
+        })
+      })
+    },
+  }
+}
+
 // https://vite.dev/config/
 export default defineConfig({
-  plugins: [react()],
+  plugins: [react(), devMetadataStore()],
   define: {
     'import.meta.env.VITE_APP_VERSION': JSON.stringify(buildVersion()),
   },

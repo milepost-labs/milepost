@@ -138,6 +138,16 @@ scheduled GitHub Actions workflow and deploys to GitHub Pages.
 user acts on is re-read on-chain first. A stale index must produce a visible
 notice, not silently wrong numbers.
 
+**The metadata store** holds programme descriptions (`docs/programme-metadata.md`
+at the repository root): `/api/metadata`, one Vercel function in `api/`, backed
+by Vercel Blob, content-addressed by the SHA-256 of the canonical JSON that a
+programme commits to as `metadata_hash`. `src/lib/metadata.ts` hashes,
+validates, publishes and resolves; nothing from a document is shown until it
+hashes to the commitment. A document can carry the creator's names for
+reviewer, verifier and payee addresses: always shown beside the address as the
+creator's claim, and the role is read from the chain. Never store anything
+about recipients. `npm run dev` serves the same handler from memory.
+
 ---
 
 ## 4. What already exists
@@ -310,7 +320,7 @@ are not wired to real reads yet, and that is fine: build the screens with
 realistic stand-in data so the layout can be judged, and wire them up after the
 wave. Currently unwired are recipient payees, a verifier's own attestations
 (only the ones signed in this browser are real, kept by `lib/verifyLinks.ts`), a programme's verifier
-roster, programme names, and the stale-index notice. Five of these depend on
+roster (beyond the names a creator published in its description), and the stale-index notice. Most of these depend on
 indexer event handlers that do not exist yet, so they cannot be wired now even
 in principle.
 

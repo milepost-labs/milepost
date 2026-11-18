@@ -11,7 +11,8 @@ import {
 } from '../../lib/deployRules';
 import { MODE_INFO } from '../../lib/modes';
 import type { detailsErrors, peopleErrors, timelineErrors } from '../../lib/deployRules';
-import { Button, DateField, Field, ModePill, Notice, Select } from '../ui';
+import { Button, DateField, Field, ModePill, Notice, Select, TextArea } from '../ui';
+import { VERTICALS } from '../../lib/metadata';
 
 // ── Shared pieces ───────────────────────────────────────────────────────────
 
@@ -69,6 +70,8 @@ export function AddressList({
   onChange,
   help,
   error,
+  labels,
+  onLabel,
 }: {
   label: string;
   /** "reviewer", "verifier": for the add field and remove buttons. */
@@ -77,6 +80,9 @@ export function AddressList({
   onChange: (items: string[]) => void;
   help?: ReactNode;
   error?: string;
+  /** Names for the addresses; when given, each row gets a name field. */
+  labels?: Record<string, string>;
+  onLabel?: (address: string, label: string) => void;
 }) {
   const inputId = useId();
   const messageId = useId();
@@ -104,6 +110,16 @@ export function AddressList({
               <span className="numeric" title={a}>
                 {truncateAddress(a, 8, 6)}
               </span>
+              {labels && onLabel && (
+                <input
+                  className="deploy-addresses__name"
+                  aria-label={`Name for ${noun} ${truncateAddress(a)}`}
+                  placeholder="Name (optional)"
+                  maxLength={80}
+                  value={labels[a] ?? ''}
+                  onChange={(e) => onLabel(a, e.target.value)}
+                />
+              )}
               <button
                 type="button"
                 className="deploy-addresses__remove"
@@ -320,19 +336,67 @@ export function DetailsStep(props: DetailsStepProps) {
         </span>
       </Notice>
 
-      <details className="deploy-more">
-        <summary>Metadata hash (optional)</summary>
-        <Field
-          label="Metadata hash"
-          placeholder="64 hex characters, empty for none"
-          value={draft.metadataHash}
-          onChange={(event) => update({ metadataHash: event.target.value.trim() })}
-          error={draft.metadataHash !== '' ? errors.metadataHash : undefined}
-          hint="The hash of an off-chain description, if you publish one. Stored as-is."
-          autoComplete="off"
-          spellCheck={false}
-        />
-      </details>
+      <fieldset className="deploy-describe">
+        <legend className="ui-field__label">Public description</legend>
+        <label className="deploy-describe__toggle">
+          <input type="checkbox" checked={draft.describe} onChange={(e) => update({ describe: e.target.checked })} />
+          <span>
+            <b>Publish a description with the programme</b>
+            <span>
+              Stored by Milepost under its hash, and the hash goes on the chain, so anyone can check the words are yours.
+              Don’t include anything about recipients.
+            </span>
+          </span>
+        </label>
+        {draft.describe ? (
+          <>
+            <TextArea
+              label="What it funds, and on what terms"
+              rows={3}
+              placeholder="e.g. Monthly stipends for community nurses, paid when the shifts are confirmed."
+              value={draft.description}
+              onChange={(e) => update({ description: e.target.value })}
+              error={draft.description !== '' ? errors.description : undefined}
+              hint="Shown on the programme’s page."
+            />
+            <Select
+              label="Sector"
+              value={draft.vertical}
+              placeholder="Choose a sector"
+              onChange={(e) => update({ vertical: e.target.value })}
+              options={VERTICALS.map((v) => ({ value: v.value, label: v.label }))}
+            />
+            <div className="deploy-two">
+              <Field
+                label="Who stands behind it"
+                placeholder="e.g. Kano Health Trust"
+                value={draft.contactName}
+                onChange={(e) => update({ contactName: e.target.value })}
+              />
+              <Field
+                label="Contact email"
+                type="email"
+                placeholder="grants@example.org"
+                value={draft.contactEmail}
+                onChange={(e) => update({ contactEmail: e.target.value })}
+                error={draft.contactEmail !== '' ? errors.contactEmail : undefined}
+                hint="Public, on the programme’s page."
+              />
+            </div>
+          </>
+        ) : (
+          <Field
+            label="Metadata hash (optional)"
+            placeholder="64 hex characters, empty for none"
+            value={draft.metadataHash}
+            onChange={(event) => update({ metadataHash: event.target.value.trim() })}
+            error={draft.metadataHash !== '' ? errors.metadataHash : undefined}
+            hint="If you host a description yourself, its hash. Stored as-is; empty means none."
+            autoComplete="off"
+            spellCheck={false}
+          />
+        )}
+      </fieldset>
     </>
   );
 }
@@ -359,10 +423,21 @@ export function PeopleStep({
         Reviewers set amounts. Verifiers unlock payments. One address can do both, but they’re separate jobs.
       </StepHead>
 
+      {draft.describe ? (
+        <p className="deploy-step__note">
+          Names are optional. They go in the published description beside each address, as your claim; the chain only
+          knows the addresses.
+        </p>
+      ) : (
+        <p className="deploy-step__note">Turn on the public description (in Details) to name reviewers and verifiers.</p>
+      )}
+
       <AddressList
         label="Reviewers"
         noun="reviewer"
         items={draft.reviewers}
+        labels={draft.describe ? draft.labels : undefined}
+        onLabel={(a, v) => update({ labels: { ...draft.labels, [a]: v } })}
         onChange={(reviewers) =>
           update({ reviewers, quorum: Math.max(1, Math.min(draft.quorum, reviewers.length || 1)) })
         }
@@ -387,6 +462,8 @@ export function PeopleStep({
         label="Verifiers"
         noun="verifier"
         items={draft.verifiers}
+        labels={draft.describe ? draft.labels : undefined}
+        onLabel={(a, v) => update({ labels: { ...draft.labels, [a]: v } })}
         onChange={(verifiers) => update({ verifiers })}
         // The restricted-schema case has its own notice below, with the fix.
         error={draft.verifiers.length > 0 && !missingAuthority ? errors.verifiers : undefined}
@@ -507,6 +584,17 @@ export function ReviewStep({
       k: 'Timeline',
       v: <span className="numeric">{dates.map((d) => (d === null ? '—' : formatDate(d))).join(' → ')}</span>,
       step: 2,
+    },
+    {
+      k: 'Description',
+      v: draft.describe
+        ? `Published with the deploy${
+            Object.values(draft.labels).some((l) => l.trim()) ? ', with names for reviewers and verifiers' : ''
+          }`
+        : draft.metadataHash.trim()
+          ? 'Your own document, by hash'
+          : 'None',
+      step: 0,
     },
   ];
   return (

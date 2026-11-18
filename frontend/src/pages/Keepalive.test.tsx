@@ -1,7 +1,10 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { configure, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
 import { Keepalive } from './Keepalive';
+
+// Extend-all runs several sends in a row; under a full parallel run that can pass the 1s default.
+configure({ asyncUtilTimeout: 3000 });
 
 const PROGRAMME_ID = `C${'A'.repeat(55)}`;
 const SUBJECT = `G${'A'.repeat(55)}`;

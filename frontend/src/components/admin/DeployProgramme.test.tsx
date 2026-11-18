@@ -3,6 +3,9 @@ import { MemoryRouter } from 'react-router-dom';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { Buffer } from 'buffer';
 import { DeployProgramme } from './DeployProgramme';
+import { handleMetadataRequest, memoryBackend } from '../../lib/metadataStore';
+import { metadataHash } from '../../lib/metadata';
+import { buildMetadata, type DeployDraft } from '../../lib/deployRules';
 
 // The deploy wizard: Details, People, Timeline, Review & deploy. Every rule
 // the programme constructor enforces is checked on its own step, the asset
@@ -72,9 +75,19 @@ function renderWizard(url = '/admin') {
 
 const continueButton = () => screen.getByRole('button', { name: 'Continue' }) as HTMLButtonElement;
 
+function describe_() {
+  fireEvent.change(screen.getByLabelText('What it funds, and on what terms'), {
+    target: { value: 'Monthly stipends for community nurses.' },
+  });
+  fireEvent.change(screen.getByLabelText('Sector'), { target: { value: 'health' } });
+  fireEvent.change(screen.getByLabelText('Who stands behind it'), { target: { value: 'Kano Health Trust' } });
+  fireEvent.change(screen.getByLabelText('Contact email'), { target: { value: 'grants@kano.example' } });
+}
+
 async function passDetails() {
   await screen.findByText('Schema found');
   fireEvent.change(screen.getByLabelText('Programme name'), { target: { value: 'Kano clinic stipends 2027' } });
+  describe_();
   await waitFor(() => expect(continueButton().disabled).toBe(false));
   fireEvent.click(continueButton());
 }
@@ -88,6 +101,7 @@ function addTo(noun: string, text: string) {
 function passPeople() {
   addTo('reviewer', `${REVIEWER_A}, ${REVIEWER_B}`);
   addTo('verifier', VERIFIER);
+  fireEvent.change(screen.getByLabelText(/Name for verifier/), { target: { value: 'District clinic lead' } });
   fireEvent.click(continueButton());
 }
 
@@ -98,7 +112,42 @@ function setDates(offsetsInDays: number[]) {
   });
 }
 
+// The description store, served by the same handler as the deployed function.
+let store = memoryBackend();
+let storeDown = false;
+
+/** The draft the deploy test fills in, for working out the hash it should commit. */
+function draftFromScreen(): DeployDraft {
+  return {
+    name: 'Kano clinic stipends 2027',
+    token: PILOT_TOKEN,
+    minAward: '',
+    tranches: 3,
+    schema: PILOT_SCHEMA.toString('hex'),
+    metadataHash: '',
+    describe: true,
+    description: 'Monthly stipends for community nurses.',
+    vertical: 'health',
+    contactName: 'Kano Health Trust',
+    contactEmail: 'grants@kano.example',
+    labels: { [VERIFIER]: 'District clinic lead' },
+    reviewers: [REVIEWER_A, REVIEWER_B],
+    verifiers: [VERIFIER],
+    quorum: 1,
+    applyDeadline: null,
+    reviewDeadline: null,
+    releaseDeadline: null,
+    sweepDeadline: null,
+  };
+}
+
 beforeEach(() => {
+  store = memoryBackend();
+  storeDown = false;
+  vi.stubGlobal('fetch', async (input: RequestInfo | URL, init?: RequestInit) => {
+    if (storeDown) throw new TypeError('Failed to fetch');
+    return handleMetadataRequest(new Request(new URL(String(input), 'http://localhost'), init), store);
+  });
   mocks.address = CREATOR;
   mocks.announce.mockClear();
   mocks.create.mockReset();
@@ -127,6 +176,9 @@ describe('DeployProgramme — details', () => {
     expect(continueButton().disabled).toBe(true);
     expect(screen.getByText('Give the programme a name.')).toBeTruthy();
     fireEvent.change(screen.getByLabelText('Programme name'), { target: { value: 'Kano clinic stipends 2027' } });
+    // The public description is on by default, so it needs its words first.
+    expect(screen.getByText('Describe what the programme funds.')).toBeTruthy();
+    describe_();
     await waitFor(() => expect(continueButton().disabled).toBe(false));
   });
 
@@ -234,10 +286,27 @@ describe('DeployProgramme — deploying', () => {
       minimum_award: 0n,
     });
     expect(Buffer.from(args.schema).equals(PILOT_SCHEMA)).toBe(true);
-    expect(Buffer.from(args.metadata_hash).equals(Buffer.alloc(32))).toBe(true);
+    // The description was published first, and its hash is what went on the chain.
+    const expectedHash = await metadataHash(buildMetadata({ ...draftFromScreen() }));
+    expect(Buffer.from(args.metadata_hash).toString('hex')).toBe(expectedHash);
+    expect(store.entries.has(expectedHash)).toBe(true);
     expect(args.apply_deadline < args.review_deadline && args.release_deadline < args.sweep_deadline).toBe(true);
     expect(screen.getByRole('link', { name: 'Open its page' }).getAttribute('href')).toBe(`/programme/${NEW_PROGRAMME}`);
     expect(mocks.announce).toHaveBeenCalledWith('Programme deployed.');
+  });
+
+  it('offers to deploy without a description when the store can’t be reached', async () => {
+    mocks.create.mockResolvedValue({ signAndSend: vi.fn(async () => ({ result: { unwrap: () => NEW_PROGRAMME } })) });
+    storeDown = true;
+    await reachReview();
+    fireEvent.click(screen.getByRole('button', { name: 'Deploy programme' }));
+
+    expect(await screen.findByText('The description wasn’t published.')).toBeTruthy();
+    expect(mocks.create).not.toHaveBeenCalled();
+    fireEvent.click(screen.getByRole('button', { name: 'Deploy without a description' }));
+
+    expect(await screen.findByRole('heading', { name: 'Programme deployed', level: 3 })).toBeTruthy();
+    expect(Buffer.from(mocks.create.mock.calls[0][0].metadata_hash).equals(Buffer.alloc(32))).toBe(true);
   });
 
   it('explains a constructor refusal in the programme’s own words', async () => {

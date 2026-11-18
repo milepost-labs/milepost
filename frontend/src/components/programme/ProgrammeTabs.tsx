@@ -3,6 +3,7 @@ import { AwardsTab } from './AwardsTab';
 import { VerifiersTab } from './VerifiersTab';
 import { TermsTab } from './TermsTab';
 import type { VerifierFixture } from '../../fixtures/programmeFixtures';
+import type { AddressLabel } from '../../lib/metadata';
 import './ProgrammeTabs.css';
 
 export type TabKey = 'awards' | 'verifiers' | 'terms';
@@ -14,6 +15,8 @@ export interface ProgrammeTabsProps {
   isSample?: boolean;
   asset?: string;
   verifiers?: VerifierFixture[];
+  /** The creator's names for addresses, from the verified description. */
+  labels?: AddressLabel[];
   defaultTab?: TabKey;
 }
 
@@ -24,6 +27,7 @@ export const ProgrammeTabs: FC<ProgrammeTabsProps> = ({
   isSample = false,
   asset = 'USDC',
   verifiers,
+  labels,
   defaultTab = 'awards',
 }) => {
   const [activeTab, setActiveTab] = useState<TabKey>(defaultTab);
@@ -116,7 +120,7 @@ export const ProgrammeTabs: FC<ProgrammeTabsProps> = ({
           />
         )}
         {activeTab === 'verifiers' && (
-          <VerifiersTab verifiers={verifiers} programmeId={programmeId} isSample={isSample} />
+          <VerifiersTab verifiers={verifiers} programmeId={programmeId} isSample={isSample} labels={labels} />
         )}
         {activeTab === 'terms' && (
           <TermsTab
