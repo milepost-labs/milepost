@@ -12,14 +12,8 @@ env:
 jobs:
   check:
     runs-on: ubuntu-latest
-    # rustsec/audit-check publishes its result as a check run. Without an
-    # explicit grant the job inherits a read-only GITHUB_TOKEN on `push`, and
-    # the action fails with "Resource not accessible by integration" after the
-    # audit itself has already come back clean — so every push to main went red
-    # on a green audit.
     permissions:
       contents: read
-      checks: write
     steps:
       - uses: actions/checkout@v7
       - uses: dtolnay/rust-toolchain@stable
@@ -31,12 +25,18 @@ jobs:
       - name: Format
         run: cargo fmt --all --check
 
-      # A prebuilt binary rather than `cargo install cargo-audit`, which
-      # compiles from source on every run and adds minutes to every push.
-      - name: Check dependencies for known vulnerabilities
-        uses: rustsec/audit-check@v2
+      # cargo-audit itself, not rustsec/audit-check: the action also publishes
+      # its result as a separate "Security audit" check run, and updating that
+      # run failed with "Not Found" on push even when the audit was clean, which
+      # turned this job red on a green audit. Accepted advisories, each with its
+      # reason, are in .cargo/audit.toml. A prebuilt binary, because
+      # `cargo install cargo-audit` compiles from source on every run.
+      - uses: taiki-e/install-action@v2
         with:
-          token: ${{ secrets.GITHUB_TOKEN }}
+          tool: cargo-audit
+
+      - name: Check dependencies for known vulnerabilities
+        run: cargo audit
 
       # Must precede both Clippy and Test. The registry's tests instantiate the
       # programme from its built wasm, the same way the registry does on-chain,
