@@ -1,0 +1,16 @@
+# cargo-audit configuration, read by the `check` job's dependency audit.
+#
+# Every ignored advisory carries the reason it is accepted. Remove an entry as
+# soon as the dependency that brings it in is upgraded.
+
+[advisories]
+ignore = [
+  # crypto-bigint 0.5.5: timing variability in constant-time operations.
+  # It arrives through soroban-env-host (k256 / p256), which only the test
+  # environment links (soroban-sdk "testutils"). The contracts' wasm builds
+  # against soroban-env-guest and does not contain it — check with
+  # `cargo tree -p milepost-program -e normal --target wasm32v1-none`.
+  # The fix ships in soroban-env-host 30; it goes away with the soroban-sdk
+  # upgrade, which is due before mainnet.
+  "RUSTSEC-2026-0387",
+]
