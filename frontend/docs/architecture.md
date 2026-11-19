@@ -1,6 +1,6 @@
 # Frontend Architecture Guide
 
-This guide explains how data flows through the Milepost frontend, which hooks to use, how writes work, and what the tests guard. It is the engineering map; `CLAUDE.md` is the design brief.
+This guide explains how data flows through the Milepost frontend, which hooks to use, how writes work, and what the tests guard. It is the engineering map; `PROJECT.md` is the design brief.
 
 ---
 
@@ -196,4 +196,4 @@ Key test files:
 ## Linked from
 
 - [README.md](../README.md)
-- [CLAUDE.md](./CLAUDE.md) (design brief)
+- [PROJECT.md](../PROJECT.md) (project and design brief)

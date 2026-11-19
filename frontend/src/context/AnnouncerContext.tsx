@@ -6,7 +6,7 @@ import { AnnouncerContext, announcementAria, type Announcement, type Announcemen
  * One shared live region for every async result, mounted once by `Layout` —
  * not reinvented per page, which is how per-page regions drift apart.
  *
- * Design reference: frontend/docs/design/CLAUDE_CODE_HANDOFF.md — "one
+ * Design reference: frontend/docs/design/HANDOFF.md — "one
  * screen-reader live region that announces every async result".
  */
 

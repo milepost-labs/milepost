@@ -1,4 +1,4 @@
-# Milepost redesign — handoff for Claude Code
+# Milepost redesign — developer handoff
 
 This folder is a design handoff. It holds working HTML prototypes plus design tokens. Your job is to rebuild the Milepost React app so it matches these designs, using the app's real data and contract calls instead of the example data.
 
