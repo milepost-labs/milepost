@@ -1,6 +1,8 @@
 import { execSync } from 'node:child_process'
+import { loadEnv } from 'vite'
 import { defineConfig, type Plugin } from 'vitest/config'
 import react from '@vitejs/plugin-react'
+import { assertMainnetEnv } from './src/config/networkEnv.js'
 import { handleMetadataRequest, memoryBackend } from './src/lib/metadataStore.js'
 
 // The commit the app was built from, shown on /about. CI sets GITHUB_SHA;
@@ -47,9 +49,21 @@ function devMetadataStore(): Plugin {
   }
 }
 
+// A mainnet build has no defaults: fail it up front, naming every variable
+// that is missing, rather than ship an app pointed at nothing.
+function requireMainnetEnv(): Plugin {
+  return {
+    name: 'milepost-require-mainnet-env',
+    apply: 'build',
+    config(_, { mode }) {
+      assertMainnetEnv({ ...loadEnv(mode, process.cwd(), 'VITE_'), ...process.env })
+    },
+  }
+}
+
 // https://vite.dev/config/
 export default defineConfig({
-  plugins: [react(), devMetadataStore()],
+  plugins: [react(), devMetadataStore(), requireMainnetEnv()],
   define: {
     'import.meta.env.VITE_APP_VERSION': JSON.stringify(buildVersion()),
   },

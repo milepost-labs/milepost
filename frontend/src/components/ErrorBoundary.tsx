@@ -1,5 +1,6 @@
 import React from 'react';
 import { Link } from 'react-router-dom';
+import { NETWORK } from '../config/network';
 import { ChunkLoadError } from '../lib/lazyWithRetry';
 
 type Props = { children: React.ReactNode };
@@ -75,12 +76,8 @@ export class ErrorBoundary extends React.Component<Props, State> {
               wallet history before trying again.
             </p>
             <p className="typo-text" style={{ margin: '0.75rem 0 0', fontSize: 'var(--text-sm)' }}>
-              <a href="https://stellar.expert/explorer/testnet" target="_blank" rel="noreferrer">
-                View on Stellar Expert (testnet)
-              </a>
-              {' · '}
-              <a href="https://horizon-testnet.stellar.org" target="_blank" rel="noreferrer">
-                Horizon testnet
+              <a href={`https://stellar.expert/explorer/${NETWORK.explorer}`} target="_blank" rel="noreferrer">
+                View on Stellar Expert ({NETWORK.name})
               </a>
             </p>
           </div>

@@ -1,4 +1,5 @@
 import { createContext } from 'react';
+import { NETWORK } from '../config/network';
 
 /**
  * Context object and types, separated from the provider component so that
@@ -14,7 +15,7 @@ export type WalletStatus =
   | 'wrong-network';
 
 /** Human name of the network these contracts are deployed on. */
-export const EXPECTED_NETWORK_NAME = 'Testnet';
+export const EXPECTED_NETWORK_NAME = NETWORK.name === 'mainnet' ? 'Mainnet' : 'Testnet';
 
 export interface WalletState {
   status: WalletStatus;

@@ -13,10 +13,10 @@
  * blocking a screen for — fall back to whatever the page can do without it.
  */
 
-const DEFAULT_BASE = 'https://milepost-labs.github.io/milepost-indexer/v1';
+import { NETWORK } from '../config/network';
 
-/** Trailing slashes are dropped so a configured URL with one still builds valid paths. */
-export const INDEXER_BASE_URL = (import.meta.env.VITE_INDEXER_URL || DEFAULT_BASE).replace(/\/+$/, '');
+/** From the network setting, which drops trailing slashes so paths build validly. */
+export const INDEXER_BASE_URL = NETWORK.indexerUrl;
 
 export interface IndexerMeta {
   network: string;

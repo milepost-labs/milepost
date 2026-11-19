@@ -13,7 +13,7 @@ import {
   requestAccess,
   signTransaction,
 } from '@stellar/freighter-api';
-import { networks } from '@milepost/registry';
+import { NETWORK } from '../config/network';
 import { WalletContext, EXPECTED_NETWORK_NAME, type WalletState, type WalletStatus } from './walletStore';
 
 /**
@@ -25,7 +25,7 @@ import { WalletContext, EXPECTED_NETWORK_NAME, type WalletState, type WalletStat
  * both.
  */
 
-const EXPECTED_PASSPHRASE = networks.testnet.networkPassphrase;
+const EXPECTED_PASSPHRASE = NETWORK.passphrase;
 
 
 /** Freighter returns errors in the payload rather than throwing. */
