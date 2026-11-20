@@ -55,6 +55,13 @@ describe('explainCode', () => {
     expect(result.contract).toBe('program');
   });
 
+  it('describes cancelling as refused only after money has been released', () => {
+    const result = explainCode('program', 17);
+    expect(result.kind).toBe('denied');
+    expect(result.message).toMatch(/money has already been paid out/i);
+    expect(result.message).not.toMatch(/holds funds or has made awards/i);
+  });
+
   it('translates a known registry code', () => {
     const result = explainCode('registry', 1);
     expect(result.kind).toBe('denied');

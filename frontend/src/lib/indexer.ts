@@ -67,6 +67,33 @@ export function fetchMeta(): Promise<IndexerMeta> {
   return readJson<IndexerMeta>('meta.json');
 }
 
+export interface IndexDeployment {
+  network: string;
+  registry: string;
+}
+
+export interface IndexMismatch {
+  /** What this build is configured to read. */
+  expected: IndexDeployment;
+  /** What the index says it was built for. */
+  found: IndexDeployment;
+}
+
+/**
+ * Whether an index belongs to this build's deployment. A different network or
+ * registry means every programme in it is foreign, so none of its lists may be
+ * used: entries would fail their on-chain check one after another.
+ */
+export function indexMismatch(
+  meta: Pick<IndexerMeta, 'network' | 'registry'>,
+): IndexMismatch | null {
+  const expected = { network: NETWORK.name, registry: NETWORK.contracts.registry };
+  const found = { network: meta.network, registry: meta.registry };
+  return expected.network === found.network && expected.registry === found.registry
+    ? null
+    : { expected, found };
+}
+
 export function fetchProgrammes(): Promise<IndexedProgramme[]> {
   return readJson<IndexedProgramme[]>('programmes.json');
 }

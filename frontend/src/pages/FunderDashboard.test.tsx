@@ -43,7 +43,7 @@ describe('Issue #82 — Cancel programme error explanations and logic', () => {
   it('translates NotCancellable (17) into a clear error explanation', () => {
     const explained = explainCode('program', 17);
     expect(explained.kind).toBe('denied');
-    expect(explained.message).toContain('A programme that holds funds or has made awards cannot be cancelled');
+    expect(explained.message).toContain('Money has already been paid out to a recipient');
   });
 });
 

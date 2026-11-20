@@ -25,8 +25,21 @@ const mocks = vi.hoisted(() => ({
   address: null as string | null,
   announce: vi.fn(),
   create: vi.fn(),
+  getConfig: vi.fn(),
   getSchema: vi.fn(),
   tokenName: vi.fn(),
+}));
+
+// The seeded programme the wizard offers as a pilot; a network with none has
+// no pilot to offer.
+const demoProgramme = vi.hoisted(() => ({
+  id: 'CD6X33SKLUEMANS67ID3LJL572FFGERMMJCIFRW7P7EKZQLH35XT67C6' as string | null,
+}));
+vi.mock('../../context/sorobanStore', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('../../context/sorobanStore')>()),
+  get DEMO_PROGRAMME_ID() {
+    return demoProgramme.id;
+  },
 }));
 
 vi.mock('../../context/useWallet', () => ({
@@ -151,15 +164,17 @@ beforeEach(() => {
   mocks.address = CREATOR;
   mocks.announce.mockClear();
   mocks.create.mockReset();
+  mocks.getConfig.mockReset().mockImplementation(() => ok({ token: PILOT_TOKEN, schema: PILOT_SCHEMA }));
   mocks.getSchema.mockReset().mockImplementation(() => ok(schema()));
   mocks.tokenName.mockReset().mockImplementation(async (id: string) => ({
     result: id === PILOT_TOKEN ? 'native' : 'USDC:GISSUER',
   }));
+  demoProgramme.id = 'CD6X33SKLUEMANS67ID3LJL572FFGERMMJCIFRW7P7EKZQLH35XT67C6';
   soroban.value = {
     rpcUrl: 'https://rpc.test',
     registry: { create: mocks.create, get_config: () => ok({ fee_bps: 250 }) },
     attest: { get_schema: mocks.getSchema },
-    demoProgramme: { get_config: () => ok({ token: PILOT_TOKEN, schema: PILOT_SCHEMA }) },
+    demoProgramme: { get_config: mocks.getConfig },
   };
 });
 
@@ -180,6 +195,22 @@ describe('DeployProgramme — details', () => {
     expect(screen.getByText('Describe what the programme funds.')).toBeTruthy();
     describe_();
     await waitFor(() => expect(continueButton().disabled).toBe(false));
+  });
+
+  it('offers no pilot defaults when the network has no demo programme', async () => {
+    demoProgramme.id = null;
+    renderWizard();
+
+    await screen.findByLabelText('Asset');
+    // Nothing is read from a pilot, and none of its copy appears.
+    expect(mocks.getConfig).not.toHaveBeenCalled();
+    expect(screen.queryByText(/testnet pilot/i)).toBeNull();
+    expect(screen.queryByRole('option', { name: 'XLM (native)' })).toBeNull();
+
+    // Both choices start empty on "Another…", with the normal fields shown.
+    expect((screen.getByLabelText('Asset') as HTMLSelectElement).value).toBe('__other');
+    expect((screen.getByLabelText('What verifiers sign') as HTMLSelectElement).value).toBe('__other');
+    expect(screen.getByLabelText('Asset contract')).toBeTruthy();
   });
 
   it('blocks a schema id that is not registered, and never reads a malformed one', async () => {

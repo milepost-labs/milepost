@@ -57,7 +57,7 @@ function makeProgramme(opts: {
   isPayee?: (addr: string) => boolean;
   finalized?: boolean;
   withdrawn?: boolean;
-  applyResult?: 'ok' | 'alreadyApplied' | 'wrongPhase';
+  applyResult?: 'ok' | 'alreadyApplied' | 'wrongPhase' | 'declined';
   releaseResult?: 'ok' | 'alreadyUsed' | 'invalidAttestation' | 'policyNotInstalled';
   withdrawError?: string;
   minimumAward?: bigint;
@@ -69,6 +69,7 @@ function makeProgramme(opts: {
   const applySignAndSend = vi.fn(async () => {
     if (opts.applyResult === 'alreadyApplied') throw new Error('Error(Contract, #9)');
     if (opts.applyResult === 'wrongPhase') throw new Error('Error(Contract, #2)');
+    if (opts.applyResult === 'declined') throw new Error('User declined the signature');
     return {
       result: { unwrap: () => undefined },
       sendTransactionResponse: { hash: 'TESTHASH1234567890ABCDEF' },
@@ -868,6 +869,37 @@ describe('Recipient Issues Suite (#272, #273, #274, #275)', () => {
       await waitFor(() => {
         expect(screen.queryByText(/below the programme.*minimum award/i)).toBeNull();
       });
+    });
+
+    it('says so when the signature is declined, instead of silently resetting', async () => {
+      const { fetchProgrammes } = await import('../../lib/indexer');
+      (fetchProgrammes as ReturnType<typeof vi.fn>).mockResolvedValueOnce([
+        { id: REAL_PROGRAMME, name: 'Live Grant Round', creator: null, createdLedger: null },
+      ]);
+
+      programme = makeProgramme({ applyResult: 'declined', phase: 'Open' });
+
+      render(
+        <MemoryRouter>
+          <ApplyForm sampleDelayMs={0} />
+        </MemoryRouter>
+      );
+
+      await screen.findByRole('option', { name: 'Live Grant Round' });
+      fireEvent.change(screen.getByLabelText('Programme'), { target: { value: REAL_PROGRAMME } });
+      fireEvent.change(screen.getByPlaceholderText('0'), { target: { value: '500' } });
+      fireEvent.change(screen.getByRole('textbox', { name: /application notes/i }), {
+        target: { value: 'Second attempt notes.' },
+      });
+
+      fireEvent.click(screen.getByRole('button', { name: /submit application/i }));
+
+      expect(
+        await screen.findByText('You declined the signature. Nothing was submitted.'),
+      ).toBeDefined();
+      // No receipt, and the form is still there to try again.
+      expect(screen.queryByText('Application submitted')).toBeNull();
+      expect(screen.getByRole('button', { name: /submit application/i })).toBeDefined();
     });
   });
 
