@@ -101,6 +101,28 @@
   color: var(--ink);
 }
 
+/* Creation date shown beside the ledger number. The separator dot keeps it
+   visually distinct from the ledger number while staying in the same chip. */
+.programme-header__created-date {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-1);
+  color: var(--ink-muted);
+}
+
+.programme-header__created-date::before {
+  content: '·';
+  font-size: var(--text-xs);
+  color: var(--ink-faint);
+  line-height: 1;
+}
+
+.programme-header__created-approx {
+  font-style: italic;
+  font-size: var(--text-xs);
+  color: var(--ink-muted);
+}
+
 .programme-header__read {
   display: inline-flex;
   align-items: center;
@@ -114,6 +136,42 @@
 }
 
 .programme-header__read svg {
+  width: 14px;
+  height: 14px;
+  flex: none;
+}
+
+/* The "Read on the chain N s ago" chip: a borderless button styled as the
+   existing read line so it sits in the meta row without looking like a control
+   until hovered. */
+.programme-header__chip {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-1-5);
+  min-height: var(--tap-min);
+  padding: 0;
+  background: none;
+  border: none;
+  font-size: var(--text-caption);
+  font-weight: var(--weight-semibold);
+  color: var(--accent);
+  cursor: pointer;
+  border-radius: var(--radius-sm);
+  outline: none;
+}
+
+.programme-header__chip:hover {
+  color: var(--accent-hover);
+  text-decoration: underline;
+}
+
+.programme-header__chip:focus-visible {
+  box-shadow: 0 0 0 2px var(--focus);
+  outline: 2px solid var(--focus);
+  outline-offset: var(--focus-offset);
+}
+
+.programme-header__chip svg {
   width: 14px;
   height: 14px;
   flex: none;

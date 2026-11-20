@@ -60,6 +60,7 @@ function makeProgramme(opts: {
   applyResult?: 'ok' | 'alreadyApplied' | 'wrongPhase';
   releaseResult?: 'ok' | 'alreadyUsed' | 'invalidAttestation' | 'policyNotInstalled';
   withdrawError?: string;
+  minimumAward?: bigint;
 } = {}) {
   const allocation = opts.allocation ?? 10_000_000_000n;
   // Withdrawing flips the stored flag, as the contract does, so a re-read sees it.
@@ -119,6 +120,9 @@ function makeProgramme(opts: {
     release: vi.fn(async () => ({ signAndSend: releaseSignAndSend })),
     get_award: vi.fn(async () => ({
       result: { unwrap: () => freshAward },
+    })),
+    get_config: vi.fn(async () => ({
+      result: { unwrap: () => ({ minimum_award: opts.minimumAward ?? 0n }) },
     })),
   };
 }
@@ -778,6 +782,92 @@ describe('Recipient Issues Suite (#272, #273, #274, #275)', () => {
 
       // The form stays on screen so the recipient can see the error — no receipt shown.
       expect(screen.queryByText('Application submitted')).toBeNull();
+    });
+
+    it('shows a warning when the requested amount is below the minimum award', async () => {
+      // 50 XLM minimum = 500_000_000 stroops
+      programme = makeProgramme({ minimumAward: 500_000_000n, phase: 'Open' });
+
+      const { fetchProgrammes } = await import('../../lib/indexer');
+      (fetchProgrammes as ReturnType<typeof vi.fn>).mockResolvedValueOnce([
+        { id: REAL_PROGRAMME, name: 'Live Grant Round', creator: null, createdLedger: null },
+      ]);
+
+      render(
+        <MemoryRouter>
+          <ApplyForm sampleDelayMs={0} />
+        </MemoryRouter>
+      );
+
+      // Select the real programme so the config read fires.
+      await screen.findByRole('option', { name: 'Live Grant Round' });
+      fireEvent.change(screen.getByLabelText('Programme'), { target: { value: REAL_PROGRAMME } });
+
+      // Enter an amount below the minimum (10 XLM < 50 XLM).
+      fireEvent.change(screen.getByPlaceholderText('0'), { target: { value: '10' } });
+
+      // Warning should appear.
+      expect(await screen.findByText(/below the programme.*minimum award/i)).toBeDefined();
+      expect(screen.getByText(/cannot be finalised/i)).toBeDefined();
+
+      // Submit button is not additionally disabled by the minimum check — it
+      // remains in whatever state the other validation gives it. Fill notes to
+      // confirm that a valid-otherwise form with a below-minimum amount is still submittable.
+      fireEvent.change(screen.getByRole('textbox', { name: /application notes/i }), {
+        target: { value: 'Need funds for exam fees.' },
+      });
+      const submitBtn = screen.getByRole('button', { name: /submit application/i });
+      expect(submitBtn.hasAttribute('disabled')).toBe(false);
+    });
+
+    it('does not show the warning when the amount equals the minimum', async () => {
+      programme = makeProgramme({ minimumAward: 500_000_000n, phase: 'Open' });
+
+      const { fetchProgrammes } = await import('../../lib/indexer');
+      (fetchProgrammes as ReturnType<typeof vi.fn>).mockResolvedValueOnce([
+        { id: REAL_PROGRAMME, name: 'Live Grant Round', creator: null, createdLedger: null },
+      ]);
+
+      render(
+        <MemoryRouter>
+          <ApplyForm sampleDelayMs={0} />
+        </MemoryRouter>
+      );
+
+      await screen.findByRole('option', { name: 'Live Grant Round' });
+      fireEvent.change(screen.getByLabelText('Programme'), { target: { value: REAL_PROGRAMME } });
+
+      // Enter exactly the minimum (50 XLM).
+      fireEvent.change(screen.getByPlaceholderText('0'), { target: { value: '50' } });
+
+      await waitFor(() => {
+        expect(screen.queryByText(/below the programme.*minimum award/i)).toBeNull();
+      });
+    });
+
+    it('does not show the warning when the amount is above the minimum', async () => {
+      programme = makeProgramme({ minimumAward: 500_000_000n, phase: 'Open' });
+
+      const { fetchProgrammes } = await import('../../lib/indexer');
+      (fetchProgrammes as ReturnType<typeof vi.fn>).mockResolvedValueOnce([
+        { id: REAL_PROGRAMME, name: 'Live Grant Round', creator: null, createdLedger: null },
+      ]);
+
+      render(
+        <MemoryRouter>
+          <ApplyForm sampleDelayMs={0} />
+        </MemoryRouter>
+      );
+
+      await screen.findByRole('option', { name: 'Live Grant Round' });
+      fireEvent.change(screen.getByLabelText('Programme'), { target: { value: REAL_PROGRAMME } });
+
+      // Enter more than the minimum (100 XLM > 50 XLM).
+      fireEvent.change(screen.getByPlaceholderText('0'), { target: { value: '100' } });
+
+      await waitFor(() => {
+        expect(screen.queryByText(/below the programme.*minimum award/i)).toBeNull();
+      });
     });
   });
 
