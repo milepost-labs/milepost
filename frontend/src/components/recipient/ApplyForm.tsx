@@ -1,11 +1,12 @@
 import { useState } from 'react';
 import { Link } from 'react-router-dom';
 import { Buffer } from 'buffer';
+import type { ProgrammeConfig } from '@milepost/program';
 import { useOpenProgrammes } from '../../hooks/useOpenProgrammes';
 import { useTransaction } from '../../hooks/useTransaction';
 import { useWallet } from '../../context/useWallet';
 import { useSoroban } from '../../context/useSoroban';
-import { validateAmount } from '../../lib/amount';
+import { validateAmount, formatAmount } from '../../lib/amount';
 import { formatIn } from '../../lib/funding';
 import { isSampleProgrammeId, programmeAsset } from '../../lib/programmeView';
 import { SAMPLE_TX_DELAY_MS, sampleSendable, sampleOutcome } from '../../lib/fundingTx';
@@ -13,6 +14,7 @@ import { useAnnouncer } from '../../context/useAnnouncer';
 import { Empty, ErrorPanel, ErrorState, Loading } from '../state/AsyncStates';
 import { TxDone, TxPending } from '../state/TxStatus';
 import { AmountField, Button, CopyButton, Notice, SampleTag, Select, TextArea, TxExplorerLink } from '../ui';
+import { useContractResult } from '../../hooks/useContractRead';
 import './ApplyForm.css';
 
 interface ApplyFormProps {
@@ -87,9 +89,29 @@ export function ApplyForm({
 
   const selected = allOpen.find((p) => p.id === effectiveSelection);
   const asset = selected ? programmeAsset(selected) : 'USDC';
+  const isSampleSelection = selected ? isSampleProgrammeId(selected.id) || selected.sample : false;
+
+  // Read the selected programme's minimum award from the chain.
+  // Sample programmes have no contract — skip the read for them.
+  const selectedClient = !isSampleSelection && effectiveSelection
+    ? programmeAt(effectiveSelection)
+    : null;
+  const configRead = useContractResult<ProgrammeConfig>(
+    () => selectedClient!.get_config(),
+    [selectedClient],
+    { enabled: selectedClient !== null },
+  );
+  const minimumAward: bigint = configRead.data?.minimum_award ?? 0n;
 
   const amountResult = amountInput.trim() ? validateAmount(amountInput, { asset }) : null;
   const isValid = amountResult?.ok === true && Boolean(effectiveSelection) && notes.trim().length > 0;
+
+  // Warn when the entered amount is below the programme's minimum award.
+  // The submit button stays enabled — apply itself does not enforce the minimum;
+  // finalize does (BelowMinimumAward, error 38).
+  const enteredStroops = amountResult?.ok ? amountResult.value : null;
+  const belowMinimum =
+    minimumAward > 0n && enteredStroops !== null && enteredStroops < minimumAward;
 
   const tx = useTransaction<ApplyReceipt>({ contract: 'program' });
 
@@ -269,6 +291,14 @@ export function ApplyForm({
                   placeholder="0"
                   hint="Ask for what you actually need. Reviewers can approve up to this amount, not more."
                 />
+
+                {belowMinimum && (
+                  <Notice tone="warn" role="status">
+                    Your request is below the programme&rsquo;s minimum award of{' '}
+                    <strong>{formatAmount(minimumAward, { asset })}</strong>. An award below this
+                    amount cannot be finalised.
+                  </Notice>
+                )}
 
                 <TextArea
                   label="Application notes"
