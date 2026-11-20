@@ -93,7 +93,7 @@ export const Keepalive = () => {
   const programmeOptions = useMemo(() => {
     const real = new Map<string, string>();
     if (linkedProgrammeId) real.set(linkedProgrammeId, linkedProgrammeId);
-    real.set(DEMO_PROGRAMME_ID, 'Seeded testnet programme');
+    if (DEMO_PROGRAMME_ID) real.set(DEMO_PROGRAMME_ID, 'Seeded testnet programme');
     for (const p of indexed.data ?? []) real.set(p.id, p.name ?? p.id);
     return [
       ...[...real].map(([value, label]) => ({ value, label })),

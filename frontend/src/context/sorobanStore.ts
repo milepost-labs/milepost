@@ -1,4 +1,5 @@
 import { createContext } from 'react';
+import { NETWORK } from '../config/network';
 import type { Client as Registry } from '@milepost/registry';
 import type { Client as Programme } from '@milepost/program';
 import type { Client as Attest } from '@milepost/attest';
@@ -7,9 +8,11 @@ import type { Client as PolicySpend } from '@milepost/policy-spend';
 
 /** Context object and types, kept apart from the provider for Fast Refresh. */
 
-/** Seeded testnet programme, used until listings exist. */
-export const DEMO_PROGRAMME_ID =
-  import.meta.env.VITE_PROGRAMME_ID || 'CD6X33SKLUEMANS67ID3LJL572FFGERMMJCIFRW7P7EKZQLH35XT67C6';
+/**
+ * The seeded programme, used until listings exist. Empty on a network that has
+ * none (mainnet); callers that would show it check for that.
+ */
+export const DEMO_PROGRAMME_ID = NETWORK.demoProgrammeId ?? '';
 
 export interface SorobanState {
   registry: Registry;

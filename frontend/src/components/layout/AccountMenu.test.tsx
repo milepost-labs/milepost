@@ -8,6 +8,13 @@ vi.mock('../../context/useWallet', () => ({
   useWallet: () => mockUseWallet(),
 }));
 
+// A mutable stand-in for the network setting, so both cases can render.
+const network = vi.hoisted(() => ({ friendbot: true }));
+vi.mock('../../config/network', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('../../config/network')>()),
+  NETWORK: network,
+}));
+
 const mockUseBalances = vi.fn();
 vi.mock('../../hooks/useBalances', () => ({
   useBalances: (addr: string) => mockUseBalances(addr),
@@ -29,6 +36,7 @@ describe('AccountMenu', () => {
   beforeEach(() => {
     vi.restoreAllMocks();
     mockAnnounce.mockClear();
+    network.friendbot = true;
     mockUseWallet.mockReturnValue({
       disconnect: vi.fn(),
       expectedNetwork: 'testnet',
@@ -109,6 +117,29 @@ describe('AccountMenu', () => {
     });
 
     expect(refetch).toHaveBeenCalled();
+  });
+
+  it('offers no Friendbot, and says the account needs XLM, where Friendbot does not exist', () => {
+    network.friendbot = false;
+    mockUseBalances.mockReturnValue({
+      xlm: 0n,
+      asset: null,
+      assetCode: 'XLM',
+      isUnfunded: true,
+      loading: false,
+      error: null,
+      refetch: vi.fn(),
+    });
+
+    render(
+      <BrowserRouter>
+        <AccountMenu address={address} />
+      </BrowserRouter>
+    );
+
+    expect(screen.queryByRole('button', { name: /Friendbot/i })).toBeNull();
+    expect(screen.queryByText(/Friendbot/i)).toBeNull();
+    expect(screen.getByText('This account needs XLM before it can sign.')).toBeTruthy();
   });
 
   // --- Issue #484: outcomes reach a screen reader, exactly once -------------
@@ -206,7 +237,7 @@ describe('AccountMenu', () => {
       assetCode: 'XLM',
       isUnfunded: false,
       loading: false,
-      error: new Error('Horizon unreachable'),
+      error: new Error('RPC unreachable'),
       refetch: vi.fn(),
     });
 

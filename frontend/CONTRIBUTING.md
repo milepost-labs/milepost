@@ -37,6 +37,12 @@ VITE_PROGRAMME_ID=
 VITE_INDEXER_URL=
 ```
 
+`VITE_NETWORK` picks the network for the whole build; unset means testnet. With
+`VITE_NETWORK=mainnet` there are no defaults, and `vite build` fails naming any of
+these that is missing: `VITE_MAINNET_RPC_URL`, `VITE_MAINNET_INDEXER_URL`,
+`VITE_MAINNET_REGISTRY_ID`, `VITE_MAINNET_ATTEST_ID`, `VITE_MAINNET_RECORD_ID`
+and `VITE_MAINNET_POLICY_ID`. The code reads all of it from `src/config/network.ts`.
+
 The index is built by [milepost-indexer](https://github.com/milepost-labs/milepost-indexer)
 and is advisory: every entry it lists is read back from the contract before the
 app treats it as fact, so a list that is stale, missing or wrong can only hide
