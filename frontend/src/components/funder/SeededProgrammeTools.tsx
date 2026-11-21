@@ -142,8 +142,8 @@ export function SeededProgrammeTools() {
       >
         <p className="fund-note">
           Cancelling is permanent. Contributed funds become available for donors to reclaim through the refund path,
-          and submitted applications will not be reviewed or awarded. A programme can only be cancelled while it holds
-          no funds and has made no awards.
+          and submitted applications will not be reviewed or awarded. A programme can only be cancelled before any
+          tranche has been released.
         </p>
         {cancelTx.error && <ErrorPanel explained={cancelTx.error} />}
       </Modal>

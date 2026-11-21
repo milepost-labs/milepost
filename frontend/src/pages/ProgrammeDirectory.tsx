@@ -8,7 +8,7 @@ import { describeAmount } from '../lib/amount';
 import { useIndexedList, useProgrammeChainReads, useRegistryProgrammes } from '../hooks';
 import { useWallet } from '../context/useWallet';
 import { useAnnouncer } from '../context/useAnnouncer';
-import { fetchMeta, fetchProgrammes, isStale } from '../lib/indexer';
+import { fetchMeta, fetchProgrammes, indexMismatch, isStale } from '../lib/indexer';
 import { FIXTURE_USER_ROLES, ROLE_LABELS } from '../fixtures/userRoles';
 import {
   DEFAULT_DIRECTORY_SORT,
@@ -116,7 +116,13 @@ export const ProgrammeDirectory = () => {
     setParams(next, { replace: true });
   }, [params, setParams]);
 
-  const realCount = listRead.data?.filter((p) => Boolean(p?.id)).length ?? 0;
+  const meta = metaRead.data?.meta ?? null;
+  const mismatch = meta ? indexMismatch(meta) : null;
+  // An index for another network or registry says nothing about this one:
+  // use none of its lists and fall back to the registry and samples.
+  const indexProgrammes = mismatch ? null : listRead.data;
+
+  const realCount = indexProgrammes?.filter((p) => Boolean(p?.id)).length ?? 0;
   const hasReal = realCount > 0;
   const samplesParam = params.get('samples');
   const showSamples = hasReal ? samplesParam === '1' : true;
@@ -129,8 +135,8 @@ export const ProgrammeDirectory = () => {
   }, [params, setParams, showSamples]);
 
   const all = useMemo(
-    () => mergeProgrammes(listRead.data, userRoles, { showSamples }, registryRead.ids ?? undefined),
-    [listRead.data, userRoles, showSamples, registryRead.ids],
+    () => mergeProgrammes(indexProgrammes, userRoles, { showSamples }, registryRead.ids ?? undefined),
+    [indexProgrammes, userRoles, showSamples, registryRead.ids],
   );
   const realIds = useMemo(() => all.filter((p) => !p.sample).map((p) => p.id), [all]);
   const reads = useProgrammeChainReads(realIds);
@@ -148,21 +154,22 @@ export const ProgrammeDirectory = () => {
   );
 
   const loading = listRead.loading || metaRead.loading;
-  const error = listRead.error ?? metaRead.error;
-  const meta = metaRead.data?.meta ?? null;
+  const error = mismatch ? null : listRead.error ?? metaRead.error;
   const now = metaRead.data?.readAt ?? null;
-  const indexedCount = listRead.data?.length ?? 0;
+  const indexedCount = indexProgrammes?.length ?? 0;
   const indexedAt = meta ? Date.parse(meta.indexedAt) : Number.NaN;
-  const stale = meta ? isStale(meta) : false;
+  const stale = meta && !mismatch ? isStale(meta) : false;
 
   const age = now !== null && !Number.isNaN(indexedAt) ? now - indexedAt : null;
   const ageText = age === null ? 'at an unknown time' : formatAgo(age);
 
   const indexLine = loading
     ? 'Reading the public index…'
-    : meta
-      ? `${indexedCount} in the public index${age === null ? '' : ` · updated ${ageText}`}`
-      : '';
+    : mismatch
+      ? 'The public index is for a different deployment'
+      : meta
+        ? `${indexedCount} in the public index${age === null ? '' : ` · updated ${ageText}`}`
+        : '';
 
   const showEmpty = !loading && shown.length === 0;
   // Carried into every programme link, so "All programmes" can come back to
@@ -208,6 +215,17 @@ export const ProgrammeDirectory = () => {
         needed to browse.
       </PageHead>
 
+      {mismatch && (
+        <Notice tone="warn" role="alert" className="directory-notice">
+          <strong>This index belongs to a different deployment.</strong> It was built for{' '}
+          <span className="numeric">{mismatch.found.network}</span> with registry{' '}
+          <span className="numeric">{mismatch.found.registry}</span>, but this app reads the{' '}
+          <span className="numeric">{mismatch.expected.network}</span> registry{' '}
+          <span className="numeric">{mismatch.expected.registry}</span>. Its lists are not used; programmes
+          are read from the chain instead.
+        </Notice>
+      )}
+
       {stale && (
         <Notice tone="warn" role="status" className="directory-notice">
           <strong>The public index was last updated {ageText}.</strong> New programmes may be missing and
@@ -242,7 +260,7 @@ export const ProgrammeDirectory = () => {
         </div>
       )}
 
-      {!hasReal && !loading && error == null && (
+      {!hasReal && !loading && error == null && !mismatch && (
         <Notice role="note" className="directory-notice">
           <strong>Showing sample programmes.</strong> No real programmes have been published to the index
           yet. These samples demonstrate layout and milestone workflows.
