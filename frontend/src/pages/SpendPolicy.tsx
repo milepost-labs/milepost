@@ -17,6 +17,7 @@ import { looksLikeAddress, truncateAddress } from '../lib/format';
 import { extractCode } from '../lib/errors';
 import { formatPeriod, summarisePolicy } from '../lib/policySummary';
 import { fetchTokenName, parseTokenName } from '../lib/token';
+import { restoreFromAssembled } from '../lib/restore';
 import './SpendPolicy.css';
 
 const SECONDS_PER_DAY = 86_400n;
@@ -180,6 +181,7 @@ export const SpendPolicy = () => {
         period,
       });
       return {
+        restore: restoreFromAssembled(tx),
         signAndSend: async (options) => {
           const sent = await tx.signAndSend(options);
           // Result<void>: a rejection reverts the whole call, so surface it through explain().
@@ -219,6 +221,7 @@ export const SpendPolicy = () => {
       const args = { steward: configuredSteward, wallet: target, payee: who };
       const tx = kind === 'allow' ? await policy.allow_payee(args) : await policy.deny_payee(args);
       return {
+        restore: restoreFromAssembled(tx),
         signAndSend: async (options) => {
           const sent = await tx.signAndSend(options);
           sent.result.unwrap();

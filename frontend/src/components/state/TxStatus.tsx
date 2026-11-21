@@ -3,7 +3,8 @@ import { Check, Clock, Wallet, X } from 'lucide-react';
 import type { TransactionPhase } from '../../hooks/useTransaction';
 import { txSteps } from '../../lib/txSteps';
 import type { Explained } from '../../lib/errors';
-import { Receipt, type ReceiptRow } from '../ui';
+import { Button, Receipt, type ReceiptRow } from '../ui';
+import { formatExact } from '../../lib/amount';
 import { ErrorPanel } from './AsyncStates';
 import './AsyncStates.css';
 
@@ -47,6 +48,37 @@ export function TxPending({
         </ol>
       )}
       {children}
+    </div>
+  );
+}
+
+/**
+ * A write that touches archived data: what the restore costs, and the choice
+ * to restore it first or send nothing. Both signatures are the user's.
+ */
+export function TxRestore({
+  feeStroops,
+  onRestore,
+  onDecline,
+}: {
+  feeStroops: bigint;
+  onRestore: () => void;
+  onDecline: () => void;
+}) {
+  return (
+    <div className="state-tx">
+      <h3 className="state-tx__title">Restore it first</h3>
+      <p className="state-tx__note">
+        Some of this programme’s data has been archived. Restore it first: about{' '}
+        <span className="numeric">{formatExact(feeStroops)} XLM</span>. Freighter asks you to sign twice, once for the
+        restore and once for this transaction.
+      </p>
+      <div className="state-tx__actions">
+        <Button onClick={onRestore}>Restore, then send</Button>
+        <Button variant="secondary" onClick={onDecline}>
+          Don’t restore
+        </Button>
+      </div>
     </div>
   );
 }

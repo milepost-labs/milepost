@@ -14,6 +14,7 @@ import { formatFigure, shortId } from '../../lib/programmeView';
 import { MoneyRow } from '../programme/MoneyRow';
 import { TxDone, TxFailed, TxPending } from '../state/TxStatus';
 import { Button, CopyButton, Modal, PhaseBadge, SampleTag, TxExplorerLink } from '../ui';
+import { restoreFromAssembled } from '../../lib/restore';
 
 export interface ContributionListProps {
   cards: ContributionCard[];
@@ -64,6 +65,7 @@ function RefundSheet({
       }
       const assembled = await programmeAt(card.programmeId).refund({ donor: address });
       return {
+        restore: restoreFromAssembled(assembled),
         signAndSend: async (options: Parameters<typeof assembled.signAndSend>[0]) => {
           const sent = await assembled.signAndSend(options);
           return { result: { amount: sent.result.unwrap(), receipt: receiptOf(sent) } };

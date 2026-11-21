@@ -16,6 +16,7 @@ import { Empty, ErrorPanel, ErrorState, Loading } from '../state/AsyncStates';
 import { TxDone, TxPending } from '../state/TxStatus';
 import { AmountField, Button, CopyButton, Notice, SampleTag, Select, TextArea, TxExplorerLink } from '../ui';
 import { useContractResult } from '../../hooks/useContractRead';
+import { restoreFromAssembled } from '../../lib/restore';
 import './ApplyForm.css';
 
 interface ApplyFormProps {
@@ -160,6 +161,7 @@ export function ApplyForm({
       });
 
       return {
+        restore: restoreFromAssembled(assembled),
         signAndSend: async (
           options: Parameters<typeof assembled.signAndSend>[0],
         ) => {

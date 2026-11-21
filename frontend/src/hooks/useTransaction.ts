@@ -1,6 +1,8 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { useWallet } from '../context/useWallet';
 import { explain, type ContractName, type Explained } from '../lib/errors';
+import { restoreOf, type RestoreStep } from '../lib/restore';
+import { requestRestoreConsent } from '../lib/restoreConsent';
 
 /**
  * One way to send a transaction.
@@ -13,11 +15,16 @@ import { explain, type ContractName, type Explained } from '../lib/errors';
  * The sequence is always the same: refuse if no wallet, refuse if the wallet is
  * on the wrong network, build and simulate, sign, submit, then let the caller
  * refresh whatever the transaction changed.
+ *
+ * When the simulation says archived entries must be restored first, it asks
+ * once (through the layout's restore prompt), sends the restore, then builds,
+ * simulates and sends the original. Declining sends nothing.
  */
 
 export type TransactionPhase =
   | 'idle'
   | 'building'
+  | 'restoring'
   | 'signing'
   | 'submitting'
   | 'success'
@@ -30,6 +37,12 @@ export interface Sendable<T> {
   }) => Promise<{ result: T }>;
   /** Simulation fee in stroops, when the binding exposes it. */
   estimatedFee?: bigint;
+  /**
+   * Archived entries the write needs restored first. Wrappers around an
+   * assembled transaction pass `restoreFromAssembled(assembled)`; an
+   * assembled transaction sent as is is checked directly.
+   */
+  restore?: RestoreStep | null;
 }
 
 export interface TransactionState<T> {
@@ -119,7 +132,19 @@ export function useTransaction<T = unknown>(
         // Building also simulates, so most contract errors surface here —
         // before anything is signed, which is the good place for them.
         setPhase('building');
-        const transaction = await build();
+        let transaction = await build();
+        const restore = restoreOf(transaction);
+        if (restore) {
+          const consent = await requestRestoreConsent(restore.feeStroops);
+          if (consent === null) throw new Error('Expired state: the restore preamble needs restoring first.');
+          if (!consent) throw new Error('RestoreDeclined');
+          setPhase('restoring');
+          await restore.run(wallet.signTransaction);
+          // The restore moved the account's sequence on: build and simulate again.
+          setPhase('building');
+          transaction = await build();
+          if (restoreOf(transaction)) throw new Error('Expired state: entries are still archived after the restore.');
+        }
         const simulation = transaction as Sendable<T> & {
           simulationResponse?: { minResourceFee?: string | number | bigint };
         };
@@ -154,7 +179,7 @@ export function useTransaction<T = unknown>(
 
   return {
     phase,
-    busy: phase === 'building' || phase === 'signing' || phase === 'submitting',
+    busy: phase === 'building' || phase === 'restoring' || phase === 'signing' || phase === 'submitting',
     error,
     result,
     estimatedFee,
@@ -169,6 +194,8 @@ export function phaseLabel(phase: string): string {
   switch (phase) {
     case 'building':
       return 'Preparing…';
+    case 'restoring':
+      return 'Restoring archived data…';
     case 'signing':
       return 'Waiting for your signature…';
     case 'submitting':

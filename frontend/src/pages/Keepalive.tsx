@@ -15,7 +15,11 @@ import { usePageTitle } from '../hooks/usePageTitle';
 import { FIXTURE_PROGRAMMES } from '../fixtures/programmes';
 import { samplesEnabled } from '../lib/samples';
 import { fetchAwards, fetchProgrammes } from '../lib/indexer';
-import { readProgrammeLifetimes, type EntryLifetimeRow } from '../lib/entryTtl';
+import { readInstanceLifetimes, readProgrammeLifetimes, type EntryLifetimeRow } from '../lib/entryTtl';
+import {
+  ProgrammeLifetimesTable,
+  type ProgrammeLifetimeRow,
+} from '../components/keepalive/ProgrammeLifetimesTable';
 import {
   FIXTURE_TTL,
   TTL_EXTENDED_DAYS,
@@ -23,6 +27,7 @@ import {
   type KeepaliveTarget,
 } from '../fixtures/keepaliveFixtures';
 import { explain, type Explained } from '../lib/errors';
+import { restoreFromAssembled } from '../lib/restore';
 import './Keepalive.css';
 
 type ExtendState = 'idle' | 'pending' | 'done' | 'error';
@@ -76,6 +81,10 @@ const EXTEND_TARGETS: ExtendTarget[] = [
  * `attest` or `record`) through `useTransaction`, and every failure is shown
  * through `explain()`. The sample programmes keep `FIXTURE_TTL` and the
  * "Sample data" tag, and cannot be extended: there is no contract behind them.
+ *
+ * Above the per-programme view, a table lists every programme the index
+ * names with its contract instance lifetime, fewest days first, read four at
+ * a time. Its Extend button selects that programme for the flow below.
  */
 export const Keepalive = () => {
   usePageTitle('Keepalive');
@@ -117,6 +126,19 @@ export const Keepalive = () => {
     () => (awards.data ?? []).map((a) => a.recipient),
     [awards.data],
   );
+  const indexedIds = useMemo(() => (indexed.data ?? []).map((p) => p.id), [indexed.data]);
+  const allLifetimes = useIndexedList(
+    () => readInstanceLifetimes(server, indexedIds),
+    [server, indexedIds],
+    { enabled: indexedIds.length > 0 },
+  );
+  const allLifetimeRows = useMemo<ProgrammeLifetimeRow[] | null>(() => {
+    if (!allLifetimes.data) return null;
+    const names = new Map((indexed.data ?? []).map((p) => [p.id, p.name]));
+    return allLifetimes.data.map((row) => ({ ...row, name: names.get(row.programmeId) ?? null }));
+  }, [allLifetimes.data, indexed.data]);
+  const extendHeading = useRef<HTMLHeadingElement>(null);
+
   const lifetimes = useIndexedList(
     () => readProgrammeLifetimes(server, programmeId, recipients),
     [server, programmeId, recipients],
@@ -194,6 +216,7 @@ export const Keepalive = () => {
               return programme.keepalive({ subject });
             })();
     return {
+      restore: restoreFromAssembled(built),
       signAndSend: async (options: Parameters<typeof built.signAndSend>[0]) => {
         const sent = await built.signAndSend(options);
         sent.result.unwrap();
@@ -258,6 +281,12 @@ export const Keepalive = () => {
     );
   };
 
+  const extendFromTable = (id: string) => {
+    setSelectedProgrammeId(id);
+    setExtendRows({});
+    requestAnimationFrame(() => extendHeading.current?.focus());
+  };
+
   const rows = lifetimes.data?.rows ?? null;
   const lowCount = isSample
     ? FIXTURE_TTL.filter((e) => e.liveForDays < TTL_WARNING_DAYS).length
@@ -288,6 +317,27 @@ export const Keepalive = () => {
       </PageHead>
 
       <ProgrammeParamNotice state={programmeParam} />
+
+      <section className="keepalive-page__panel" aria-labelledby="all-programmes-heading">
+        <h2 id="all-programmes-heading">Every programme</h2>
+        <p className="keepalive-page__fine">
+          How long each programme&rsquo;s contract has left, fewest days first. The list comes from the published
+          index, which is advisory; every lifetime is read from the network.
+        </p>
+        {indexed.loading ? (
+          <Loading label="Reading the programme index" rows={2} />
+        ) : indexed.error ? (
+          <ErrorState error={indexed.error} onRetry={indexed.refetch} />
+        ) : indexedIds.length === 0 ? (
+          <p className="keepalive-page__fine">The index does not list any programmes yet.</p>
+        ) : allLifetimes.loading && !allLifetimeRows ? (
+          <Loading label="Reading programme lifetimes" rows={2} />
+        ) : allLifetimes.error && !allLifetimeRows ? (
+          <ErrorState error={allLifetimes.error} onRetry={allLifetimes.refetch} />
+        ) : allLifetimeRows ? (
+          <ProgrammeLifetimesTable rows={allLifetimeRows} onExtend={extendFromTable} />
+        ) : null}
+      </section>
 
       <div className="keepalive-page__programme">
         <Select
@@ -331,7 +381,9 @@ export const Keepalive = () => {
           </section>
 
           <section className="keepalive-page__panel" aria-labelledby="extend-heading">
-            <h2 id="extend-heading">Extend</h2>
+            <h2 id="extend-heading" ref={extendHeading} tabIndex={-1}>
+              Extend
+            </h2>
             <p className="keepalive-page__fine">
               Each keepalive extends the entries it names by about {TTL_EXTENDED_DAYS} days.
             </p>
