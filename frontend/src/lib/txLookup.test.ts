@@ -1,20 +1,14 @@
 /**
  * Unit tests for refund receipt parsing.
  *
- * We test via `lookupTransaction` with a mocked RPC server so we can supply
- * controlled envelope XDR and return values without constructing raw XDR by
- * hand — the SDK's XDR constructors are complex and differ between package
- * versions. The mocked server feeds pre-encoded values built from real
- * programme transactions recorded from testnet.
- *
- * The two XDR strings below were produced by submitting `refund` and
- * `refund_partial` on the testnet programme
- * CBJWECZ3EUVNAE73YIMT2KWWNRHRF7NNWVKOLQRVOHSKYRYE32XBRPW7, then capturing
- * the transaction envelopes and return values via `getTransaction`. They are
- * stored verbatim so the tests run without any network access.
+ * Each test builds a minimal transaction envelope with the SDK's XDR builders
+ * (one `invokeHostFunction` calling `refund`, `refund_partial` or
+ * `contribute` on a programme) and, for `lookupTransaction`, feeds it through
+ * a mocked RPC server, so nothing touches the network.
  */
 import { describe, it, expect, vi } from 'vitest';
-import { xdr, Address } from '@milepost/program';
+import { Buffer } from 'buffer';
+import { Address, nativeToScVal, xdr } from '@stellar/stellar-sdk';
 import { lookupTransaction, parseContribution, parseRefund } from './txLookup';
 
 const PROGRAMME = 'CBJWECZ3EUVNAE73YIMT2KWWNRHRF7NNWVKOLQRVOHSKYRYE32XBRPW7';
@@ -25,18 +19,9 @@ const PROGRAMME = 'CBJWECZ3EUVNAE73YIMT2KWWNRHRF7NNWVKOLQRVOHSKYRYE32XBRPW7';
 // to XDR schema changes in the SDK.
 // ---------------------------------------------------------------------------
 
-/** Encode a string as an XDR ScSymbol (function name). */
-function fnNameBuf(name: string): Buffer {
-  return Buffer.from(name, 'utf8');
-}
-
-/** Build an i128 ScVal from a positive bigint. */
+/** Build an i128 ScVal from a bigint. */
 function i128(amount: bigint): xdr.ScVal {
-  const lo = amount & 0xffff_ffff_ffff_ffffn;
-  const hi = amount >> 64n;
-  return xdr.ScVal.scvI128(
-    new xdr.Int128Parts({ hi: BigInt(hi), lo: BigInt(lo) }),
-  );
+  return nativeToScVal(amount, { type: 'i128' });
 }
 
 /** Minimal envelope: a single invokeHostFunction for `fnName(contractId, ...args)`. */
@@ -48,7 +33,7 @@ function minimalEnvelope(
   const contractAddress = Address.fromString(contractId).toScAddress();
   const invokeArgs = new xdr.InvokeContractArgs({
     contractAddress,
-    functionName: fnNameBuf(fnName),
+    functionName: fnName,
     args,
   });
   const hostFn = xdr.HostFunction.hostFunctionTypeInvokeContract(invokeArgs);
@@ -62,8 +47,8 @@ function minimalEnvelope(
   const tx = new xdr.Transaction({
     sourceAccount: account,
     fee: 100,
-    seqNum: 1n,
-    timeBounds: null,
+    seqNum: xdr.Int64.fromString('1'),
+    cond: xdr.Preconditions.precondNone(),
     memo: xdr.Memo.memoNone(),
     operations: [op],
     ext: new xdr.TransactionExt(0),
@@ -74,12 +59,10 @@ function minimalEnvelope(
 }
 
 // ---------------------------------------------------------------------------
-// Donor address: use an all-zero account id (a valid ScAddress in XDR even
-// though it is not a real key on the network).
+// The donor: a real account address, so the parsed donor can be checked.
 // ---------------------------------------------------------------------------
-const DONOR_BYTES = Buffer.alloc(32); // 32 zero bytes = all-zero Ed25519 public key
-const donorAccountId = xdr.AccountId.publicKeyTypeEd25519(DONOR_BYTES);
-const donorScVal = xdr.ScVal.scvAddress(xdr.ScAddress.scAddressTypeAccount(donorAccountId));
+const DONOR = 'GA7QYNF7SOWQ3GLR2BGMZEHXAVIRZA4KVWLTJJFC7MGXUA74P7UJVSGZ';
+const donorScVal = new Address(DONOR).toScVal();
 
 // ---------------------------------------------------------------------------
 // parseRefund — direct unit tests
@@ -93,6 +76,7 @@ describe('parseRefund', () => {
 
     expect(result).not.toBeNull();
     expect(result!.programmeId).toBe(PROGRAMME);
+    expect(result!.donor).toBe(DONOR);
     expect(result!.amount).toBe(180_000_000n);
     expect(result!.partial).toBe(false);
   });
@@ -105,6 +89,7 @@ describe('parseRefund', () => {
     const result = parseRefund(envelope, returnValue);
 
     expect(result).not.toBeNull();
+    expect(result!.donor).toBe(DONOR);
     expect(result!.amount).toBe(50_000_000n);
     expect(result!.partial).toBe(true);
   });
@@ -141,6 +126,7 @@ describe('parseContribution', () => {
 
     expect(result).not.toBeNull();
     expect(result!.programmeId).toBe(PROGRAMME);
+    expect(result!.donor).toBe(DONOR);
     expect(result!.amount).toBe(250_000_000n);
   });
 

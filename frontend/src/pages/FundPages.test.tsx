@@ -93,7 +93,7 @@ describe('ReceiptLookup', () => {
     renderAt(<ReceiptLookup />, `/funders/receipt?hash=${HASH}`);
 
     expect(await screen.findByRole('heading', { name: 'Refund · 18 XLM' })).toBeTruthy();
-    // Does NOT show "Partial refund" row for a full refund.
+    // Does NOT show a "Partial refund" row for a refund of the whole share.
     expect(screen.queryByText('Partial refund')).toBeNull();
     expect(mocks.announce).toHaveBeenCalledWith('Refund receipt rebuilt from the transaction.');
   });

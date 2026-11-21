@@ -325,7 +325,7 @@ function RebuiltRefundReceipt({
 
   const text = [
     'Milepost refund receipt',
-    tx.partial ? 'Type: Partial refund' : 'Type: Full refund',
+    tx.partial ? 'Type: Partial refund' : 'Type: Refund',
     `Programme: ${name} (${tx.programmeId})`,
     `To: ${tx.donor}`,
     `Returned: ${formatIn(tx.amount, asset)}`,
