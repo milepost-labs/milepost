@@ -141,6 +141,47 @@ describe('Issue #440 - AwardsTab index-chain disagreement', () => {
     expect(screen.getByLabelText('0 of 2 tranches released')).toBeDefined();
     expect(screen.getByRole('cell', { name: '0 USDC' }).textContent).toBe('0');
   });
+
+  it('neutralizes malicious formula characters in awards when downloading CSV', async () => {
+    mockedAwards = [
+      {
+        ...mockAwards[0],
+        recipient: '=SUM(1+1)',
+        payee: '@EVIL_PAYEE',
+      },
+    ];
+
+    renderTab();
+    const downloadBtn = await screen.findByRole('button', { name: 'Download CSV' });
+
+    // Installed after render: mocking appendChild earlier stops the tab mounting.
+    const createObjectURLSpy = vi.fn().mockReturnValue('blob:http://localhost/mock-url');
+    const revokeObjectURLSpy = vi.fn();
+    const originalCreate = URL.createObjectURL;
+    const originalRevoke = URL.revokeObjectURL;
+    URL.createObjectURL = createObjectURLSpy;
+    URL.revokeObjectURL = revokeObjectURLSpy;
+    const appendSpy = vi.spyOn(document.body, 'appendChild').mockImplementation((node) => {
+      (node as HTMLAnchorElement).click = vi.fn();
+      return node;
+    });
+    const removeSpy = vi.spyOn(document.body, 'removeChild').mockImplementation((node) => node);
+
+    fireEvent.click(downloadBtn);
+
+    expect(createObjectURLSpy).toHaveBeenCalledTimes(1);
+    expect(revokeObjectURLSpy).toHaveBeenCalledWith('blob:http://localhost/mock-url');
+    const [blob] = createObjectURLSpy.mock.calls[0] as [Blob];
+    const text = await blob.text();
+    expect(text).toContain("'=SUM(1+1)");
+    expect(text).toContain("'@EVIL_PAYEE");
+    expect(text).not.toContain(',=SUM(1+1),');
+
+    URL.createObjectURL = originalCreate;
+    URL.revokeObjectURL = originalRevoke;
+    appendSpy.mockRestore();
+    removeSpy.mockRestore();
+  });
 });
 
 // ---------------------------------------------------------------------------

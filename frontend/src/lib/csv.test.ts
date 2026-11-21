@@ -1,11 +1,12 @@
-import { describe, expect, it } from 'vitest';
-import { escapeCsvField, csvRow, awardsToCsv, contributionsToCsv } from './csv';
+import { describe, expect, it, vi } from 'vitest';
+import { escapeCsvField, csvRow, awardsToCsv, contributionsToCsv, downloadFile, numericCell } from './csv';
 import type { ContributionCard } from './funding';
 import { FIXTURE_AWARDS } from '../fixtures/programmeFixtures';
 
 describe('escapeCsvField', () => {
   it('returns plain values unchanged', () => {
     expect(escapeCsvField('hello')).toBe('hello');
+    expect(escapeCsvField('Programme 2026')).toBe('Programme 2026');
   });
 
   it('wraps fields with commas in quotes', () => {
@@ -18,6 +19,75 @@ describe('escapeCsvField', () => {
 
   it('wraps fields with newlines', () => {
     expect(escapeCsvField('line1\nline2')).toBe('"line1\nline2"');
+    expect(escapeCsvField('line1\r\nline2')).toBe('"line1\r\nline2"');
+  });
+
+  describe('formula neutralization (OWASP defense)', () => {
+    it('neutralizes = as first character', () => {
+      expect(escapeCsvField('=SUM(A1:A10)')).toBe("'=SUM(A1:A10)");
+    });
+
+    it('neutralizes + as first character', () => {
+      expect(escapeCsvField('+12345')).toBe("'+12345");
+    });
+
+    it('neutralizes - as first character for text cells', () => {
+      expect(escapeCsvField('-cmd|/C calc')).toBe("'-cmd|/C calc");
+    });
+
+    it('neutralizes @ as first character', () => {
+      expect(escapeCsvField('@SUM(1+1)')).toBe("'@SUM(1+1)");
+    });
+
+    it('neutralizes tab (\\t) as first character', () => {
+      expect(escapeCsvField('\tcalc')).toBe("'\tcalc");
+    });
+
+    it('neutralizes carriage return (\\r) as first character and quotes it', () => {
+      // \r is neutralized to '\r... which then triggers RFC 4180 quoting because it contains \r
+      expect(escapeCsvField('\rcalc')).toBe("\"'\rcalc\"");
+    });
+
+    it('neutralizes and quotes a cell that needs both', () => {
+      // Starts with = and contains a comma -> quotes around the neutralized string
+      expect(escapeCsvField('=SUM(A1,B1)')).toBe("\"'=SUM(A1,B1)\"");
+      // Starts with @ and contains quotes -> quotes doubled and wrapped
+      expect(escapeCsvField('@lookup("x")')).toBe("\"'@lookup(\"\"x\"\")\"");
+      // Starts with + and contains newline
+      expect(escapeCsvField('+cmd\narg')).toBe("\"'+cmd\narg\"");
+    });
+  });
+
+  describe('numeric vs text handling', () => {
+    it('leaves amounts (including negative numbers) unchanged when marked numeric', () => {
+      expect(escapeCsvField(numericCell('-5'))).toBe('-5');
+      expect(escapeCsvField(numericCell('-100.50'))).toBe('-100.50');
+      expect(escapeCsvField(numericCell(42))).toBe('42');
+      expect(escapeCsvField(numericCell(-42))).toBe('-42');
+      expect(escapeCsvField('-5', { numeric: true })).toBe('-5');
+      expect(escapeCsvField({ value: '-5', numeric: true })).toBe('-5');
+      expect(escapeCsvField({ value: '-10.5', raw: true })).toBe('-10.5');
+    });
+
+    it('distinguishes numeric-marked versus text-typed "-5"', () => {
+      // Text cell defaults to safe: neutralized with single quote
+      expect(escapeCsvField('-5')).toBe("'-5");
+      // Explicit numeric cell remains untouched
+      expect(escapeCsvField(numericCell('-5'))).toBe('-5');
+    });
+  });
+
+  describe('empty, null, and undefined handling', () => {
+    it('handles empty string', () => {
+      expect(escapeCsvField('')).toBe('');
+    });
+
+    it('handles null and undefined', () => {
+      expect(escapeCsvField(null)).toBe('');
+      expect(escapeCsvField(undefined)).toBe('');
+      expect(escapeCsvField({ value: null })).toBe('');
+      expect(escapeCsvField({ value: undefined, numeric: true })).toBe('');
+    });
   });
 });
 
@@ -28,6 +98,11 @@ describe('csvRow', () => {
 
   it('escapes individual fields', () => {
     expect(csvRow(['plain', 'has,comma'])).toBe('plain,"has,comma"');
+  });
+
+  it('neutralizes formula cells in a row while leaving numeric cells untouched', () => {
+    const row = csvRow(['=malicious', numericCell('-50.00'), 'normal']);
+    expect(row).toBe("'=malicious,-50.00,normal");
   });
 });
 
@@ -40,7 +115,7 @@ describe('awardsToCsv', () => {
     expect(lines[1]).toContain('2026-09-15T12:00:00Z');
   });
 
-  it('exports both stroops and formatted units', () => {
+  it('exports both stroops and formatted units as numeric', () => {
     const csv = awardsToCsv(FIXTURE_AWARDS, '2026-09-15T12:00:00Z');
     const lines = csv.split('\n');
     const firstAward = lines[2];
@@ -56,13 +131,90 @@ describe('awardsToCsv', () => {
   });
 
   it('escapes commas in recipient addresses', () => {
-    const awards = [{
-      ...FIXTURE_AWARDS[0],
-      recipient: 'GTEST,COMMA',
-    }];
+    const awards = [
+      {
+        ...FIXTURE_AWARDS[0],
+        recipient: 'GTEST,COMMA',
+      },
+    ];
     const csv = awardsToCsv(awards, '2026-09-15T12:00:00Z');
     const lines = csv.split('\n');
     expect(lines[2]).toContain('"GTEST,COMMA"');
+  });
+
+  it('neutralizes malicious formula characters in recipient and payee fields', () => {
+    const maliciousAwards = [
+      {
+        ...FIXTURE_AWARDS[0],
+        recipient: '=1+1',
+        payee: '@EVIL_PAYEE',
+      },
+      {
+        ...FIXTURE_AWARDS[0],
+        recipient: '+CMD_INJECT',
+        payee: '-MINUS_PAYEE',
+      },
+    ];
+    const csv = awardsToCsv(maliciousAwards, '2026-09-15T12:00:00Z');
+    const lines = csv.split('\n');
+    expect(lines[2]).not.toContain(',=1+1,');
+    expect(lines[2]).toContain("'=1+1");
+    expect(lines[2]).toContain("'@EVIL_PAYEE");
+    expect(lines[3]).toContain("'+CMD_INJECT");
+    expect(lines[3]).toContain("'-MINUS_PAYEE");
+  });
+});
+
+describe('downloadFile', () => {
+  it('creates an object URL, clicks a temporary anchor with filename and mime type, and revokes the URL', async () => {
+    const mockUrl = 'blob:http://localhost/mock-blob-uuid';
+    const createObjectURLSpy = vi.fn().mockReturnValue(mockUrl);
+    const revokeObjectURLSpy = vi.fn();
+
+    vi.stubGlobal('URL', {
+      ...URL,
+      createObjectURL: createObjectURLSpy,
+      revokeObjectURL: revokeObjectURLSpy,
+    });
+
+    const appended: HTMLAnchorElement[] = [];
+    let clicked = false;
+
+    const appendSpy = vi.spyOn(document.body, 'appendChild').mockImplementation((node) => {
+      const anchor = node as HTMLAnchorElement;
+      anchor.click = () => {
+        clicked = true;
+      };
+      appended.push(anchor);
+      return node;
+    });
+
+    const removeSpy = vi.spyOn(document.body, 'removeChild').mockImplementation((node) => {
+      return node;
+    });
+
+    const content = 'Recipient,Amount\n\'=evil,100';
+    downloadFile(content, 'test-export.csv', 'text/csv;charset=utf-8;');
+
+    expect(createObjectURLSpy).toHaveBeenCalledTimes(1);
+    const [blobArg] = createObjectURLSpy.mock.calls[0] as [Blob];
+    expect(blobArg).toBeInstanceOf(Blob);
+    expect(blobArg.type).toBe('text/csv;charset=utf-8;');
+    expect(await blobArg.text()).toBe(content);
+
+    expect(appendSpy).toHaveBeenCalled();
+    expect(appended).toHaveLength(1);
+    const [appendedElement] = appended;
+    expect(appendedElement.href).toBe(mockUrl);
+    expect(appendedElement.download).toBe('test-export.csv');
+    expect(clicked).toBe(true);
+
+    expect(removeSpy).toHaveBeenCalledWith(appendedElement);
+    expect(revokeObjectURLSpy).toHaveBeenCalledWith(mockUrl);
+
+    appendSpy.mockRestore();
+    removeSpy.mockRestore();
+    vi.unstubAllGlobals();
   });
 });
 
@@ -108,5 +260,10 @@ describe('contributionsToCsv', () => {
   it('returns only the header when all contributions are samples', () => {
     const csv = contributionsToCsv([makeCard({ sample: true })]);
     expect(csv).toBe('programme id,name,asset,contributed,refunded,refundable now,phase');
+  });
+
+  it('neutralises a programme name written as a formula', () => {
+    const csv = contributionsToCsv([makeCard({ name: '=HYPERLINK("x")' })]);
+    expect(csv.split('\n')[1]).toBe('CPROG123,"\'=HYPERLINK(""x"")",USDC,2000,50,125.5,Settled');
   });
 });
