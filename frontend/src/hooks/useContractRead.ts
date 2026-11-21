@@ -20,7 +20,7 @@ export interface ContractRead<T> {
   error: unknown;
   /** True when the read failed because the entry is archived (TTL expired). `error` is set too. */
   archived: boolean;
-  /** True only on the first load. A refetch keeps existing data visible. */
+  /** True until the read settles for its current key. A refetch of the same key keeps existing data visible. */
   loading: boolean;
   /** True while any request is in flight, including a background refresh. */
   fetching: boolean;
@@ -51,6 +51,18 @@ function isArchivedError(caught: unknown): boolean {
   return false;
 }
 
+/** What one settled read left behind, stored beside the deps it was read for. */
+interface Settled<T> {
+  deps: unknown[];
+  data: T | null;
+  error: unknown;
+  archived: boolean;
+}
+
+function sameDeps(a: unknown[], b: unknown[]): boolean {
+  return a.length === b.length && a.every((value, index) => Object.is(value, b[index]));
+}
+
 export function useContractRead<T>(
   call: () => Promise<{ result: T }>,
   deps: unknown[],
@@ -58,14 +70,13 @@ export function useContractRead<T>(
 ): ContractRead<T> {
   const { enabled = true } = options;
 
-  const [data, setData] = useState<T | null>(null);
-  const [error, setError] = useState<unknown>(null);
-  const [archived, setArchived] = useState(false);
-  // Starts true when a request will be made, so the first render already shows
-  // loading. Setting it inside the effect instead would cascade an extra
-  // render on every mount.
-  const [fetching, setFetching] = useState(enabled);
-  const [loaded, setLoaded] = useState(false);
+  // The answer is stored beside the deps it belongs to. A render whose deps
+  // differ from the stored ones sees no data and no error at once, instead of
+  // the previous key's result until the new request lands.
+  const [settled, setSettled] = useState<Settled<T> | null>(null);
+  // True from a manual refetch until it settles. A change of deps needs no
+  // flag: the stored answer simply stops matching.
+  const [refetching, setRefetching] = useState(false);
 
   // Only the newest request may write state. Without this, a slow first
   // response can land after a fast second one and quietly show stale data.
@@ -78,36 +89,40 @@ export function useContractRead<T>(
     };
   }, []);
 
-  // Kept in a ref so a caller passing an inline closure does not retrigger the
+  // Kept in refs so a caller passing an inline closure does not retrigger the
   // fetch on every render. Synced in an effect rather than during render —
   // mutating a ref while rendering is not safe under concurrent React. This
   // effect is declared before the fetching one, so it runs first.
   const callRef = useRef(call);
+  const depsRef = useRef(deps);
   useEffect(() => {
     callRef.current = call;
+    depsRef.current = deps;
   });
 
   const run = useCallback(async () => {
     const current = ++generation.current;
+    const runDeps = depsRef.current;
 
     try {
       const response = await callRef.current();
       reportRpcSuccess();
       if (!mounted.current || current !== generation.current) return;
-      setData(response.result);
-      setArchived(false);
+      setSettled({ deps: runDeps, data: response.result, error: null, archived: false });
     } catch (caught) {
       if (isRpcFailure(caught)) reportRpcFailure();
       if (!mounted.current || current !== generation.current) return;
       // Still an error, so screens that do not check `archived` show it
-      // rather than reading an archived entry as absent.
-      setArchived(isArchivedError(caught));
-      setError(caught);
+      // rather than reading an archived entry as absent. A refetch of the same
+      // key keeps its last value beside the error.
+      setSettled((previous) => ({
+        deps: runDeps,
+        data: previous && sameDeps(previous.deps, runDeps) ? previous.data : null,
+        error: caught,
+        archived: isArchivedError(caught),
+      }));
     } finally {
-      if (mounted.current && current === generation.current) {
-        setFetching(false);
-        setLoaded(true);
-      }
+      if (mounted.current && current === generation.current) setRefetching(false);
     }
   }, []);
 
@@ -118,20 +133,23 @@ export function useContractRead<T>(
   }, [enabled, run, ...deps]);
 
   // Refetch is user-initiated rather than an effect, so setting state here is
-  // both safe and necessary — the flags need resetting for a second attempt.
+  // both safe and necessary — the error needs clearing for a second attempt.
   const refetch = useCallback(() => {
-    setFetching(true);
-    setError(null);
-    setArchived(false);
+    setRefetching(true);
+    setSettled((previous) => (previous ? { ...previous, error: null, archived: false } : previous));
     void run();
   }, [run]);
 
+  const current = settled && sameDeps(settled.deps, deps) ? settled : null;
+
   return {
-    data,
-    error,
-    archived,
-    loading: enabled && !loaded && fetching,
-    fetching,
+    data: current ? current.data : null,
+    error: current ? current.error : null,
+    archived: current ? current.archived : false,
+    // Loading from the moment the read is enabled until it first settles for
+    // this key, including a read that became enabled after mount.
+    loading: enabled && !current,
+    fetching: enabled && (!current || refetching),
     refetch,
   };
 }
