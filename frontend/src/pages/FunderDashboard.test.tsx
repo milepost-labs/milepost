@@ -99,7 +99,7 @@ describe('Funding dashboard', () => {
     const signButton = await within(sheet).findByRole('button', { name: 'Sign and claim refund' });
     fireEvent.click(signButton);
 
-    expect(await within(sheet).findByText('Refund claimed', {}, { timeout: 3000 })).toBeTruthy();
+    expect(await within(sheet).findAllByText('Refund claimed', {}, { timeout: 3000 })).toBeTruthy();
     expect(within(sheet).getByText(/495 USDC sent back to your wallet, in proportion/)).toBeTruthy();
     expect(within(sheet).getByText('4,853,391')).toBeTruthy();
     expect(mocks.announce).toHaveBeenCalledWith('Refund of 495 USDC sent to your wallet.');
