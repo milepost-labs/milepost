@@ -101,7 +101,7 @@ export function DeployProgramme({ aside }: { aside?: ReactNode }) {
   const [nowSeconds] = useState(() => Math.floor(Date.now() / 1000));
 
   // The testnet pilot's asset and schema, offered as the first choice.
-  const pilotRead = useKeyedRead(DEMO_PROGRAMME_ID, async () => {
+  const pilotRead = useKeyedRead(DEMO_PROGRAMME_ID || null, async () => {
     const config = (await demoProgramme.get_config()).result.unwrap();
     const schemaHex = Buffer.from(config.schema).toString('hex');
     const [tokenName, definition] = await Promise.all([

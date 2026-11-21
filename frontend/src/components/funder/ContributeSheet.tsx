@@ -7,6 +7,8 @@ import { useWallet } from '../../context/useWallet';
 import { phaseLabel, useTransaction } from '../../hooks/useTransaction';
 import { useContractRead, useContractResult } from '../../hooks/useContractRead';
 import { useProgrammeBalance, type ProgrammeBalanceStatus } from '../../hooks/useProgrammeBalance';
+import { NETWORK } from '../../config/network';
+import { samplesEnabled } from '../../lib/samples';
 import { useBalances } from '../../hooks/useBalances';
 import { formatAmount, STROOPS_PER_UNIT, validateAmount } from '../../lib/amount';
 import { explain, explainCode, isFailure, type Explained } from '../../lib/errors';
@@ -398,8 +400,10 @@ export function ContributeSheet({
               xlmBalance.xlm !== null &&
               xlmBalance.xlm < tx.estimatedFee + MIN_XLM_RESERVE && (
                 <Notice tone="warn" role="alert">
-                  Your XLM balance cannot cover this fee while keeping the minimum reserve. Fund the wallet on
-                  testnet with Friendbot before signing.
+                  Your XLM balance cannot cover this fee while keeping the minimum reserve.{' '}
+                  {NETWORK.friendbot
+                    ? 'Fund the wallet on testnet with Friendbot before signing.'
+                    : 'Add XLM to the wallet before signing.'}
                 </Notice>
               )}
           </TxPending>
@@ -443,7 +447,7 @@ export function ContributeSheet({
               money stays locked in the programme until a verifier confirms each milepost, and whatever isn't
               paid out comes back to you in proportion.
             </p>
-            {programme.sample && (
+            {programme.sample && samplesEnabled() && (
               <p className="contribute__sample">
                 <SampleTag>Sample receipt</SampleTag>
               </p>

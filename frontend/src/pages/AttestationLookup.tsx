@@ -4,6 +4,7 @@ import { Ban, Check, Search, ShieldCheck } from 'lucide-react';
 import type { Client as ProgrammeClient } from '@milepost/program';
 import type { Attestation, Schema } from '@milepost/attest';
 import { Badge, Button, CopyButton, Field, Notice, PageHead, Receipt, SampleTag, Segmented } from '../components/ui';
+import { samplesEnabled } from '../lib/samples';
 import type { ReceiptRow } from '../components/ui';
 import { useContractRead, useContractResult } from '../hooks';
 import { useKeyedRead } from '../hooks/useKeyedRead';
@@ -262,7 +263,7 @@ export const AttestationLookup = () => {
   const addressLoading = isAddress && !addressSearch && !addressError;
 
   const samples =
-    searchedYet && !isHex64 && !isAddress
+    samplesEnabled() && searchedYet && !isHex64 && !isAddress
       ? FIXTURE_ATTESTATIONS.filter(
           (a) =>
             a.uid.toLowerCase() === cleanHex || a.subject.toLowerCase() === cleanHex || a.attester.toLowerCase() === cleanHex,
@@ -378,15 +379,17 @@ export const AttestationLookup = () => {
                 </Button>
               )}
             </form>
-            <div className="attest-lookup__samples">
-              <SampleTag />
-              <span>Sample ids:</span>
-              {FIXTURE_ATTESTATIONS.map((a) => (
-                <button key={a.uid} type="button" className="attest-lookup__sample numeric" onClick={() => pick(a.uid)}>
-                  {a.uid}
-                </button>
-              ))}
-            </div>
+            {samplesEnabled() && (
+              <div className="attest-lookup__samples">
+                <SampleTag />
+                <span>Sample ids:</span>
+                {FIXTURE_ATTESTATIONS.map((a) => (
+                  <button key={a.uid} type="button" className="attest-lookup__sample numeric" onClick={() => pick(a.uid)}>
+                    {a.uid}
+                  </button>
+                ))}
+              </div>
+            )}
           </div>
 
           <div aria-live="polite" className="attest-lookup__status">

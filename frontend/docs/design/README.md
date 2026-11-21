@@ -6,7 +6,7 @@ behind the look, the voice, and the claims the app must never make.
 | File | What it is |
 | --- | --- |
 | `BRAND.md` | Voice, the money-square colours, the never-claim rules, visual foundations. |
-| `CLAUDE_CODE_HANDOFF.md` | The designer's handoff note: ground rules and a suggested build order. |
+| `HANDOFF.md` | The designer's handoff note: ground rules and a suggested build order. |
 | `prototypes/landing.html` | The landing page. Open it in a browser. |
 | `prototypes/app.html` | A clickable prototype of the app shell and every screen. The "Design review: states" button (bottom left) switches loading, empty, error, stale, signed-out and offline states. |
 | `prototypes/app-styles.css` | The app prototype's stylesheet, on its own for reading. |

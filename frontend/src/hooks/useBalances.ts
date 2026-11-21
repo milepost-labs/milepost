@@ -1,6 +1,7 @@
 import { useEffect } from 'react';
+import { Keypair, rpc, xdr } from '@stellar/stellar-sdk';
+import { NETWORK } from '../config/network';
 import { useWallet } from '../context/useWallet';
-import { parseAmount } from '../lib/amount';
 import { useIndexedList } from './useIndexedList';
 
 export interface BalancesState {
@@ -13,24 +14,27 @@ export interface BalancesState {
   refetch: () => void;
 }
 
-const HORIZON_TESTNET_URL = 'https://horizon-testnet.stellar.org';
-
 interface AccountRead {
   xlm: bigint;
   isUnfunded: boolean;
 }
 
+/**
+ * The account's native balance, from its ledger entry on the RPC. No entry
+ * means the account has never been funded. A failed read throws, so it shows
+ * as an error and never as a zero balance.
+ */
 async function readAccount(address: string): Promise<AccountRead> {
-  const response = await fetch(`${HORIZON_TESTNET_URL}/accounts/${encodeURIComponent(address)}`);
+  const server = new rpc.Server(NETWORK.rpcUrl, { allowHttp: NETWORK.rpcUrl.startsWith('http://') });
+  const key = xdr.LedgerKey.account(
+    new xdr.LedgerKeyAccount({ accountId: Keypair.fromPublicKey(address).xdrAccountId() }),
+  );
+  const { entries } = await server.getLedgerEntries(key);
 
-  // Horizon answers 404 for an account that has never been funded.
-  if (response.status === 404) return { xlm: 0n, isUnfunded: true };
-  if (!response.ok) throw new Error(`Horizon error: ${response.statusText}`);
+  const entry = entries[0];
+  if (!entry) return { xlm: 0n, isUnfunded: true };
 
-  const data = await response.json();
-  const balances = (data.balances || []) as Array<{ asset_type: string; balance: string }>;
-  const native = balances.find((b) => b.asset_type === 'native');
-  const xlm = native ? parseAmount(native.balance) : 0n;
+  const xlm = BigInt(entry.val.account().balance().toString());
   return { xlm, isUnfunded: xlm === 0n };
 }
 

@@ -7,6 +7,7 @@ import { truncateAddress } from '../../lib/format';
 import { shortId } from '../../lib/programmeView';
 import { absoluteLink, replyPath, type SignedRecord } from '../../lib/verifyLinks';
 import { FIXTURE_MY_ATTESTATIONS } from '../../fixtures/verifierFixtures';
+import { samplesEnabled } from '../../lib/samples';
 import { CopyButton, SampleTag } from '../ui';
 import { AttestationRevoke } from './AttestationRevoke';
 import type { RoleProgramme } from './useMyRoles';
@@ -158,15 +159,16 @@ export function SignedAttestations({
                 programmeName={allProgrammes?.find((p) => p.id === r.programmeId)?.name ?? null}
               />
             ))}
-            {FIXTURE_MY_ATTESTATIONS.map((s) => (
-              <SampleRow key={s.uid} sample={s} />
-            ))}
+            {samplesEnabled() &&
+              FIXTURE_MY_ATTESTATIONS.map((s) => <SampleRow key={s.uid} sample={s} />)}
           </tbody>
         </table>
-      <p className="verify__fine">
-        <SampleTag /> Rows stand in until the index publishes attestations. Ones you sign in this browser show their
-        status read from the chain.
-      </p>
+      {samplesEnabled() && (
+        <p className="verify__fine">
+          <SampleTag /> Rows stand in until the index publishes attestations. Ones you sign in this browser show their
+          status read from the chain.
+        </p>
+      )}
     </section>
   );
 }

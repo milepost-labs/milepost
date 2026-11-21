@@ -1,5 +1,5 @@
-import { useEffect, useMemo, useState } from "react";
-import { useLocation } from "react-router-dom";
+import { useCallback, useEffect, useMemo, useState } from "react";
+import { Link, Navigate, useLocation } from "react-router-dom";
 import type { ProgrammeConfig } from "@milepost/program";
 import {
   FileText,
@@ -11,16 +11,18 @@ import { PausedBanner } from "../components/programme/PausedBanner";
 import { ProgrammeHeader } from "../components/programme/ProgrammeHeader";
 import { WhereTheMoneyIs } from "../components/programme/WhereTheMoneyIs";
 import { ProgrammeTabs } from "../components/programme/ProgrammeTabs";
+import { ProgrammeActivityPanel } from "../components/programme/ProgrammeActivity";
 import { ProgrammeActions } from "../components/programme/ProgrammeActions";
 import { DescriptionBand, MetadataPanel } from "../components/programme/ProgrammeDescription";
 import { useProgrammeMetadata } from "../hooks/useProgrammeMetadata";
-import { AddToCalendar, AddressChip, Badge, Card, Deadline, List, ListRow, Notice, StatTile } from "../components/ui";
+import { AddToCalendar, AddressChip, Badge, Card, Deadline, List, ListRow, Notice, PageHead, StatTile } from "../components/ui";
 import { useSoroban } from "../context/useSoroban";
 import { useContractRead, useContractResult, useIndexedList, useProgramme } from "../hooks";
+import { useLedgerCloseTime } from "../hooks/useLedgerCloseTime";
 import { fetchProgrammes } from "../lib/indexer";
 import { directoryHref } from "../lib/programmeView";
 import { formatAmount, percentOf } from "../lib/amount";
-import { formatFigure, isSampleProgrammeId } from "../lib/programmeView";
+import { formatFigure, isSampleProgrammeId, programmeRouteState } from "../lib/programmeView";
 import { registryVerificationCopy } from "../lib/registryVerification";
 import { FIXTURE_CHAIN } from "../fixtures/programmes";
 import { fetchTokenName, parseTokenName } from "../lib/token";
@@ -167,8 +169,13 @@ function nextDeadline(
 }
 
 
-export const ProgrammeDetail = () => {
-  const { id: programmeId, client: programme, isDefault } = useProgramme();
+interface ProgrammeDetailBodyProps {
+  programmeId: string;
+  programme: ReturnType<typeof useProgramme>["client"];
+  isDefault: boolean;
+}
+
+const ProgrammeDetailBody = ({ programmeId, programme, isDefault }: ProgrammeDetailBodyProps) => {
   const { registry } = useSoroban();
   const location = useLocation();
   const [nowMs, setNowMs] = useState(() => Date.now());
@@ -254,8 +261,36 @@ export const ProgrammeDetail = () => {
     swept.refetch();
   };
 
+  // Track when both core reads last settled together. Using state rather than
+  // a ref so it drives a re-render when the chip's age label needs updating,
+  // and updated via useEffect so the write happens outside of render.
+  const [lastReadAt, setLastReadAt] = useState<number | null>(null);
+  const coreFetching = phase.fetching || config.fetching;
+  const coreReady = phase.data !== null && config.data !== null;
+
+  useEffect(() => {
+    if (!coreFetching && coreReady) {
+      // This hook intentionally sets state inside an effect to record the
+      // exact moment a fetch settles, which is only knowable in an effect.
+      // eslint-disable-next-line react-hooks/set-state-in-effect
+      setLastReadAt(Date.now());
+    }
+    // We deliberately depend only on coreFetching so this fires when a fetch
+    // completes, not on every render. coreReady is stable once true.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [coreFetching]);
+
+  const handleRefetch = useCallback(() => {
+    setLastReadAt(null);
+    phase.refetch();
+    config.refetch();
+    refetchMoney();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [phase.refetch, config.refetch]);
+
   const phaseName = phase.data?.tag ?? "Loading";
   const activeDeadline = config.data ? nextDeadline(config.data, nowMs) : null;
+
   // Name and created ledger come from the published index; the phase is read
   // on-chain and is never taken from the index or a sample.
   const indexRead = useIndexedList(() => fetchProgrammes(), []);
@@ -263,6 +298,8 @@ export const ProgrammeDetail = () => {
     () => (indexRead.data ?? []).find((entry) => entry.id === programmeId) ?? null,
     [indexRead.data, programmeId],
   );
+  const createdLedger = indexEntry?.createdLedger ?? null;
+  const ledgerCloseTime = useLedgerCloseTime(createdLedger);
   // Sample programmes live only in the fixtures: their planned mode is the
   // stand-in chain read, and the header tags it as sample data. A deployed
   // programme has no programme-level mode on-chain — the contracts pick one
@@ -329,6 +366,8 @@ export const ProgrammeDetail = () => {
         name={indexEntry?.name ?? "Programme detail"}
         creator={config.data?.creator ?? null}
         createdLedger={indexEntry?.createdLedger ?? null}
+        createdAt={ledgerCloseTime.data?.closeTime ?? null}
+        createdAtIsEstimate={ledgerCloseTime.data?.isEstimate ?? false}
         phase={phase.data?.tag ?? null}
         phaseError={Boolean(phase.error)}
         verified={isRegistered.data ?? undefined}
@@ -337,6 +376,8 @@ export const ProgrammeDetail = () => {
         sample={isSample}
         deadlines={deadlines}
         nowMs={nowMs}
+        lastReadAt={lastReadAt}
+        onRefetch={handleRefetch}
         action={
           /* A sample programme's dates are made up; they do not belong in
              anyone's calendar. */
@@ -443,10 +484,13 @@ export const ProgrammeDetail = () => {
             programmeId={programmeId}
             phase={phaseName}
             quorum={config.data?.quorum ?? 1}
+            minimumAward={config.data?.minimum_award ?? 0n}
             isSample={isSample}
             asset={asset}
             labels={metadata?.status === "ok" ? metadata.doc.labels : undefined}
           />
+
+          <ProgrammeActivityPanel programmeId={programmeId} isSample={isSample} />
         </div>
 
         <div className="programme-cols__side">
@@ -608,4 +652,31 @@ export const ProgrammeDetail = () => {
       </section>
     </div>
   );
+};
+
+/**
+ * A sample programme has no contract and no mainnet presence. Without samples,
+ * its address is not a programme on this network, so say that rather than
+ * reading a made-up contract and showing a wall of failed reads.
+ */
+export const ProgrammeDetail = () => {
+  const { id, client, isDefault } = useProgramme();
+  const routeState = programmeRouteState(id);
+
+  if (routeState === 'directory' || id === null) return <Navigate to="/directory" replace />;
+
+  if (routeState === 'not-a-programme') {
+    return (
+      <div className="programme-detail">
+        <PageHead eyebrow="Programmes" title="Not a programme on this network">
+          <p>This address belongs to a sample programme, and samples exist only on testnet.</p>
+        </PageHead>
+        <Notice tone="info">
+          <Link to="/directory">Back to the programme directory</Link>
+        </Notice>
+      </div>
+    );
+  }
+
+  return <ProgrammeDetailBody programmeId={id} programme={client} isDefault={isDefault} />;
 };

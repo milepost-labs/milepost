@@ -1,5 +1,6 @@
 import { useState, type FC } from 'react';
 import { FIXTURE_VERIFIERS, type VerifierFixture } from '../../fixtures/programmeFixtures';
+import { samplesEnabled } from '../../lib/samples';
 import { useOptionalSoroban } from '../../context/useSoroban';
 import { useContractRead } from '../../hooks/useContractRead';
 import { Badge, Button, Field, SampleTag } from '../ui';
@@ -60,7 +61,7 @@ const NamedRow: FC<{ entry: AddressLabel; programmeId: string }> = ({ entry, pro
 };
 
 export const VerifiersTab: FC<VerifiersTabProps> = ({
-  verifiers = FIXTURE_VERIFIERS,
+  verifiers = samplesEnabled() ? FIXTURE_VERIFIERS : [],
   programmeId,
   isSample = false,
   labels,

@@ -13,6 +13,7 @@ import { usePageTitle } from '../hooks/usePageTitle';
 import { truncateAddress } from '../lib/format';
 import { FIXTURE_PROGRAMMES } from '../fixtures/programmes';
 import { FIXTURE_PAYEES, type PayeeFixture } from '../fixtures/payeeFixtures';
+import { samplesEnabled } from '../lib/samples';
 import {
   bulkBatchDone,
   bulkBatchFailed,
@@ -33,7 +34,7 @@ const PAYEE_ADDRESS = /^G[A-Z2-7]{55}$/;
 type PayeeStatus = 'checking' | 'verified' | 'unverified' | 'error';
 
 function isSampleProgramme(programmeId: string): boolean {
-  return FIXTURE_PROGRAMMES.some((p) => p.id === programmeId);
+  return samplesEnabled() && FIXTURE_PROGRAMMES.some((p) => p.id === programmeId);
 }
 
 interface SessionChange {

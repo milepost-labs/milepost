@@ -1,9 +1,5 @@
 import { Link } from 'react-router-dom';
-import { networks as registryNetworks } from '@milepost/registry';
-import { networks as attestNetworks } from '@milepost/attest';
-import { networks as recordNetworks } from '@milepost/record';
-import { networks as policyNetworks } from '@milepost/policy-spend';
-import { DEMO_PROGRAMME_ID } from '../context/sorobanStore';
+import { NETWORK } from '../config/network';
 import { useSoroban } from '../context/useSoroban';
 import { INDEXER_BASE_URL } from '../lib/indexer';
 import { AddressChip, Notice, PageHead, Receipt } from '../components/ui';
@@ -23,33 +19,37 @@ const DEPLOYED_CONTRACTS: DeploymentContract[] = [
   {
     name: 'Registry',
     code: 'registry',
-    id: registryNetworks.testnet.contractId,
+    id: NETWORK.contracts.registry,
     description: 'Deploys programmes and holds the protocol config.',
   },
   {
     name: 'Attestations',
     code: 'attest',
-    id: attestNetworks.testnet.contractId,
+    id: NETWORK.contracts.attest,
     description: 'Signed claims under registered schemas.',
   },
   {
     name: 'Standing',
     code: 'record',
-    id: recordNetworks.testnet.contractId,
+    id: NETWORK.contracts.record,
     description: 'Recipients’ portable totals across programmes.',
   },
   {
     name: 'Spend policy',
     code: 'policy_spend',
-    id: policyNetworks.testnet.contractId,
+    id: NETWORK.contracts.policy,
     description: 'The default policy signer for Restricted awards.',
   },
-  {
-    name: 'Testnet pilot',
-    code: 'program',
-    id: DEMO_PROGRAMME_ID,
-    description: 'The seeded programme. Every programme is its own contract.',
-  },
+  ...(NETWORK.demoProgrammeId
+    ? [
+        {
+          name: 'Testnet pilot',
+          code: 'program',
+          id: NETWORK.demoProgrammeId,
+          description: 'The seeded programme. Every programme is its own contract.',
+        },
+      ]
+    : []),
 ];
 
 const APP_BUILD_VERSION = import.meta.env.VITE_APP_VERSION || 'dev';
@@ -70,9 +70,15 @@ export function AboutDeployment() {
       </PageHead>
 
       <Notice tone="risk">
-        <span>
-          <strong>Stellar testnet, pre-audit.</strong> The contracts have not been audited. Don’t use real funds.
-        </span>
+        {NETWORK.name === 'mainnet' ? (
+          <span>
+            <strong>Stellar mainnet, pre-audit.</strong> The contracts have not been audited. Funds you send are real.
+          </span>
+        ) : (
+          <span>
+            <strong>Stellar testnet, pre-audit.</strong> The contracts have not been audited. Don’t use real funds.
+          </span>
+        )}
       </Notice>
 
       <div className="about__grid">
@@ -112,8 +118,8 @@ export function AboutDeployment() {
             <h2 id="about-network">Network and build</h2>
             <Receipt
               rows={[
-                { label: 'Network', value: 'Stellar testnet', text: true },
-                { label: 'Passphrase', value: registryNetworks.testnet.networkPassphrase, text: true },
+                { label: 'Network', value: NETWORK.name === 'mainnet' ? 'Stellar mainnet' : 'Stellar testnet', text: true },
+                { label: 'Passphrase', value: NETWORK.passphrase, text: true },
                 { label: 'RPC', value: rpcUrl.replace(/^https?:\/\//, '') },
                 { label: 'App build', value: APP_BUILD_VERSION },
                 {

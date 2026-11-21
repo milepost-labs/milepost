@@ -6,6 +6,8 @@
  * a 56-character address has to be shortened without becoming ambiguous.
  */
 
+import { explorerFor } from '../config/network';
+
 /** Contract timestamps are seconds; `Date` wants milliseconds. */
 export function toDate(unixSeconds: number | bigint): Date {
   return new Date(Number(unixSeconds) * 1000);
@@ -106,10 +108,11 @@ export function looksLikeContractId(value: string): boolean {
  *
  * `network` is whatever Freighter's `getNetwork()` returns — typically
  * `"TESTNET"` or `"PUBLIC"`. Anything that does not case-insensitively
- * contain "testnet" is treated as mainnet, which is the safer default.
+ * contain "testnet" is treated as mainnet, which is the safer default. Left
+ * out, it is the app's own network.
  */
-export function explorerUrl(hash: string, network: string): string {
-  const net = network.toLowerCase().includes('testnet') ? 'testnet' : 'public';
+export function explorerUrl(hash: string, network?: string): string {
+  const net = explorerFor(network);
   return `https://stellar.expert/explorer/${net}/tx/${hash}`;
 }
 
@@ -117,8 +120,8 @@ export function explorerUrl(hash: string, network: string): string {
  * Build a Stellar Expert URL for an account or contract address.
  * Accounts start with 'G', contracts start with 'C'.
  */
-export function addressExplorerUrl(address: string, network = 'testnet'): string {
-  const net = network.toLowerCase().includes('testnet') ? 'testnet' : 'public';
+export function addressExplorerUrl(address: string, network?: string): string {
+  const net = explorerFor(network);
   if (address.startsWith('C')) {
     return `https://stellar.expert/explorer/${net}/contract/${address}`;
   }

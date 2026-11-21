@@ -11,6 +11,7 @@ import { explain } from '../lib/errors';
 import { formatDate, looksLikeAddress } from '../lib/format';
 import { formatFigure, programmeAsset, shortId } from '../lib/programmeView';
 import { FIXTURE_PROGRAMMES, chainFor, isSampleProgrammeId } from '../fixtures/programmes';
+import { samplesEnabled } from '../lib/samples';
 import { FIXTURE_REVIEW_APPLICATIONS } from '../fixtures/finalizeFixtures';
 import { awardFromVotes } from '../lib/awardRule';
 import { Button, Field, Notice, PageHead, PhaseBadge, SampleTag, Select } from '../components/ui';
@@ -61,6 +62,14 @@ export const FinalizeAwards = () => {
   const programmeParam = useProgrammeParam();
   const listRead = useIndexedList(() => fetchProgrammes(), []);
 
+  // A sample address is not a programme on mainnet, even if a link names it.
+  const linkedProgrammeId =
+    programmeParam.status === 'valid' &&
+    programmeParam.programmeId &&
+    (samplesEnabled() || !isSampleProgrammeId(programmeParam.programmeId))
+      ? programmeParam.programmeId
+      : null;
+
   const programmes: ProgrammeOption[] = useMemo(() => {
     const seen = new Set<string>();
     const list: ProgrammeOption[] = [];
@@ -70,23 +79,25 @@ export const FinalizeAwards = () => {
       list.push(p);
     };
     for (const p of listRead.data ?? []) push({ id: p.id, name: p.name, sample: false });
-    if (programmeParam.status === 'valid' && programmeParam.programmeId) {
-      push({ id: programmeParam.programmeId, name: null, sample: isSampleProgrammeId(programmeParam.programmeId) });
+    if (linkedProgrammeId) {
+      push({ id: linkedProgrammeId, name: null, sample: samplesEnabled() && isSampleProgrammeId(linkedProgrammeId) });
     }
-    for (const f of FIXTURE_PROGRAMMES) push({ id: f.id, name: f.name, sample: true });
+    if (samplesEnabled()) {
+      for (const f of FIXTURE_PROGRAMMES) push({ id: f.id, name: f.name, sample: true });
+    }
     return list;
-  }, [listRead.data, programmeParam.status, programmeParam.programmeId]);
+  }, [linkedProgrammeId, listRead.data]);
 
   const [chosen, setChosen] = useState<string | null>(null);
   const selectedId =
     chosen ??
-    (programmeParam.status === 'valid' && programmeParam.programmeId ? programmeParam.programmeId : null) ??
+    linkedProgrammeId ??
     programmes.find((p) => !p.sample)?.id ??
-    SAMPLE_REVIEW_ID;
+    (samplesEnabled() ? SAMPLE_REVIEW_ID : null);
   const selected = programmes.find((p) => p.id === selectedId) ?? {
-    id: selectedId,
+    id: selectedId ?? '',
     name: null,
-    sample: isSampleProgrammeId(selectedId),
+    sample: selectedId !== null && samplesEnabled() && isSampleProgrammeId(selectedId),
   };
   const sample = selected.sample;
   const asset = programmeAsset({ sample });

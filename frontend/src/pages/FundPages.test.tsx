@@ -54,6 +54,7 @@ describe('ReceiptLookup', () => {
       createdAt: 1_790_000_000,
       opCount: 1,
       contribution: { programmeId: PROGRAMME, donor: DONOR, amount: 250_000_000n },
+      refund: null,
     });
     renderAt(<ReceiptLookup />, `/funders/receipt?hash=${HASH}`);
 
@@ -78,6 +79,38 @@ describe('ReceiptLookup', () => {
     fireEvent.change(screen.getByLabelText('Transaction hash'), { target: { value: 'nope' } });
     expect(screen.getByText(/doesn’t look like a transaction hash/)).toBeTruthy();
     expect(mocks.lookup).not.toHaveBeenCalled();
+  });
+
+  it('rebuilds a full refund receipt with the returned amount', async () => {
+    mocks.lookup.mockResolvedValue({
+      status: 'SUCCESS',
+      ledger: 4_700_000,
+      createdAt: 1_790_100_000,
+      opCount: 1,
+      contribution: null,
+      refund: { programmeId: PROGRAMME, donor: DONOR, amount: 180_000_000n, partial: false },
+    });
+    renderAt(<ReceiptLookup />, `/funders/receipt?hash=${HASH}`);
+
+    expect(await screen.findByRole('heading', { name: 'Refund · 18 XLM' })).toBeTruthy();
+    // Does NOT show a "Partial refund" row for a refund of the whole share.
+    expect(screen.queryByText('Partial refund')).toBeNull();
+    expect(mocks.announce).toHaveBeenCalledWith('Refund receipt rebuilt from the transaction.');
+  });
+
+  it('rebuilds a partial refund receipt and labels it as partial', async () => {
+    mocks.lookup.mockResolvedValue({
+      status: 'SUCCESS',
+      ledger: 4_700_001,
+      createdAt: 1_790_200_000,
+      opCount: 1,
+      contribution: null,
+      refund: { programmeId: PROGRAMME, donor: DONOR, amount: 50_000_000n, partial: true },
+    });
+    renderAt(<ReceiptLookup />, `/funders/receipt?hash=${HASH}`);
+
+    expect(await screen.findByRole('heading', { name: 'Partial refund · 5 XLM' })).toBeTruthy();
+    expect(await screen.findByText('Partial refund')).toBeTruthy();
   });
 });
 

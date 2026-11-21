@@ -15,7 +15,7 @@ import { formatShare, formatIn } from '../lib/funding';
 import { explain } from '../lib/errors';
 import { fetchProgrammes } from '../lib/indexer';
 import { programmeAsset, shortId } from '../lib/programmeView';
-import { isValidTxHash, lookupTransaction, rpcServer, type ContributionTx, type TxLookup } from '../lib/txLookup';
+import { isValidTxHash, lookupTransaction, rpcServer, type ContributionTx, type RefundTx, type TxLookup } from '../lib/txLookup';
 import './ReceiptLookup.css';
 
 type LookupState =
@@ -59,7 +59,9 @@ export const ReceiptLookup = () => {
           result.status === 'SUCCESS'
             ? result.contribution
               ? 'Receipt rebuilt from the transaction.'
-              : 'The transaction went through, but it is not a contribution.'
+              : result.refund
+                ? 'Refund receipt rebuilt from the transaction.'
+                : 'The transaction went through, but it is not a contribution or refund.'
             : result.status === 'NOT_FOUND'
               ? 'The network no longer has this transaction.'
               : 'The transaction did not go through.',
@@ -117,7 +119,7 @@ export const ReceiptLookup = () => {
         </Button>
       </form>
       <p className="receipt-lookup__fine">
-        Works for contributions. The network keeps recent transactions only; older ones live on the explorer.
+        Works for contributions and refunds. The network keeps recent transactions only; older ones live on the explorer.
       </p>
 
       {state.kind === 'searching' && (
@@ -163,23 +165,35 @@ function ResultView({
       </Notice>
     );
   }
-  if (!result.contribution) {
+  if (!result.contribution && !result.refund) {
     return (
       <Notice tone="info" role="status">
         <span>
           The transaction went through ({result.opCount} operation{result.opCount === 1 ? '' : 's'}), but none of them is
-          a contribution. A receipt can only be rebuilt from a call to a programme’s <code>contribute</code>.
+          a contribution or refund. A receipt can only be rebuilt from a call to a programme’s <code>contribute</code>,{' '}
+          <code>refund</code>, or <code>refund_partial</code>.
         </span>
       </Notice>
     );
   }
+  if (result.refund) {
+    return (
+      <RebuiltRefundReceipt
+        tx={result.refund}
+        hash={hash}
+        ledger={result.ledger}
+        createdAt={result.createdAt}
+        programmeName={programmeName(result.refund.programmeId)}
+      />
+    );
+  }
   return (
     <RebuiltReceipt
-      tx={result.contribution}
+      tx={result.contribution!}
       hash={hash}
       ledger={result.ledger}
       createdAt={result.createdAt}
-      programmeName={programmeName(result.contribution.programmeId)}
+      programmeName={programmeName(result.contribution!.programmeId)}
     />
   );
 }
@@ -286,5 +300,78 @@ function RebuiltReceipt({
         </p>
       </section>
     </>
+  );
+}
+
+/** A rebuilt refund receipt: what the hash proves was paid back. */
+function RebuiltRefundReceipt({
+  tx,
+  hash,
+  ledger,
+  createdAt,
+  programmeName,
+}: {
+  tx: RefundTx;
+  hash: string;
+  ledger: number;
+  createdAt: number | null;
+  programmeName: string | null;
+}) {
+  const asset = programmeAsset({ sample: false });
+  const name = programmeName ?? shortId(tx.programmeId);
+  const title = tx.partial
+    ? `Partial refund · ${formatIn(tx.amount, asset)}`
+    : `Refund · ${formatIn(tx.amount, asset)}`;
+
+  const text = [
+    'Milepost refund receipt',
+    tx.partial ? 'Type: Partial refund' : 'Type: Refund',
+    `Programme: ${name} (${tx.programmeId})`,
+    `To: ${tx.donor}`,
+    `Returned: ${formatIn(tx.amount, asset)}`,
+    `Ledger: ${ledger}`,
+    createdAt !== null ? `Time: ${formatDateTime(createdAt)}` : null,
+    `Transaction: ${hash}`,
+  ]
+    .filter(Boolean)
+    .join('\n');
+
+  return (
+    <section className="receipt-card" aria-labelledby="refund-receipt-title">
+      <div className="receipt-card__head">
+        <div>
+          <p className="receipt-card__eyebrow">Receipt · rebuilt from the chain</p>
+          <h2 id="refund-receipt-title">{title}</h2>
+        </div>
+        <span className="receipt-card__status">Success</span>
+      </div>
+      <Receipt
+        rows={[
+          {
+            label: 'Programme',
+            value: <Link to={`/programme/${encodeURIComponent(tx.programmeId)}`}>{name}</Link>,
+            text: true,
+          },
+          { label: 'To', value: <span title={tx.donor}>{truncateAddress(tx.donor)}</span> },
+          { label: 'Returned', value: formatIn(tx.amount, asset) },
+          ...(tx.partial ? [{ label: 'Type', value: 'Partial refund', text: true as const }] : []),
+          { label: 'Ledger', value: ledger.toLocaleString('en-GB') },
+          { label: 'Time', value: createdAt !== null ? formatDateTime(createdAt) : 'Unknown', text: true },
+          { label: 'Transaction', value: <span title={hash}>{shortId(hash)}</span> },
+        ]}
+      />
+      <div className="receipt-card__actions">
+        <CopyButton value={hash} label="Copy hash" showLabel />
+        <a
+          className="ui-button ui-button--ghost ui-button--sm"
+          href={explorerUrl(hash, 'TESTNET')}
+          target="_blank"
+          rel="noreferrer"
+        >
+          <ExternalLink size={16} aria-hidden="true" /> View on the explorer
+        </a>
+        <CopyButton value={text} label="Copy receipt as text" showLabel />
+      </div>
+    </section>
   );
 }

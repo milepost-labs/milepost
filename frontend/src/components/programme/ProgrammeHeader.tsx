@@ -1,9 +1,10 @@
 import { useState, type CSSProperties, type ReactNode } from 'react';
 import { Link } from 'react-router-dom';
-import { ArrowLeft, Ban, Check, ShieldAlert, ShieldCheck } from 'lucide-react';
+import { ArrowLeft, Ban, RefreshCw, ShieldAlert, ShieldCheck } from 'lucide-react';
 import { AddressChip, ModePill, PhaseBadge, SampleTag } from '../ui';
 import { formatDate, truncateAddress } from '../../lib/format';
 import { registryVerificationCopy } from '../../lib/registryVerification';
+import { useChainAge } from '../../hooks/useChainAge';
 import './ProgrammeHeader.css';
 
 /** The four deadlines from the programme's config, in unix seconds. */
@@ -78,6 +79,8 @@ export function ProgrammeHeader({
   name,
   creator,
   createdLedger,
+  createdAt = null,
+  createdAtIsEstimate = false,
   phase,
   phaseError = false,
   verified,
@@ -86,12 +89,18 @@ export function ProgrammeHeader({
   sample = false,
   deadlines = null,
   nowMs,
+  lastReadAt = null,
+  onRefetch,
   action,
 }: {
   id: string;
   name: string;
   creator: string | null;
   createdLedger: number | null;
+  /** Unix seconds of the ledger's close, resolved from the RPC. Null while loading or unknown. */
+  createdAt?: number | null;
+  /** True when `createdAt` was estimated rather than read exactly from the RPC. */
+  createdAtIsEstimate?: boolean;
   /** The on-chain phase, or null while it has not been read. */
   phase: string | null;
   phaseError?: boolean;
@@ -107,6 +116,10 @@ export function ProgrammeHeader({
   deadlines?: ProgrammeDeadlines | null;
   /** The clock the dates are compared with. Defaults to now. */
   nowMs?: number;
+  /** Unix ms when the slowest core read last settled. Null until the first read is done. */
+  lastReadAt?: number | null;
+  /** Called when the user presses the "read on the chain" chip to refetch. */
+  onRefetch?: () => void;
   /** Sits opposite the title: the page's one header action. */
   action?: ReactNode;
 }) {
@@ -115,6 +128,7 @@ export function ProgrammeHeader({
   const cancelled = phase === 'Cancelled';
   const current = currentStep(phase, deadlines, now);
   const progress = stepProgress(current, deadlines, now);
+  const chainAge = useChainAge(lastReadAt ?? null, onRefetch ?? (() => {}));
   const readLine = phase
     ? 'Phase read on-chain just now'
     : phaseError
@@ -159,11 +173,36 @@ export function ProgrammeHeader({
               </code>
             </span>
             <span className="programme-header__meta-item">
-              Created at ledger <span className="numeric">{createdLedger?.toLocaleString() ?? '—'}</span>
+              Created at ledger{' '}
+              <span className="numeric">{createdLedger?.toLocaleString() ?? '—'}</span>
+              {createdAt !== null && (
+                <span className="programme-header__created-date">
+                  {createdAtIsEstimate && (
+                    <span className="programme-header__created-approx" aria-label="approximate date">
+                      about{' '}
+                    </span>
+                  )}
+                  <span className="numeric">{formatDate(createdAt)}</span>
+                </span>
+              )}
             </span>
             <span className={`programme-header__read${phase ? ' programme-header__read--ok' : ''}`}>
-              {phase && <Check aria-hidden="true" />}
-              {readLine}
+              {chainAge.label !== null ? (
+                <button
+                  type="button"
+                  className="programme-header__chip"
+                  onClick={chainAge.refetch}
+                  aria-label={`Read on the chain ${chainAge.label}. Press to refetch.`}
+                >
+                  <RefreshCw aria-hidden="true" />
+                  Read on the chain {chainAge.label}
+                </button>
+              ) : (
+                <>
+                  <RefreshCw aria-hidden="true" />
+                  {readLine}
+                </>
+              )}
             </span>
           </div>
         </div>

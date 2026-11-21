@@ -14,6 +14,8 @@ export interface ProgrammeTabsProps {
   quorum?: number;
   isSample?: boolean;
   asset?: string;
+  /** Minimum award in stroops, from get_config(). */
+  minimumAward?: bigint;
   verifiers?: VerifierFixture[];
   /** The creator's names for addresses, from the verified description. */
   labels?: AddressLabel[];
@@ -26,6 +28,7 @@ export const ProgrammeTabs: FC<ProgrammeTabsProps> = ({
   quorum = 1,
   isSample = false,
   asset = 'USDC',
+  minimumAward,
   verifiers,
   labels,
   defaultTab = 'awards',
@@ -127,6 +130,7 @@ export const ProgrammeTabs: FC<ProgrammeTabsProps> = ({
             programmeId={programmeId}
             quorum={quorum}
             asset={asset}
+            minimumAward={minimumAward}
           />
         )}
       </div>
