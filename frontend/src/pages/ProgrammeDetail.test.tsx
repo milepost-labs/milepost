@@ -365,6 +365,94 @@ describe('ProgrammeDetail — when a read fails', () => {
   });
 });
 
+describe('ProgrammeDetail — an address that is not a programme', () => {
+  const NOT_A_PROGRAMME = `CA${'N'.repeat(54)}`;
+
+  /** Every read the page makes on the programme beyond the one that tells it what this is. */
+  const otherReads = () => [
+    programme.get_phase,
+    programme.budget,
+    programme.fee,
+    programme.total_contributed,
+    programme.total_granted,
+    programme.total_released,
+    programme.total_refunded,
+    programme.total_swept,
+    programme.is_paused,
+  ];
+
+  it('shows one notice with the address and a way back, and sends no other reads', async () => {
+    registry.is_programme.mockResolvedValue({ result: false });
+    programme.get_config.mockRejectedValue(new Error('contract not found'));
+    renderProgramme(`/programme/${NOT_A_PROGRAMME}`);
+
+    expect(await screen.findByText('No Milepost programme at this address')).toBeTruthy();
+    expect(screen.getByRole('link', { name: 'Browse programmes' }).getAttribute('href')).toBe('/directory');
+    expect(screen.getAllByText(new RegExp(NOT_A_PROGRAMME.slice(0, 6))).length).toBeGreaterThan(0);
+
+    // One notice, not a wall of per-panel failures.
+    expect(screen.queryByText('Programme rules')).toBeNull();
+    expect(screen.queryByText('Timeline')).toBeNull();
+    expect(screen.queryByText(/Something went wrong/)).toBeNull();
+    expect(screen.queryAllByRole('alert')).toHaveLength(0);
+
+    // Only the two questions that decide it were asked, once each.
+    expect(registry.is_programme).toHaveBeenCalledTimes(1);
+    expect(programme.get_config).toHaveBeenCalledTimes(1);
+    for (const read of otherReads()) expect(read).not.toHaveBeenCalled();
+  });
+
+  it('waits for the registry before reading anything else', async () => {
+    let answer!: (value: { result: boolean }) => void;
+    registry.is_programme.mockImplementation(() => new Promise((resolve) => { answer = resolve; }));
+    renderProgramme(`/programme/${REAL_ID}`);
+
+    expect(await screen.findByText('Checking this address')).toBeTruthy();
+    expect(programme.get_config).not.toHaveBeenCalled();
+    for (const read of otherReads()) expect(read).not.toHaveBeenCalled();
+
+    answer({ result: true });
+    await moneyReady();
+  });
+
+  it('leaves a real programme unchanged: no notice, and the registry is asked once', async () => {
+    renderProgramme(`/programme/${REAL_ID}`);
+    await moneyReady();
+
+    expect(screen.queryByText('No Milepost programme at this address')).toBeNull();
+    expect(registry.is_programme).toHaveBeenCalledTimes(1);
+    expect(screen.getByText('Programme rules')).toBeTruthy();
+  });
+
+  it('keeps the full page for a programme deployed outside the registry', async () => {
+    registry.is_programme.mockResolvedValue({ result: false });
+    renderProgramme(`/programme/${REAL_ID}`);
+    await moneyReady();
+
+    expect(screen.queryByText('No Milepost programme at this address')).toBeNull();
+    expect(screen.getAllByText('Not registry-deployed').length).toBeGreaterThan(0);
+  });
+
+  it('does not call a real programme a non-programme because the network failed', async () => {
+    registry.is_programme.mockResolvedValue({ result: false });
+    programme.get_config.mockRejectedValue(new Error('Failed to fetch'));
+    renderProgramme(`/programme/${REAL_ID}`);
+
+    // The page renders, and each panel that failed says so for itself.
+    expect((await screen.findAllByText('Could not reach the network.')).length).toBeGreaterThan(0);
+    expect(screen.queryByText('No Milepost programme at this address')).toBeNull();
+    expect(programme.get_phase).toHaveBeenCalled();
+  });
+
+  it('does not call a real programme a non-programme because the registry read failed', async () => {
+    registry.is_programme.mockRejectedValue(new Error('Failed to fetch'));
+    renderProgramme(`/programme/${REAL_ID}`);
+    await moneyReady();
+
+    expect(screen.queryByText('No Milepost programme at this address')).toBeNull();
+  });
+});
+
 describe('ProgrammeDetail — the description', () => {
   const doc = {
     schema_version: '1.1.0',
