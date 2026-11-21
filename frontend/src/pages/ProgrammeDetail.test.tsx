@@ -354,7 +354,10 @@ describe('ProgrammeDetail — when a read fails', () => {
     renderProgramme(`/programme/${REAL_ID}`);
 
     expect((await screen.findAllByText('Could not reach the network.')).length).toBeGreaterThan(0);
-    const retries = screen.getAllByRole('button', { name: 'Try again' });
+    // Click the retry on a failed read's error panel, not the activity panel's.
+    const retries = screen
+      .getAllByRole('button', { name: 'Try again' })
+      .filter((button) => button.closest('.state-error'));
     fireEvent.click(retries[retries.length - 1]);
 
     expect(await screen.findByText('Budget 7,920.00 XLM')).toBeTruthy();

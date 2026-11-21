@@ -11,6 +11,7 @@ import { PausedBanner } from "../components/programme/PausedBanner";
 import { ProgrammeHeader } from "../components/programme/ProgrammeHeader";
 import { WhereTheMoneyIs } from "../components/programme/WhereTheMoneyIs";
 import { ProgrammeTabs } from "../components/programme/ProgrammeTabs";
+import { ProgrammeActivityPanel } from "../components/programme/ProgrammeActivity";
 import { ProgrammeActions } from "../components/programme/ProgrammeActions";
 import { DescriptionBand, MetadataPanel } from "../components/programme/ProgrammeDescription";
 import { useProgrammeMetadata } from "../hooks/useProgrammeMetadata";
@@ -483,6 +484,8 @@ export const ProgrammeDetail = () => {
             asset={asset}
             labels={metadata?.status === "ok" ? metadata.doc.labels : undefined}
           />
+
+          <ProgrammeActivityPanel programmeId={programmeId} isSample={isSample} />
         </div>
 
         <div className="programme-cols__side">

@@ -284,3 +284,25 @@
   justify-content: flex-end;
   gap: var(--space-3);
 }
+
+/* The award's own page: linkable, shareable, live from the chain. */
+.award-card__detail-link {
+  display: inline-flex;
+  align-items: center;
+  min-height: var(--tap-min);
+  margin-top: var(--space-1);
+  font-size: var(--text-sm);
+  font-weight: var(--weight-semibold);
+  color: var(--accent);
+  text-decoration: none;
+  outline-offset: var(--focus-offset);
+}
+
+.award-card__detail-link:hover {
+  text-decoration: underline;
+}
+
+.award-card__detail-link:focus-visible {
+  outline: 2px solid var(--focus);
+  border-radius: var(--radius-sm);
+}

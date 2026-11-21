@@ -95,6 +95,7 @@ export const APP_ROUTES: AppRoute[] = [
   { path: '/recipients/standing', label: 'Standing', title: 'Recipient Standing', section: 'get-funded' },
   { path: '/recipients/award-progress', label: 'Award progress', title: 'Award Progress', section: 'get-funded' },
   { path: '/recipients/application-timeline', label: 'Application timeline', title: 'Application Timeline', section: 'get-funded' },
+  { path: '/award', label: 'Award detail', title: 'Award Detail', section: 'get-funded' },
   { path: '/verifiers', label: 'Verifiers', title: 'Verifier Dashboard', section: 'verify' },
   { path: '/finalize', label: 'Finalize awards', title: 'Finalize Awards', section: 'admin' },
   { path: '/policy', label: 'Spend policy', title: 'Spend Policy', section: 'get-funded' },
@@ -116,7 +117,7 @@ export function getSectionForPath(pathname: string): NavSectionKey | null {
     return 'programmes';
   }
   if (pathname.startsWith('/funders')) return 'fund';
-  if (pathname.startsWith('/recipients') || pathname === '/policy') return 'get-funded';
+  if (pathname.startsWith('/recipients') || pathname === '/policy' || pathname.startsWith('/award')) return 'get-funded';
   if (pathname.startsWith('/verifiers') || pathname.startsWith('/attestations')) return 'verify';
   if (pathname.startsWith('/admin') || pathname.startsWith('/schemas') || pathname === '/finalize' || pathname === '/keepalive') {
     return 'admin';

@@ -1,0 +1,133 @@
+.award-detail {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-5);
+  max-width: var(--page-measure-narrow, 48rem);
+  margin: 0 auto;
+}
+
+.award-detail__back {
+  align-self: flex-start;
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-1-5);
+  min-height: var(--tap-min);
+  font-size: var(--text-sm);
+  font-weight: var(--weight-semibold);
+  color: var(--accent);
+  text-decoration: none;
+}
+
+.award-detail__back:hover {
+  text-decoration: underline;
+}
+
+.award-detail__back svg {
+  width: 16px;
+  height: 16px;
+}
+
+.award-detail__card {
+  background: var(--bg-raised);
+  border-radius: var(--radius-md);
+  padding: var(--space-5);
+}
+
+.award-detail__card-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: var(--space-3);
+  flex-wrap: wrap;
+  margin-bottom: var(--space-4);
+}
+
+.award-detail__eyebrow {
+  margin: 0 0 var(--space-1);
+  font-size: var(--text-caption);
+  color: var(--ink-muted);
+}
+
+.award-detail__figure {
+  margin: 0;
+  font-family: var(--font-numeric);
+  font-size: var(--text-xl);
+  font-weight: var(--weight-semibold);
+  letter-spacing: var(--tracking-tight);
+}
+
+.award-detail__party {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-1-5);
+  flex-wrap: wrap;
+}
+
+/* One square per tranche, painted once released — same two states as the
+   programme's money squares. */
+.award-detail__tranches {
+  display: flex;
+  gap: var(--space-1);
+  margin-top: var(--space-4);
+  flex-wrap: wrap;
+}
+
+.award-detail__tranche {
+  width: 14px;
+  height: 14px;
+  flex: none;
+  border-radius: var(--radius-sq);
+  box-sizing: border-box;
+  background: var(--money-locked);
+}
+
+.award-detail__tranche[data-money-state='released'] {
+  background: var(--money-released);
+}
+
+.award-detail__mode {
+  background: var(--bg-sunken);
+  border-radius: var(--radius-md);
+  padding: var(--space-5);
+}
+
+.award-detail__mode-title {
+  margin: 0 0 var(--space-2);
+  font-size: var(--text-md);
+  font-weight: var(--weight-semibold);
+}
+
+.award-detail__mode-body {
+  margin: 0;
+  font-size: var(--text-sm);
+  line-height: var(--leading-body);
+  color: var(--ink);
+}
+
+.award-detail__mode-note {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--space-1-5);
+  margin: var(--space-3) 0 0;
+  font-size: var(--text-sm);
+  line-height: var(--leading-body);
+  color: var(--ink-muted);
+}
+
+.award-detail__mode-note svg {
+  width: 16px;
+  height: 16px;
+  flex: none;
+  color: var(--accent);
+}
+
+.award-detail__fine {
+  margin: 0;
+  font-size: var(--text-caption);
+  line-height: var(--leading-body);
+  color: var(--ink-muted);
+}
+
+.award-detail__spacer {
+  height: 0;
+}
