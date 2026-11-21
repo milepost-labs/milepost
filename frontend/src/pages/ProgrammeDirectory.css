@@ -188,6 +188,27 @@
   font-weight: var(--weight-medium);
 }
 
+/* The sector from the programme's published description, under the id. */
+.directory-card__sector {
+  margin-top: var(--space-1-5);
+  font-size: var(--text-sm);
+  font-weight: var(--weight-semibold);
+  color: var(--ink);
+}
+
+/* A one-line clamp of the description, so a long summary never pushes the
+   card's figures off-screen. */
+.directory-card__summary {
+  margin-top: var(--space-1);
+  font-size: var(--text-sm);
+  line-height: var(--leading-snug);
+  color: var(--ink-muted);
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
 .directory-card__roles {
   display: flex;
   flex-wrap: wrap;

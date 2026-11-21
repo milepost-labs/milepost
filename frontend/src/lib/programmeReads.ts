@@ -99,6 +99,8 @@ export interface ProgrammeChainRead {
   quorum: number | null;
   /** Applications close here (Unix seconds), for the "closes in N days" line. */
   applyDeadline: bigint | null;
+  /** SHA-256 hex of the programme's committed description, or null when none. */
+  metadataHash: string | null;
 }
 
 /**
@@ -155,6 +157,7 @@ export async function readProgrammeChain(
           feeBps: Number(value.fee_bps),
           quorum: Number(value.quorum),
           applyDeadline: value.apply_deadline,
+          metadataHash: value.metadata_hash.toString("hex"),
         };
       }),
     ]);
@@ -169,6 +172,7 @@ export async function readProgrammeChain(
       feeBps: config?.feeBps ?? null,
       quorum: config?.quorum ?? null,
       applyDeadline: config?.applyDeadline ?? null,
+      metadataHash: config?.metadataHash ?? null,
     };
   });
 }
