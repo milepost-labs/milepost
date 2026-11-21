@@ -9,9 +9,12 @@ import type { FixtureContribution } from '../fixtures/funding';
 import { phaseRequirement, type Phase } from './phaseGate';
 import { formatFigure, programmeAsset, shortId, type DirectoryProgramme } from './programmeView';
 
-/** An amount with its asset, trailing zeros dropped: "990 USDC", "12.5 XLM". */
-export function formatIn(stroops: bigint, asset: string): string {
-  return `${formatFigure(stroops)} ${asset}`;
+/**
+ * An amount with its asset, trailing zeros dropped: "990 USDC", "12.5 XLM".
+ * Without an asset (still being read) it is the bare figure.
+ */
+export function formatIn(stroops: bigint, asset: string | null): string {
+  return asset ? `${formatFigure(stroops)} ${asset}` : formatFigure(stroops);
 }
 
 /** A share held in basis points, as a percentage: "12.5%", "0.04%". */

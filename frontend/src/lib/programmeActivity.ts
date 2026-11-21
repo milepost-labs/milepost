@@ -217,12 +217,12 @@ function detailOf(kind: (typeof ACTIVITY_TOPICS)[number], map: Record<string, un
 }
 
 /** One sentence for an item, in the programme's asset. */
-export function activitySentence(item: ActivityItem, asset: string): string {
+export function activitySentence(item: ActivityItem, asset: string | null): string {
   const amount =
     item.amount !== null
       ? ` · ${new Intl.NumberFormat(undefined, { maximumFractionDigits: 2 }).format(
           Number(item.amount) / 10_000_000,
-        )} ${asset}`
+        )}${asset ? ` ${asset}` : ''}`
       : '';
 
   switch (item.kind) {
