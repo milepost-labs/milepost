@@ -116,7 +116,7 @@ export const SpendPolicy = () => {
   });
   const install = () => {
     setSheet('install');
-    void installTx.send(() => policy.install({ wallet: target }));
+    void installTx.prepare(() => policy.install({ wallet: target }));
   };
 
   // --- Configure ------------------------------------------------------------
@@ -172,7 +172,7 @@ export const SpendPolicy = () => {
     if (configureReason || configureTx.busy || !capParsed.ok) return;
     const period = BigInt(periodDays) * SECONDS_PER_DAY;
     setSheet('configure');
-    void configureTx.send(async () => {
+    void configureTx.prepare(async () => {
       const tx = await policy.configure({
         steward: effectiveSteward,
         wallet: target,
@@ -180,8 +180,12 @@ export const SpendPolicy = () => {
         cap: capParsed.value,
         period,
       });
+      const rawFee = (
+        tx as unknown as { simulationResponse?: { minResourceFee?: string | number | bigint } }
+      ).simulationResponse?.minResourceFee;
       return {
         restore: restoreFromAssembled(tx),
+        estimatedFee: rawFee !== undefined ? BigInt(rawFee) : undefined,
         signAndSend: async (options) => {
           const sent = await tx.signAndSend(options);
           // Result<void>: a rejection reverts the whole call, so surface it through explain().
@@ -217,11 +221,15 @@ export const SpendPolicy = () => {
     if (payeeReason || !configuredSteward || payeeTx.busy) return;
     setPayeeAction({ kind, payee: who });
     setSheet('payee');
-    const done = await payeeTx.send(async () => {
+    await payeeTx.prepare(async () => {
       const args = { steward: configuredSteward, wallet: target, payee: who };
       const tx = kind === 'allow' ? await policy.allow_payee(args) : await policy.deny_payee(args);
+      const rawFee = (
+        tx as unknown as { simulationResponse?: { minResourceFee?: string | number | bigint } }
+      ).simulationResponse?.minResourceFee;
       return {
         restore: restoreFromAssembled(tx),
+        estimatedFee: rawFee !== undefined ? BigInt(rawFee) : undefined,
         signAndSend: async (options) => {
           const sent = await tx.signAndSend(options);
           sent.result.unwrap();
@@ -229,11 +237,20 @@ export const SpendPolicy = () => {
         },
       } satisfies Sendable<string>;
     });
+  };
+
+  const confirmPayee = async () => {
+    if (!payeeAction) return;
+    const done = await payeeTx.confirm();
     if (done !== null) {
       setSessionPayees((prev) =>
-        kind === 'allow' ? (prev.includes(done) ? prev : [...prev, done]) : prev.filter((p) => p !== done),
+        payeeAction.kind === 'allow'
+          ? prev.includes(done)
+            ? prev
+            : [...prev, done]
+          : prev.filter((p) => p !== done),
       );
-      if (kind === 'allow') {
+      if (payeeAction.kind === 'allow') {
         setNewPayeeInput('');
         setPayeeAttempted(false);
       }
@@ -606,6 +623,7 @@ export const SpendPolicy = () => {
             </>
           ) : undefined
         }
+        onConfirm={() => void confirmPayee()}
         failTitle="Payee list not changed"
         onRetry={payeeAction ? () => void changePayee(payeeAction.kind, payeeAction.payee) : undefined}
       />

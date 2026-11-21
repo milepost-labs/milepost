@@ -94,7 +94,7 @@ export const RegisterSchema = () => {
     const def = buildSchemaDefinition(trimmedName, fields);
     const predecessorBuf =
       predecessor.trim() === '' ? undefined : Buffer.from(predecessor.trim().replace(/^0x/i, ''), 'hex');
-    const result = await tx.send(async () => {
+    await tx.prepare(async () => {
       const built = await attest.register_schema({
         authority: address,
         definition: def,
@@ -103,14 +103,22 @@ export const RegisterSchema = () => {
         restricted: false,
         predecessor: predecessorBuf,
       });
+      const rawFee = (
+        built as unknown as { simulationResponse?: { minResourceFee?: string | number | bigint } }
+      ).simulationResponse?.minResourceFee;
       return {
         restore: restoreFromAssembled(built),
+        estimatedFee: rawFee !== undefined ? BigInt(rawFee) : undefined,
         signAndSend: async (options: Parameters<typeof built.signAndSend>[0]) => {
           const sent = await built.signAndSend(options);
           return { result: sent.result.unwrap() as Buffer };
         },
       };
     });
+  };
+
+  const confirmRegister = async () => {
+    const result = await tx.confirm();
     if (result !== null) {
       setSessionSchemas((prev) => [
         { uid: result.toString('hex'), name: trimmedName, fields: fields.trim(), revocable },
@@ -301,6 +309,7 @@ export const RegisterSchema = () => {
               ]
             : undefined
         }
+        onConfirm={() => void confirmRegister()}
         failTitle="Schema not registered"
         onRetry={() => void register()}
       />
