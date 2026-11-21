@@ -17,9 +17,11 @@ const mockAwards: IndexedAward[] = [
   },
 ];
 
+let currentAwards: IndexedAward[] = [...mockAwards];
+
 vi.mock('../../hooks/useIndexedList', () => ({
   useIndexedList: () => ({
-    data: mockAwards,
+    data: currentAwards,
     loading: false,
     error: null,
     fetching: false,
@@ -30,6 +32,7 @@ vi.mock('../../hooks/useIndexedList', () => ({
 describe('Issue #440 - AwardsTab index-chain disagreement', () => {
   beforeEach(() => {
     vi.restoreAllMocks();
+    currentAwards = [...mockAwards];
   });
 
   const createSorobanContext = (getAwardFn: unknown): SorobanState =>
@@ -122,5 +125,51 @@ describe('Issue #440 - AwardsTab index-chain disagreement', () => {
     expect(screen.getByRole('cell', { name: '10000 USDC' }).textContent).toBe('10,000');
     expect(screen.getByLabelText('0 of 2 tranches released')).toBeDefined();
     expect(screen.getByRole('cell', { name: '0 USDC' }).textContent).toBe('0');
+  });
+
+  it('neutralizes malicious formula characters in awards when downloading CSV', async () => {
+    currentAwards = [
+      {
+        ...mockAwards[0],
+        recipient: '=SUM(1+1)',
+        payee: '@EVIL_PAYEE',
+      },
+    ];
+
+    const createObjectURLSpy = vi.fn().mockReturnValue('blob:http://localhost/mock-url');
+    const revokeObjectURLSpy = vi.fn();
+    vi.stubGlobal('URL', {
+      ...URL,
+      createObjectURL: createObjectURLSpy,
+      revokeObjectURL: revokeObjectURLSpy,
+    });
+
+    const appendSpy = vi.spyOn(document.body, 'appendChild').mockImplementation((node) => {
+      (node as HTMLAnchorElement).click = vi.fn();
+      return node;
+    });
+    const removeSpy = vi.spyOn(document.body, 'removeChild').mockImplementation((node) => node);
+
+    const getAward = vi.fn().mockRejectedValue(new Error('Contract read fail'));
+
+    render(
+      <SorobanContext.Provider value={createSorobanContext(getAward)}>
+        <AwardsTab programmeId="CD6X33SKLUEMANS67ID3LJL572FFGERMMJCIFRW7P7EKZQLH35XT67C6" asset="USDC" />
+      </SorobanContext.Provider>,
+    );
+
+    const downloadBtn = await screen.findByRole('button', { name: 'Download CSV' });
+    downloadBtn.click();
+
+    expect(createObjectURLSpy).toHaveBeenCalledTimes(1);
+    const [blob] = createObjectURLSpy.mock.calls[0] as [Blob];
+    const text = await blob.text();
+    expect(text).toContain("'=SUM(1+1)");
+    expect(text).toContain("'@EVIL_PAYEE");
+    expect(text).not.toContain(',=SUM(1+1),');
+
+    appendSpy.mockRestore();
+    removeSpy.mockRestore();
+    vi.unstubAllGlobals();
   });
 });
