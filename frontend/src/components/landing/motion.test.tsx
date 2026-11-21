@@ -43,7 +43,8 @@ function makeFakeIO(): {
 } {
   const instances: FakeIOInstance[] = [];
 
-  const Constructor = vi.fn().mockImplementation((cb: IOCallback) => {
+  // A regular function, not an arrow: the hook calls it with `new`.
+  const Constructor = vi.fn().mockImplementation(function (cb: IOCallback) {
     const inst: FakeIOInstance = {
       callback: cb,
       observed: new Set(),
@@ -484,7 +485,7 @@ describe('useReveal()', () => {
 // A simple test component exercising useReveal via render
 // ---------------------------------------------------------------------------
 
-function RevealFixture({ reduced }: { reduced: boolean }) {
+function RevealFixture() {
   const ref = useRef<HTMLElement>(null);
   useReveal(ref);
   return (
@@ -509,7 +510,7 @@ describe('useReveal via rendered component', () => {
       value: Constructor,
     });
 
-    const { container } = render(<RevealFixture reduced={false} />);
+    const { container } = render(<RevealFixture />);
     expect(container.querySelector('[data-reveal-ready]')).toBeTruthy();
   });
 });

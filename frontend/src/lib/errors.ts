@@ -204,6 +204,13 @@ export function explain(error: unknown, contract: ContractName = 'program'): Exp
   if (/user (declined|rejected)|denied by the user|UserDeclined/i.test(text)) {
     return { kind: 'none', message: 'You declined the signature.', action: 'Nothing was submitted.' };
   }
+  if (/RestoreDeclined/.test(text)) {
+    return {
+      kind: 'none',
+      message: 'You chose not to restore the archived data, so nothing was sent.',
+      action: 'Restore it when you are ready, or extend it from the Keepalive screen.',
+    };
+  }
   if (/expired ?state|restore.*preamble/i.test(text)) {
     return {
       kind: 'blocked',

@@ -30,12 +30,9 @@ import {
 // RPC; each test controls what readProgrammeChain and readRegistryProgrammes
 // resolve to.
 const reads = vi.hoisted(() => ({
-  readProgrammeChain: vi.fn<
-    [string, (id: string) => unknown],
-    Promise<unknown>
-  >(),
-  readRegistryProgrammes: vi.fn<[unknown], Promise<string[]>>(),
-  sessionRead: vi.fn<[string, () => Promise<unknown>], Promise<unknown>>(),
+  readProgrammeChain: vi.fn<(id: string, programmeAt: (id: string) => unknown) => Promise<unknown>>(),
+  readRegistryProgrammes: vi.fn<(registry: unknown) => Promise<string[]>>(),
+  sessionRead: vi.fn<(key: string, read: () => Promise<unknown>) => Promise<unknown>>(),
 }));
 
 vi.mock('../lib/programmeReads', () => ({

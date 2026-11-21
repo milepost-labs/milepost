@@ -69,9 +69,10 @@ export default defineConfig({
   },
   test: {
     environment: 'jsdom',
-    // App tests only. scripts/*.test.mjs use node:test and run through
-    // `npm run test:design-system`.
-    include: ['src/**/*.test.{ts,tsx}'],
+    // App tests, plus the Vercel functions under api/ (e.g. the metadata
+    // store's Blob backend, which only lives there, not under src/).
+    // scripts/*.test.mjs use node:test and run through `npm run test:design-system`.
+    include: ['src/**/*.test.{ts,tsx}', 'api/**/*.test.{ts,tsx}'],
     setupFiles: ['./src/test/setup.ts'],
     // Tests mock the contract clients; nothing should touch the network.
     // Fail loudly if something tries.
@@ -82,9 +83,10 @@ export default defineConfig({
       // Listing every source file is the point. Without `include`, only files
       // some test imports are reported, so a screen with no test at all would
       // not appear in the report.
-      include: ['src/**/*.{ts,tsx}'],
+      include: ['src/**/*.{ts,tsx}', 'api/**/*.ts'],
       exclude: [
         'src/**/*.test.{ts,tsx}',
+        'api/**/*.test.{ts,tsx}',
         'src/test/**',
         // Stand-in data, not logic; counting it would inflate the figure.
         'src/fixtures/**',

@@ -13,9 +13,9 @@
  * Closes #640
  */
 
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { act, render, screen } from '@testing-library/react';
-import { MemoryRouter, Route, Routes } from 'react-router-dom';
+import { MemoryRouter, Route, Routes, useNavigate, type NavigateFunction } from 'react-router-dom';
 import { Layout } from './Layout';
 
 // ---------------------------------------------------------------------------
@@ -31,8 +31,9 @@ vi.mock('./OfflineBanner', () => ({
 }));
 // AnnouncerContext is real (Layout mounts it and NavigationFocusManager uses it).
 // useAnnouncer is used by NavigationFocusManager; stub it so it doesn't throw.
+const announce = vi.hoisted(() => vi.fn());
 vi.mock('../../context/useAnnouncer', () => ({
-  useAnnouncer: () => vi.fn(),
+  useAnnouncer: () => announce,
 }));
 
 // ---------------------------------------------------------------------------
@@ -212,5 +213,62 @@ describe('NavigationFocusManager', () => {
     expect(region.textContent).toBe('');
 
     vi.useRealTimers();
+  });
+});
+
+describe('NavigationFocusManager on route change', () => {
+  let navigate: NavigateFunction = () => undefined;
+  function Page({ title }: { title: string }) {
+    navigate = useNavigate();
+    return <h1>{title}</h1>;
+  }
+
+  function renderNavigable() {
+    return render(
+      <MemoryRouter initialEntries={['/directory']}>
+        <Routes>
+          <Route element={<Layout />} path="/">
+            <Route path="directory" element={<Page title="Directory" />} />
+            <Route path="funders" element={<Page title="Funders" />} />
+          </Route>
+        </Routes>
+      </MemoryRouter>,
+    );
+  }
+
+  beforeEach(() => {
+    vi.useFakeTimers({ toFake: ['requestAnimationFrame'] });
+  });
+
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
+  it('moves focus to the new page heading and announces its title', () => {
+    renderNavigable();
+    act(() => navigate('/funders'));
+    act(() => { vi.runAllTimers(); });
+
+    const heading = screen.getByRole('heading', { name: 'Funders' });
+    expect(document.activeElement).toBe(heading);
+    expect(heading.getAttribute('tabindex')).toBe('-1');
+    expect(announce).toHaveBeenCalledWith('Funders');
+  });
+
+  it('leaves a hash change on the same page alone', () => {
+    renderNavigable();
+    act(() => navigate('/directory#awards'));
+    act(() => { vi.runAllTimers(); });
+
+    expect(announce).not.toHaveBeenCalled();
+  });
+
+  it('leaves a navigation to a hash target alone', () => {
+    renderNavigable();
+    act(() => navigate('/funders#contributions'));
+    act(() => { vi.runAllTimers(); });
+
+    expect(announce).not.toHaveBeenCalled();
+    expect(document.activeElement).not.toBe(screen.getByRole('heading', { name: 'Funders' }));
   });
 });

@@ -17,6 +17,7 @@ import { Badge, Button, DisabledReason, Field, Modal, PhaseBadge, SampleTag, Sel
 import { ErrorPanel } from '../state/AsyncStates';
 import { TxDone, TxFailed, TxPending } from '../state/TxStatus';
 import type { RoleProgramme } from './useMyRoles';
+import { restoreFromAssembled } from '../../lib/restore';
 
 const OTHER = '__other';
 
@@ -80,6 +81,7 @@ function VoteRow({ programmeId, applicant, gate }: VoteRowProps) {
         approved: parsed.value,
       });
       return {
+        restore: restoreFromAssembled(assembled),
         signAndSend: async (options: Parameters<typeof assembled.signAndSend>[0]) => {
           const sent = await assembled.signAndSend(options);
           return { result: sent.result.unwrap() };

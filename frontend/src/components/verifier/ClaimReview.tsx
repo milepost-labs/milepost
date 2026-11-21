@@ -17,6 +17,7 @@ import { absoluteLink, referenceHash, replyPath, type ClaimRequest, type SignedR
 import { Button, CopyButton, DisabledReason, Field, Modal, ModePill, Notice } from '../ui';
 import { ErrorPanel } from '../state/AsyncStates';
 import { TxDone, TxFailed, TxPending } from '../state/TxStatus';
+import { restoreFromAssembled } from '../../lib/restore';
 
 export interface Claim extends ClaimRequest {
   /** Where the claim came from: a recipient's request link, or the verifier's own lookup. */
@@ -165,6 +166,7 @@ export function ClaimReview({ claim, programmeName, onSigned, onFinished, onDism
         expires_at: undefined,
       });
       return {
+        restore: restoreFromAssembled(assembled),
         signAndSend: async (options: Parameters<typeof assembled.signAndSend>[0]) => {
           const sent = await assembled.signAndSend(options);
           return { result: sent.result.unwrap() };

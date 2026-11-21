@@ -9,6 +9,7 @@ import { sampleSendable, SAMPLE_TX_DELAY_MS } from '../../lib/fundingTx';
 import { Button, Modal } from '../ui';
 import { ErrorPanel, TransactionOutcome } from '../state/AsyncStates';
 import type { RecipientApplicationFixture } from '../../fixtures/recipientFixtures';
+import { restoreFromAssembled } from '../../lib/restore';
 import './ApplicationWithdraw.css';
 
 type View =
@@ -106,6 +107,7 @@ export function ApplicationWithdraw({ application, sampleDelayMs = SAMPLE_TX_DEL
       }
       const assembled = await client!.withdraw({ applicant: recipient });
       return {
+        restore: restoreFromAssembled(assembled),
         signAndSend: async (options: Parameters<typeof assembled.signAndSend>[0]) => {
           const sent = await assembled.signAndSend(options);
           sent.result.unwrap();

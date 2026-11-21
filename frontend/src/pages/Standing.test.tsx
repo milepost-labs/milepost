@@ -1,12 +1,11 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
-import { MemoryRouter } from 'react-router-dom';
+import { act, fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { MemoryRouter, useLocation } from 'react-router-dom';
 import { Buffer } from 'buffer';
 
 import { Standing, StandingPanel, StandingStats } from './Standing';
 import { isTtlLow, standingStats } from '../lib/standing';
 import {
-  parseStandingHistory,
   verifyStandingHistory,
   type NextRoot,
   type StandingHistoryEntry,
@@ -590,5 +589,113 @@ describe('verifyStandingHistory pure function vectors', () => {
     if (verdict.kind === 'mismatch') {
       expect(verdict.message).toBe('The history is empty but the on-chain root is not the zero root.');
     }
+  });
+});
+
+/** Shows the router's current path and query, so a test can read the URL. */
+function LocationProbe() {
+  const location = useLocation();
+  return <output data-testid="location">{location.pathname + location.search}</output>;
+}
+
+const renderAt = (entry: string) =>
+  render(
+    <MemoryRouter initialEntries={[entry]}>
+      <Standing />
+      <LocationProbe />
+    </MemoryRouter>,
+  );
+
+const lookedUpStanding = read({
+  programmes: 6,
+  total_received: 90_000_000_000n,
+  tranches: 8,
+});
+
+describe('standing links', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    wallet.address = SUBJECT;
+    chain.get.mockImplementation(async ({ subject }: { subject: string }) =>
+      subject === LOOKED_UP_SUBJECT ? lookedUpStanding : read(standing),
+    );
+  });
+
+  it('opens straight on the address in the link', async () => {
+    renderAt(`/recipients/standing?address=${LOOKED_UP_SUBJECT}`);
+
+    await waitFor(() => expect(screen.getByText('9,000.00 XLM')).toBeTruthy());
+    expect(chain.get).toHaveBeenCalledWith({ subject: LOOKED_UP_SUBJECT });
+    expect(chain.get).not.toHaveBeenCalledWith({ subject: SUBJECT });
+    expect(screen.getByText('Viewing')).toBeTruthy();
+  });
+
+  it('opens a linked standing for a signed-out visitor', async () => {
+    wallet.address = null;
+
+    renderAt(`/recipients/standing?address=${LOOKED_UP_SUBJECT}`);
+
+    await waitFor(() => expect(screen.getByText('9,000.00 XLM')).toBeTruthy());
+    expect(screen.getByRole('button', { name: 'Clear lookup' })).toBeTruthy();
+  });
+
+  it('keeps an invalid address in the lookup with its validation, and reads nothing for it', async () => {
+    renderAt('/recipients/standing?address=not-an-address');
+
+    expect(screen.getByLabelText('Recipient address')).toHaveProperty('value', 'not-an-address');
+    expect(screen.getByRole('alert').textContent).toMatch(/does not hold a Stellar address/);
+    expect(screen.getByRole('button', { name: 'Look up' })).toHaveProperty('disabled', true);
+    // The signed-in address's own standing still shows.
+    await waitFor(() => expect(screen.getByText('4,630.00 XLM')).toBeTruthy());
+    expect(chain.get).toHaveBeenCalledWith({ subject: SUBJECT });
+    expect(chain.get).not.toHaveBeenCalledWith({ subject: 'not-an-address' });
+
+    fireEvent.change(screen.getByLabelText('Recipient address'), { target: { value: LOOKED_UP_SUBJECT } });
+    expect(screen.queryByRole('alert')).toBeNull();
+    expect(screen.getByRole('button', { name: 'Look up' })).toHaveProperty('disabled', false);
+  });
+
+  it('shows the signed-in standing when the link has no address', async () => {
+    renderAt('/recipients/standing');
+
+    await waitFor(() => expect(screen.getByText('4,630.00 XLM')).toBeTruthy());
+    expect(screen.queryByText('Viewing')).toBeNull();
+    expect(screen.queryByRole('alert')).toBeNull();
+    expect(screen.getByTestId('location').textContent).toBe('/recipients/standing');
+  });
+
+  it('puts a looked-up address in the URL and takes it out again on clear', async () => {
+    renderAt('/recipients/standing');
+    await waitFor(() => expect(screen.getByText('4,630.00 XLM')).toBeTruthy());
+
+    fireEvent.change(screen.getByLabelText('Recipient address'), { target: { value: LOOKED_UP_SUBJECT } });
+    fireEvent.click(screen.getByRole('button', { name: 'Look up' }));
+
+    await waitFor(() =>
+      expect(screen.getByTestId('location').textContent).toBe(
+        `/recipients/standing?address=${LOOKED_UP_SUBJECT}`,
+      ),
+    );
+    await waitFor(() => expect(screen.getByText('9,000.00 XLM')).toBeTruthy());
+
+    fireEvent.click(screen.getByRole('button', { name: 'Show my standing' }));
+    await waitFor(() => expect(screen.getByTestId('location').textContent).toBe('/recipients/standing'));
+    await waitFor(() => expect(screen.getByText('4,630.00 XLM')).toBeTruthy());
+  });
+
+  it('copies a link that opens the standing being viewed', async () => {
+    const writeText = vi.fn().mockResolvedValue(undefined);
+    Object.defineProperty(navigator, 'clipboard', { value: { writeText }, configurable: true });
+
+    renderAt(`/recipients/standing?address=${LOOKED_UP_SUBJECT}`);
+    await waitFor(() => expect(screen.getByText('9,000.00 XLM')).toBeTruthy());
+
+    fireEvent.click(screen.getByRole('button', { name: 'Copy link to this standing' }));
+
+    await waitFor(() =>
+      expect(writeText).toHaveBeenCalledWith(
+        `${window.location.origin}/recipients/standing?address=${LOOKED_UP_SUBJECT}`,
+      ),
+    );
   });
 });

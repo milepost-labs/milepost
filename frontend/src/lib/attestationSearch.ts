@@ -25,6 +25,8 @@ export type AttestationRole = 'subject' | 'attester' | 'both';
 export interface AttestationMatch {
   uid: string;
   role: AttestationRole;
+  /** Who the attestation is about, from the event. */
+  subject: string;
   /** Ledger the `Attested` event was emitted in. */
   ledger: number;
   /** Re-read on-chain; null when the entry could not be read (usually archived). */
@@ -85,7 +87,7 @@ export async function searchAttestations(
     const role = roleOf(target, subject, attester);
     if (!role) continue;
     const uid = Buffer.from(scValToNative(uidVal) as Uint8Array).toString('hex');
-    found.push({ uid, role, ledger: event.ledger });
+    found.push({ uid, role, subject, ledger: event.ledger });
   }
 
   found.sort((a, b) => b.ledger - a.ledger);
