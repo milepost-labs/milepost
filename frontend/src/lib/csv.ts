@@ -25,6 +25,7 @@
  */
 
 import type { IndexedAward } from './indexer';
+import type { ContributionCard } from './funding';
 import { STROOPS_PER_UNIT } from './amount';
 
 /**
@@ -63,7 +64,7 @@ export function numericCell(
 /** Escape a single CSV field with RFC 4180 quoting and formula neutralization. */
 export function escapeCsvField(value: CsvCell, options?: EscapeCsvOptions): string {
   let rawStr: string;
-  let isNumeric = false;
+  let isNumeric: boolean;
 
   if (typeof value === 'object' && value !== null && 'value' in value) {
     rawStr = value.value == null ? '' : String(value.value);
@@ -139,6 +140,42 @@ export function awardsToCsv(awards: IndexedAward[], indexedAt: string): string {
   ]);
 
   return [header, notice, ...rows].join('\n');
+}
+
+/**
+ * Convert a funder's contribution cards into CSV rows.
+ *
+ * Sample programmes are excluded. Amounts are formatted as decimal strings in
+ * the programme's asset (never raw stroops).
+ */
+export function contributionsToCsv(cards: readonly ContributionCard[]): string {
+  const header = csvRow([
+    'programme id',
+    'name',
+    'asset',
+    'contributed',
+    'refunded',
+    'refundable now',
+    'phase',
+  ]);
+
+  const rows = cards
+    .filter((card) => !card.sample)
+    .map((card) => {
+      const refundedAmount = card.refunded ? card.refundable : card.refundedSoFar;
+      const refundableNow = card.claimable ? card.refundable : 0n;
+      return csvRow([
+        card.programmeId,
+        card.name,
+        card.asset,
+        numericCell(stroopsToUnits(card.amount.toString())),
+        numericCell(stroopsToUnits(refundedAmount.toString())),
+        numericCell(stroopsToUnits(refundableNow.toString())),
+        card.phase,
+      ]);
+    });
+
+  return [header, ...rows].join('\n');
 }
 
 /** Stroop string to decimal units string (7 decimal places, no trailing zeros). */

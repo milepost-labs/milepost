@@ -420,9 +420,17 @@
 }
 
 .att-status--used,
-.att-status--checking {
+.att-status--checking,
+.att-status--unchecked {
   background: var(--bg-sunken);
   color: var(--ink-muted);
+}
+
+.signed__events-error {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-2);
 }
 
 .att-status--revoked {

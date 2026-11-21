@@ -33,6 +33,7 @@ import type { Phase } from '../../lib/phaseGate';
 import { programmeAsset, shortId, type DirectoryProgramme } from '../../lib/programmeView';
 import { TxDone, TxFailed, TxPending } from '../state/TxStatus';
 import { AmountField, Button, CopyButton, Modal, Notice, Receipt, SampleTag, Select, TxExplorerLink } from '../ui';
+import { restoreFromAssembled } from '../../lib/restore';
 import './ContributeSheet.css';
 
 const PRESETS = ['50', '100', '250', '500', '1,000'];
@@ -224,6 +225,7 @@ export function ContributeSheet({
           (assembled as unknown as { simulationResponse?: { minResourceFee?: string } }).simulationResponse
             ?.minResourceFee ?? 0,
         ),
+        restore: restoreFromAssembled(assembled),
         signAndSend: async (options: Parameters<typeof assembled.signAndSend>[0]) => {
           const sent = await assembled.signAndSend(options);
           sent.result.unwrap();

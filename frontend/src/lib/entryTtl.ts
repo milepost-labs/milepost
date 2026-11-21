@@ -120,3 +120,60 @@ export async function readProgrammeLifetimes(
     unchecked: ['Contributions', 'Applications and votes'],
   };
 }
+
+/** How many programmes' lifetimes are read from the RPC at once. */
+export const LIFETIME_READ_CONCURRENCY = 4;
+
+/** One programme's instance entry lifetime, or why it could not be read. */
+export interface ProgrammeInstanceLifetime {
+  programmeId: string;
+  /** Days left; null when the RPC returned no entry (archived, or not a programme). */
+  liveForDays: number | null;
+  /** The read failed; the row says so instead of guessing a number. */
+  error: unknown;
+}
+
+/**
+ * Reads the instance entry of every programme, at most `concurrency` at a
+ * time so a long index does not flood the RPC. A failed read is kept on its
+ * own row rather than failing the whole table.
+ */
+export async function readInstanceLifetimes(
+  server: LedgerEntriesReader,
+  programmeIds: string[],
+  concurrency: number = LIFETIME_READ_CONCURRENCY,
+): Promise<ProgrammeInstanceLifetime[]> {
+  const ids = [...new Set(programmeIds)];
+  const results: ProgrammeInstanceLifetime[] = [];
+  let next = 0;
+  const worker = async () => {
+    while (next < ids.length) {
+      const index = next++;
+      const programmeId = ids[index];
+      try {
+        const response = await server.getLedgerEntries(instanceLedgerKey(programmeId));
+        const seq = response.entries.find((entry) => entry.liveUntilLedgerSeq !== undefined)?.liveUntilLedgerSeq;
+        results[index] = {
+          programmeId,
+          liveForDays: seq === undefined ? null : ledgersToDays(seq, response.latestLedger),
+          error: null,
+        };
+      } catch (error) {
+        results[index] = { programmeId, liveForDays: null, error };
+      }
+    }
+  };
+  await Promise.all(Array.from({ length: Math.min(Math.max(1, concurrency), ids.length) }, worker));
+  return results;
+}
+
+/**
+ * Most urgent first: entries the RPC no longer returns, then fewest days
+ * left. Failed reads go last, since nothing is known about them.
+ */
+export function sortByDaysLeft<T extends Pick<ProgrammeInstanceLifetime, 'liveForDays' | 'error'>>(rows: T[]): T[] {
+  const rank = (row: T) => (row.error ? 2 : row.liveForDays === null ? 0 : 1);
+  return [...rows].sort(
+    (a, b) => rank(a) - rank(b) || (a.liveForDays ?? 0) - (b.liveForDays ?? 0),
+  );
+}

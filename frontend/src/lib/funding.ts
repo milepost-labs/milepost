@@ -41,6 +41,12 @@ export interface ContributionCard {
   releasedShare: bigint;
   /** This funder's share of the refundable pool, in stroops. */
   refundable: bigint;
+  /**
+   * Estimated proportional refund if the programme closed today, computed with
+   * the same `proportionalRefund` formula as `claimableRefund`. Non-zero only
+   * before refunds are open (when not yet claimable or refunded).
+   */
+  estimatedRefund: bigint;
   /** True only when a refund claim would succeed right now. */
   claimable: boolean;
   refunded: boolean;
@@ -54,15 +60,43 @@ export interface ContributionCard {
 }
 
 /**
+ * Single proportional refund calculation matching `execute_refund` in
+ * `contracts/program/src/lib.rs`:
+ *
+ *   fee       = (totalContributed * feeBps) / 10_000
+ *   budget    = totalContributed - fee
+ *   unpaid    = budget - totalReleased
+ *   share     = (donorContributed * unpaid) / totalContributed
+ *   remaining = max(0, share - alreadyRefunded)
+ *
+ * Used both for open refunds (`claimableRefund`) and for pre-open estimates
+ * ("If it closed today: about X").
+ */
+export function proportionalRefund(
+  donorContributed: bigint,
+  totalContributed: bigint,
+  feeBps: bigint,
+  totalReleased: bigint,
+  alreadyRefunded = 0n,
+): bigint {
+  if (totalContributed <= 0n || donorContributed <= 0n) return 0n;
+
+  const fee = (totalContributed * feeBps) / BPS_DENOMINATOR;
+  const budget = totalContributed - fee;
+  const unpaid = budget - totalReleased;
+  if (unpaid <= 0n) return 0n;
+
+  const share = (donorContributed * unpaid) / totalContributed;
+  if (share <= 0n) return 0n;
+
+  const remaining = share - alreadyRefunded;
+  return remaining > 0n ? remaining : 0n;
+}
+
+/**
  * The donor's claimable refund, matching the contract's `execute_refund` formula
  * exactly, so the UI never shows a figure that disagrees with what the chain
  * would return.
- *
- * Formula:
- *   budget  = totalContributed * (1 - feeBps / 10_000)
- *   unpaid  = budget - totalReleased
- *   share   = (donorContributed * unpaid) / totalContributed
- *   claimable = max(0, share - alreadyRefunded)
  *
  * Returns 0n when refunds are not yet open, when the donor never contributed,
  * or when the full share has already been claimed.
@@ -83,18 +117,15 @@ export function claimableRefund(
   refundsOpen: boolean,
 ): bigint {
   if (!refundsOpen) return 0n;
-  if (totalContributed <= 0n || donorContributed <= 0n) return 0n;
+  return proportionalRefund(donorContributed, totalContributed, feeBps, totalReleased, alreadyRefunded);
+}
 
-  const fee = (totalContributed * feeBps) / BPS_DENOMINATOR;
-  const budget = totalContributed - fee;
-  const unpaid = budget - totalReleased;
-  if (unpaid <= 0n) return 0n;
-
-  const share = (donorContributed * unpaid) / totalContributed;
-  if (share <= 0n) return 0n;
-
-  const remaining = share - alreadyRefunded;
-  return remaining > 0n ? remaining : 0n;
+/**
+ * Plain-language estimate shown before refunds open, or null when not applicable.
+ */
+export function formatEstimatedRefund(card: Pick<ContributionCard, 'estimatedRefund' | 'asset'>): string | null {
+  if (card.estimatedRefund <= 0n) return null;
+  return `If it closed today: about ${formatIn(card.estimatedRefund, card.asset)}`;
 }
 
 /**
@@ -124,6 +155,10 @@ export function contributionCard(
   const phase: Phase = chain?.phase ?? 'Open';
   const refunded = refundedHere || contribution.refunded;
   const claimable = !refunded && refundable > 0n && (phase === 'Cancelled' || phase === 'Settled');
+  const estimatedRefund =
+    !refunded && !claimable && chain && contributed > 0n
+      ? proportionalRefund(amount, contributed, feeBpsOf(chain), BigInt(chain.released || '0'), refundedSoFar)
+      : 0n;
 
   let note: string;
   if (refunded) note = `Refunded ${formatIn(refundable, asset)}.`;
@@ -143,6 +178,7 @@ export function contributionCard(
     share,
     releasedShare,
     refundable,
+    estimatedRefund,
     claimable,
     refunded,
     note,

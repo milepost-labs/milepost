@@ -167,3 +167,25 @@
     padding: var(--space-4);
   }
 }
+
+.funder__actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-2);
+}
+
+.fund-card__estimate {
+  margin: var(--space-3) 0 0;
+  font-size: var(--text-caption);
+  color: var(--ink-muted);
+}
+
+.fund-card__estimate .numeric {
+  color: var(--ink);
+  font-weight: var(--weight-medium);
+}
+
+.fund-card__estimate-tag {
+  color: var(--ink-muted);
+}

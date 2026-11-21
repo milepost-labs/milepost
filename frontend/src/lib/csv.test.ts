@@ -1,5 +1,6 @@
 import { describe, expect, it, vi } from 'vitest';
-import { escapeCsvField, csvRow, awardsToCsv, downloadFile, numericCell } from './csv';
+import { escapeCsvField, csvRow, awardsToCsv, contributionsToCsv, downloadFile, numericCell } from './csv';
+import type { ContributionCard } from './funding';
 import { FIXTURE_AWARDS } from '../fixtures/programmeFixtures';
 
 describe('escapeCsvField', () => {
@@ -70,7 +71,7 @@ describe('escapeCsvField', () => {
 
     it('distinguishes numeric-marked versus text-typed "-5"', () => {
       // Text cell defaults to safe: neutralized with single quote
-      expect(escapeCsvField('-5')).toBe("'-5'");
+      expect(escapeCsvField('-5')).toBe("'-5");
       // Explicit numeric cell remains untouched
       expect(escapeCsvField(numericCell('-5'))).toBe('-5');
     });
@@ -176,17 +177,15 @@ describe('downloadFile', () => {
       revokeObjectURL: revokeObjectURLSpy,
     });
 
-    let appendedElement: HTMLAnchorElement | null = null;
+    const appended: HTMLAnchorElement[] = [];
     let clicked = false;
 
-    const originalAppendChild = document.body.appendChild.bind(document.body);
-    const originalRemoveChild = document.body.removeChild.bind(document.body);
-
     const appendSpy = vi.spyOn(document.body, 'appendChild').mockImplementation((node) => {
-      appendedElement = node as HTMLAnchorElement;
-      appendedElement.click = () => {
+      const anchor = node as HTMLAnchorElement;
+      anchor.click = () => {
         clicked = true;
       };
+      appended.push(anchor);
       return node;
     });
 
@@ -204,9 +203,10 @@ describe('downloadFile', () => {
     expect(await blobArg.text()).toBe(content);
 
     expect(appendSpy).toHaveBeenCalled();
-    expect(appendedElement).not.toBeNull();
-    expect(appendedElement?.href).toBe(mockUrl);
-    expect(appendedElement?.download).toBe('test-export.csv');
+    expect(appended).toHaveLength(1);
+    const [appendedElement] = appended;
+    expect(appendedElement.href).toBe(mockUrl);
+    expect(appendedElement.download).toBe('test-export.csv');
     expect(clicked).toBe(true);
 
     expect(removeSpy).toHaveBeenCalledWith(appendedElement);
@@ -215,5 +215,55 @@ describe('downloadFile', () => {
     appendSpy.mockRestore();
     removeSpy.mockRestore();
     vi.unstubAllGlobals();
+  });
+});
+
+describe('contributionsToCsv', () => {
+  const makeCard = (overrides: Partial<ContributionCard> = {}): ContributionCard => ({
+    programmeId: 'CPROG123',
+    name: 'Health Stipends',
+    phase: 'Settled',
+    asset: 'USDC',
+    chain: null,
+    sample: false,
+    amount: 20_000_000_000n, // 2000 USDC
+    share: 2_000n,
+    releasedShare: 10_000_000_000n,
+    refundable: 1_255_000_000n, // 125.5 USDC
+    estimatedRefund: 0n,
+    claimable: true,
+    refunded: false,
+    note: '',
+    refundedSoFar: 500_000_000n, // 50 USDC
+    ...overrides,
+  });
+
+  it('writes the required columns and decimal amounts in the asset (never stroops)', () => {
+    const csv = contributionsToCsv([makeCard()]);
+    const lines = csv.split('\n');
+    expect(lines).toHaveLength(2);
+    expect(lines[0]).toBe('programme id,name,asset,contributed,refunded,refundable now,phase');
+    expect(lines[1]).toBe('CPROG123,Health Stipends,USDC,2000,50,125.5,Settled');
+  });
+
+  it('excludes sample programmes', () => {
+    const csv = contributionsToCsv([
+      makeCard({ programmeId: 'CSAMPLE', name: 'Sample Fund', sample: true }),
+      makeCard({ programmeId: 'CREAL', name: 'Real, "Active" Fund', sample: false, claimable: false, refunded: false, refundedSoFar: 0n, phase: 'Open' }),
+    ]);
+    const lines = csv.split('\n');
+    expect(lines).toHaveLength(2);
+    expect(csv).not.toContain('CSAMPLE');
+    expect(lines[1]).toBe('CREAL,"Real, ""Active"" Fund",USDC,2000,0,0,Open');
+  });
+
+  it('returns only the header when all contributions are samples', () => {
+    const csv = contributionsToCsv([makeCard({ sample: true })]);
+    expect(csv).toBe('programme id,name,asset,contributed,refunded,refundable now,phase');
+  });
+
+  it('neutralises a programme name written as a formula', () => {
+    const csv = contributionsToCsv([makeCard({ name: '=HYPERLINK("x")' })]);
+    expect(csv.split('\n')[1]).toBe('CPROG123,"\'=HYPERLINK(""x"")",USDC,2000,50,125.5,Settled');
   });
 });

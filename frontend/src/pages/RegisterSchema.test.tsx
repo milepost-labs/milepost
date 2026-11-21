@@ -72,6 +72,7 @@ describe('RegisterSchema', () => {
     });
 
     fireEvent.click(screen.getByRole('button', { name: 'Register schema' }));
+    fireEvent.click(await screen.findByRole('button', { name: 'Sign and send' }));
 
     await waitFor(() => expect(screen.getAllByText('Schema registered').length).toBeGreaterThan(0));
     expect(screen.getByText(validHex)).toBeTruthy();

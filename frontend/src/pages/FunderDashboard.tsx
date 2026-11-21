@@ -1,6 +1,6 @@
-import { useMemo, useState } from 'react';
+import { useCallback, useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
-import { Plus, Wallet } from 'lucide-react';
+import { Download, Plus, Wallet } from 'lucide-react';
 import { ContributeSheet } from '../components/funder/ContributeSheet';
 import { ContributionList } from '../components/funder/ContributionList';
 import { SeededProgrammeTools } from '../components/funder/SeededProgrammeTools';
@@ -16,6 +16,7 @@ import { DEMO_PROGRAMME_ID } from '../context/sorobanStore';
 import { useIndexedList, useProgrammeParam } from '../hooks';
 import { usePageTitle } from '../hooks/usePageTitle';
 import { useReleaseDeadlines } from '../hooks/useReleaseDeadlines';
+import { contributionsToCsv, downloadFile } from '../lib/csv';
 import { contributionCard, fundingTotals } from '../lib/funding';
 import { fetchProgrammes } from '../lib/indexer';
 import { formatFigure, mergeProgrammes } from '../lib/programmeView';
@@ -61,6 +62,7 @@ export const FunderDashboard = () => {
       contributionCard(c, byId.get(c.programmeId), refunded.has(c.programmeId)),
     );
   }, [programmes, refunded]);
+  const exportableCount = useMemo(() => cards.filter((c) => !c.sample).length, [cards]);
   const totals = fundingTotals(cards);
   // Every stand-in contribution is in its programme's asset; they share one.
   const asset = cards[0]?.asset ?? 'USDC';
@@ -73,6 +75,12 @@ export const FunderDashboard = () => {
   const releaseDeadlines = useReleaseDeadlines(contributionProgrammeIds, sampleIds);
 
   const markRefunded = (programmeId: string) => setRefunded((current) => new Set(current).add(programmeId));
+
+  const handleDownloadCsv = useCallback(() => {
+    const csv = contributionsToCsv(cards);
+    const filename = `contributions-${Date.now()}.csv`;
+    downloadFile(csv, filename, 'text/csv;charset=utf-8;');
+  }, [cards]);
 
   const lead = (
     <p>
@@ -112,9 +120,24 @@ export const FunderDashboard = () => {
         eyebrow="Fund"
         title="Your funding"
         action={
-          <Button icon={<Plus size={18} aria-hidden="true" />} onClick={() => setManualOpen(true)}>
-            Contribute
-          </Button>
+          <div className="funder__actions">
+            <Button
+              variant="secondary"
+              icon={<Download size={18} aria-hidden="true" />}
+              onClick={handleDownloadCsv}
+              disabled={exportableCount === 0}
+              title={
+                exportableCount === 0
+                  ? 'Sample programmes are excluded from CSV exports'
+                  : undefined
+              }
+            >
+              Download CSV
+            </Button>
+            <Button icon={<Plus size={18} aria-hidden="true" />} onClick={() => setManualOpen(true)}>
+              Contribute
+            </Button>
+          </div>
         }
       >
         {lead}

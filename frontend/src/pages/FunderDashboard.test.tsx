@@ -95,10 +95,11 @@ describe('Funding dashboard', () => {
     await screen.findByRole('link', { name: 'Flood response cash transfers' });
     fireEvent.click(within(card('Flood response cash transfers')).getByRole('button', { name: 'Claim refund' }));
 
-    const sheet = screen.getByRole('dialog', { name: 'Claim your refund' });
-    expect(within(sheet).getByText('Claiming your refund')).toBeTruthy();
+    const sheet = await screen.findByRole('dialog', { name: 'Claim your refund' });
+    const signButton = await within(sheet).findByRole('button', { name: 'Sign and claim refund' });
+    fireEvent.click(signButton);
 
-    expect(await within(sheet).findByText('Refund claimed', {}, { timeout: 3000 })).toBeTruthy();
+    expect(await within(sheet).findAllByText('Refund claimed', {}, { timeout: 3000 })).toBeTruthy();
     expect(within(sheet).getByText(/495 USDC sent back to your wallet, in proportion/)).toBeTruthy();
     expect(within(sheet).getByText('4,853,391')).toBeTruthy();
     expect(mocks.announce).toHaveBeenCalledWith('Refund of 495 USDC sent to your wallet.');

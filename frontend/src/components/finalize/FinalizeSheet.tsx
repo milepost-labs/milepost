@@ -12,6 +12,7 @@ import { sampleSendable, SAMPLE_TX_DELAY_MS } from '../../lib/fundingTx';
 import { MODE_INFO, type ModeName } from '../../lib/modes';
 import { Button, DisabledReason, Field, Modal, ModePill, Notice, SampleTag } from '../ui';
 import { TxDone, TxFailed, TxPending } from '../state/TxStatus';
+import { restoreFromAssembled } from '../../lib/restore';
 
 const MODES = Object.keys(MODE_INFO) as ModeName[];
 
@@ -116,6 +117,7 @@ export function FinalizeSheet({ target, onClose, onFinalized, sampleDelayMs = SA
         mode: { tag: chosen, values: undefined } as Mode,
       });
       return {
+        restore: restoreFromAssembled(assembled),
         signAndSend: async (options: Parameters<typeof assembled.signAndSend>[0]) => {
           const sent = await assembled.signAndSend(options);
           return { result: sent.result.unwrap() };

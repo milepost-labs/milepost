@@ -3,7 +3,10 @@ import { render, screen, fireEvent, waitFor } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
 import { AllocatedSpending } from './AllocatedSpending';
 import type { RecipientAwardFixture } from '../../fixtures/recipientFixtures';
-import { explainCode } from '../../lib/errors';
+import { explain, explainCode } from '../../lib/errors';
+import { phaseRequirement } from '../../lib/phaseGate';
+import { formatAmount } from '../../lib/amount';
+import { truncateAddress } from '../../lib/format';
 
 const RECIPIENT = 'GAH3D4RM45ETE4W7VDRCWZBPRPT63CJXAGXFYVBC2FGANBZTS4OTKXCA';
 const PAYEE = 'GBBD47IF6LWK7P7MDEVSCWR7DPUWV3NY3DTQEVFL4NAT4AQH3ZLLFLA5';
@@ -60,6 +63,9 @@ function makeAward(overrides: Partial<RecipientAwardFixture> = {}): RecipientAwa
     mode: 'Allocated',
     payee: null,
     escrow: '10000000000',
+    updatedLedger: 4640021,
+    attestationReady: false,
+    condition: 'Milestone attested',
     ...overrides,
   };
 }
@@ -108,33 +114,20 @@ describe('AllocatedSpending component failure paths & branch coverage', () => {
     await waitFor(() => {
       expect(screen.getByRole('alert')).toBeDefined();
     });
-    expect(screen.getByRole('button', { name: 'Retry' })).toBeDefined();
+    expect(screen.getByRole('button', { name: 'Try again' })).toBeDefined();
   });
 
-  it('renders phase-blocked gate before spend window opens (phase Open or Review)', async () => {
-    mockClient.get_phase.mockResolvedValue({ result: { unwrap: () => ({ tag: 'Open' }) } });
+  it.each(['Open', 'Review'] as const)('renders the phase gate before the spend window opens (%s)', async (phase) => {
+    mockClient.get_phase.mockResolvedValue({ result: { unwrap: () => ({ tag: phase }) } });
 
-    const { rerender } = render(
+    render(
       <MemoryRouter>
         <AllocatedSpending award={makeAward()} />
       </MemoryRouter>,
     );
 
-    await waitFor(() => {
-      expect(screen.getByText(/This action needs the programme to be in Settled\. It is currently in Open\./)).toBeDefined();
-    });
-
-    // When phase is Review
-    mockClient.get_phase.mockResolvedValue({ result: { unwrap: () => ({ tag: 'Review' }) } });
-    rerender(
-      <MemoryRouter>
-        <AllocatedSpending award={makeAward()} />
-      </MemoryRouter>,
-    );
-
-    await waitFor(() => {
-      expect(screen.getByText(/This action needs the programme to be in Settled\. It is currently in Review\./)).toBeDefined();
-    });
+    expect(await screen.findByText(phaseRequirement('Settled', phase))).toBeDefined();
+    expect(screen.queryByRole('button', { name: 'Send to payee' })).toBeNull();
   });
 
   it('renders phase-blocked gate when programme was Cancelled', async () => {
@@ -146,9 +139,7 @@ describe('AllocatedSpending component failure paths & branch coverage', () => {
       </MemoryRouter>,
     );
 
-    await waitFor(() => {
-      expect(screen.getByText(/This action needs the programme to be in Settled\. It is currently in Cancelled\./)).toBeDefined();
-    });
+    expect(await screen.findByText(phaseRequirement('Settled', 'Cancelled'))).toBeDefined();
   });
 
   it('renders allocation-error panel when allocation_of read fails', async () => {
@@ -163,7 +154,7 @@ describe('AllocatedSpending component failure paths & branch coverage', () => {
     await waitFor(() => {
       expect(screen.getByRole('alert')).toBeDefined();
     });
-    expect(screen.getByRole('button', { name: 'Retry' })).toBeDefined();
+    expect(screen.getByRole('button', { name: 'Try again' })).toBeDefined();
   });
 
   it('renders empty notice when allocation is 0n', async () => {
@@ -205,7 +196,8 @@ describe('AllocatedSpending component failure paths & branch coverage', () => {
   });
 
   it('handles contract or network error when checking payee', async () => {
-    mockClient.is_payee.mockRejectedValue(new Error('HostError: Error(Contract, #1)'));
+    const failure = new Error('HostError: Error(Contract, #1)');
+    mockClient.is_payee.mockRejectedValue(failure);
 
     render(
       <MemoryRouter>
@@ -217,9 +209,7 @@ describe('AllocatedSpending component failure paths & branch coverage', () => {
     fireEvent.change(screen.getByLabelText('Payee address'), { target: { value: PAYEE } });
     fireEvent.click(screen.getByRole('button', { name: 'Check payee' }));
 
-    await waitFor(() => {
-      expect(screen.getByRole('alert')).toBeDefined();
-    });
+    expect(await screen.findByText(explain(failure, 'program').message)).toBeDefined();
     expect((screen.getByRole('button', { name: 'Send to payee' }) as HTMLButtonElement).disabled).toBe(true);
   });
 
@@ -334,7 +324,9 @@ describe('AllocatedSpending component failure paths & branch coverage', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Send to payee' }));
 
     expect(await screen.findByText('Sent to payee')).toBeDefined();
-    expect(screen.getByText(/500\.00 XLM to GBBBBB/)).toBeDefined();
+    expect(
+      screen.getByText(`${formatAmount(5_000_000_000n, { asset: 'XLM' })} to ${truncateAddress(PAYEE)}`),
+    ).toBeDefined();
 
     // Submission called once with exact arguments
     expect(mockClient.spend).toHaveBeenCalledTimes(1);

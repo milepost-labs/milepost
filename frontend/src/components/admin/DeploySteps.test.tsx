@@ -1,5 +1,5 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { render, screen, fireEvent, within } from '@testing-library/react';
+import { describe, it, expect, vi } from 'vitest';
+import { render, screen, fireEvent } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
 import {
   Stepper,
@@ -117,8 +117,8 @@ describe('Stepper component', () => {
     const minusBtn = screen.getByRole('button', { name: 'Fewer tranches' });
     const plusBtn = screen.getByRole('button', { name: 'More tranches' });
 
-    expect(minusBtn).not.toBeDisabled();
-    expect(plusBtn).not.toBeDisabled();
+    expect((minusBtn as HTMLButtonElement).disabled).toBe(false);
+    expect((plusBtn as HTMLButtonElement).disabled).toBe(false);
     expect(screen.getByRole('status').textContent).toBe('2');
 
     fireEvent.click(minusBtn);
@@ -138,7 +138,7 @@ describe('Stepper component', () => {
         onChange={handleChange}
       />,
     );
-    expect(screen.getByRole('button', { name: 'Fewer tranches' })).toBeDisabled();
+    expect((screen.getByRole('button', { name: 'Fewer tranches' }) as HTMLButtonElement).disabled).toBe(true);
 
     // Test at max boundary
     rerender(
@@ -151,7 +151,7 @@ describe('Stepper component', () => {
         onChange={handleChange}
       />,
     );
-    expect(screen.getByRole('button', { name: 'More tranches' })).toBeDisabled();
+    expect((screen.getByRole('button', { name: 'More tranches' }) as HTMLButtonElement).disabled).toBe(true);
   });
 
   it('displays error text when provided', () => {
@@ -304,7 +304,7 @@ describe('DetailsStep component', () => {
           setTokenInput={vi.fn()}
           assetCode="USDC"
           tokenState="ok"
-          schemaChoice="cd".repeat(32)
+          schemaChoice={'cd'.repeat(32)}
           setSchemaChoice={vi.fn()}
           schemaInput=""
           setSchemaInput={vi.fn()}
@@ -352,7 +352,7 @@ describe('DetailsStep component', () => {
           tokenState="idle"
           schemaChoice={OTHER}
           setSchemaChoice={vi.fn()}
-          schemaInput="ab".repeat(32)
+          schemaInput={'ab'.repeat(32)}
           setSchemaInput={setSchemaInput}
           schemaPanel={null}
         />
