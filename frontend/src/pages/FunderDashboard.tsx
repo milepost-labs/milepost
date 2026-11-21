@@ -3,7 +3,6 @@ import { Link } from 'react-router-dom';
 import { Download, Plus, Wallet } from 'lucide-react';
 import { ContributeSheet } from '../components/funder/ContributeSheet';
 import { ContributionList } from '../components/funder/ContributionList';
-import { SeededProgrammeTools } from '../components/funder/SeededProgrammeTools';
 import { SignInSheet } from '../components/layout/SignInSheet';
 import { MoneyLegend } from '../components/programme/MoneyRow';
 import { ProgrammeParamNotice } from '../components/programme/ProgrammeParamNotice';
@@ -196,8 +195,6 @@ export const FunderDashboard = () => {
           </p>
         </>
       )}
-
-      {DEMO_PROGRAMME_ID && <SeededProgrammeTools />}
 
       <ContributeSheet
         open={contributeOpen}

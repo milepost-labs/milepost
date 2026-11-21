@@ -20,8 +20,6 @@ vi.mock('../lib/indexer', async (importOriginal) => ({
   ...(await importOriginal<typeof import('../lib/indexer')>()),
   fetchProgrammes: vi.fn(async () => []),
 }));
-// Live reads against the seeded testnet programme; covered by their own components.
-vi.mock('../components/funder/SeededProgrammeTools', () => ({ SeededProgrammeTools: () => null }));
 
 function renderPage() {
   return render(

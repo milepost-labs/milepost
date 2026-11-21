@@ -220,6 +220,7 @@ export function chainFromRead(
     refundable: (read.refunded ?? 0n).toString(),
     quorum: read.quorum ?? 0,
     closesInDays,
+    metadataHash: read.metadataHash,
   };
 }
 
