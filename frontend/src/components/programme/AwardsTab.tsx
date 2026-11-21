@@ -1,6 +1,7 @@
 import type { FC } from 'react';
 import { useCallback, useContext, useMemo } from 'react';
-import { Download } from 'lucide-react';
+import { useSearchParams } from 'react-router-dom';
+import { ChevronLeft, ChevronRight, Download } from 'lucide-react';
 import type { Award } from '@milepost/program';
 import type { IndexedAward } from '../../lib/indexer';
 import { fetchAwards } from '../../lib/indexer';
@@ -14,6 +15,12 @@ import { FIXTURE_AWARDS } from '../../fixtures/programmeFixtures';
 import { Empty } from '../state/AsyncStates';
 import { Badge, Button, SampleTag } from '../ui';
 import './AwardsTab.css';
+
+/** Awards shown per page. */
+const PAGE_SIZE = 25;
+
+/** URL search param that carries the current awards page (1-indexed). */
+const PAGE_PARAM = 'awardsPage';
 
 export interface AwardsTabProps {
   programmeId: string;
@@ -156,6 +163,48 @@ export const AwardRowItem: FC<AwardRowItemProps> = ({
   );
 };
 
+/** Previous / Next controls with a count. */
+interface PaginationProps {
+  page: number;
+  totalPages: number;
+  totalAwards: number;
+  pageSize: number;
+  onPage: (page: number) => void;
+}
+
+const Pagination: FC<PaginationProps> = ({ page, totalPages, totalAwards, pageSize, onPage }) => {
+  const start = (page - 1) * pageSize + 1;
+  const end = Math.min(page * pageSize, totalAwards);
+
+  return (
+    <nav className="awards-tab__pagination" aria-label="Awards pages">
+      <button
+        type="button"
+        className="awards-tab__page-btn"
+        onClick={() => onPage(page - 1)}
+        disabled={page <= 1}
+        aria-label="Previous page"
+      >
+        <ChevronLeft size={16} aria-hidden="true" />
+        Previous
+      </button>
+      <span className="awards-tab__page-count" aria-live="polite" aria-atomic="true">
+        {start}–{end} of {totalAwards}
+      </span>
+      <button
+        type="button"
+        className="awards-tab__page-btn"
+        onClick={() => onPage(page + 1)}
+        disabled={page >= totalPages}
+        aria-label="Next page"
+      >
+        Next
+        <ChevronRight size={16} aria-hidden="true" />
+      </button>
+    </nav>
+  );
+};
+
 export const AwardsTab: FC<AwardsTabProps> = ({
   programmeId,
   phase = 'Open',
@@ -167,6 +216,12 @@ export const AwardsTab: FC<AwardsTabProps> = ({
   // the index.
   const sample = isSample && isSampleProgrammeId(programmeId);
 
+  const [searchParams, setSearchParams] = useSearchParams();
+
+  // Page is 1-indexed; clamp to 1 if the param is absent or invalid.
+  const rawPage = Number(searchParams.get(PAGE_PARAM) ?? '1');
+  const page = Number.isFinite(rawPage) && rawPage >= 1 ? Math.floor(rawPage) : 1;
+
   const {
     data: fetchedAwards,
     loading,
@@ -177,20 +232,46 @@ export const AwardsTab: FC<AwardsTabProps> = ({
     { enabled: Boolean(programmeId) && !sample },
   );
 
-  const awards = useMemo(() => {
+  const allAwards = useMemo(() => {
     if (sample) return phase === 'Settled' ? FIXTURE_AWARDS : [];
     return fetchedAwards ?? [];
   }, [sample, phase, fetchedAwards]);
+
+  const totalPages = Math.max(1, Math.ceil(allAwards.length / PAGE_SIZE));
+  // Clamp the current page to the valid range once allAwards is known.
+  const clampedPage = Math.min(page, totalPages);
+
+  // Only the visible page is passed to AwardRowItem — chain reads fire for
+  // these rows only, not for every award in the list.
+  const pageAwards = useMemo(
+    () => allAwards.slice((clampedPage - 1) * PAGE_SIZE, clampedPage * PAGE_SIZE),
+    [allAwards, clampedPage],
+  );
+
+  const handlePage = useCallback(
+    (next: number) => {
+      setSearchParams(
+        (prev) => {
+          const params = new URLSearchParams(prev);
+          params.set(PAGE_PARAM, String(next));
+          return params;
+        },
+        { replace: true },
+      );
+    },
+    [setSearchParams],
+  );
 
   const advisoryNote = sample
     ? 'Awards use the middle reviewer vote after enough reviewers have voted. Listed from the public index, advisory.'
     : 'From the public index (awards.json), advisory. Each award is re-read on-chain before it is acted on.';
 
+  // CSV export covers all awards, not just the visible page.
   const handleDownloadCsv = useCallback(() => {
-    const csv = awardsToCsv(awards, new Date().toISOString());
+    const csv = awardsToCsv(allAwards, new Date().toISOString());
     const filename = `awards-${programmeId.slice(0, 12)}-${Date.now()}.csv`;
     downloadFile(csv, filename, 'text/csv;charset=utf-8;');
-  }, [awards, programmeId]);
+  }, [allAwards, programmeId]);
 
   const empty =
     phase === 'Open'
@@ -214,10 +295,10 @@ export const AwardsTab: FC<AwardsTabProps> = ({
       aria-labelledby="tab-awards"
       tabIndex={0}
     >
-      {!loading && !error && awards.length > 0 && (
+      {!loading && !error && allAwards.length > 0 && (
         <div className="awards-tab__bar">
           <span className="awards-tab__count">
-            {awards.length} {awards.length === 1 ? 'award' : 'awards'} · amounts in {asset}
+            {allAwards.length} {allAwards.length === 1 ? 'award' : 'awards'} · amounts in {asset}
           </span>
           <Button
             variant="ghost"
@@ -245,35 +326,47 @@ export const AwardsTab: FC<AwardsTabProps> = ({
         </div>
       )}
 
-      {!loading && !error && awards.length === 0 && <Empty {...empty} />}
+      {!loading && !error && allAwards.length === 0 && <Empty {...empty} />}
 
-      {!loading && !error && awards.length > 0 && (
-        <table className="ui-table awards-tab__table">
-          <thead>
-            <tr>
-              <th scope="col">Recipient</th>
-              <th scope="col">Tranches</th>
-              <th scope="col" className="numeric-col">
-                Award
-              </th>
-              <th scope="col" className="numeric-col">
-                Released
-              </th>
-              <th scope="col">Payee</th>
-            </tr>
-          </thead>
-          <tbody>
-            {awards.map((award, idx) => (
-              <AwardRowItem
-                key={`${award.recipient}-${idx}`}
-                award={award}
-                programmeId={programmeId}
-                isSample={isSample}
-                asset={asset}
-              />
-            ))}
-          </tbody>
-        </table>
+      {!loading && !error && allAwards.length > 0 && (
+        <>
+          <table className="ui-table awards-tab__table">
+            <thead>
+              <tr>
+                <th scope="col">Recipient</th>
+                <th scope="col">Tranches</th>
+                <th scope="col" className="numeric-col">
+                  Award
+                </th>
+                <th scope="col" className="numeric-col">
+                  Released
+                </th>
+                <th scope="col">Payee</th>
+              </tr>
+            </thead>
+            <tbody>
+              {pageAwards.map((award, idx) => (
+                <AwardRowItem
+                  key={`${award.recipient}-${(clampedPage - 1) * PAGE_SIZE + idx}`}
+                  award={award}
+                  programmeId={programmeId}
+                  isSample={isSample}
+                  asset={asset}
+                />
+              ))}
+            </tbody>
+          </table>
+
+          {totalPages > 1 && (
+            <Pagination
+              page={clampedPage}
+              totalPages={totalPages}
+              totalAwards={allAwards.length}
+              pageSize={PAGE_SIZE}
+              onPage={handlePage}
+            />
+          )}
+        </>
       )}
 
       <p className="awards-tab__note">

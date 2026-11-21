@@ -100,3 +100,51 @@
     text-align: right;
   }
 }
+
+/* Pagination bar: Previous / count / Next. */
+.awards-tab__pagination {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-3);
+  padding: var(--space-2) 0;
+}
+
+.awards-tab__page-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-1-5);
+  min-height: var(--tap-min);
+  padding: 0 var(--space-3);
+  background: none;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
+  font-size: var(--text-sm);
+  font-weight: var(--weight-semibold);
+  color: var(--accent);
+  cursor: pointer;
+  outline: none;
+}
+
+.awards-tab__page-btn:hover:not(:disabled) {
+  border-color: var(--accent);
+  background: var(--accent-soft);
+}
+
+.awards-tab__page-btn:focus-visible {
+  outline: 2px solid var(--focus);
+  outline-offset: var(--focus-offset);
+}
+
+.awards-tab__page-btn:disabled {
+  color: var(--ink-faint);
+  border-color: var(--line);
+  cursor: not-allowed;
+}
+
+.awards-tab__page-count {
+  font-size: var(--text-sm);
+  color: var(--ink-muted);
+  flex: 1;
+  text-align: center;
+}
