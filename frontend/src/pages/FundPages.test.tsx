@@ -11,6 +11,15 @@ const HASH = 'ab'.repeat(32);
 
 const mocks = vi.hoisted(() => ({ lookup: vi.fn(), announce: vi.fn(), copied: [] as string[] }));
 
+// The asset read has its own tests (hooks/useProgrammeAsset.test.tsx). Here a
+// sample programme is in its stand-in asset and a deployed one pays in XLM.
+vi.mock('../hooks/useProgrammeAsset', async () => {
+  const { isSampleProgrammeId } = await import('../lib/programmeView');
+  return {
+    useProgrammeAsset: (id: string | null | undefined) => (!id ? null : isSampleProgrammeId(id) ? 'USDC' : 'XLM'),
+  };
+});
+
 vi.mock('../lib/txLookup', async (importOriginal) => ({
   ...(await importOriginal<typeof import('../lib/txLookup')>()),
   lookupTransaction: (...args: unknown[]) => mocks.lookup(...args),

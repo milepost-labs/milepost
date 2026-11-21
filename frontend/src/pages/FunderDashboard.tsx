@@ -65,7 +65,7 @@ export const FunderDashboard = () => {
   const exportableCount = useMemo(() => cards.filter((c) => !c.sample).length, [cards]);
   const totals = fundingTotals(cards);
   // Every stand-in contribution is in its programme's asset; they share one.
-  const asset = cards[0]?.asset ?? 'USDC';
+  const asset = cards[0]?.asset ?? null;
   const sampleIds = useMemo(() => new Set(programmes.filter((p) => p.sample).map((p) => p.id)), [programmes]);
 
   const contributionProgrammeIds = useMemo(
@@ -161,19 +161,19 @@ export const FunderDashboard = () => {
             <StatTile
               label="Contributed"
               value={formatFigure(totals.contributed)}
-              unit={asset}
+              unit={asset ?? undefined}
               hint={`Across ${plural(totals.programmes, 'programme', 'programmes')}`}
             />
             <StatTile
               label="Released to people"
               value={formatFigure(totals.released)}
-              unit={asset}
+              unit={asset ?? undefined}
               hint="Your share of releases so far"
             />
             <StatTile
               label="Refundable now"
               value={formatFigure(totals.refundableNow)}
-              unit={asset}
+              unit={asset ?? undefined}
               hint={
                 totals.refundablePrograms > 0
                   ? `From ${plural(totals.refundablePrograms, 'programme', 'programmes')}`

@@ -4,10 +4,10 @@
  * splits into protocol fee and budget.
  */
 
-import type { FixtureChainRead } from '../fixtures/programmes';
+import { FIXTURE_ASSET_CODE, type FixtureChainRead } from '../fixtures/programmes';
 import type { FixtureContribution } from '../fixtures/funding';
 import { phaseRequirement, type Phase } from './phaseGate';
-import { formatFigure, programmeAsset, shortId, type DirectoryProgramme } from './programmeView';
+import { formatFigure, shortId, type DirectoryProgramme } from './programmeView';
 
 /**
  * An amount with its asset, trailing zeros dropped: "990 USDC", "12.5 XLM".
@@ -33,7 +33,7 @@ export interface ContributionCard {
   name: string;
   phase: Phase;
   /** The programme's asset; every amount on the card is in it. */
-  asset: string;
+  asset: string | null;
   /** The programme's figures, for the money row. Null when the programme is unknown. */
   chain: FixtureChainRead | null;
   sample: boolean;
@@ -154,7 +154,10 @@ export function contributionCard(
   const refundable = contributed > 0n ? (amount * pool) / contributed : 0n;
   const share = contributed > 0n ? (amount * BPS_DENOMINATOR) / contributed : 0n;
   const releasedShare = contributed > 0n && chain ? (amount * BigInt(chain.released || '0')) / contributed : 0n;
-  const asset = programme ? programmeAsset(programme) : 'USDC';
+  // A sample (or a contribution with no programme listed) is written in the stand-in
+  // asset. A real programme's asset is read from its token by the screen
+  // (useProgrammeAsset), not guessed here.
+  const asset = (programme?.sample ?? true) ? FIXTURE_ASSET_CODE : null;
   const phase: Phase = chain?.phase ?? 'Open';
   const refunded = refundedHere || contribution.refunded;
   const claimable = !refunded && refundable > 0n && (phase === 'Cancelled' || phase === 'Settled');

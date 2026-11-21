@@ -13,7 +13,6 @@ import type { IndexedProgramme } from './indexer';
 import { DEMO_PROGRAMME_ID } from '../context/sorobanStore';
 import { samplesEnabled } from './samples';
 import { chainFor,
-  FIXTURE_ASSET_CODE,
   FIXTURE_CHAIN,
   FIXTURE_PROGRAMMES,
   type FixtureChainRead,
@@ -395,15 +394,6 @@ export function formatUsdc(stroops: string | bigint): string {
 export function formatFigure(stroops: string | bigint): string {
   const value = typeof stroops === 'bigint' ? stroops : BigInt(stroops || '0');
   return formatAmount(value, { decimals: 2 }).replace(/\.00$/, '');
-}
-
-/**
- * The asset a programme's amounts are in, for the screens that have not moved
- * to `useProgrammeAsset` yet. It cannot read a token, so it still guesses XLM
- * for a real programme: do not add callers.
- */
-export function programmeAsset(programme: { sample: boolean }): string {
-  return programme.sample ? FIXTURE_ASSET_CODE : 'XLM';
 }
 
 /**

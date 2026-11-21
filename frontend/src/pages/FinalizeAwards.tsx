@@ -9,7 +9,8 @@ import { usePageTitle } from '../hooks/usePageTitle';
 import { fetchAwards, fetchProgrammes } from '../lib/indexer';
 import { explain } from '../lib/errors';
 import { formatDate, looksLikeAddress } from '../lib/format';
-import { formatFigure, programmeAsset, shortId } from '../lib/programmeView';
+import { formatFigure, shortId } from '../lib/programmeView';
+import { useProgrammeAsset } from '../hooks/useProgrammeAsset';
 import { FIXTURE_PROGRAMMES, chainFor, isSampleProgrammeId } from '../fixtures/programmes';
 import { samplesEnabled } from '../lib/samples';
 import { FIXTURE_REVIEW_APPLICATIONS } from '../fixtures/finalizeFixtures';
@@ -100,7 +101,8 @@ export const FinalizeAwards = () => {
     sample: selectedId !== null && samplesEnabled() && isSampleProgrammeId(selectedId),
   };
   const sample = selected.sample;
-  const asset = programmeAsset({ sample });
+  const asset = useProgrammeAsset(selected.id || null);
+  const unit = asset ? ` ${asset}` : '';
   const programme = useMemo(() => programmeAt(selected.id), [programmeAt, selected.id]);
 
   // Real programme reads. Sample programmes read nothing.
@@ -240,7 +242,7 @@ export const FinalizeAwards = () => {
             {quorum > 0 && <span className="finalize__quorum">Quorum {quorum}</span>}
             {minimum > 0n && (
               <span className="finalize__quorum">
-                Minimum award {formatFigure(minimum)} {asset}
+                Minimum award {formatFigure(minimum)}{unit}
               </span>
             )}
             {sample && <SampleTag />}
@@ -250,7 +252,7 @@ export const FinalizeAwards = () => {
             role="img"
             aria-label={
               budget !== null && awarded !== null
-                ? `${formatFigure(awarded)} of ${formatFigure(budget)} ${asset} awarded`
+                ? `${formatFigure(awarded)} of ${formatFigure(budget)}${unit} awarded`
                 : 'Budget not read yet'
             }
           >
@@ -262,7 +264,7 @@ export const FinalizeAwards = () => {
             </span>
             <span>
               <b className="numeric">{left !== null ? formatFigure(left) : '—'}</b> of{' '}
-              <span className="numeric">{budget !== null ? formatFigure(budget) : '—'}</span> {asset} left
+              <span className="numeric">{budget !== null ? formatFigure(budget) : '—'}</span>{unit} left
             </span>
           </div>
         </section>
@@ -271,7 +273,7 @@ export const FinalizeAwards = () => {
           <Notice tone="risk" role="note">
             <span>
               <b>This programme is oversubscribed.</b> The awards ready to finalize total{' '}
-              {formatFigure(pendingSampleTotal)} {asset} against {formatFigure(left)} left. The budget is protected and
+              {formatFigure(pendingSampleTotal)}{unit} against {formatFigure(left)} left. The budget is protected and
               can’t be exceeded, but <b>whoever finalizes first decides who gets funded</b>. Once the money runs out, the
               rest can’t be finalized.
             </span>
