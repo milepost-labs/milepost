@@ -91,6 +91,32 @@ describe('explain', () => {
     expect(result.message).toMatch(/network/i);
   });
 
+  it('recognises a timeout as a network failure', () => {
+    const result = explain(new Error('connection timeout'));
+    expect(result.kind).toBe('fault');
+    expect(result.message).toMatch(/network/i);
+  });
+
+  it('recognises an archived (expired-state) entry', () => {
+    const result = explain(new Error('expired state: restore with the preamble'));
+    expect(result.kind).toBe('blocked');
+    expect(result.message).toMatch(/archived/i);
+    expect(result.action).toMatch(/keepalive/i);
+  });
+
+  it('handles a raw string error, not wrapped in an Error object', () => {
+    const result = explain('Error(Contract, #3)');
+    expect(result.code).toBe(3);
+    expect(result.contract).toBe('program');
+  });
+
+  it('handles an unknown plain object with no recognisable shape', () => {
+    const result = explain({ weird: true });
+    expect(result.kind).toBe('fault');
+    expect(result.code).toBeUndefined();
+    expect(result.contract).toBeUndefined();
+  });
+
   it('translates a contract error by default to program', () => {
     const result = explain(new Error('Error(Contract, #14)'));
     expect(result.code).toBe(14);
@@ -119,6 +145,22 @@ describe('isFailure', () => {
 
   it('returns true for kind "fault"', () => {
     expect(isFailure({ kind: 'fault', message: 'bad' })).toBe(true);
+  });
+
+  it('returns true for kind "blocked"', () => {
+    expect(isFailure({ kind: 'blocked', message: 'bad' })).toBe(true);
+  });
+
+  it('returns true for kind "invalid"', () => {
+    expect(isFailure({ kind: 'invalid', message: 'bad' })).toBe(true);
+  });
+
+  it('returns true for kind "denied"', () => {
+    expect(isFailure({ kind: 'denied', message: 'bad' })).toBe(true);
+  });
+
+  it('returns true for kind "conflict"', () => {
+    expect(isFailure({ kind: 'conflict', message: 'bad' })).toBe(true);
   });
 });
 
