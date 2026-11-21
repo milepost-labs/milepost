@@ -19,6 +19,8 @@ export interface ProgrammeTabsProps {
   verifiers?: VerifierFixture[];
   /** The creator's names for addresses, from the verified description. */
   labels?: AddressLabel[];
+  /** Bumped after a creator write, so role checks in the tabs re-read. */
+  version?: number;
   defaultTab?: TabKey;
 }
 
@@ -31,6 +33,7 @@ export const ProgrammeTabs: FC<ProgrammeTabsProps> = ({
   minimumAward,
   verifiers,
   labels,
+  version,
   defaultTab = 'awards',
 }) => {
   const [activeTab, setActiveTab] = useState<TabKey>(defaultTab);
@@ -123,7 +126,7 @@ export const ProgrammeTabs: FC<ProgrammeTabsProps> = ({
           />
         )}
         {activeTab === 'verifiers' && (
-          <VerifiersTab verifiers={verifiers} programmeId={programmeId} isSample={isSample} labels={labels} />
+          <VerifiersTab verifiers={verifiers} programmeId={programmeId} isSample={isSample} labels={labels} version={version} />
         )}
         {activeTab === 'terms' && (
           <TermsTab

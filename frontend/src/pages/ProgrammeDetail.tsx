@@ -492,6 +492,7 @@ const ProgrammeDetailBody = ({ programmeId, programme, isDefault }: ProgrammeDet
             isSample={isSample}
             asset={asset}
             labels={metadata?.status === "ok" ? metadata.doc.labels : undefined}
+            version={chainVersion}
           />
 
           <ProgrammeActivityPanel programmeId={programmeId} isSample={isSample} />

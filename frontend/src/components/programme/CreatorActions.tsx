@@ -5,6 +5,7 @@ import { isPhase, type Phase } from '../../lib/phaseGate';
 import { CancelAction } from './CancelAction';
 import { ExtendDeadlineAction } from './ExtendDeadlineAction';
 import { PauseAction } from './PauseAction';
+import { VerifiersAction } from './VerifiersAction';
 
 /** What every creator action needs to gate itself and refresh the page. */
 export interface CreatorContext {
@@ -52,6 +53,7 @@ export function CreatorActions({ programmeId, phase, verified, onChanged }: Crea
       <p className="programme-actions__group-note">Only you can see these. You created this programme.</p>
       <ul className="programme-actions__list">
         <PauseAction {...context} />
+        <VerifiersAction {...context} />
         <ExtendDeadlineAction {...context} />
         <CancelAction {...context} />
       </ul>
