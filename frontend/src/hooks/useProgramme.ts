@@ -12,8 +12,8 @@ export function useProgramme() {
 
   const linkedProgrammeId =
     !programmeId && linkedProgramme.status === 'valid' ? linkedProgramme.programmeId : null;
-  const id = programmeId ?? linkedProgrammeId ?? DEMO_PROGRAMME_ID;
-  const client = useMemo(() => programmeAt(id), [id, programmeAt]);
+  const id = programmeId ?? linkedProgrammeId ?? (DEMO_PROGRAMME_ID || null);
+  const client = useMemo(() => programmeAt(id ?? ''), [id, programmeAt]);
   const readsEnabled = !linkedProgramme.blocksProgramme || Boolean(programmeId);
 
   const { data: totalContributed } = useContractRead(
@@ -51,7 +51,7 @@ export function useProgramme() {
     return {
       id,
       client,
-      isDefault: !programmeId && linkedProgrammeId === null,
+      isDefault: !programmeId && linkedProgrammeId === null && DEMO_PROGRAMME_ID !== '',
       linkedProgramme,
       readsEnabled,
       breakdown: {

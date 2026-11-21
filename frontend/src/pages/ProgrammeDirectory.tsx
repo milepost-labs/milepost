@@ -9,6 +9,7 @@ import { useIndexedList, useProgrammeChainReads, useRegistryProgrammes } from '.
 import { useWallet } from '../context/useWallet';
 import { useAnnouncer } from '../context/useAnnouncer';
 import { fetchMeta, fetchProgrammes, indexMismatch, isStale } from '../lib/indexer';
+import { samplesEnabled } from '../lib/samples';
 import { FIXTURE_USER_ROLES, ROLE_LABELS } from '../fixtures/userRoles';
 import {
   DEFAULT_DIRECTORY_SORT,
@@ -74,7 +75,7 @@ export const ProgrammeDirectory = () => {
   const listRead = useIndexedList(() => fetchProgrammes(), []);
   const registryRead = useRegistryProgrammes();
 
-  const userRoles = isSignedIn ? FIXTURE_USER_ROLES : undefined;
+  const userRoles = isSignedIn && samplesEnabled() ? FIXTURE_USER_ROLES : undefined;
 
   const setQuery = useCallback(
     (value: string) => {
@@ -135,7 +136,7 @@ export const ProgrammeDirectory = () => {
   const realCount = indexProgrammes?.filter((p) => Boolean(p?.id)).length ?? 0;
   const hasReal = realCount > 0;
   const samplesParam = params.get('samples');
-  const showSamples = hasReal ? samplesParam === '1' : true;
+  const showSamples = samplesEnabled() && (hasReal ? samplesParam === '1' : true);
 
   const toggleSamples = useCallback(() => {
     const next = new URLSearchParams(params);
@@ -331,7 +332,7 @@ export const ProgrammeDirectory = () => {
               Yours
             </button>
           )}
-          {hasReal && (
+          {hasReal && samplesEnabled() && (
             <button type="button" className="directory-toggle" aria-pressed={showSamples} onClick={toggleSamples}>
               {showSamples ? 'Hide sample programmes' : 'Show sample programmes'}
             </button>

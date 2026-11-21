@@ -9,6 +9,7 @@ import { useSoroban } from '../../context/useSoroban';
 import { validateAmount, formatAmount } from '../../lib/amount';
 import { formatIn } from '../../lib/funding';
 import { isSampleProgrammeId, programmeAsset } from '../../lib/programmeView';
+import { samplesEnabled } from '../../lib/samples';
 import { SAMPLE_TX_DELAY_MS, sampleSendable, sampleOutcome } from '../../lib/fundingTx';
 import { useAnnouncer } from '../../context/useAnnouncer';
 import { Empty, ErrorPanel, ErrorState, Loading } from '../state/AsyncStates';
@@ -250,7 +251,7 @@ export function ApplyForm({
               {receipt.amountFormatted} requested from {receipt.programmeName}. The application hash is the
               SHA-256 of your notes: keep the notes, they prove what you submitted.
             </p>
-            {receipt.sample && (
+            {receipt.sample && samplesEnabled() && (
               <p className="apply__sample">
                 <SampleTag>Sample receipt</SampleTag>
               </p>
