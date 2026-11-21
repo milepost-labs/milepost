@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
 import { MoneyLegend, MoneyRow } from '../components/programme/MoneyRow';
-import { ArrowRight, Plus, RefreshCw, Search, WifiOff } from 'lucide-react';
+import { ArrowRight, ChevronLeft, ChevronRight, Plus, RefreshCw, Search, WifiOff } from 'lucide-react';
 import { Badge, ModePill, Notice, PageHead, PhaseBadge, SampleTag, Segmented } from '../components/ui';
 import { Skeleton, Empty } from '../components/state/AsyncStates';
 import { describeAmount } from '../lib/amount';
@@ -41,6 +41,9 @@ const asSort = (value: string | null): DirectorySort =>
     ? (value as DirectorySort)
     : DEFAULT_DIRECTORY_SORT;
 
+/** Cards shown per page. */
+const PAGE_SIZE = 24;
+
 /**
  * `/directory` — every programme, narrowed by a search box and phase pills.
  *
@@ -62,6 +65,8 @@ export const ProgrammeDirectory = () => {
   const phase = asPhase(params.get('phase'));
   const sort = asSort(params.get('sort'));
   const yoursOnly = params.get('yours') === '1';
+  const rawPage = Number(params.get('page') ?? '1');
+  const page = Number.isFinite(rawPage) && rawPage >= 1 ? Math.floor(rawPage) : 1;
   const { status: walletStatus, address } = useWallet();
   const isSignedIn = walletStatus === 'connected' && address != null;
 
@@ -76,6 +81,7 @@ export const ProgrammeDirectory = () => {
       const next = new URLSearchParams(params);
       if (value) next.set('q', value);
       else next.delete('q');
+      next.delete('page');
       setParams(next, { replace: true });
     },
     [params, setParams],
@@ -86,6 +92,7 @@ export const ProgrammeDirectory = () => {
       const next = new URLSearchParams(params);
       if (value === 'All') next.delete('phase');
       else next.set('phase', value);
+      next.delete('page');
       setParams(next, { replace: true });
     },
     [params, setParams],
@@ -96,6 +103,7 @@ export const ProgrammeDirectory = () => {
       const next = new URLSearchParams(params);
       if (value === DEFAULT_DIRECTORY_SORT) next.delete('sort');
       else next.set('sort', value);
+      next.delete('page');
       setParams(next, { replace: true });
     },
     [params, setParams],
@@ -105,6 +113,7 @@ export const ProgrammeDirectory = () => {
     const next = new URLSearchParams(params);
     if (yoursOnly) next.delete('yours');
     else next.set('yours', '1');
+    next.delete('page');
     setParams(next, { replace: true });
   }, [params, setParams, yoursOnly]);
 
@@ -113,6 +122,7 @@ export const ProgrammeDirectory = () => {
     next.delete('q');
     next.delete('phase');
     next.delete('yours');
+    next.delete('page');
     setParams(next, { replace: true });
   }, [params, setParams]);
 
@@ -132,19 +142,52 @@ export const ProgrammeDirectory = () => {
     () => mergeProgrammes(listRead.data, userRoles, { showSamples }, registryRead.ids ?? undefined),
     [listRead.data, userRoles, showSamples, registryRead.ids],
   );
-  const realIds = useMemo(() => all.filter((p) => !p.sample).map((p) => p.id), [all]);
-  const reads = useProgrammeChainReads(realIds);
-  // Real cards swap their stand-in chain for the read the moment it lands.
-  const hydrated = useMemo(() => hydrateRealProgrammes(all, reads.reads), [all, reads.reads]);
+
+  // Counts and filtering need the full merged list. Chain reads fire only for
+  // the programmes on the visible page so the RPC is not hammered on load.
+  // The hydrated list reuses whatever reads have already settled (cached by
+  // sessionRead) so previously-read cards stay hydrated when paging back.
+  const counts = useMemo(() => phaseCounts(all, query), [all, query]);
+  const shown = useMemo(
+    () => sortProgrammes(filterProgrammes(all, query, phase, yoursOnly), sort),
+    [all, query, phase, sort, yoursOnly],
+  );
+
+  // Pagination: clamp current page to valid range, then slice.
+  const totalPages = Math.max(1, Math.ceil(shown.length / PAGE_SIZE));
+  const clampedPage = Math.min(page, totalPages);
+  const pageShown = useMemo(
+    () => shown.slice((clampedPage - 1) * PAGE_SIZE, clampedPage * PAGE_SIZE),
+    [shown, clampedPage],
+  );
+
+  const setPage = useCallback(
+    (next: number) => {
+      setParams(
+        (prev) => {
+          const p = new URLSearchParams(prev);
+          if (next <= 1) p.delete('page');
+          else p.set('page', String(next));
+          return p;
+        },
+        { replace: true },
+      );
+    },
+    [setParams],
+  );
+
+  // Only the visible page's real IDs get chain reads.
+  const pageRealIds = useMemo(
+    () => pageShown.filter((p) => !p.sample).map((p) => p.id),
+    [pageShown],
+  );
+  const reads = useProgrammeChainReads(pageRealIds);
+  // Merge the settled reads back into the visible page so cards update live.
+  const hydrated = useMemo(() => hydrateRealProgrammes(pageShown, reads.reads), [pageShown, reads.reads]);
+
   const readsByError = useMemo(
     () => new Map(Object.entries(reads.errors).map(([id, error]) => [id, error])),
     [reads.errors],
-  );
-
-  const counts = useMemo(() => phaseCounts(hydrated, query), [hydrated, query]);
-  const shown = useMemo(
-    () => sortProgrammes(filterProgrammes(hydrated, query, phase, yoursOnly), sort),
-    [hydrated, query, phase, sort, yoursOnly],
   );
 
   const loading = listRead.loading || metaRead.loading;
@@ -328,16 +371,50 @@ export const ProgrammeDirectory = () => {
         )}
 
         {!loading && shown.length > 0 && (
-          <div className="directory-grid">
-            {shown.map((programme) => (
-              <ProgrammeCard
-                key={programme.id}
-                programme={programme}
-                carriedSearch={carriedSearch}
-                readError={readsByError.get(programme.id)}
-              />
-            ))}
-          </div>
+          <>
+            <div className="directory-grid">
+              {hydrated.map((programme) => (
+                <ProgrammeCard
+                  key={programme.id}
+                  programme={programme}
+                  carriedSearch={carriedSearch}
+                  readError={readsByError.get(programme.id)}
+                />
+              ))}
+            </div>
+
+            {totalPages > 1 && (
+              <nav className="directory-pagination" aria-label="Programme pages">
+                <button
+                  type="button"
+                  className="directory-pagination__btn"
+                  onClick={() => setPage(clampedPage - 1)}
+                  disabled={clampedPage <= 1}
+                  aria-label="Previous page"
+                >
+                  <ChevronLeft size={16} aria-hidden="true" />
+                  Previous
+                </button>
+                <span
+                  className="directory-pagination__count"
+                  aria-live="polite"
+                  aria-atomic="true"
+                >
+                  {(clampedPage - 1) * PAGE_SIZE + 1}–{Math.min(clampedPage * PAGE_SIZE, shown.length)} of {shown.length}
+                </span>
+                <button
+                  type="button"
+                  className="directory-pagination__btn"
+                  onClick={() => setPage(clampedPage + 1)}
+                  disabled={clampedPage >= totalPages}
+                  aria-label="Next page"
+                >
+                  Next
+                  <ChevronRight size={16} aria-hidden="true" />
+                </button>
+              </nav>
+            )}
+          </>
         )}
       </div>
 

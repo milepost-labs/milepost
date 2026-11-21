@@ -401,6 +401,14 @@ export function AwardCard({ award: initialAward, reply = null, sampleDelayMs = S
             </Link>
           </h3>
           <p className="award-card__mode-line">{modeLine(liveAward.mode, liveAward.payee)}</p>
+          {isReal && (
+            <Link
+              to={`/award/${encodeURIComponent(initialAward.programmeId)}/${encodeURIComponent(initialAward.recipient)}`}
+              className="award-card__detail-link"
+            >
+              View this award&apos;s detail →
+            </Link>
+          )}
         </div>
         <div className="award-card__amount">
           <b className="numeric" aria-label={describeAmount(granted, asset)}>

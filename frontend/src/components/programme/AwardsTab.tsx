@@ -1,6 +1,6 @@
 import type { FC } from 'react';
 import { useCallback, useContext, useMemo } from 'react';
-import { useSearchParams } from 'react-router-dom';
+import { Link, useSearchParams } from 'react-router-dom';
 import { ChevronLeft, ChevronRight, Download } from 'lucide-react';
 import type { Award } from '@milepost/program';
 import type { IndexedAward } from '../../lib/indexer';
@@ -118,9 +118,14 @@ export const AwardRowItem: FC<AwardRowItemProps> = ({
     <tr>
       <td data-label="Recipient">
         <span className="awards-tab__recipient-line">
-          <span className="awards-tab__recipient numeric" title={award.recipient}>
+          <Link
+            to={`/award/${encodeURIComponent(programmeId)}/${encodeURIComponent(award.recipient)}`}
+            className="awards-tab__recipient-link numeric"
+            title={award.recipient}
+            aria-label={`Open the award for ${award.recipient}`}
+          >
             {shortAddress(award.recipient)}
-          </span>
+          </Link>
           {chainFailed && <Badge tone="neutral">Advisory</Badge>}
         </span>
         {differs && (

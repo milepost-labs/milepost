@@ -1,0 +1,157 @@
+/* The activity timeline: one dot per event, a rule joining them, the newest
+   at the top. Released money paints the dot green; everything else stays
+   locked-grey, the same two states the money squares use. */
+.programme-activity {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+  padding: var(--space-5);
+  background: var(--bg-raised);
+  border-radius: var(--radius-md);
+}
+
+.programme-activity__head {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  flex-wrap: wrap;
+}
+
+.programme-activity__title {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-1-5);
+  margin: 0;
+  font-size: var(--text-md);
+  font-weight: var(--weight-semibold);
+}
+
+.programme-activity__title svg {
+  width: 18px;
+  height: 18px;
+  flex: none;
+  color: var(--ink-muted);
+}
+
+.programme-activity__window {
+  flex: 1 1 100%;
+  margin: 0;
+  font-size: var(--text-caption);
+  color: var(--ink-muted);
+}
+
+.programme-activity__list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.programme-activity__item {
+  display: grid;
+  grid-template-columns: var(--space-4) minmax(0, 1fr);
+  gap: 0 var(--space-3);
+  position: relative;
+  padding-bottom: var(--space-4);
+}
+
+.programme-activity__item:last-child {
+  padding-bottom: 0;
+}
+
+/* The dot. */
+.programme-activity__item::before {
+  content: '';
+  grid-column: 1;
+  width: 10px;
+  height: 10px;
+  border-radius: var(--radius-sq);
+  margin-top: var(--space-1);
+  background: var(--money-locked);
+}
+
+/* The connecting rule. */
+.programme-activity__item::after {
+  content: '';
+  position: absolute;
+  left: 4px;
+  top: calc(var(--space-1) + 14px);
+  bottom: 0;
+  width: 2px;
+  background: var(--line);
+}
+
+.programme-activity__item:last-child::after {
+  display: none;
+}
+
+/* Money-moving events paint their dot green. */
+.programme-activity__item--released::before,
+.programme-activity__item--released_batch::before,
+.programme-activity__item--awarded::before,
+.programme-activity__item--contrib::before {
+  background: var(--money-released);
+}
+
+.programme-activity__body {
+  grid-column: 2;
+  font-size: var(--text-sm);
+  color: var(--ink);
+  line-height: var(--leading-body);
+  overflow-wrap: anywhere;
+}
+
+.programme-activity__actor {
+  color: var(--ink-muted);
+  font-size: var(--text-xs);
+}
+
+.programme-activity__meta {
+  grid-column: 2;
+  display: block;
+  font-family: var(--font-numeric);
+  font-size: var(--text-xs);
+  font-weight: var(--weight-medium);
+  line-height: var(--leading-snug);
+  color: var(--ink-muted);
+}
+
+.programme-activity__status,
+.programme-activity__empty {
+  margin: 0;
+  padding: var(--space-3) 0;
+  font-size: var(--text-sm);
+  color: var(--ink-muted);
+}
+
+.programme-activity__error {
+  margin: 0;
+  padding: var(--space-3) 0;
+  font-size: var(--text-sm);
+  color: var(--danger-strong, var(--danger));
+}
+
+.programme-activity__retry {
+  min-height: var(--tap-min);
+  padding: 0 var(--space-2);
+  background: none;
+  border: none;
+  font: inherit;
+  font-weight: var(--weight-semibold);
+  color: var(--accent);
+  cursor: pointer;
+}
+
+.programme-activity__retry:focus-visible {
+  outline: 2px solid var(--focus);
+  outline-offset: var(--focus-offset);
+  border-radius: var(--radius-sm);
+}
+
+.programme-activity__truncated {
+  margin: 0;
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  font-size: var(--text-caption);
+  color: var(--ink-muted);
+}

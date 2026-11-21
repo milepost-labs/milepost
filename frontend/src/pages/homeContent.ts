@@ -573,6 +573,7 @@ export const FOOTER_GROUPS: FooterGroup[] = [
       { label: 'Standing', path: '/recipients/standing' },
       { label: 'Award progress', path: '/recipients/award-progress' },
       { label: 'Application timeline', path: '/recipients/application-timeline' },
+      { label: 'Award detail', path: '/award' },
       { label: 'Index status', path: '/status' },
     ],
   },
