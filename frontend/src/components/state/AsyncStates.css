@@ -327,3 +327,15 @@
 @media (prefers-reduced-motion: reduce) {
   .state-ring--done { animation: none; }
 }
+
+.state-tx__fee {
+  margin: var(--space-2) 0 0;
+  font-size: var(--text-sm);
+  font-weight: var(--weight-medium);
+  color: var(--ink);
+}
+.state-tx__warn {
+  width: 100%;
+  margin-top: var(--space-3);
+  text-align: left;
+}

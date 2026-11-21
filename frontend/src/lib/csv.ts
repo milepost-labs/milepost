@@ -7,6 +7,7 @@
  */
 
 import type { IndexedAward } from './indexer';
+import type { ContributionCard } from './funding';
 import { STROOPS_PER_UNIT } from './amount';
 
 /** Escape a single CSV field. */
@@ -71,6 +72,42 @@ export function awardsToCsv(awards: IndexedAward[], indexedAt: string): string {
   ]);
 
   return [header, notice, ...rows].join('\n');
+}
+
+/**
+ * Convert a funder's contribution cards into CSV rows.
+ *
+ * Sample programmes are excluded. Amounts are formatted as decimal strings in
+ * the programme's asset (never raw stroops).
+ */
+export function contributionsToCsv(cards: readonly ContributionCard[]): string {
+  const header = csvRow([
+    'programme id',
+    'name',
+    'asset',
+    'contributed',
+    'refunded',
+    'refundable now',
+    'phase',
+  ]);
+
+  const rows = cards
+    .filter((card) => !card.sample)
+    .map((card) => {
+      const refundedAmount = card.refunded ? card.refundable : card.refundedSoFar;
+      const refundableNow = card.claimable ? card.refundable : 0n;
+      return csvRow([
+        card.programmeId,
+        card.name,
+        card.asset,
+        stroopsToUnits(card.amount.toString()),
+        stroopsToUnits(refundedAmount.toString()),
+        stroopsToUnits(refundableNow.toString()),
+        card.phase,
+      ]);
+    });
+
+  return [header, ...rows].join('\n');
 }
 
 /** Stroop string to decimal units string (7 decimal places, no trailing zeros). */

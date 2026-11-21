@@ -221,35 +221,39 @@ export const PayeeManagement = () => {
     setAddError(null);
     const lbl = labelInput.trim() || 'Verified payee';
     setSingle({ kind: 'verify', address, label: lbl });
-    void tx.send(() => programme.allow_payee({ payee: address })).then((res) => {
-      if (res === null) return;
-      remember({ address, label: lbl });
-      setSessionChanges((prev) => ({
-        ...prev,
-        [sessionKey]: [
-          { address, label: lbl, action: 'added' },
-          ...(prev[sessionKey] ?? []).filter((c) => c.address !== address),
-        ],
-      }));
-      setAddressInput('');
-      setLabelInput('');
-    });
+    void tx.prepare(() => programme.allow_payee({ payee: address }));
   };
 
   const handleRevoke = (address: string) => {
     if (!programme || !programmeId) return;
     setSingle({ kind: 'remove', address, label: '' });
-    void tx.send(() => programme.deny_payee({ payee: address })).then((res) => {
-      if (res !== null) {
-        setSessionChanges((prev) => ({
-          ...prev,
-          [sessionKey]: [
-            { address, label: 'Removed payee', action: 'removed' },
-            ...(prev[sessionKey] ?? []).filter((c) => c.address !== address),
-          ],
-        }));
-      }
-    });
+    void tx.prepare(() => programme.deny_payee({ payee: address }));
+  };
+
+  const confirmSingle = async () => {
+    if (!single) return;
+    const res = await tx.confirm();
+    if (res === null) return;
+    if (single.kind === 'verify') {
+      remember({ address: single.address, label: single.label });
+      setSessionChanges((prev) => ({
+        ...prev,
+        [sessionKey]: [
+          { address: single.address, label: single.label, action: 'added' },
+          ...(prev[sessionKey] ?? []).filter((c) => c.address !== single.address),
+        ],
+      }));
+      setAddressInput('');
+      setLabelInput('');
+    } else {
+      setSessionChanges((prev) => ({
+        ...prev,
+        [sessionKey]: [
+          { address: single.address, label: 'Removed payee', action: 'removed' },
+          ...(prev[sessionKey] ?? []).filter((c) => c.address !== single.address),
+        ],
+      }));
+    }
   };
 
   const canSubmit = Boolean(programme) && isCreator && PAYEE_ADDRESS.test(addressInput.trim());
@@ -709,12 +713,13 @@ export const PayeeManagement = () => {
             : 'The address can now receive Direct payments or be chosen from escrow.'
         }
         doneRows={single ? [{ label: 'Address', value: truncateAddress(single.address, 6, 6) }] : undefined}
+        onConfirm={() => void confirmSingle()}
         failTitle={single?.kind === 'remove' ? 'Payee not removed' : 'Payee not verified'}
         onRetry={
           single
             ? () => {
                 if (!programme) return;
-                void tx.send(() =>
+                void tx.prepare(() =>
                   single.kind === 'remove'
                     ? programme.deny_payee({ payee: single.address })
                     : programme.allow_payee({ payee: single.address }),
