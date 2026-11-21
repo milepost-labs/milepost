@@ -1,5 +1,5 @@
 /**
- * Rebuilding a contribution receipt from a transaction hash.
+ * Rebuilding a contribution or refund receipt from a transaction hash.
  *
  * A receipt used to exist only in the tab that sent the contribution. The
  * RPC's `getTransaction(hash)` still knows a recent transaction's result and
@@ -9,6 +9,11 @@
  * receipt (share of the programme, the state the money sits in now) is
  * re-read on-chain through the shared reader, so it reflects today, not the
  * moment of sending.
+ *
+ * Refunds (`refund` and `refund_partial`) are also recognised. The amount
+ * actually paid is taken from the transaction's return value (the contract
+ * returns `Result<i128>` for both), so the receipt shows what was received,
+ * not what was requested.
  *
  * The response's XDR is already decoded by the SDK, so this is typed access,
  * not string parsing. Old transactions fall out of the RPC's history window;
@@ -36,6 +41,23 @@ export interface ContributionTx {
   amount: bigint;
 }
 
+/**
+ * A parsed `refund` or `refund_partial` call.
+ *
+ * The amount is taken from the transaction's return value (`Result<i128>`),
+ * not the call argument, so it reflects what the contract actually paid out.
+ */
+export interface RefundTx {
+  /** The programme whose `refund` / `refund_partial` the transaction invoked. */
+  programmeId: string;
+  /** The donor who claimed the refund. */
+  donor: string;
+  /** Stroops actually returned, from the transaction result. */
+  amount: bigint;
+  /** True when the call was `refund_partial` rather than a full `refund`. */
+  partial: boolean;
+}
+
 /** What the RPC answered for a hash. */
 export type TxLookup =
   | {
@@ -45,6 +67,8 @@ export type TxLookup =
       createdAt: number | null;
       /** The contribution, or null when this transaction is not one. */
       contribution: ContributionTx | null;
+      /** The refund, or null when this transaction is not one. */
+      refund: RefundTx | null;
       /** How many operations the transaction carried. */
       opCount: number;
     }
@@ -82,6 +106,7 @@ export async function lookupTransaction(server: rpc.Server, hash: string): Promi
         ledger: response.ledger,
         createdAt: typeof response.createdAt === 'number' ? response.createdAt : null,
         contribution: parseContribution(response.envelopeXdr),
+        refund: parseRefund(response.envelopeXdr, response.returnValue),
         opCount: operationsOf(response.envelopeXdr).length,
       };
   }
@@ -106,6 +131,51 @@ export function parseContribution(envelope: xdr.TransactionEnvelope): Contributi
       return { programmeId, donor: native[0], amount: native[1] };
     } catch {
       continue; // Not an address-shaped invocation; skip without failing the lookup.
+    }
+  }
+  return null;
+}
+
+/**
+ * Find the first `refund` or `refund_partial` invocation and read the amount
+ * paid from the transaction's return value.
+ *
+ * Both functions return `Result<i128>`. The SDK decodes this as an `ScVal`
+ * in `returnValue`; `scValToNative` turns `Ok(n)` into the bigint `n`.
+ * When `returnValue` is absent or cannot be decoded as a positive bigint the
+ * function returns null, so a failed result never produces a receipt.
+ */
+export function parseRefund(
+  envelope: xdr.TransactionEnvelope,
+  returnValue: xdr.ScVal | undefined,
+): RefundTx | null {
+  for (const operation of operationsOf(envelope)) {
+    const invocation = contractInvocation(operation);
+    if (!invocation) continue;
+
+    const fnName = invocation.functionName().toString();
+    const isRefund = fnName === 'refund';
+    const isPartial = fnName === 'refund_partial';
+    if (!isRefund && !isPartial) continue;
+
+    const args = invocation.args();
+
+    // refund(donor: Address) or refund_partial(donor: Address, amount: i128)
+    if (args.length < 1) continue;
+    try {
+      const donorVal = scValToNative(args[0]);
+      if (typeof donorVal !== 'string') continue;
+
+      // The amount is the contract's return value, not the call argument.
+      if (!returnValue) continue;
+      const returned = scValToNative(returnValue);
+      // Result<i128> unwraps to bigint on Ok, or an object on Err.
+      if (typeof returned !== 'bigint' || returned <= 0n) continue;
+
+      const programmeId = Address.fromScAddress(invocation.contractAddress()).toString();
+      return { programmeId, donor: donorVal, amount: returned, partial: isPartial };
+    } catch {
+      continue;
     }
   }
   return null;
