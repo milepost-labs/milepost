@@ -2,10 +2,12 @@ import { useMemo } from 'react';
 import type { Programme } from '@milepost/program';
 import { useSoroban } from '../../context/useSoroban';
 import { isPhase, type Phase } from '../../lib/phaseGate';
+import { CancelAction } from './CancelAction';
 import { PauseAction } from './PauseAction';
 
 /** What every creator action needs to gate itself and refresh the page. */
 export interface CreatorContext {
+  programmeId: string;
   client: Programme;
   /** Null while the phase is being read. */
   phase: Phase | null;
@@ -34,6 +36,7 @@ export function CreatorActions({ programmeId, phase, verified, onChanged }: Crea
   const client = useMemo(() => programmeAt(programmeId), [programmeAt, programmeId]);
 
   const context: CreatorContext = {
+    programmeId,
     client,
     phase: isPhase(phase) ? phase : null,
     verified,
@@ -48,6 +51,7 @@ export function CreatorActions({ programmeId, phase, verified, onChanged }: Crea
       <p className="programme-actions__group-note">Only you can see these. You created this programme.</p>
       <ul className="programme-actions__list">
         <PauseAction {...context} />
+        <CancelAction {...context} />
       </ul>
     </section>
   );
