@@ -6,9 +6,11 @@ import { SignInSheet } from '../layout/SignInSheet';
 import { formatIn } from '../../lib/funding';
 import { isPhase } from '../../lib/phaseGate';
 import { programmeActions } from '../../lib/programmeActions';
-import { sweepFeeGate } from '../../lib/sweepActions';
+import { formatDate } from '../../lib/format';
+import { sweepFeeGate, sweepUnclaimedGate } from '../../lib/sweepActions';
 import { Button, DisabledReason } from '../ui';
 import { SweepFeeSheet } from './SweepFeeSheet';
+import { SweepUnclaimedSheet } from './SweepUnclaimedSheet';
 import './ProgrammeActions.css';
 
 export interface ProgrammeActionsProps {
@@ -45,6 +47,12 @@ export interface ProgrammeSweep {
   feeSwept: boolean | null;
   asset: string;
   sample?: boolean;
+  /** Whether the sweep deadline has passed. Null while the config is being read. */
+  sweepDeadlinePassed: boolean | null;
+  /** The sweep deadline in unix seconds, for the reason shown before it opens. */
+  sweepDeadline: bigint | null;
+  /** Whether a sweep of unclaimed refunds would find nothing. Null while being read. */
+  nothingToSweep: boolean | null;
   /** Called after a sweep lands, so the page re-reads what it changed. */
   onChanged: () => void;
 }
@@ -66,6 +74,7 @@ export function ProgrammeActions({ programmeId, phase, refundsOpen, refundable, 
   const { address } = useWallet();
   const [signInOpen, setSignInOpen] = useState(false);
   const [sweepingFee, setSweepingFee] = useState(false);
+  const [sweepingUnclaimed, setSweepingUnclaimed] = useState(false);
   const signedIn = Boolean(address);
 
   const feeGate = sweep
@@ -82,6 +91,21 @@ export function ProgrammeActions({ programmeId, phase, refundsOpen, refundable, 
   const feeBlockedReason =
     feeGate && feeGate.enabled && !feeReady ? 'Reading the fee and the treasury address…' : null;
   const feeEnabled = Boolean(feeGate?.enabled) && feeReady;
+
+  const unclaimedGate = sweep
+    ? sweepUnclaimedGate({
+        signedIn,
+        verified,
+        sample: sweep.sample,
+        deadlinePassed: sweep.sweepDeadlinePassed,
+        deadlineText: sweep.sweepDeadline !== null ? formatDate(sweep.sweepDeadline) : null,
+        nothingLeft: sweep.nothingToSweep,
+      })
+    : null;
+  const treasuryKnown = sweep !== undefined && sweep.treasury !== null;
+  const unclaimedBlockedReason =
+    unclaimedGate && unclaimedGate.enabled && !treasuryKnown ? 'Reading the treasury address…' : null;
+  const unclaimedEnabled = Boolean(unclaimedGate?.enabled) && treasuryKnown;
 
   const actions = programmeActions({
     programmeId,
@@ -214,6 +238,44 @@ export function ProgrammeActions({ programmeId, phase, refundsOpen, refundable, 
             )}
           </li>
         )}
+
+        {sweep && unclaimedGate && (
+          <li className="programme-action">
+            <div className="programme-action__row">
+              <span className="programme-action__text">
+                <span className="programme-action__label">Send unclaimed refunds to the treasury</span>
+                <span className="programme-action__who">Anyone, after the sweep deadline</span>
+              </span>
+              {unclaimedEnabled ? (
+                <Button
+                  size="sm"
+                  onClick={() => setSweepingUnclaimed(true)}
+                  aria-describedby="programme-action-why-sweep-unclaimed"
+                >
+                  Send unclaimed
+                </Button>
+              ) : (
+                <button
+                  type="button"
+                  className="ui-button ui-button--secondary ui-button--sm"
+                  aria-disabled="true"
+                  aria-describedby="programme-action-why-sweep-unclaimed"
+                >
+                  Send unclaimed
+                </button>
+              )}
+            </div>
+            {unclaimedEnabled ? (
+              <p id="programme-action-why-sweep-unclaimed" className="programme-action__reason">
+                Sends what no donor came back for. This is final. {unclaimedGate.reason}
+              </p>
+            ) : (
+              <DisabledReason id="programme-action-why-sweep-unclaimed">
+                {unclaimedBlockedReason ?? unclaimedGate.reason}
+              </DisabledReason>
+            )}
+          </li>
+        )}
       </ul>
 
       <div className="programme-actions__manage">
@@ -239,6 +301,17 @@ export function ProgrammeActions({ programmeId, phase, refundsOpen, refundable, 
           open
           onClose={() => setSweepingFee(false)}
           fee={sweep.fee}
+          asset={sweep.asset}
+          treasury={sweep.treasury}
+          onSwept={sweep.onChanged}
+        />
+      )}
+
+      {sweepingUnclaimed && sweep && sweep.treasury !== null && (
+        <SweepUnclaimedSheet
+          programmeId={programmeId}
+          open
+          onClose={() => setSweepingUnclaimed(false)}
           asset={sweep.asset}
           treasury={sweep.treasury}
           onSwept={sweep.onChanged}

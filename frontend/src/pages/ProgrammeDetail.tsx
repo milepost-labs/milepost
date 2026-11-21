@@ -24,7 +24,7 @@ import { directoryHref } from "../lib/programmeView";
 import { formatAmount, percentOf } from "../lib/amount";
 import { formatFigure, isSampleProgrammeId, programmeRouteState } from "../lib/programmeView";
 import { registryVerificationCopy } from "../lib/registryVerification";
-import { readFeeSwept } from "../lib/sweepActions";
+import { readFeeSwept, readNothingToSweep } from "../lib/sweepActions";
 import { FIXTURE_CHAIN } from "../fixtures/programmes";
 import { fetchTokenName, parseTokenName } from "../lib/token";
 import "./ProgrammeDetail.css";
@@ -218,6 +218,16 @@ const ProgrammeDetailBody = ({ programmeId, programme, isDefault }: ProgrammeDet
     { enabled: feeSweepOpen },
   );
   const refetchFeeSwept = feeSwept.refetch;
+
+  // Likewise for unclaimed refunds: once the sweep deadline has passed, ask
+  // the contract whether a sweep would find anything to send.
+  const sweepDeadlinePassed = config.data ? nowMs / 1000 >= Number(config.data.sweep_deadline) : null;
+  const nothingToSweep = useContractRead(
+    async () => ({ result: await readNothingToSweep(programme) }),
+    [programme],
+    { enabled: sweepDeadlinePassed === true },
+  );
+  const refetchNothingToSweep = nothingToSweep.refetch;
 
   useEffect(() => {
     const interval = window.setInterval(() => {
@@ -527,8 +537,21 @@ const ProgrammeDetailBody = ({ programmeId, programme, isDefault }: ProgrammeDet
                     : null,
               asset,
               sample: isSample,
+              sweepDeadlinePassed,
+              sweepDeadline: config.data ? config.data.sweep_deadline : null,
+              // Pending until the check has answered; a failed check counts as
+              // "something left", for the same reason as the fee above.
+              nothingToSweep:
+                sweepDeadlinePassed !== true
+                  ? false
+                  : nothingToSweep.data !== null
+                    ? nothingToSweep.data
+                    : nothingToSweep.error
+                      ? false
+                      : null,
               onChanged: () => {
                 refetchFeeSwept();
+                refetchNothingToSweep();
                 refetchMoney();
               },
             }}
