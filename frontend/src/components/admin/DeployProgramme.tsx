@@ -30,6 +30,7 @@ import { Button, CopyButton, DisabledReason, Modal, Notice } from '../ui';
 import { ErrorPanel } from '../state/AsyncStates';
 import { TxDone, TxFailed, TxPending } from '../state/TxStatus';
 import { DetailsStep, OTHER, PeopleStep, ReviewStep, TimelineStep } from './DeploySteps';
+import { restoreFromAssembled } from '../../lib/restore';
 import './DeployProgramme.css';
 
 const STEPS = ['Details', 'People', 'Timeline', 'Review & deploy'] as const;
@@ -190,6 +191,7 @@ export function DeployProgramme({ aside }: { aside?: ReactNode }) {
     const address = await tx.send(async () => {
       const assembled = await registry.create(args);
       return {
+        restore: restoreFromAssembled(assembled),
         signAndSend: async (options: Parameters<typeof assembled.signAndSend>[0]) => {
           const sent = await assembled.signAndSend(options);
           return { result: sent.result.unwrap() };

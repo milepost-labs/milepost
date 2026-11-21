@@ -464,6 +464,8 @@ describe('Issue #439 - Real vs Sample programmes payee management', () => {
       expect(programme.allow_payee).toHaveBeenCalledWith({ payee: VALID_A });
     });
 
+    fireEvent.click(await screen.findByRole('button', { name: 'Sign and send' }));
+
     await waitFor(() => {
       expect(screen.getByText('Session Clinic')).toBeDefined();
       expect(screen.getByText('Session-only')).toBeDefined();

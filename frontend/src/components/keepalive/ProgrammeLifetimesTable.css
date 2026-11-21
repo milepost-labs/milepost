@@ -1,0 +1,57 @@
+/* Every programme's lifetime. Every value comes from a token in styles/tokens.css. */
+
+.lifetimes-table__programme {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+  min-width: 0;
+}
+
+.lifetimes-table__name {
+  font-weight: var(--weight-semibold);
+  overflow-wrap: anywhere;
+}
+
+.lifetimes-table__id {
+  font-size: var(--text-caption);
+  color: var(--ink-muted);
+}
+
+.lifetimes-table__days {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+}
+
+.lifetimes-table__days--low .numeric,
+.lifetimes-table__warn {
+  color: var(--refund-strong);
+  font-weight: var(--weight-semibold);
+}
+
+.lifetimes-table__warn {
+  font-size: var(--text-caption);
+}
+
+.lifetimes-table__bar {
+  display: block;
+  height: var(--space-1);
+  border-radius: var(--radius-pill);
+  background: var(--bg-sunken);
+  overflow: hidden;
+}
+
+.lifetimes-table__bar span {
+  display: block;
+  height: 100%;
+  background: var(--money-released);
+}
+
+.lifetimes-table__days--low .lifetimes-table__bar span {
+  background: var(--money-refundable);
+}
+
+.lifetimes-table__failed {
+  color: var(--ink-muted);
+  font-size: var(--text-sm);
+}

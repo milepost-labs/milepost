@@ -358,7 +358,7 @@ export const VerifierDashboard = () => {
         </div>
 
         <div className="verify__signed">
-          <SignedAttestations records={signed.list} allProgrammes={roles.all} />
+          <SignedAttestations attester={address} records={signed.list} allProgrammes={roles.all} />
         </div>
       </div>
     </div>

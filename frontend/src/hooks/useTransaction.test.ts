@@ -9,8 +9,12 @@ import type { WalletState } from '../context/walletStore';
  * "no" from the signer as a failure.
  */
 
-const { useWallet } = vi.hoisted(() => ({ useWallet: vi.fn() }));
+const { useWallet, requestRestoreConsent } = vi.hoisted(() => ({
+  useWallet: vi.fn(),
+  requestRestoreConsent: vi.fn(),
+}));
 vi.mock('../context/useWallet', () => ({ useWallet }));
+vi.mock('../lib/restoreConsent', () => ({ requestRestoreConsent }));
 
 function connectedWallet(overrides: Partial<WalletState> = {}): WalletState {
   return {
@@ -177,5 +181,101 @@ describe('useTransaction', () => {
     expect(result.current.phase).toBe('idle');
     expect(result.current.error).toBeNull();
     expect(result.current.result).toBeNull();
+  });
+});
+
+describe('useTransaction with archived entries', () => {
+  beforeEach(() => {
+    requestRestoreConsent.mockReset();
+  });
+
+  const restoreStep = () => ({ feeStroops: 5_000n, run: vi.fn().mockResolvedValue(undefined) });
+
+  it('asks once, restores, then builds and sends the original', async () => {
+    requestRestoreConsent.mockResolvedValue(true);
+    const restore = restoreStep();
+    const first = { restore, signAndSend: vi.fn() };
+    const second = { restore: null, signAndSend: vi.fn().mockResolvedValue({ result: 'paid' }) };
+    const build = vi.fn().mockResolvedValueOnce(first).mockResolvedValueOnce(second);
+    const wallet = connectedWallet();
+    useWallet.mockReturnValue(wallet);
+    const { result } = renderHook(() => useTransaction());
+
+    let sent: unknown;
+    await act(async () => {
+      sent = await result.current.send(build);
+    });
+
+    expect(requestRestoreConsent).toHaveBeenCalledTimes(1);
+    expect(requestRestoreConsent).toHaveBeenCalledWith(5_000n);
+    expect(restore.run).toHaveBeenCalledWith(wallet.signTransaction);
+    expect(build).toHaveBeenCalledTimes(2);
+    expect(first.signAndSend).not.toHaveBeenCalled();
+    expect(second.signAndSend).toHaveBeenCalledTimes(1);
+    expect(sent).toBe('paid');
+    expect(result.current.phase).toBe('success');
+  });
+
+  it('sends nothing when the restore is declined, and says so', async () => {
+    requestRestoreConsent.mockResolvedValue(false);
+    const restore = restoreStep();
+    const first = { restore, signAndSend: vi.fn() };
+    const build = vi.fn().mockResolvedValue(first);
+    const { result } = renderHook(() => useTransaction());
+
+    let sent: unknown;
+    await act(async () => {
+      sent = await result.current.send(build);
+    });
+
+    expect(sent).toBeNull();
+    expect(restore.run).not.toHaveBeenCalled();
+    expect(first.signAndSend).not.toHaveBeenCalled();
+    expect(build).toHaveBeenCalledTimes(1);
+    expect(result.current.error?.message).toBe('You chose not to restore the archived data, so nothing was sent.');
+    expect(result.current.phase).toBe('idle');
+  });
+
+  it('does not ask twice when the entries are still archived after the restore', async () => {
+    requestRestoreConsent.mockResolvedValue(true);
+    const build = vi
+      .fn()
+      .mockResolvedValueOnce({ restore: restoreStep(), signAndSend: vi.fn() })
+      .mockResolvedValueOnce({ restore: restoreStep(), signAndSend: vi.fn() });
+    const { result } = renderHook(() => useTransaction());
+
+    await act(async () => {
+      await result.current.send(build);
+    });
+
+    expect(requestRestoreConsent).toHaveBeenCalledTimes(1);
+    expect(result.current.phase).toBe('error');
+    expect(result.current.error?.message).toBe('This record has been archived on the ledger.');
+  });
+
+  it('fails as before, pointing at Keepalive, when nothing can ask', async () => {
+    requestRestoreConsent.mockResolvedValue(null);
+    const restore = restoreStep();
+    const { result } = renderHook(() => useTransaction());
+
+    await act(async () => {
+      await result.current.send(async () => ({ restore, signAndSend: vi.fn() }));
+    });
+
+    expect(restore.run).not.toHaveBeenCalled();
+    expect(result.current.error?.action).toBe('Restore it from the Keepalive screen, then try again.');
+  });
+
+  it('explains a restore that fails', async () => {
+    requestRestoreConsent.mockResolvedValue(true);
+    const restore = { feeStroops: 1n, run: vi.fn().mockRejectedValue(new Error('Failed to fetch')) };
+    const { result } = renderHook(() => useTransaction());
+
+    await act(async () => {
+      await result.current.send(async () => ({ restore, signAndSend: vi.fn() }));
+    });
+
+    expect(result.current.phase).toBe('error');
+    expect(result.current.error?.kind).not.toBe('none');
   });
 });

@@ -11,6 +11,7 @@ import { sampleSendable, SAMPLE_TX_DELAY_MS } from '../../lib/fundingTx';
 import { AmountField, Button, Field } from '../ui';
 import { ErrorPanel, PendingPulse, TransactionOutcome } from '../state/AsyncStates';
 import type { RecipientAwardFixture } from '../../fixtures/recipientFixtures';
+import { restoreFromAssembled } from '../../lib/restore';
 import './AllocatedSpending.css';
 
 /** A payee is a Stellar account — a `G` address. */
@@ -175,6 +176,7 @@ export function AllocatedSpending({ award, sampleDelayMs = SAMPLE_TX_DELAY_MS }:
       }
       const assembled = await client!.spend({ recipient, payee, amount: amountValue });
       return {
+        restore: restoreFromAssembled(assembled),
         signAndSend: async (options: Parameters<typeof assembled.signAndSend>[0]) => {
           const sent = await assembled.signAndSend(options);
           const remaining = sent.result.unwrap();

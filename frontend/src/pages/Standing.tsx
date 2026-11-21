@@ -1,9 +1,10 @@
 import { useState, type FormEvent } from 'react';
+import { useHref, useSearchParams } from 'react-router-dom';
 import { Buffer } from 'buffer';
 import { Search } from 'lucide-react';
 import { useStanding, useTransaction, phaseLabel } from '../hooks';
 import { Empty, ErrorPanel, ErrorState, Loading } from '../components/state/AsyncStates';
-import { AddressChip, Badge, Button, Card, Field, StatTile, TextArea } from '../components/ui';
+import { AddressChip, Badge, Button, Card, CopyButton, Field, StatTile, TextArea } from '../components/ui';
 import { RecipientShell } from '../components/recipient/RecipientShell';
 import { useAnnouncer } from '../context/useAnnouncer';
 import { useSoroban } from '../context/useSoroban';
@@ -17,6 +18,7 @@ import {
   verifyStandingHistory,
   type HistoryVerdict,
 } from '../lib/standingHistory';
+import { restoreFromAssembled } from '../lib/restore';
 import './Standing.css';
 
 /**
@@ -218,6 +220,7 @@ function StandingTtlRow({ standing, subject }: { standing: StandingView; subject
     void tx.send(async () => {
       const built = await record.keepalive({ subject });
       return {
+        restore: restoreFromAssembled(built),
         signAndSend: async (options: Parameters<typeof built.signAndSend>[0]) => {
           const sent = await built.signAndSend(options);
           return { result: sent.result.unwrap() };
@@ -326,6 +329,9 @@ export function StandingPanel({ subject }: { subject: string }) {
   );
 }
 
+const INVALID_LINK_ADDRESS =
+  'The link does not hold a Stellar address. Check the link, or paste the address here.';
+
 /**
  * `/recipients/standing` — a recipient's standing: aggregates only, never a
  * transaction log.
@@ -333,21 +339,44 @@ export function StandingPanel({ subject }: { subject: string }) {
  * Signed out, the design shows an explainer rather than empty shells. Signed
  * in, it reads the signed-in address's standing from the chain and offers a
  * lookup so any address's record can be read before it is underwritten.
+ *
+ * The looked-up address lives in the URL (`?address=G…`), so a recipient can
+ * send their standing to the next funder as a link.
  */
 export const Standing = () => {
   const { address } = useWallet();
-  const [lookupInput, setLookupInput] = useState('');
-  const [lookedUp, setLookedUp] = useState<string | null>(null);
+  const [searchParams, setSearchParams] = useSearchParams();
+  const linked = (searchParams.get('address') ?? '').trim();
+  const lookedUp = looksLikeAddress(linked) ? linked : null;
+  const linkInvalid = linked !== '' && lookedUp === null;
+  // A link with a malformed address lands in the field, where the lookup's
+  // own validation keeps the button disabled until it is fixed.
+  const [lookupInput, setLookupInput] = useState(linkInvalid ? linked : '');
+  const [editedLookup, setEditedLookup] = useState(false);
 
   const subject = lookedUp ?? address;
   const candidate = lookupInput.trim();
   const canLookup = looksLikeAddress(candidate) && candidate !== subject;
+  const lookupError = linkInvalid && !editedLookup ? INVALID_LINK_ADDRESS : null;
+
+  const shareHref = useHref({ pathname: '/recipients/standing', search: subject ? `?address=${subject}` : '' });
+  const shareUrl = new URL(shareHref, window.location.origin).toString();
+
+  const showAddress = (next: string | null) => {
+    setSearchParams((current) => {
+      const params = new URLSearchParams(current);
+      if (next) params.set('address', next);
+      else params.delete('address');
+      return params;
+    });
+  };
 
   const submitLookup = (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     if (!canLookup) return;
-    setLookedUp(candidate);
+    showAddress(candidate);
     setLookupInput('');
+    setEditedLookup(false);
   };
 
   // The same body signed in or out: looking up an address never needs a wallet.
@@ -360,11 +389,14 @@ export const Standing = () => {
               <span className="standing-viewer__label">{lookedUp ? 'Viewing' : 'Your standing'}</span>
               {lookedUp && <AddressChip address={lookedUp} />}
             </span>
-            {lookedUp && (
-              <Button variant="ghost" size="sm" onClick={() => setLookedUp(null)}>
-                {address ? 'Show my standing' : 'Clear lookup'}
-              </Button>
-            )}
+            <span className="standing-viewer__actions">
+              <CopyButton value={shareUrl} label="Copy link to this standing" showLabel />
+              {lookedUp && (
+                <Button variant="ghost" size="sm" onClick={() => showAddress(null)}>
+                  {address ? 'Show my standing' : 'Clear lookup'}
+                </Button>
+              )}
+            </span>
           </div>
 
           {/* Keyed by subject so switching addresses starts a fresh read
@@ -386,7 +418,11 @@ export const Standing = () => {
             <Field
               label="Recipient address"
               value={lookupInput}
-              onChange={(event) => setLookupInput(event.target.value)}
+              error={lookupError}
+              onChange={(event) => {
+                setLookupInput(event.target.value);
+                setEditedLookup(true);
+              }}
               placeholder="G…"
               spellCheck={false}
               autoComplete="off"

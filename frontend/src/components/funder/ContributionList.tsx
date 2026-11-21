@@ -7,13 +7,14 @@ import { useTransaction } from '../../hooks/useTransaction';
 import { useRefundedTo } from '../../hooks/useRefundedTo';
 import { describeAmount } from '../../lib/amount';
 import { formatDate } from '../../lib/format';
-import { formatIn, formatShare, type ContributionCard } from '../../lib/funding';
+import { formatEstimatedRefund, formatIn, formatShare, type ContributionCard } from '../../lib/funding';
 import { FIXTURE_TX } from '../../fixtures/funding';
 import { receiptOf, SAMPLE_TX_DELAY_MS, sampleSendable, type TxReceipt } from '../../lib/fundingTx';
 import { formatFigure, shortId } from '../../lib/programmeView';
 import { MoneyRow } from '../programme/MoneyRow';
-import { TxDone, TxFailed, TxPending } from '../state/TxStatus';
-import { Button, CopyButton, Modal, PhaseBadge, SampleTag, TxExplorerLink } from '../ui';
+import { TxSheet } from '../state/TxSheet';
+import { Button, CopyButton, PhaseBadge, SampleTag, TxExplorerLink } from '../ui';
+import { restoreFromAssembled } from '../../lib/restore';
 
 export interface ContributionListProps {
   cards: ContributionCard[];
@@ -32,8 +33,9 @@ interface Refund {
 }
 
 /**
- * Claiming a refund, in a sheet: it opens already sending, then shows the
- * receipt or the failure with a retry. It cannot be closed while in flight.
+ * Claiming a refund, in the shared write sheet: simulates first to show the
+ * network fee and XLM balance check, then sends on confirmation and shows the
+ * receipt or failure with retry.
  */
 function RefundSheet({
   card,
@@ -51,11 +53,17 @@ function RefundSheet({
   const { address } = useWallet();
   const { programmeAt } = useSoroban();
   const announce = useAnnouncer();
-  const tx = useTransaction<Refund>({ contract: 'program' });
+  const tx = useTransaction<Refund>({
+    contract: 'program',
+    onSuccess: (refunded) => {
+      onRefunded(card.programmeId);
+      announce(`Refund of ${formatIn(refunded.amount, card.asset)} sent to your wallet.`);
+    },
+  });
 
-  const claim = async () => {
+  const prepareRefund = () => {
     if (!address) return;
-    const refunded = await tx.send(async () => {
+    void tx.prepare(async () => {
       if (card.sample) {
         return sampleSendable(
           () => ({ amount: card.refundable, receipt: { hash: FIXTURE_TX.hash, ledger: FIXTURE_TX.ledger } }),
@@ -63,22 +71,23 @@ function RefundSheet({
         );
       }
       const assembled = await programmeAt(card.programmeId).refund({ donor: address });
+      const rawFee = (
+        assembled as unknown as { simulationResponse?: { minResourceFee?: string | number | bigint } }
+      ).simulationResponse?.minResourceFee;
       return {
+        restore: restoreFromAssembled(assembled),
+        estimatedFee: rawFee !== undefined ? BigInt(rawFee) : undefined,
         signAndSend: async (options: Parameters<typeof assembled.signAndSend>[0]) => {
           const sent = await assembled.signAndSend(options);
           return { result: { amount: sent.result.unwrap(), receipt: receiptOf(sent) } };
         },
       };
     });
-    if (refunded !== null) {
-      onRefunded(card.programmeId);
-      announce(`Refund of ${formatIn(refunded.amount, card.asset)} sent to your wallet.`);
-    }
   };
 
-  // The sheet opens because someone pressed Claim: send straight away.
+  // Simulate as soon as the sheet opens so the fee is ready before signing.
   useEffect(() => {
-    if (open && tx.phase === 'idle' && !tx.result) void claim();
+    if (open && tx.phase === 'idle' && !tx.result) prepareRefund();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open]);
 
@@ -92,62 +101,61 @@ function RefundSheet({
     onClose();
   };
 
-  const declined = tx.error !== null && tx.phase === 'idle';
+  const doneRows = tx.result
+    ? [
+        { label: 'Refunded', value: formatIn(tx.result.amount, card.asset) },
+        {
+          label: 'Ledger',
+          value: tx.result.receipt.ledger !== null ? tx.result.receipt.ledger.toLocaleString() : 'Not reported',
+        },
+        {
+          label: 'Transaction',
+          value: tx.result.receipt.hash ? (
+            <span className="contribute__hash">
+              <span title={tx.result.receipt.hash}>{shortId(tx.result.receipt.hash)}</span>
+              <CopyButton value={tx.result.receipt.hash} label="Copy transaction hash" />
+              {!card.sample && <TxExplorerLink hash={tx.result.receipt.hash} />}
+            </span>
+          ) : (
+            'Not reported'
+          ),
+        },
+      ]
+    : undefined;
 
   return (
-    <Modal open={open} onClose={close} title="Claim your refund" eyebrow={card.name} busy={tx.busy}>
-      {tx.phase === 'success' && tx.result ? (
-        <TxDone
-          title="Refund claimed"
-          rows={[
-            { label: 'Refunded', value: formatIn(tx.result.amount, card.asset) },
-            {
-              label: 'Ledger',
-              value: tx.result.receipt.ledger !== null ? tx.result.receipt.ledger.toLocaleString() : 'Not reported',
-            },
-            {
-              label: 'Transaction',
-              value: tx.result.receipt.hash ? (
-                <span className="contribute__hash">
-                  <span title={tx.result.receipt.hash}>{shortId(tx.result.receipt.hash)}</span>
-                  <CopyButton value={tx.result.receipt.hash} label="Copy transaction hash" />
-                  {!card.sample && <TxExplorerLink hash={tx.result.receipt.hash} />}
-                </span>
-              ) : (
-                'Not reported'
-              ),
-            },
-          ]}
-          actions={<Button onClick={close}>Done</Button>}
-        >
-          <p>
+    <TxSheet
+      open={open}
+      onClose={close}
+      tx={tx}
+      eyebrow={card.name}
+      confirmTitle="Claim your refund"
+      confirmText={
+        <p>
+          Claim <span className="numeric">{formatIn(card.refundable, card.asset)}</span> back to your wallet, in
+          proportion to what you put in.
+        </p>
+      }
+      confirmLabel="Sign and claim refund"
+      pendingTitle="Claiming your refund"
+      doneTitle="Refund claimed"
+      doneRows={doneRows}
+      doneText={
+        tx.result ? (
+          <>
             {formatIn(tx.result.amount, card.asset)} sent back to your wallet, in proportion to what you put in.
-          </p>
-          {card.sample && (
-            <p className="contribute__sample">
-              <SampleTag>Sample receipt</SampleTag>
-            </p>
-          )}
-        </TxDone>
-      ) : tx.phase === 'error' && tx.error ? (
-        <TxFailed title="Refund didn't go through" explained={tx.error} onRetry={claim} />
-      ) : declined ? (
-        <TxFailed
-          title="Nothing was sent"
-          explained={tx.error!}
-          actions={
-            <>
-              <Button variant="ghost" onClick={close}>
-                Close
-              </Button>
-              <Button onClick={claim}>Try again</Button>
-            </>
-          }
-        />
-      ) : (
-        <TxPending title="Claiming your refund" phase={tx.phase === 'idle' ? 'building' : tx.phase} />
-      )}
-    </Modal>
+            {card.sample && (
+              <span className="contribute__sample">
+                {' '}
+                <SampleTag>Sample receipt</SampleTag>
+              </span>
+            )}
+          </>
+        ) : undefined
+      }
+      failTitle={tx.phase === 'idle' && tx.error ? 'Nothing was sent' : "Refund didn't go through"}
+      onRetry={prepareRefund}
+    />
   );
 }
 
@@ -171,6 +179,7 @@ function ContributionItem({
 
   const href = `/programme/${encodeURIComponent(card.programmeId)}`;
   const deadline = releaseDeadline !== null && releaseDeadline > 0n ? formatDate(releaseDeadline) : null;
+  const estimateText = !card.claimable && !card.refunded ? formatEstimatedRefund(card) : null;
 
   let waiting: string;
   if (card.phase === 'Open') waiting = deadline ? `Refunds, if any, open after ${deadline}.` : card.note;
@@ -185,6 +194,7 @@ function ContributionItem({
         </span>
         <PhaseBadge phase={card.phase} />
       </div>
+
       <h3 className="fund-card__name">
         <Link to={href}>{card.name}</Link>
       </h3>
@@ -217,6 +227,13 @@ function ContributionItem({
       {refundedSoFar > 0n && (
         <p className="fund-card__refunded-so-far">
           Refunded so far <span className="numeric">{formatIn(refundedSoFar, card.asset)}</span>
+        </p>
+      )}
+
+      {estimateText && (
+        <p className="fund-card__estimate">
+          <span className="numeric">{estimateText}</span>{' '}
+          <span className="fund-card__estimate-tag">(estimate)</span>
         </p>
       )}
 

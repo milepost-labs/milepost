@@ -98,7 +98,8 @@ export function addAddresses(list: string[], text: string): { list: string[]; er
 
 /** The minimum award in stroops, or why it cannot be used. */
 export function parseMinAward(input: string, tranches: number): { ok: true; value: bigint } | { ok: false; error: string } {
-  if (input.trim() === '') return { ok: true, value: 0n };
+  // Blank or zero means no minimum; parseAmount refuses zero for amounts sent.
+  if (/^\s*0*(\.0*)?\s*$/.test(input)) return { ok: true, value: 0n };
   const parsed = tryParseAmount(input);
   if (!parsed.ok) return parsed;
   if (parsed.value > 0n && parsed.value < BigInt(tranches)) {
