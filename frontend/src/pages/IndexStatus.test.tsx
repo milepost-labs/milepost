@@ -1,6 +1,7 @@
 import { render, screen, waitFor } from '@testing-library/react';
 import { describe, expect, it, vi, afterEach, beforeEach } from 'vitest';
 import { MemoryRouter } from 'react-router-dom';
+import { NETWORK } from '../config/network';
 import { IndexStatus } from './IndexStatus';
 
 // Issue #480: the freshness change reaches the shared announcer once, instead
@@ -68,6 +69,32 @@ describe('IndexStatus', () => {
     });
     expect(screen.getByText('4,698,280')).toBeTruthy();
     expect(screen.getByText('Complete')).toBeTruthy();
+  });
+
+  it('refuses an index built for another network, naming both', async () => {
+    stubFetch(meta({ network: 'mainnet' }));
+    render(
+      <MemoryRouter>
+        <IndexStatus />
+      </MemoryRouter>,
+    );
+    const alert = await screen.findByRole('alert');
+    expect(alert.textContent).toContain('different deployment');
+    expect(alert.textContent).toContain(NETWORK.name);
+    expect(alert.textContent).toContain('mainnet');
+    expect(screen.queryByText('Fresh.')).toBeNull();
+  });
+
+  it('refuses an index built for another registry, naming both', async () => {
+    stubFetch(meta({ registry: 'COTHERREGISTRY000000000000000000000000000000000000000000' }));
+    render(
+      <MemoryRouter>
+        <IndexStatus />
+      </MemoryRouter>,
+    );
+    const alert = await screen.findByRole('alert');
+    expect(alert.textContent).toContain(NETWORK.contracts.registry);
+    expect(alert.textContent).toContain('COTHERREGISTRY');
   });
 
   it('renders stale state', async () => {

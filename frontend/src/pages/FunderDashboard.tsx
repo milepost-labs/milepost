@@ -10,6 +10,8 @@ import { Empty } from '../components/state/AsyncStates';
 import { Button, PageHead, SampleTag, StatTile } from '../components/ui';
 import { useWallet } from '../context/useWallet';
 import { FIXTURE_CONTRIBUTIONS } from '../fixtures/funding';
+import { samplesEnabled } from '../lib/samples';
+import { DEMO_PROGRAMME_ID } from '../context/sorobanStore';
 import { useIndexedList, useProgrammeParam } from '../hooks';
 import { usePageTitle } from '../hooks/usePageTitle';
 import { useReleaseDeadlines } from '../hooks/useReleaseDeadlines';
@@ -52,6 +54,7 @@ export const FunderDashboard = () => {
   const programmes = useMemo(() => mergeProgrammes(listRead.data), [listRead.data]);
 
   const cards = useMemo(() => {
+    if (!samplesEnabled()) return [];
     const byId = new Map(programmes.map((p) => [p.id, p]));
     return FIXTURE_CONTRIBUTIONS.map((c) =>
       contributionCard(c, byId.get(c.programmeId), refunded.has(c.programmeId)),
@@ -62,7 +65,10 @@ export const FunderDashboard = () => {
   const asset = cards[0]?.asset ?? 'USDC';
   const sampleIds = useMemo(() => new Set(programmes.filter((p) => p.sample).map((p) => p.id)), [programmes]);
 
-  const contributionProgrammeIds = useMemo(() => FIXTURE_CONTRIBUTIONS.map((c) => c.programmeId), []);
+  const contributionProgrammeIds = useMemo(
+    () => (samplesEnabled() ? FIXTURE_CONTRIBUTIONS.map((c) => c.programmeId) : []),
+    [],
+  );
   const releaseDeadlines = useReleaseDeadlines(contributionProgrammeIds, sampleIds);
 
   const markRefunded = (programmeId: string) => setRefunded((current) => new Set(current).add(programmeId));

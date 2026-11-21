@@ -3,6 +3,7 @@ import { ArrowRight, Coins, HandCoins, LayoutGrid, ShieldCheck, SlidersHorizonta
 import type { LucideIcon } from 'lucide-react';
 import { Link, useLocation } from 'react-router-dom';
 import { useWallet } from '../../context/useWallet';
+import { NETWORK } from '../../config/network';
 import {
   HOME_ANCHORS,
   NAV_SECTIONS,
@@ -63,6 +64,10 @@ export const Navbar = () => {
   const currentPage = getSectionPageForPath(location.pathname);
   const { address, status, network, networkError, expectedNetwork, recheckNetwork } = useWallet();
   const wrongNetwork = status === 'wrong-network';
+  // The road-paint yellow dot is reserved for testnet. Mainnet reads as muted
+  // ink instead, and a wrong network still turns the whole tag red.
+  const isMainnet = NETWORK.name === 'mainnet';
+  const showDot = !isMainnet || wrongNetwork;
 
   return (
     <>
@@ -87,20 +92,22 @@ export const Navbar = () => {
 
           <div className="app-header__actions">
             <span
-              className={`testnet-tag${wrongNetwork ? ' testnet-tag--wrong' : ''}`}
+              className={`testnet-tag${isMainnet ? ' testnet-tag--mainnet' : ''}${wrongNetwork ? ' testnet-tag--wrong' : ''}`}
               title={
                 wrongNetwork
                   ? (networkError ?? undefined)
                   : `Contracts are deployed on ${expectedNetwork}. They have not been audited.`
               }
             >
-              <span className="testnet-tag__dot" aria-hidden="true" />
+              {showDot && <span className="testnet-tag__dot" aria-hidden="true" />}
               <span className="testnet-tag__text">
                 {wrongNetwork
                   ? `Freighter: ${network ?? 'unknown network'}`
-                  : isHome
-                    ? `${expectedNetwork} · pre-audit`
-                    : expectedNetwork}
+                  : isMainnet
+                    ? expectedNetwork
+                    : isHome
+                      ? `${expectedNetwork} · pre-audit`
+                      : expectedNetwork}
               </span>
             </span>
             <ThemeToggle />

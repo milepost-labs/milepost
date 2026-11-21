@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
 import { MoneyLegend, MoneyRow } from '../components/programme/MoneyRow';
-import { ArrowRight, Plus, RefreshCw, Search, WifiOff } from 'lucide-react';
+import { ArrowRight, ChevronLeft, ChevronRight, Plus, RefreshCw, Search, WifiOff } from 'lucide-react';
 import { Badge, ModePill, Notice, PageHead, PhaseBadge, SampleTag, Segmented } from '../components/ui';
 import { Skeleton, Empty } from '../components/state/AsyncStates';
 import { describeAmount } from '../lib/amount';
@@ -10,7 +10,8 @@ import { useWallet } from '../context/useWallet';
 import { useAnnouncer } from '../context/useAnnouncer';
 import { useProgrammeMetadata } from '../hooks/useProgrammeMetadata';
 import { VERTICALS } from '../lib/metadata';
-import { fetchMeta, fetchProgrammes, isStale } from '../lib/indexer';
+import { fetchMeta, fetchProgrammes, indexMismatch, isStale } from '../lib/indexer';
+import { samplesEnabled } from '../lib/samples';
 import { FIXTURE_USER_ROLES, ROLE_LABELS } from '../fixtures/userRoles';
 import {
   DEFAULT_DIRECTORY_SORT,
@@ -43,6 +44,9 @@ const asSort = (value: string | null): DirectorySort =>
     ? (value as DirectorySort)
     : DEFAULT_DIRECTORY_SORT;
 
+/** Cards shown per page. */
+const PAGE_SIZE = 24;
+
 /**
  * `/directory` — every programme, narrowed by a search box and phase pills.
  *
@@ -64,6 +68,8 @@ export const ProgrammeDirectory = () => {
   const phase = asPhase(params.get('phase'));
   const sort = asSort(params.get('sort'));
   const yoursOnly = params.get('yours') === '1';
+  const rawPage = Number(params.get('page') ?? '1');
+  const page = Number.isFinite(rawPage) && rawPage >= 1 ? Math.floor(rawPage) : 1;
   const { status: walletStatus, address } = useWallet();
   const isSignedIn = walletStatus === 'connected' && address != null;
 
@@ -71,13 +77,14 @@ export const ProgrammeDirectory = () => {
   const listRead = useIndexedList(() => fetchProgrammes(), []);
   const registryRead = useRegistryProgrammes();
 
-  const userRoles = isSignedIn ? FIXTURE_USER_ROLES : undefined;
+  const userRoles = isSignedIn && samplesEnabled() ? FIXTURE_USER_ROLES : undefined;
 
   const setQuery = useCallback(
     (value: string) => {
       const next = new URLSearchParams(params);
       if (value) next.set('q', value);
       else next.delete('q');
+      next.delete('page');
       setParams(next, { replace: true });
     },
     [params, setParams],
@@ -88,6 +95,7 @@ export const ProgrammeDirectory = () => {
       const next = new URLSearchParams(params);
       if (value === 'All') next.delete('phase');
       else next.set('phase', value);
+      next.delete('page');
       setParams(next, { replace: true });
     },
     [params, setParams],
@@ -98,6 +106,7 @@ export const ProgrammeDirectory = () => {
       const next = new URLSearchParams(params);
       if (value === DEFAULT_DIRECTORY_SORT) next.delete('sort');
       else next.set('sort', value);
+      next.delete('page');
       setParams(next, { replace: true });
     },
     [params, setParams],
@@ -107,6 +116,7 @@ export const ProgrammeDirectory = () => {
     const next = new URLSearchParams(params);
     if (yoursOnly) next.delete('yours');
     else next.set('yours', '1');
+    next.delete('page');
     setParams(next, { replace: true });
   }, [params, setParams, yoursOnly]);
 
@@ -115,13 +125,20 @@ export const ProgrammeDirectory = () => {
     next.delete('q');
     next.delete('phase');
     next.delete('yours');
+    next.delete('page');
     setParams(next, { replace: true });
   }, [params, setParams]);
 
-  const realCount = listRead.data?.filter((p) => Boolean(p?.id)).length ?? 0;
+  const meta = metaRead.data?.meta ?? null;
+  const mismatch = meta ? indexMismatch(meta) : null;
+  // An index for another network or registry says nothing about this one:
+  // use none of its lists and fall back to the registry and samples.
+  const indexProgrammes = mismatch ? null : listRead.data;
+
+  const realCount = indexProgrammes?.filter((p) => Boolean(p?.id)).length ?? 0;
   const hasReal = realCount > 0;
   const samplesParam = params.get('samples');
-  const showSamples = hasReal ? samplesParam === '1' : true;
+  const showSamples = samplesEnabled() && (hasReal ? samplesParam === '1' : true);
 
   const toggleSamples = useCallback(() => {
     const next = new URLSearchParams(params);
@@ -131,40 +148,74 @@ export const ProgrammeDirectory = () => {
   }, [params, setParams, showSamples]);
 
   const all = useMemo(
-    () => mergeProgrammes(listRead.data, userRoles, { showSamples }, registryRead.ids ?? undefined),
-    [listRead.data, userRoles, showSamples, registryRead.ids],
+    () => mergeProgrammes(indexProgrammes, userRoles, { showSamples }, registryRead.ids ?? undefined),
+    [indexProgrammes, userRoles, showSamples, registryRead.ids],
   );
-  const realIds = useMemo(() => all.filter((p) => !p.sample).map((p) => p.id), [all]);
-  const reads = useProgrammeChainReads(realIds);
-  // Real cards swap their stand-in chain for the read the moment it lands.
-  const hydrated = useMemo(() => hydrateRealProgrammes(all, reads.reads), [all, reads.reads]);
+
+  // Counts and filtering need the full merged list. Chain reads fire only for
+  // the programmes on the visible page so the RPC is not hammered on load.
+  // The hydrated list reuses whatever reads have already settled (cached by
+  // sessionRead) so previously-read cards stay hydrated when paging back.
+  const counts = useMemo(() => phaseCounts(all, query), [all, query]);
+  const shown = useMemo(
+    () => sortProgrammes(filterProgrammes(all, query, phase, yoursOnly), sort),
+    [all, query, phase, sort, yoursOnly],
+  );
+
+  // Pagination: clamp current page to valid range, then slice.
+  const totalPages = Math.max(1, Math.ceil(shown.length / PAGE_SIZE));
+  const clampedPage = Math.min(page, totalPages);
+  const pageShown = useMemo(
+    () => shown.slice((clampedPage - 1) * PAGE_SIZE, clampedPage * PAGE_SIZE),
+    [shown, clampedPage],
+  );
+
+  const setPage = useCallback(
+    (next: number) => {
+      setParams(
+        (prev) => {
+          const p = new URLSearchParams(prev);
+          if (next <= 1) p.delete('page');
+          else p.set('page', String(next));
+          return p;
+        },
+        { replace: true },
+      );
+    },
+    [setParams],
+  );
+
+  // Only the visible page's real IDs get chain reads.
+  const pageRealIds = useMemo(
+    () => pageShown.filter((p) => !p.sample).map((p) => p.id),
+    [pageShown],
+  );
+  const reads = useProgrammeChainReads(pageRealIds);
+  // Merge the settled reads back into the visible page so cards update live.
+  const hydrated = useMemo(() => hydrateRealProgrammes(pageShown, reads.reads), [pageShown, reads.reads]);
+
   const readsByError = useMemo(
     () => new Map(Object.entries(reads.errors).map(([id, error]) => [id, error])),
     [reads.errors],
   );
 
-  const counts = useMemo(() => phaseCounts(hydrated, query), [hydrated, query]);
-  const shown = useMemo(
-    () => sortProgrammes(filterProgrammes(hydrated, query, phase, yoursOnly), sort),
-    [hydrated, query, phase, sort, yoursOnly],
-  );
-
   const loading = listRead.loading || metaRead.loading;
-  const error = listRead.error ?? metaRead.error;
-  const meta = metaRead.data?.meta ?? null;
+  const error = mismatch ? null : listRead.error ?? metaRead.error;
   const now = metaRead.data?.readAt ?? null;
-  const indexedCount = listRead.data?.length ?? 0;
+  const indexedCount = indexProgrammes?.length ?? 0;
   const indexedAt = meta ? Date.parse(meta.indexedAt) : Number.NaN;
-  const stale = meta ? isStale(meta) : false;
+  const stale = meta && !mismatch ? isStale(meta) : false;
 
   const age = now !== null && !Number.isNaN(indexedAt) ? now - indexedAt : null;
   const ageText = age === null ? 'at an unknown time' : formatAgo(age);
 
   const indexLine = loading
     ? 'Reading the public index…'
-    : meta
-      ? `${indexedCount} in the public index${age === null ? '' : ` · updated ${ageText}`}`
-      : '';
+    : mismatch
+      ? 'The public index is for a different deployment'
+      : meta
+        ? `${indexedCount} in the public index${age === null ? '' : ` · updated ${ageText}`}`
+        : '';
 
   const showEmpty = !loading && shown.length === 0;
   // Carried into every programme link, so "All programmes" can come back to
@@ -210,6 +261,17 @@ export const ProgrammeDirectory = () => {
         needed to browse.
       </PageHead>
 
+      {mismatch && (
+        <Notice tone="warn" role="alert" className="directory-notice">
+          <strong>This index belongs to a different deployment.</strong> It was built for{' '}
+          <span className="numeric">{mismatch.found.network}</span> with registry{' '}
+          <span className="numeric">{mismatch.found.registry}</span>, but this app reads the{' '}
+          <span className="numeric">{mismatch.expected.network}</span> registry{' '}
+          <span className="numeric">{mismatch.expected.registry}</span>. Its lists are not used; programmes
+          are read from the chain instead.
+        </Notice>
+      )}
+
       {stale && (
         <Notice tone="warn" role="status" className="directory-notice">
           <strong>The public index was last updated {ageText}.</strong> New programmes may be missing and
@@ -244,7 +306,7 @@ export const ProgrammeDirectory = () => {
         </div>
       )}
 
-      {!hasReal && !loading && error == null && (
+      {!hasReal && !loading && error == null && !mismatch && (
         <Notice role="note" className="directory-notice">
           <strong>Showing sample programmes.</strong> No real programmes have been published to the index
           yet. These samples demonstrate layout and milestone workflows.
@@ -272,7 +334,7 @@ export const ProgrammeDirectory = () => {
               Yours
             </button>
           )}
-          {hasReal && (
+          {hasReal && samplesEnabled() && (
             <button type="button" className="directory-toggle" aria-pressed={showSamples} onClick={toggleSamples}>
               {showSamples ? 'Hide sample programmes' : 'Show sample programmes'}
             </button>
@@ -330,16 +392,50 @@ export const ProgrammeDirectory = () => {
         )}
 
         {!loading && shown.length > 0 && (
-          <div className="directory-grid">
-            {shown.map((programme) => (
-              <ProgrammeCard
-                key={programme.id}
-                programme={programme}
-                carriedSearch={carriedSearch}
-                readError={readsByError.get(programme.id)}
-              />
-            ))}
-          </div>
+          <>
+            <div className="directory-grid">
+              {hydrated.map((programme) => (
+                <ProgrammeCard
+                  key={programme.id}
+                  programme={programme}
+                  carriedSearch={carriedSearch}
+                  readError={readsByError.get(programme.id)}
+                />
+              ))}
+            </div>
+
+            {totalPages > 1 && (
+              <nav className="directory-pagination" aria-label="Programme pages">
+                <button
+                  type="button"
+                  className="directory-pagination__btn"
+                  onClick={() => setPage(clampedPage - 1)}
+                  disabled={clampedPage <= 1}
+                  aria-label="Previous page"
+                >
+                  <ChevronLeft size={16} aria-hidden="true" />
+                  Previous
+                </button>
+                <span
+                  className="directory-pagination__count"
+                  aria-live="polite"
+                  aria-atomic="true"
+                >
+                  {(clampedPage - 1) * PAGE_SIZE + 1}–{Math.min(clampedPage * PAGE_SIZE, shown.length)} of {shown.length}
+                </span>
+                <button
+                  type="button"
+                  className="directory-pagination__btn"
+                  onClick={() => setPage(clampedPage + 1)}
+                  disabled={clampedPage >= totalPages}
+                  aria-label="Next page"
+                >
+                  Next
+                  <ChevronRight size={16} aria-hidden="true" />
+                </button>
+              </nav>
+            )}
+          </>
         )}
       </div>
 

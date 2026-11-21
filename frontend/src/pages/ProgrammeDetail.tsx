@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { useLocation } from "react-router-dom";
+import { Link, Navigate, useLocation } from "react-router-dom";
 import type { ProgrammeConfig } from "@milepost/program";
 import {
   FileText,
@@ -11,17 +11,18 @@ import { PausedBanner } from "../components/programme/PausedBanner";
 import { ProgrammeHeader } from "../components/programme/ProgrammeHeader";
 import { WhereTheMoneyIs } from "../components/programme/WhereTheMoneyIs";
 import { ProgrammeTabs } from "../components/programme/ProgrammeTabs";
+import { ProgrammeActivityPanel } from "../components/programme/ProgrammeActivity";
 import { ProgrammeActions } from "../components/programme/ProgrammeActions";
 import { DescriptionBand, MetadataPanel } from "../components/programme/ProgrammeDescription";
 import { useProgrammeMetadata } from "../hooks/useProgrammeMetadata";
-import { AddToCalendar, AddressChip, Badge, Card, Deadline, List, ListRow, Notice, SampleTag, StatTile } from "../components/ui";
+import { AddToCalendar, AddressChip, Badge, Card, Deadline, List, ListRow, Notice, PageHead, SampleTag, StatTile } from "../components/ui";
 import { useSoroban } from "../context/useSoroban";
 import { useContractRead, useContractResult, useIndexedList, useProgramme } from "../hooks";
 import { useLedgerCloseTime } from "../hooks/useLedgerCloseTime";
 import { fetchProgrammes } from "../lib/indexer";
 import { directoryHref } from "../lib/programmeView";
 import { formatAmount, percentOf } from "../lib/amount";
-import { formatFigure, isSampleProgrammeId, programmeAsset } from "../lib/programmeView";
+import { formatFigure, isSampleProgrammeId, programmeAsset, programmeRouteState } from "../lib/programmeView";
 import { registryVerificationCopy } from "../lib/registryVerification";
 import { FIXTURE_PROGRAMMES, chainFor } from "../fixtures/programmes";
 import { fetchTokenName, parseTokenName } from "../lib/token";
@@ -167,8 +168,13 @@ function nextDeadline(
 }
 
 
-export const ProgrammeDetail = () => {
-  const { id: programmeId, client: programme, isDefault } = useProgramme();
+interface ProgrammeDetailBodyProps {
+  programmeId: string;
+  programme: ReturnType<typeof useProgramme>["client"];
+  isDefault: boolean;
+}
+
+const ProgrammeDetailBody = ({ programmeId, programme, isDefault }: ProgrammeDetailBodyProps) => {
   const { registry } = useSoroban();
   const location = useLocation();
   const [nowMs, setNowMs] = useState(() => Date.now());
@@ -607,6 +613,8 @@ export const ProgrammeDetail = () => {
             asset={asset}
             labels={metadata?.status === "ok" ? metadata.doc.labels : undefined}
           />
+
+          <ProgrammeActivityPanel programmeId={programmeId} isSample={isSample} />
         </div>
 
         <div className="programme-cols__side">
@@ -792,4 +800,31 @@ export const ProgrammeDetail = () => {
       </section>
     </div>
   );
+};
+
+/**
+ * A sample programme has no contract and no mainnet presence. Without samples,
+ * its address is not a programme on this network, so say that rather than
+ * reading a made-up contract and showing a wall of failed reads.
+ */
+export const ProgrammeDetail = () => {
+  const { id, client, isDefault } = useProgramme();
+  const routeState = programmeRouteState(id);
+
+  if (routeState === 'directory' || id === null) return <Navigate to="/directory" replace />;
+
+  if (routeState === 'not-a-programme') {
+    return (
+      <div className="programme-detail">
+        <PageHead eyebrow="Programmes" title="Not a programme on this network">
+          <p>This address belongs to a sample programme, and samples exist only on testnet.</p>
+        </PageHead>
+        <Notice tone="info">
+          <Link to="/directory">Back to the programme directory</Link>
+        </Notice>
+      </div>
+    );
+  }
+
+  return <ProgrammeDetailBody programmeId={id} programme={client} isDefault={isDefault} />;
 };

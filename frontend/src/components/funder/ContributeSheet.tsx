@@ -8,6 +8,7 @@ import { phaseLabel, useTransaction } from '../../hooks/useTransaction';
 import { useContractRead, useContractResult } from '../../hooks/useContractRead';
 import { useProgrammeBalance, type ProgrammeBalanceStatus } from '../../hooks/useProgrammeBalance';
 import { NETWORK } from '../../config/network';
+import { samplesEnabled } from '../../lib/samples';
 import { useBalances } from '../../hooks/useBalances';
 import { formatAmount, STROOPS_PER_UNIT, validateAmount } from '../../lib/amount';
 import { explain, explainCode, isFailure, type Explained } from '../../lib/errors';
@@ -446,7 +447,7 @@ export function ContributeSheet({
               money stays locked in the programme until a verifier confirms each milepost, and whatever isn't
               paid out comes back to you in proportion.
             </p>
-            {programme.sample && (
+            {programme.sample && samplesEnabled() && (
               <p className="contribute__sample">
                 <SampleTag>Sample receipt</SampleTag>
               </p>

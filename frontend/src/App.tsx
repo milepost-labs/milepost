@@ -46,6 +46,9 @@ const AwardProgress = lazyWithRetry(() =>
 const ApplicationTimeline = lazyWithRetry(() =>
   import("./pages/ApplicationTimeline").then((m) => ({ default: m.ApplicationTimeline })),
 );
+const AwardDetail = lazyWithRetry(() =>
+  import("./pages/AwardDetail").then((m) => ({ default: m.AwardDetail })),
+);
 const VerifierDashboard = lazyWithRetry(() =>
   import("./pages/VerifierDashboard").then((m) => ({ default: m.VerifierDashboard })),
 );
@@ -100,6 +103,7 @@ const ROUTE_ELEMENTS: Record<string, ReactElement> = {
   "/recipients/standing": <Standing />,
   "/recipients/award-progress": <AwardProgress />,
   "/recipients/application-timeline": <ApplicationTimeline />,
+  "/award": <AwardDetail />,
   "/verifiers": <VerifierDashboard />,
   "/finalize": <FinalizeAwards />,
   "/policy": <SpendPolicy />,
@@ -147,6 +151,10 @@ function App() {
                     <Route
                       path="programme/:programmeId"
                       element={<ProgrammeDetail />}
+                    />
+                    <Route
+                      path="award/:programmeId/:recipient"
+                      element={<AwardDetail />}
                     />
                     {ComponentGallery && <Route path="dev/ui" element={<ComponentGallery />} />}
                     <Route path="*" element={<NotFound />} />

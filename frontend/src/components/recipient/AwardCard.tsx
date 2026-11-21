@@ -8,6 +8,7 @@ import { describeAmount } from '../../lib/amount';
 import { looksLikeContractId, truncateAddress } from '../../lib/format';
 import { formatIn } from '../../lib/funding';
 import { formatFigure, isSampleProgrammeId, programmeAsset, shortId } from '../../lib/programmeView';
+import { samplesEnabled } from '../../lib/samples';
 import { useAnnouncer } from '../../context/useAnnouncer';
 import { useWallet } from '../../context/useWallet';
 import { useSoroban } from '../../context/useSoroban';
@@ -210,7 +211,7 @@ function ReleaseSheet({
           actions={<Button onClick={close}>Done</Button>}
         >
           <p>{modeDestination(award.mode, award.payee)}</p>
-          {!isReal && (
+          {!isReal && samplesEnabled() && (
             <p className="award-card__sample-note">
               <SampleTag>Sample receipt</SampleTag>
             </p>
@@ -393,7 +394,7 @@ export function AwardCard({ award: initialAward, reply = null, sampleDelayMs = S
         <div className="award-card__title-group">
           <div className="award-card__badges">
             <ModePill mode={liveAward.mode} />
-            {!isReal && <SampleTag />}
+            {!isReal && samplesEnabled() && <SampleTag />}
           </div>
           <h3 className="award-card__name">
             <Link id={`award-${initialAward.programmeId}`} to={`/programme/${encodeURIComponent(initialAward.programmeId)}`}>
@@ -401,6 +402,14 @@ export function AwardCard({ award: initialAward, reply = null, sampleDelayMs = S
             </Link>
           </h3>
           <p className="award-card__mode-line">{modeLine(liveAward.mode, liveAward.payee)}</p>
+          {isReal && (
+            <Link
+              to={`/award/${encodeURIComponent(initialAward.programmeId)}/${encodeURIComponent(initialAward.recipient)}`}
+              className="award-card__detail-link"
+            >
+              View this award&apos;s detail →
+            </Link>
+          )}
         </div>
         <div className="award-card__amount">
           <b className="numeric" aria-label={describeAmount(granted, asset)}>

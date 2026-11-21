@@ -9,6 +9,7 @@ import { useSoroban } from '../../context/useSoroban';
 import { validateAmount, formatAmount } from '../../lib/amount';
 import { formatIn } from '../../lib/funding';
 import { isSampleProgrammeId, programmeAsset } from '../../lib/programmeView';
+import { samplesEnabled } from '../../lib/samples';
 import { SAMPLE_TX_DELAY_MS, sampleSendable, sampleOutcome } from '../../lib/fundingTx';
 import { useAnnouncer } from '../../context/useAnnouncer';
 import { Empty, ErrorPanel, ErrorState, Loading } from '../state/AsyncStates';
@@ -199,6 +200,9 @@ export function ApplyForm({
   // Show receipt once we have one (success), even after tx.reset would clear
   // tx.phase — receipt state drives the done view, not tx.phase.
   const showReceipt = receipt !== null && tx.phase !== 'error';
+  // A declined signature is a choice: useTransaction returns to idle rather
+  // than error, so the form would otherwise reset with no explanation.
+  const declined = tx.error !== null && tx.phase === 'idle';
 
   const programmeOptions = [
     ...real.map((p) => ({ value: p.id, label: p.name })),
@@ -247,7 +251,7 @@ export function ApplyForm({
               {receipt.amountFormatted} requested from {receipt.programmeName}. The application hash is the
               SHA-256 of your notes: keep the notes, they prove what you submitted.
             </p>
-            {receipt.sample && (
+            {receipt.sample && samplesEnabled() && (
               <p className="apply__sample">
                 <SampleTag>Sample receipt</SampleTag>
               </p>
@@ -321,6 +325,12 @@ export function ApplyForm({
                 <Button type="submit" disabled={!isValid}>
                   Submit application
                 </Button>
+
+                {declined && tx.error && (
+                  <Notice tone="info">
+                    {tx.error.message} {tx.error.action}
+                  </Notice>
+                )}
 
                 {tx.phase === 'error' && tx.error && <ErrorPanel explained={tx.error} onRetry={() => tx.reset()} />}
               </>

@@ -11,6 +11,7 @@
 import { formatAmount } from './amount';
 import type { IndexedProgramme } from './indexer';
 import { DEMO_PROGRAMME_ID } from '../context/sorobanStore';
+import { samplesEnabled } from './samples';
 import { chainFor,
   FIXTURE_CHAIN,
   FIXTURE_PROGRAMMES,
@@ -30,6 +31,20 @@ import type { UserRole } from '../fixtures/userRoles';
  */
 export function isSampleProgrammeId(id: string): boolean {
   return id !== DEMO_PROGRAMME_ID && FIXTURE_PROGRAMMES.some((p) => p.id === id);
+}
+
+/**
+ * What a `/programme` address means on this network. A network with no seeded
+ * programme sends the bare route to the directory; a sample address outside
+ * testnet is not a programme there, so it gets a not-a-programme state instead
+ * of a read against a contract that does not exist.
+ */
+export type ProgrammeRouteState = 'programme' | 'directory' | 'not-a-programme';
+
+export function programmeRouteState(id: string | null): ProgrammeRouteState {
+  if (id === null) return 'directory';
+  if (!samplesEnabled() && isSampleProgrammeId(id)) return 'not-a-programme';
+  return 'programme';
 }
 
 export type DirectoryPhase = 'All' | FixturePhase;
@@ -148,7 +163,7 @@ export function mergeProgrammes(
     });
   }
 
-  const includeSamples = options?.showSamples ?? true;
+  const includeSamples = options?.showSamples ?? samplesEnabled();
   if (includeSamples) {
     for (const entry of FIXTURE_PROGRAMMES) {
       if (seen.has(entry.id)) continue;

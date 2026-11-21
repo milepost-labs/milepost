@@ -307,3 +307,51 @@
   .directory-toolbar__filters { width: 100%; }
   .directory-toolbar__filters .ui-segmented { width: 100%; }
 }
+
+/* Pagination bar below the card grid. */
+.directory-pagination {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-3);
+  margin-top: var(--space-5);
+}
+
+.directory-pagination__btn {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-1-5);
+  min-height: var(--tap-min);
+  padding: 0 var(--space-4);
+  background: var(--bg-raised);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
+  font-size: var(--text-sm);
+  font-weight: var(--weight-semibold);
+  color: var(--accent);
+  cursor: pointer;
+  outline: none;
+}
+
+.directory-pagination__btn:hover:not(:disabled) {
+  border-color: var(--accent);
+  background: var(--accent-soft);
+}
+
+.directory-pagination__btn:focus-visible {
+  outline: 2px solid var(--focus);
+  outline-offset: var(--focus-offset);
+}
+
+.directory-pagination__btn:disabled {
+  color: var(--ink-faint);
+  border-color: var(--line);
+  cursor: not-allowed;
+}
+
+.directory-pagination__count {
+  font-size: var(--text-sm);
+  color: var(--ink-muted);
+  flex: 1;
+  text-align: center;
+}

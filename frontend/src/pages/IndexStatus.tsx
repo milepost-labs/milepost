@@ -3,7 +3,7 @@ import { Link } from 'react-router-dom';
 import { RefreshCw } from 'lucide-react';
 import { useIndexedList } from '../hooks/useIndexedList';
 import { usePageTitle } from '../hooks/usePageTitle';
-import { fetchMeta, isStale } from '../lib/indexer';
+import { fetchMeta, indexMismatch, isStale } from '../lib/indexer';
 import type { IndexerMeta } from '../lib/indexer';
 import { formatAgo } from '../lib/programmeView';
 import { Skeleton } from '../components/state/AsyncStates';
@@ -47,7 +47,9 @@ export const IndexStatus = () => {
   const fetchedAt = data?.fetchedAt ?? null;
   const indexedAt = meta ? Date.parse(meta.indexedAt) : NaN;
   const age = fetchedAt && Number.isFinite(indexedAt) ? Math.max(0, fetchedAt - indexedAt) : null;
-  const stale = meta ? isStale(meta) : false;
+  const mismatch = meta ? indexMismatch(meta) : null;
+  // A foreign index is not "fresh" in any useful sense; say it is wrong first.
+  const stale = meta && !mismatch ? isStale(meta) : false;
   const unhandled = meta
     ? Object.entries(meta.unhandledEvents)
         .filter(([, count]) => count > 0)
@@ -56,7 +58,7 @@ export const IndexStatus = () => {
   const unhandledTotal = unhandled.reduce((sum, [, count]) => sum + count, 0);
 
   useEffect(() => {
-    if (!meta) return;
+    if (!meta || mismatch) return;
     const freshness = stale ? 'stale' : 'fresh';
     if (announcedFreshness.current === freshness) return;
     announcedFreshness.current = freshness;
@@ -65,7 +67,7 @@ export const IndexStatus = () => {
         ? 'Index status is stale. Older than 12 hours, so new data may be missing.'
         : 'Index status is fresh. Updated within the last 12 hours.',
     );
-  }, [meta, stale, announce]);
+  }, [meta, stale, mismatch, announce]);
 
   return (
     <div className="index-status">
@@ -112,7 +114,18 @@ export const IndexStatus = () => {
 
       {meta && (
         <>
-          {stale ? (
+          {mismatch ? (
+            <Notice tone="risk" role="alert">
+              <span>
+                <strong>This index is for a different deployment.</strong> It was built for{' '}
+                <span className="numeric">{mismatch.found.network}</span> with registry{' '}
+                <span className="numeric">{mismatch.found.registry}</span>, but this app reads the{' '}
+                <span className="numeric">{mismatch.expected.network}</span> registry{' '}
+                <span className="numeric">{mismatch.expected.registry}</span>. Its lists are not used anywhere in
+                the app; programme pages still read the chain directly.
+              </span>
+            </Notice>
+          ) : stale ? (
             <Notice tone="warn" role="status">
               <span>
                 <strong>Stale.</strong> Last rebuilt {age !== null ? formatAgo(age) : 'a while ago'}. Above 12 hours,

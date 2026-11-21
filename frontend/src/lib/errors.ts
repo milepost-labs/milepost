@@ -58,7 +58,11 @@ const PROGRAM: Table = {
   14: { kind: 'blocked', message: 'The programme does not have enough budget left for this award.', action: 'Awards are settled in the order they are finalised.' },
   15: { kind: 'fault', message: 'That amount is too large to process.' },
   16: { kind: 'blocked', message: 'This programme has been cancelled.' },
-  17: { kind: 'denied', message: 'A programme that holds funds or has made awards cannot be cancelled.' },
+  17: {
+    kind: 'denied',
+    message: 'Money has already been paid out to a recipient, so this programme can no longer be cancelled.',
+    action: 'Cancelling is only possible before the first tranche is released.',
+  },
   18: { kind: 'invalid', message: 'A programme needs at least one verifier, or no tranche could ever be released.' },
   19: { kind: 'none', message: 'No award for this account yet.' },
   20: { kind: 'none', message: 'Every tranche of this award has already been released.' },

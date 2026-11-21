@@ -13,6 +13,7 @@ import { Button, DisabledReason, Field, Notice, PageHead, SampleTag, Select } fr
 import { RefreshCw } from 'lucide-react';
 import { usePageTitle } from '../hooks/usePageTitle';
 import { FIXTURE_PROGRAMMES } from '../fixtures/programmes';
+import { samplesEnabled } from '../lib/samples';
 import { fetchAwards, fetchProgrammes } from '../lib/indexer';
 import { readProgrammeLifetimes, type EntryLifetimeRow } from '../lib/entryTtl';
 import {
@@ -88,7 +89,7 @@ export const Keepalive = () => {
   const [selectedProgrammeId, setSelectedProgrammeId] = useState<string | null>(null);
   const programmeId = selectedProgrammeId ?? linkedProgrammeId ?? DEMO_PROGRAMME_ID;
 
-  const isSample = FIXTURE_PROGRAMMES.some((p) => p.id === programmeId);
+  const isSample = samplesEnabled() && FIXTURE_PROGRAMMES.some((p) => p.id === programmeId);
   const indexed = useIndexedList(fetchProgrammes, []);
   const programmeOptions = useMemo(() => {
     const real = new Map<string, string>();
@@ -97,7 +98,9 @@ export const Keepalive = () => {
     for (const p of indexed.data ?? []) real.set(p.id, p.name ?? p.id);
     return [
       ...[...real].map(([value, label]) => ({ value, label })),
-      ...FIXTURE_PROGRAMMES.map((p) => ({ value: p.id, label: `${p.name ?? p.id} (sample)` })),
+      ...(samplesEnabled()
+        ? FIXTURE_PROGRAMMES.map((p) => ({ value: p.id, label: `${p.name ?? p.id} (sample)` }))
+        : []),
     ];
   }, [indexed.data, linkedProgrammeId]);
 
@@ -107,7 +110,7 @@ export const Keepalive = () => {
     [rpcUrl],
   );
   const awards = useIndexedList(() => fetchAwards(programmeId), [programmeId], {
-    enabled: !isSample,
+    enabled: Boolean(programmeId) && !isSample,
   });
   // A programme with no published awards has no awards.json; that is not a failure here.
   const recipients = useMemo(
@@ -117,7 +120,7 @@ export const Keepalive = () => {
   const lifetimes = useIndexedList(
     () => readProgrammeLifetimes(server, programmeId, recipients),
     [server, programmeId, recipients],
-    { enabled: !isSample && !awards.fetching },
+    { enabled: Boolean(programmeId) && !isSample && !awards.fetching },
   );
 
   // Real extensions.

@@ -12,6 +12,7 @@ import { validateAmount } from '../../lib/amount';
 import { programmeAsset, shortId } from '../../lib/programmeView';
 import { isProgrammeContractId } from '../../lib/registryVerification';
 import { FIXTURE_REVIEW_APPLICANTS, type ApplicantFixture } from '../../fixtures/reviewFixtures';
+import { samplesEnabled } from '../../lib/samples';
 import { Badge, Button, DisabledReason, Field, Modal, PhaseBadge, SampleTag, Select } from '../ui';
 import { ErrorPanel } from '../state/AsyncStates';
 import { TxDone, TxFailed, TxPending } from '../state/TxStatus';
@@ -229,12 +230,15 @@ export function ReviewerVotes({ reviewerOf, allProgrammes, initialProgrammeId }:
   const isReviewerRead = useContractRead(
     () => programme.is_reviewer({ addr: address ?? '' }),
     [programme, address],
-    { contract: 'program', enabled: Boolean(address) },
+    { contract: 'program', enabled: Boolean(address) && Boolean(programmeId) },
   );
-  const phaseRead = useContractResult(() => programme.get_phase(), [programme], { contract: 'program' });
+  const phaseRead = useContractResult(() => programme.get_phase(), [programme], {
+    contract: 'program',
+    enabled: Boolean(programmeId),
+  });
   const phase = phaseRead.data?.tag ?? null;
 
-  const samples = FIXTURE_REVIEW_APPLICANTS[programmeId] ?? [];
+  const samples = samplesEnabled() ? (FIXTURE_REVIEW_APPLICANTS[programmeId] ?? []) : [];
   const applicants = [...(added[programmeId] ?? []), ...samples];
 
   const gate = !address
