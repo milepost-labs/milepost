@@ -18,7 +18,7 @@ export function useRefundedTo(
   programmeId: string | null,
   donor: string | null,
   sample: boolean,
-): { refundedSoFar: bigint; loading: boolean } {
+): { refundedSoFar: bigint; loading: boolean; refetch: () => void } {
   const { programmeAt } = useSoroban();
 
   const client = useMemo(
@@ -35,5 +35,6 @@ export function useRefundedTo(
   return {
     refundedSoFar: read.data ?? 0n,
     loading: read.loading,
+    refetch: read.refetch,
   };
 }
