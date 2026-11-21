@@ -199,7 +199,7 @@ function ContributionItem({
 
       <dl className="fund-card__figs">
         <div>
-          <dt>Contributed</dt>
+          <dt>You put in</dt>
           <dd className="numeric" aria-label={describeAmount(card.amount, card.asset)}>
             {formatFigure(card.amount)}
           </dd>
@@ -209,7 +209,7 @@ function ContributionItem({
           <dd className="numeric">{formatShare(card.share)}</dd>
         </div>
         <div>
-          <dt>Released</dt>
+          <dt>Released, your share</dt>
           <dd className="numeric" aria-label={describeAmount(card.releasedShare, card.asset)}>
             {formatFigure(card.releasedShare)}
           </dd>

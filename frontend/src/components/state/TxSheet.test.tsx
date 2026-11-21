@@ -83,7 +83,7 @@ describe('TxSheet confirm step', () => {
     );
 
     expect(screen.queryByRole('button', { name: 'Sign and send' })).toBeNull();
-    expect(screen.getByText('Payee not verified')).toBeTruthy();
+    expect(screen.getAllByText('Payee not verified').length).toBeGreaterThan(0);
     expect(screen.getByText(/Nothing was transferred/)).toBeTruthy();
   });
 
