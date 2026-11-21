@@ -18,6 +18,7 @@ import { absoluteLink, REQUEST_NOTE_MAX, requestPath, type ReleaseReply } from '
 import { Button, CopyButton, Field, Modal, ModePill, Notice, SampleTag, TextArea, TxExplorerLink } from '../ui';
 import { TxDone, TxFailed, TxPending } from '../state/TxStatus';
 import { AllocatedSpending } from './AllocatedSpending';
+import { restoreFromAssembled } from '../../lib/restore';
 import './AwardCard.css';
 
 interface AwardCardProps {
@@ -144,6 +145,7 @@ function ReleaseSheet({
 
       const assembled = await client!.release({ recipient, attestation: attestationBuf!, attester });
       return {
+        restore: restoreFromAssembled(assembled),
         signAndSend: async (options: Parameters<typeof assembled.signAndSend>[0]) => {
           const sent = await assembled.signAndSend(options);
           const amount = sent.result.unwrap();

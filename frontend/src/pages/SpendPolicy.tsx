@@ -17,6 +17,7 @@ import { looksLikeAddress, truncateAddress } from '../lib/format';
 import { extractCode } from '../lib/errors';
 import { formatPeriod, summarisePolicy } from '../lib/policySummary';
 import { fetchTokenName, parseTokenName } from '../lib/token';
+import { restoreFromAssembled } from '../lib/restore';
 import './SpendPolicy.css';
 
 const SECONDS_PER_DAY = 86_400n;
@@ -183,6 +184,7 @@ export const SpendPolicy = () => {
         tx as unknown as { simulationResponse?: { minResourceFee?: string | number | bigint } }
       ).simulationResponse?.minResourceFee;
       return {
+        restore: restoreFromAssembled(tx),
         estimatedFee: rawFee !== undefined ? BigInt(rawFee) : undefined,
         signAndSend: async (options) => {
           const sent = await tx.signAndSend(options);
@@ -226,6 +228,7 @@ export const SpendPolicy = () => {
         tx as unknown as { simulationResponse?: { minResourceFee?: string | number | bigint } }
       ).simulationResponse?.minResourceFee;
       return {
+        restore: restoreFromAssembled(tx),
         estimatedFee: rawFee !== undefined ? BigInt(rawFee) : undefined,
         signAndSend: async (options) => {
           const sent = await tx.signAndSend(options);

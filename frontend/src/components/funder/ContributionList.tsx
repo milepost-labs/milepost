@@ -14,6 +14,7 @@ import { formatFigure, shortId } from '../../lib/programmeView';
 import { MoneyRow } from '../programme/MoneyRow';
 import { TxSheet } from '../state/TxSheet';
 import { Button, CopyButton, PhaseBadge, SampleTag, TxExplorerLink } from '../ui';
+import { restoreFromAssembled } from '../../lib/restore';
 
 export interface ContributionListProps {
   cards: ContributionCard[];
@@ -74,6 +75,7 @@ function RefundSheet({
         assembled as unknown as { simulationResponse?: { minResourceFee?: string | number | bigint } }
       ).simulationResponse?.minResourceFee;
       return {
+        restore: restoreFromAssembled(assembled),
         estimatedFee: rawFee !== undefined ? BigInt(rawFee) : undefined,
         signAndSend: async (options: Parameters<typeof assembled.signAndSend>[0]) => {
           const sent = await assembled.signAndSend(options);

@@ -17,7 +17,7 @@ export function txSteps(phase: TransactionPhase, network = 'Stellar testnet'): {
   // The first step names what is happening while it happens, and what was
   // done once it has.
   const labels = [
-    at > 0 ? 'Built and checked' : 'Building and checking',
+    phase === 'restoring' ? 'Restoring archived data' : at > 0 ? 'Built and checked' : 'Building and checking',
     'Waiting for your signature',
     `Confirming on ${network}`,
   ];

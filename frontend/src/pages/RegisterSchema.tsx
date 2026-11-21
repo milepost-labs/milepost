@@ -15,6 +15,7 @@ import { TxSheet } from '../components/state/TxSheet';
 import { SignInSheet } from '../components/layout/SignInSheet';
 import { lookupSchemaChain, parseSchemaUid, type SchemaRecord } from '../lib/schemaLookup';
 import { SCHEMA_NAME_ERROR, buildSchemaDefinition, isValidSchemaName, type FixtureSchema } from '../fixtures/schemaFixtures';
+import { restoreFromAssembled } from '../lib/restore';
 import './RegisterSchema.css';
 
 const HEX_32_BYTES = /^(0x)?[0-9a-fA-F]{64}$/;
@@ -106,6 +107,7 @@ export const RegisterSchema = () => {
         built as unknown as { simulationResponse?: { minResourceFee?: string | number | bigint } }
       ).simulationResponse?.minResourceFee;
       return {
+        restore: restoreFromAssembled(built),
         estimatedFee: rawFee !== undefined ? BigInt(rawFee) : undefined,
         signAndSend: async (options: Parameters<typeof built.signAndSend>[0]) => {
           const sent = await built.signAndSend(options);

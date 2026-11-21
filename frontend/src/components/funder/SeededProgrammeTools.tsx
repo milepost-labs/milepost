@@ -12,6 +12,7 @@ import { Button, Modal } from '../ui';
 import { ErrorPanel } from '../state/AsyncStates';
 import { DonorContributionReceipt } from './DonorContributionReceipt';
 import { PausedBanner } from '../programme/PausedBanner';
+import { restoreFromAssembled } from '../../lib/restore';
 import './Funding.css';
 
 /**
@@ -56,6 +57,7 @@ export function SeededProgrammeTools() {
     const result = await cancelTx.send(async () => {
       const tx = await programme.cancel();
       return {
+        restore: restoreFromAssembled(tx),
         signAndSend: async (options: Parameters<typeof tx.signAndSend>[0]) => {
           const sent = await tx.signAndSend(options);
           return { result: sent.result.unwrap() };
@@ -74,6 +76,7 @@ export function SeededProgrammeTools() {
     const result = await pauseTx.send(async () => {
       const tx = paused.data ? await programme.unpause() : await programme.pause();
       return {
+        restore: restoreFromAssembled(tx),
         signAndSend: async (options: Parameters<typeof tx.signAndSend>[0]) => {
           const sent = await tx.signAndSend(options);
           return { result: sent.result.unwrap() };

@@ -2,6 +2,7 @@ import React, { useEffect, useRef } from 'react';
 import { Navbar } from './Navbar';
 import { Outlet, useLocation } from 'react-router-dom';
 import { AnnouncerProvider } from '../../context/AnnouncerContext';
+import { RestoreConsentHost } from '../state/RestoreConsent';
 import { useAnnouncer } from '../../context/useAnnouncer';
 import { OfflineBanner } from './OfflineBanner';
 import './Layout.css';
@@ -74,6 +75,7 @@ export const Layout: React.FC = () => {
           <Outlet />
         </main>
       </div>
+      <RestoreConsentHost />
     </AnnouncerProvider>
   );
 };

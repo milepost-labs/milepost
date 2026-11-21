@@ -1,6 +1,8 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { useWallet } from '../context/useWallet';
 import { explain, type ContractName, type Explained } from '../lib/errors';
+import { restoreOf, type RestoreStep } from '../lib/restore';
+import { requestRestoreConsent } from '../lib/restoreConsent';
 
 /**
  * One way to send a transaction.
@@ -14,11 +16,16 @@ import { explain, type ContractName, type Explained } from '../lib/errors';
  * on the wrong network, build and simulate, optionally pause to show the
  * simulated fee, sign, submit, then let the caller refresh whatever the
  * transaction changed.
+ *
+ * When the simulation says archived entries must be restored first, it asks
+ * once (through the layout's restore prompt), sends the restore, then builds
+ * and simulates the original again. Declining sends nothing.
  */
 
 export type TransactionPhase =
   | 'idle'
   | 'building'
+  | 'restoring'
   | 'confirming'
   | 'signing'
   | 'submitting'
@@ -32,6 +39,12 @@ export interface Sendable<T> {
   }) => Promise<{ result: T }>;
   /** Simulation fee in stroops, when the binding exposes it. */
   estimatedFee?: bigint;
+  /**
+   * Archived entries the write needs restored first. Wrappers around an
+   * assembled transaction pass `restoreFromAssembled(assembled)`; an
+   * assembled transaction sent as is is checked directly.
+   */
+  restore?: RestoreStep | null;
 }
 
 export interface TransactionState<T> {
@@ -130,6 +143,29 @@ export function useTransaction<T = unknown>(
     return true;
   }, [wallet.address, wallet.status, wallet.networkError, wallet.network, wallet.expectedNetwork, onError]);
 
+  /**
+   * Builds and simulates. When the simulation asks for archived entries to be
+   * restored first, asks once, sends the restore, then builds again — the
+   * restore moved the account's sequence on.
+   */
+  const buildRestoring = useCallback(
+    async (build: () => Promise<Sendable<T>>): Promise<Sendable<T>> => {
+      const transaction = await build();
+      const restore = restoreOf(transaction);
+      if (!restore) return transaction;
+      const consent = await requestRestoreConsent(restore.feeStroops);
+      if (consent === null) throw new Error('Expired state: the restore preamble needs restoring first.');
+      if (!consent) throw new Error('RestoreDeclined');
+      setPhase('restoring');
+      await restore.run(wallet.signTransaction);
+      setPhase('building');
+      const rebuilt = await build();
+      if (restoreOf(rebuilt)) throw new Error('Expired state: entries are still archived after the restore.');
+      return rebuilt;
+    },
+    [wallet.signTransaction],
+  );
+
   const prepare = useCallback(
     async (build: () => Promise<Sendable<T>>): Promise<boolean> => {
       if (inFlight.current) return false;
@@ -143,7 +179,7 @@ export function useTransaction<T = unknown>(
 
       try {
         setPhase('building');
-        const transaction = await build();
+        const transaction = await buildRestoring(build);
         const fee = extractFee(transaction);
         if (fee !== null) setEstimatedFee(fee);
         preparedRef.current = transaction;
@@ -159,7 +195,7 @@ export function useTransaction<T = unknown>(
         inFlight.current = false;
       }
     },
-    [checkWalletReady, contract, onError],
+    [checkWalletReady, buildRestoring, contract, onError],
   );
 
   const confirm = useCallback(async (): Promise<T | null> => {
@@ -208,7 +244,7 @@ export function useTransaction<T = unknown>(
         // Building also simulates, so most contract errors surface here —
         // before anything is signed, which is the good place for them.
         setPhase('building');
-        const transaction = await build();
+        const transaction = await buildRestoring(build);
         const fee = extractFee(transaction);
         if (fee !== null) setEstimatedFee(fee);
 
@@ -235,12 +271,12 @@ export function useTransaction<T = unknown>(
         inFlight.current = false;
       }
     },
-    [checkWalletReady, wallet.signTransaction, contract, onSuccess, onError],
+    [checkWalletReady, buildRestoring, wallet.signTransaction, contract, onSuccess, onError],
   );
 
   return {
     phase,
-    busy: phase === 'building' || phase === 'signing' || phase === 'submitting',
+    busy: phase === 'building' || phase === 'restoring' || phase === 'signing' || phase === 'submitting',
     error,
     result,
     estimatedFee,
@@ -257,6 +293,8 @@ export function phaseLabel(phase: string): string {
   switch (phase) {
     case 'building':
       return 'Preparing…';
+    case 'restoring':
+      return 'Restoring archived data…';
     case 'confirming':
       return 'Ready to sign';
     case 'signing':

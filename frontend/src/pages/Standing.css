@@ -38,6 +38,13 @@
   min-height: var(--tap-min);
 }
 
+.standing-viewer__actions {
+  display: inline-flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+}
+
 .standing-viewer__label {
   font-size: var(--text-sm);
   font-weight: var(--weight-bold);
