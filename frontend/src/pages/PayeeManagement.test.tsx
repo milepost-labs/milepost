@@ -181,6 +181,25 @@ const PROGRAMME_ID = `C${'A'.repeat(55)}`;
 const mocks = vi.hoisted(() => ({
   address: null as string | null,
   announce: vi.fn(),
+  metadata: {
+    status: 'ok' as const,
+    doc: {
+      schema_version: '1.1.0',
+      name: 'Clinic grants',
+      description: 'Clinic stipends',
+      vertical: 'health',
+      contact: { name: 'Kano', email: 'kano@example.org' },
+      labels: [
+        { address: 'GAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA', role: 'payee', label: 'St Jude Hospital' },
+        { address: 'GBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB', role: 'payee', label: 'City Clinic' },
+        { address: 'GCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCC', role: 'reviewer', label: 'Reviewer Account' },
+      ],
+    },
+  } as any,
+}));
+
+vi.mock('../hooks/useProgrammeMetadata', () => ({
+  useProgrammeMetadata: () => mocks.metadata,
 }));
 
 vi.mock('../context/useWallet', () => ({
@@ -209,7 +228,7 @@ function sendable<T>(result: T) {
 
 function makeProgramme() {
   return {
-    get_config: vi.fn(() => unwrap({ creator: CREATOR })),
+    get_config: vi.fn(() => unwrap({ creator: CREATOR, metadata_hash: new Uint8Array(32) })),
     is_payee: vi.fn(async ({ payee }: { payee: string }) => ({ result: payee === VALID_C })),
     allow_payees: vi.fn<(args: { payees: string[] }) => ReturnType<typeof sendable>>(() => sendable(undefined)),
     deny_payees: vi.fn<(args: { payees: string[] }) => ReturnType<typeof sendable>>(() => sendable(undefined)),
@@ -482,6 +501,77 @@ describe('Issue #439 - Real vs Sample programmes payee management', () => {
     await waitFor(() => {
       expect(screen.getByText('Sample Payee Clinic')).toBeDefined();
       expect(screen.getByText('Sample data')).toBeDefined();
+    });
+  });
+
+  describe('creator payee names (Issue #632)', () => {
+    it('shows creator payee names beside addresses with on-chain verification status', async () => {
+      // VALID_C is verified; VALID_A is verified; VALID_B is not verified
+      programme.is_payee.mockImplementation(async ({ payee }: { payee: string }) => ({
+        result: payee === VALID_A,
+      }));
+
+      await renderPage();
+
+      await waitFor(() => {
+        expect(screen.getByText('Named by the creator')).toBeDefined();
+      });
+
+      // VALID_A is named and verified
+      expect(screen.getByText('St Jude Hospital')).toBeDefined();
+      expect(screen.getByText('Verified payee')).toBeDefined();
+
+      // VALID_B is named but not verified, says so in words
+      expect(screen.getByText('City Clinic')).toBeDefined();
+      expect(screen.getByText('Not a verified payee')).toBeDefined();
+
+      // VALID_C has role reviewer, so it is ignored and not listed under named payees
+      expect(screen.queryByText('Reviewer Account')).toBeNull();
+    });
+
+    it('shows creator name beside address in check address result and ignores other roles', async () => {
+      programme.is_payee.mockImplementation(async ({ payee }: { payee: string }) => ({
+        result: payee === VALID_A,
+      }));
+
+      await renderPage();
+
+      const input = screen.getByLabelText('Check payee address');
+      // Check VALID_A (named payee)
+      fireEvent.change(input, { target: { value: VALID_A } });
+      fireEvent.click(screen.getByRole('button', { name: 'Check address' }));
+
+      await waitFor(() => {
+        expect(screen.getByText('St Jude Hospital')).toBeDefined();
+        expect(screen.getByText('Verified on-chain')).toBeDefined();
+      });
+
+      // Check VALID_B (named but not verified)
+      fireEvent.change(input, { target: { value: VALID_B } });
+      fireEvent.click(screen.getByRole('button', { name: 'Check address' }));
+
+      await waitFor(() => {
+        expect(screen.getByText('City Clinic')).toBeDefined();
+        expect(screen.getByText('Not a verified payee')).toBeDefined();
+      });
+
+      // Check unnamed address
+      const UNNAMED = 'GD6X33SKLUEMANS67ID3LJL572FFGERMMJCIFRW7P7EKZQLH35XT67C6';
+      fireEvent.change(input, { target: { value: UNNAMED } });
+      fireEvent.click(screen.getByRole('button', { name: 'Check address' }));
+
+      await waitFor(() => {
+        expect(screen.queryByText('St Jude Hospital')).toBeNull();
+        expect(screen.queryByText('City Clinic')).toBeNull();
+      });
+    });
+
+    it('does not display creator names when metadata is unavailable or loading', async () => {
+      mocks.metadata = { status: 'unavailable', reason: 'failed' };
+      await renderPage();
+
+      expect(screen.queryByText('Named by the creator')).toBeNull();
+      expect(screen.queryByText('St Jude Hospital')).toBeNull();
     });
   });
 });

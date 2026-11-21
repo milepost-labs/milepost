@@ -21,6 +21,24 @@ const mocks = vi.hoisted(() => ({
   address: null as string | null,
   announce: vi.fn(),
   isInstalled: vi.fn(),
+  metadata: {
+    status: 'ok' as const,
+    doc: {
+      schema_version: '1.1.0',
+      name: 'Programme',
+      description: 'Desc',
+      vertical: 'health',
+      contact: { name: 'Trust', email: 'test@example.com' },
+      labels: [
+        { address: PAYEE, role: 'payee', label: 'St Jude Hospital' },
+        { address: WALLET, role: 'reviewer', label: 'Reviewer Wallet' },
+      ],
+    },
+  } as any,
+}));
+
+vi.mock('../hooks/useProgrammeMetadata', () => ({
+  useProgrammeMetadata: () => mocks.metadata,
 }));
 
 vi.mock('../context/useWallet', () => ({
@@ -288,5 +306,68 @@ describe('FinalizeAwards — a sample programme', () => {
     fireEvent.click(within(sheet).getByRole('button', { name: 'Finalize award' }));
     await waitFor(() => expect(within(sheet).getByText(/The award is fixed/)).toBeTruthy(), { timeout: 3000 });
     expect(programme.finalize).not.toHaveBeenCalled();
+  });
+
+  describe('creator payee names in FinalizeSheet (Issue #632)', () => {
+    it('shows creator payee name beside address and verified badge when is_payee is true', async () => {
+      programme.is_payee.mockResolvedValue({ result: true });
+      const sheet = await openSheet();
+
+      fireEvent.click(within(sheet).getByRole('radio', { name: /Direct/ }));
+      fireEvent.change(within(sheet).getByLabelText('Verified payee'), { target: { value: PAYEE } });
+
+      await waitFor(() => {
+        expect(within(sheet).getByText('St Jude Hospital')).toBeDefined();
+        expect(within(sheet).getByText('Verified payee')).toBeDefined();
+      });
+    });
+
+    it('says "Not a verified payee" in words when named payee is not verified on chain', async () => {
+      programme.is_payee.mockResolvedValue({ result: false });
+      const sheet = await openSheet();
+
+      fireEvent.click(within(sheet).getByRole('radio', { name: /Direct/ }));
+      fireEvent.change(within(sheet).getByLabelText('Verified payee'), { target: { value: PAYEE } });
+
+      await waitFor(() => {
+        expect(within(sheet).getByText('St Jude Hospital')).toBeDefined();
+        expect(within(sheet).getAllByText('Not a verified payee').length).toBeGreaterThan(0);
+      });
+    });
+
+    it('shows no creator name for an unnamed address', async () => {
+      const UNNAMED_PAYEE = `GPAY${'Z'.repeat(52)}`;
+      const sheet = await openSheet();
+
+      fireEvent.click(within(sheet).getByRole('radio', { name: /Direct/ }));
+      fireEvent.change(within(sheet).getByLabelText('Verified payee'), { target: { value: UNNAMED_PAYEE } });
+
+      await waitFor(() => {
+        expect(within(sheet).queryByText('St Jude Hospital')).toBeNull();
+      });
+    });
+
+    it('ignores labels for the same address with a different role', async () => {
+      const sheet = await openSheet();
+
+      fireEvent.click(within(sheet).getByRole('radio', { name: /Direct/ }));
+      fireEvent.change(within(sheet).getByLabelText('Verified payee'), { target: { value: WALLET } });
+
+      await waitFor(() => {
+        expect(within(sheet).queryByText('Reviewer Wallet')).toBeNull();
+      });
+    });
+
+    it('does not display creator payee name when metadata is unavailable', async () => {
+      mocks.metadata = { status: 'unavailable', reason: 'failed' };
+      const sheet = await openSheet();
+
+      fireEvent.click(within(sheet).getByRole('radio', { name: /Direct/ }));
+      fireEvent.change(within(sheet).getByLabelText('Verified payee'), { target: { value: PAYEE } });
+
+      await waitFor(() => {
+        expect(within(sheet).queryByText('St Jude Hospital')).toBeNull();
+      });
+    });
   });
 });

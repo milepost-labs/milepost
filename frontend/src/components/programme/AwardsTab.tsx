@@ -2,11 +2,13 @@ import type { FC } from 'react';
 import { useCallback, useContext, useMemo } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
 import { ChevronLeft, ChevronRight, Download } from 'lucide-react';
-import type { Award } from '@milepost/program';
+import { Buffer } from 'buffer';
+import type { Award, ProgrammeConfig } from '@milepost/program';
 import type { IndexedAward } from '../../lib/indexer';
 import { fetchAwards } from '../../lib/indexer';
 import { useIndexedList } from '../../hooks/useIndexedList';
 import { useContractResult } from '../../hooks/useContractRead';
+import { useProgrammeMetadata } from '../../hooks/useProgrammeMetadata';
 import { SorobanContext } from '../../context/sorobanStore';
 import { formatAmount, parseAmount, describeAmount } from '../../lib/amount';
 import { awardsToCsv, downloadFile } from '../../lib/csv';
@@ -56,6 +58,7 @@ export interface AwardRowItemProps {
   programmeId: string;
   isSample: boolean;
   asset: string;
+  payeeNames?: Map<string, string>;
 }
 
 export const AwardRowItem: FC<AwardRowItemProps> = ({
@@ -63,6 +66,7 @@ export const AwardRowItem: FC<AwardRowItemProps> = ({
   programmeId,
   isSample,
   asset,
+  payeeNames,
 }) => {
   const soroban = useContext(SorobanContext);
   const programme = useMemo(() => {
@@ -73,6 +77,36 @@ export const AwardRowItem: FC<AwardRowItemProps> = ({
       return null;
     }
   }, [soroban, programmeId, isSample]);
+
+  const standaloneConfig = useContractResult<ProgrammeConfig>(
+    () => programme!.get_config(),
+    [programme],
+    { enabled: Boolean(programme && !payeeNames) },
+  );
+  const standaloneHashHex = standaloneConfig.data
+    ? Buffer.from(standaloneConfig.data.metadata_hash).toString('hex')
+    : null;
+  const standaloneMetadata = useProgrammeMetadata(payeeNames ? null : standaloneHashHex);
+
+  const effectivePayeeNames = useMemo(() => {
+    if (payeeNames) return payeeNames;
+    if (standaloneMetadata?.status !== 'ok' || !standaloneMetadata.doc.labels) return new Map<string, string>();
+    const map = new Map<string, string>();
+    for (const l of standaloneMetadata.doc.labels) {
+      if (l.role === 'payee' && l.label?.trim()) {
+        map.set(l.address.trim(), l.label.trim());
+      }
+    }
+    return map;
+  }, [payeeNames, standaloneMetadata]);
+
+  const payeeName = award.payee ? effectivePayeeNames.get(award.payee.trim()) : undefined;
+
+  const isPayee = useContractResult<boolean>(
+    () => programme!.is_payee({ payee: award.payee! }),
+    [programme, award.payee],
+    { enabled: Boolean(programme && award.payee && payeeName) },
+  );
 
   const chainAward = useContractResult<Award>(
     () => programme!.get_award({ recipient: award.recipient }),
@@ -157,9 +191,29 @@ export const AwardRowItem: FC<AwardRowItemProps> = ({
       </td>
       <td data-label="Payee">
         {award.payee ? (
-          <span className="awards-tab__payee numeric" title={award.payee}>
-            {shortAddress(award.payee)}
-          </span>
+          payeeName ? (
+            <span className="awards-tab__payee-wrap">
+              <span className="awards-tab__payee-name">
+                {payeeName} <span className="awards-tab__claim-tag">(creator’s claim)</span>
+              </span>
+              <span className="awards-tab__payee numeric" title={award.payee}>
+                {shortAddress(award.payee)}
+              </span>
+              {isPayee.loading ? (
+                <Badge tone="neutral">Checking…</Badge>
+              ) : isPayee.data === true ? (
+                <Badge tone="success">Verified payee</Badge>
+              ) : isPayee.data === false ? (
+                <Badge tone="danger">Not a verified payee</Badge>
+              ) : isPayee.error ? (
+                <Badge tone="warning">Couldn’t check</Badge>
+              ) : null}
+            </span>
+          ) : (
+            <span className="awards-tab__payee numeric" title={award.payee}>
+              {shortAddress(award.payee)}
+            </span>
+          )
         ) : (
           <span className="awards-tab__muted">Not set</span>
         )}
@@ -252,6 +306,37 @@ export const AwardsTab: FC<AwardsTabProps> = ({
     () => allAwards.slice((clampedPage - 1) * PAGE_SIZE, clampedPage * PAGE_SIZE),
     [allAwards, clampedPage],
   );
+
+  const soroban = useContext(SorobanContext);
+  const programme = useMemo(() => {
+    if (!soroban || !programmeId || sample) return null;
+    try {
+      return soroban.programmeAt(programmeId);
+    } catch {
+      return null;
+    }
+  }, [soroban, programmeId, sample]);
+
+  const config = useContractResult<ProgrammeConfig>(
+    () => programme!.get_config(),
+    [programme],
+    { enabled: Boolean(programme) },
+  );
+  const hashHex = config.data
+    ? Buffer.from(config.data.metadata_hash).toString('hex')
+    : null;
+  const metadata = useProgrammeMetadata(hashHex);
+
+  const payeeNames = useMemo(() => {
+    if (metadata?.status !== 'ok' || !metadata.doc.labels) return new Map<string, string>();
+    const map = new Map<string, string>();
+    for (const l of metadata.doc.labels) {
+      if (l.role === 'payee' && l.label?.trim()) {
+        map.set(l.address.trim(), l.label.trim());
+      }
+    }
+    return map;
+  }, [metadata]);
 
   const handlePage = useCallback(
     (next: number) => {
@@ -357,6 +442,7 @@ export const AwardsTab: FC<AwardsTabProps> = ({
                   programmeId={programmeId}
                   isSample={isSample}
                   asset={asset}
+                  payeeNames={payeeNames}
                 />
               ))}
             </tbody>

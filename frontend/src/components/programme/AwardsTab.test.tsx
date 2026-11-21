@@ -47,7 +47,33 @@ vi.mock('../../hooks/useIndexedList', () => ({
   }),
 }));
 
-const createSorobanContext = (getAwardFn: unknown): SorobanState =>
+const NAMED_PAYEE = 'GBBD47IF6LWK7P7MDEVSCWR7DPUWV3NY3DTQEVFL4NAT4AQH3ZLLFLA5';
+const UNVERIFIED_PAYEE = 'GCSW2JNZG3XY6Q5Q4QNY7QXZV7WQZ6WXYZ6QWXYZ6QWXYZ6QWXYZ6QWX';
+const REVIEWER_ADDR = 'GD6X33SKLUEMANS67ID3LJL572FFGERMMJCIFRW7P7EKZQLH35XT67C6';
+
+const metadataMock = vi.hoisted(() => ({
+  value: {
+    status: 'ok' as const,
+    doc: {
+      schema_version: '1.1.0',
+      name: 'Test',
+      description: 'Desc',
+      vertical: 'health',
+      contact: { name: 'Trust', email: 't@example.com' },
+      labels: [
+        { address: NAMED_PAYEE, role: 'payee', label: 'St Jude Hospital' },
+        { address: UNVERIFIED_PAYEE, role: 'payee', label: 'Unverified Pharmacy' },
+        { address: REVIEWER_ADDR, role: 'reviewer', label: 'Ignored Reviewer' },
+      ],
+    },
+  } as any,
+}));
+
+vi.mock('../../hooks/useProgrammeMetadata', () => ({
+  useProgrammeMetadata: () => metadataMock.value,
+}));
+
+const createSorobanContext = (getAwardFn: unknown, isPayeeFn?: unknown): SorobanState =>
   ({
     registry: {},
     attest: {},
@@ -55,6 +81,8 @@ const createSorobanContext = (getAwardFn: unknown): SorobanState =>
     policy: {},
     programmeAt: () => ({
       get_award: getAwardFn,
+      get_config: vi.fn().mockResolvedValue({ result: { unwrap: () => ({ metadata_hash: new Uint8Array(32) }) } }),
+      is_payee: isPayeeFn ?? vi.fn().mockResolvedValue({ result: true }),
     }),
     demoProgramme: {},
     rpcUrl: 'https://soroban-testnet.stellar.org',
@@ -76,10 +104,11 @@ function renderTab(
       }),
     },
   }),
+  isPayeeFn?: unknown,
 ) {
   return render(
     <MemoryRouter initialEntries={[url]}>
-      <SorobanContext.Provider value={createSorobanContext(getAwardFn)}>
+      <SorobanContext.Provider value={createSorobanContext(getAwardFn, isPayeeFn)}>
         <AwardsTab programmeId={PROG_ID} asset="USDC" {...props} />
       </SorobanContext.Provider>
     </MemoryRouter>,
@@ -283,5 +312,124 @@ describe('Issue #614 — AwardsTab pagination', () => {
     expect(downloads.length).toBe(1);
     // The filename uses the programme id prefix.
     expect(downloads[0]).toMatch(/^awards-CD6X33SK/);
+  });
+
+  describe('creator payee names beside addresses (Issue #632)', () => {
+    it('shows creator name and verified badge when payee is named and verified', async () => {
+      mockedAwards = [
+        {
+          recipient: 'GAAA47IF6LWK7P7MDEVSCWR7DPUWV3NY3DTQEVFL4NAT4AQH3ZLLFLA5',
+          payee: NAMED_PAYEE,
+          mode: 'Direct',
+          granted: '10000000',
+          released: '0',
+          tranches: 1,
+          tranchesReleased: 0,
+          updatedLedger: 100,
+        },
+      ];
+
+      const isPayeeFn = vi.fn().mockResolvedValue({ result: true });
+      renderTab({}, '/', undefined, isPayeeFn);
+
+      await waitFor(() => {
+        expect(screen.getByText('St Jude Hospital')).toBeDefined();
+        expect(screen.getByText('Verified payee')).toBeDefined();
+        // Address remains visible
+        expect(screen.getByTitle(NAMED_PAYEE)).toBeDefined();
+      });
+    });
+
+    it('says "Not a verified payee" in words when named payee is not verified on chain', async () => {
+      mockedAwards = [
+        {
+          recipient: 'GAAA47IF6LWK7P7MDEVSCWR7DPUWV3NY3DTQEVFL4NAT4AQH3ZLLFLA5',
+          payee: UNVERIFIED_PAYEE,
+          mode: 'Direct',
+          granted: '10000000',
+          released: '0',
+          tranches: 1,
+          tranchesReleased: 0,
+          updatedLedger: 100,
+        },
+      ];
+
+      const isPayeeFn = vi.fn().mockResolvedValue({ result: false });
+      renderTab({}, '/', undefined, isPayeeFn);
+
+      await waitFor(() => {
+        expect(screen.getByText('Unverified Pharmacy')).toBeDefined();
+        expect(screen.getByText('Not a verified payee')).toBeDefined();
+        expect(screen.getByTitle(UNVERIFIED_PAYEE)).toBeDefined();
+      });
+    });
+
+    it('shows bare address as before when payee is unnamed', async () => {
+      const UNNAMED_ADDR = 'GDEF47IF6LWK7P7MDEVSCWR7DPUWV3NY3DTQEVFL4NAT4AQH3ZLLFLA5';
+      mockedAwards = [
+        {
+          recipient: 'GAAA47IF6LWK7P7MDEVSCWR7DPUWV3NY3DTQEVFL4NAT4AQH3ZLLFLA5',
+          payee: UNNAMED_ADDR,
+          mode: 'Direct',
+          granted: '10000000',
+          released: '0',
+          tranches: 1,
+          tranchesReleased: 0,
+          updatedLedger: 100,
+        },
+      ];
+
+      renderTab();
+
+      await waitFor(() => {
+        expect(screen.getByTitle(UNNAMED_ADDR)).toBeDefined();
+        expect(screen.queryByText('St Jude Hospital')).toBeNull();
+      });
+    });
+
+    it('ignores labels for the same address with a different role', async () => {
+      mockedAwards = [
+        {
+          recipient: 'GAAA47IF6LWK7P7MDEVSCWR7DPUWV3NY3DTQEVFL4NAT4AQH3ZLLFLA5',
+          payee: REVIEWER_ADDR,
+          mode: 'Direct',
+          granted: '10000000',
+          released: '0',
+          tranches: 1,
+          tranchesReleased: 0,
+          updatedLedger: 100,
+        },
+      ];
+
+      renderTab();
+
+      await waitFor(() => {
+        expect(screen.getByTitle(REVIEWER_ADDR)).toBeDefined();
+        expect(screen.queryByText('Ignored Reviewer')).toBeNull();
+      });
+    });
+
+    it('does not show creator names when metadata status is not ok', async () => {
+      metadataMock.value = { status: 'unavailable', reason: 'failed' };
+      mockedAwards = [
+        {
+          recipient: 'GAAA47IF6LWK7P7MDEVSCWR7DPUWV3NY3DTQEVFL4NAT4AQH3ZLLFLA5',
+          payee: NAMED_PAYEE,
+          mode: 'Direct',
+          granted: '10000000',
+          released: '0',
+          tranches: 1,
+          tranchesReleased: 0,
+          updatedLedger: 100,
+        },
+      ];
+
+      renderTab();
+
+      await waitFor(() => {
+        expect(screen.getByTitle(NAMED_PAYEE)).toBeDefined();
+        expect(screen.queryByText('St Jude Hospital')).toBeNull();
+      });
+    });
   });
 });
