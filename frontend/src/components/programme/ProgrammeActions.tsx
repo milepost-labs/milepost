@@ -6,6 +6,7 @@ import { SignInSheet } from '../layout/SignInSheet';
 import { isPhase } from '../../lib/phaseGate';
 import { programmeActions } from '../../lib/programmeActions';
 import { Button, DisabledReason } from '../ui';
+import { CreatorActions } from './CreatorActions';
 import './ProgrammeActions.css';
 
 export interface ProgrammeActionsProps {
@@ -26,6 +27,10 @@ export interface ProgrammeActionsProps {
    * errors never grant unverified programmes write access.
    */
   verified: boolean | null;
+  /** `get_config().creator`. The Creator group shows only when the signed-in address matches. */
+  creator?: string | null;
+  /** Called after a creator write lands, so the page re-reads what it changed. */
+  onChanged?: () => void;
 }
 
 /**
@@ -41,10 +46,19 @@ export interface ProgrammeActionsProps {
  * reading), every write action is disabled and a warning banner explains why,
  * linking to the directory where trustworthy programmes can be found.
  */
-export function ProgrammeActions({ programmeId, phase, refundsOpen, refundable, verified }: ProgrammeActionsProps) {
+export function ProgrammeActions({
+  programmeId,
+  phase,
+  refundsOpen,
+  refundable,
+  verified,
+  creator = null,
+  onChanged,
+}: ProgrammeActionsProps) {
   const { address } = useWallet();
   const [signInOpen, setSignInOpen] = useState(false);
   const signedIn = Boolean(address);
+  const isCreator = Boolean(address && creator && address === creator);
 
   const actions = programmeActions({
     programmeId,
@@ -145,6 +159,10 @@ export function ProgrammeActions({ programmeId, phase, refundsOpen, refundable, 
           );
         })}
       </ul>
+
+      {isCreator && (
+        <CreatorActions programmeId={programmeId} phase={phase} verified={verified} onChanged={() => onChanged?.()} />
+      )}
 
       <div className="programme-actions__manage">
         <Link
