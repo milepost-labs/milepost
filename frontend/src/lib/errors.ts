@@ -133,6 +133,26 @@ const POLICY: Table = {
   11: { kind: 'none', message: 'That payee was not on the allowlist.' },
 };
 
+/**
+ * Where an error means something different from its usual table entry. The
+ * program contract reuses one `BatchTooLarge` (36) for payee batches and for
+ * `release_batch`, and the payee wording would be wrong for a recipient
+ * releasing tranches.
+ */
+export type ExplainContext = 'release-batch';
+
+const CONTEXT: Record<ExplainContext, Partial<Record<ContractName, Table>>> = {
+  'release-batch': {
+    program: {
+      36: {
+        kind: 'invalid',
+        message: 'That is too many proofs for one release batch.',
+        action: 'A batch takes at most 50 proofs, and no more than the tranches left on the award. Remove some and try again.',
+      },
+    },
+  },
+};
+
 const TABLES: Record<ContractName, Table> = {
   program: PROGRAM,
   attest: ATTEST,
@@ -173,8 +193,8 @@ export function extractCode(error: unknown): number | null {
 }
 
 /** Translate a raw contract error code. */
-export function explainCode(contract: ContractName, code: number): Explained {
-  const entry = TABLES[contract][code];
+export function explainCode(contract: ContractName, code: number, context?: ExplainContext): Explained {
+  const entry = (context && CONTEXT[context][contract]?.[code]) || TABLES[contract][code];
   return entry ? { ...entry, code, contract } : { ...UNKNOWN, code, contract };
 }
 
@@ -185,7 +205,11 @@ export function explainCode(contract: ContractName, code: number): Explained {
  * signature, which is a choice rather than a failure, and an unreachable
  * network.
  */
-export function explain(error: unknown, contract: ContractName = 'program'): Explained {
+export function explain(
+  error: unknown,
+  contract: ContractName = 'program',
+  context?: ExplainContext,
+): Explained {
   const text = (() => {
     if (typeof error === 'string') return error;
     if (error instanceof Error) return error.message;
@@ -227,7 +251,7 @@ export function explain(error: unknown, contract: ContractName = 'program'): Exp
   }
 
   const code = extractCode(error);
-  return code === null ? { ...UNKNOWN } : explainCode(contract, code);
+  return code === null ? { ...UNKNOWN } : explainCode(contract, code, context);
 }
 
 /** Whether this should be shown as a failure at all. */
