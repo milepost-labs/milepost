@@ -132,11 +132,13 @@ describe('Issue #264 - WhereTheMoneyIs component', () => {
 describe('Issue #265 - AwardsTab component', () => {
   it('states the advisory nature of index data and renders award details with tranche bar', () => {
     render(
-      <AwardsTab
-        programmeId="test-prog-1"
-        phase="Settled"
-        asset="USDC"
-      />,
+      <MemoryRouter>
+        <AwardsTab
+          programmeId="test-prog-1"
+          phase="Settled"
+          asset="USDC"
+        />
+      </MemoryRouter>,
     );
 
     // Advisory note
@@ -167,10 +169,12 @@ describe('Issue #265 - AwardsTab component', () => {
     });
 
     render(
-      <AwardsTab
-        programmeId="empty-prog"
-        phase="Open"
-      />,
+      <MemoryRouter>
+        <AwardsTab
+          programmeId="empty-prog"
+          phase="Open"
+        />
+      </MemoryRouter>,
     );
 
     expect(screen.getByText('No awards yet')).toBeDefined();
@@ -210,11 +214,13 @@ describe('Issue #265 - AwardsTab component', () => {
     });
 
     render(
-      <AwardsTab
-        programmeId={DEMO_PROGRAMME_ID}
-        phase="Settled"
-        isSample
-      />,
+      <MemoryRouter>
+        <AwardsTab
+          programmeId={DEMO_PROGRAMME_ID}
+          phase="Settled"
+          isSample
+        />
+      </MemoryRouter>,
     );
 
     // The index version of the advisory note, and the index's own awards.
@@ -230,11 +236,13 @@ describe('Issue #265 - AwardsTab component', () => {
 
   it('keeps fixture awards and the sample note for a true sample programme', () => {
     render(
-      <AwardsTab
-        programmeId={FIXTURE_PROGRAMMES[0].id}
-        phase="Settled"
-        isSample
-      />,
+      <MemoryRouter>
+        <AwardsTab
+          programmeId={FIXTURE_PROGRAMMES[0].id}
+          phase="Settled"
+          isSample
+        />
+      </MemoryRouter>,
     );
 
     expect(screen.getByText(/Awards use the middle reviewer vote after enough reviewers have voted/)).toBeDefined();

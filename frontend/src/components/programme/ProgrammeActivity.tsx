@@ -1,7 +1,7 @@
 import { useMemo, type FC } from 'react';
 import { History } from 'lucide-react';
 import { activitySentence, type ActivityItem } from '../../lib/programmeActivity';
-import { describeWindow, type EventWindow } from '../../lib/contractEvents';
+import { describeWindow } from '../../lib/contractEvents';
 import { useProgrammeActivity } from '../../hooks/useProgrammeActivity';
 import { programmeAsset, shortId } from '../../lib/programmeView';
 import { FIXTURE_ACTIVITY } from '../../fixtures/activity';
@@ -77,7 +77,7 @@ export const ProgrammeActivityPanel: FC<ProgrammeActivityPanelProps> = ({
         </p>
       )}
 
-      {!sample && read.error && (
+      {!sample && read.error != null && (
         <p className="programme-activity__error" role="alert">
           Could not read recent events from the network.{' '}
           <button

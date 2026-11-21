@@ -113,7 +113,8 @@ export const AwardDetail = () => {
           {(value) => {
             const tranches = Number(value.tranches);
             const released = Number(value.tranches_released);
-            const remaining = Math.max(0, BigInt(value.granted) - BigInt(value.released));
+            const owed = BigInt(value.granted) - BigInt(value.released);
+            const remaining = owed > 0n ? owed : 0n;
             return (
               <>
                 <section className="award-detail__card" aria-labelledby="award-summary-title">
@@ -242,7 +243,7 @@ export const AwardDetail = () => {
         </AsyncView>
       )}
 
-      {configRead.error && (
+      {configRead.error != null && (
         <Notice tone="warn" role="status">
           <span>The programme&apos;s configuration could not be read; the figures above still stand.</span>
         </Notice>

@@ -220,8 +220,8 @@ describe('Issue #614 — AwardsTab pagination', () => {
   it('CSV export downloads all awards, not just the visible page', () => {
     const downloads: string[] = [];
     // Capture the download by stubbing URL.createObjectURL and the anchor click.
-    global.URL.createObjectURL = vi.fn(() => 'blob:test');
-    global.URL.revokeObjectURL = vi.fn();
+    globalThis.URL.createObjectURL = vi.fn(() => 'blob:test');
+    globalThis.URL.revokeObjectURL = vi.fn();
     const origCreate = document.createElement.bind(document);
     vi.spyOn(document, 'createElement').mockImplementation((tag: string) => {
       const el = origCreate(tag);

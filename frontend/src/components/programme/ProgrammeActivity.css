@@ -74,7 +74,7 @@
   content: '';
   position: absolute;
   left: 4px;
-  top: calc(var(--space-1) + 14px);
+  top: var(--space-4); /* just below the dot */
   bottom: 0;
   width: 2px;
   background: var(--line);
