@@ -41,6 +41,14 @@ export type ContractName = 'program' | 'attest' | 'record' | 'registry' | 'polic
 
 type Table = Record<number, Omit<Explained, 'code' | 'contract'>>;
 
+/**
+ * Wording for particular codes when one call means something different by them
+ * than the shared table does. Reuse of an error for a second purpose is common
+ * in the contracts (`RefundsNotOpen` is also "too late to extend"), and a
+ * shared table can only carry one meaning. Pass a module-level constant.
+ */
+export type CodeOverrides = Table;
+
 const PROGRAM: Table = {
   1: { kind: 'denied', message: 'This account is not allowed to do that here.' },
   2: { kind: 'blocked', message: 'The window for this action is not open.', action: 'Check the programme timeline for when it opens or closed.' },
@@ -183,9 +191,13 @@ export function explainCode(contract: ContractName, code: number): Explained {
  *
  * Handles the two non-contract cases that users actually hit: a rejected
  * signature, which is a choice rather than a failure, and an unreachable
- * network.
+ * network. `overrides` re-words specific codes for one call only.
  */
-export function explain(error: unknown, contract: ContractName = 'program'): Explained {
+export function explain(
+  error: unknown,
+  contract: ContractName = 'program',
+  overrides?: CodeOverrides,
+): Explained {
   const text = (() => {
     if (typeof error === 'string') return error;
     if (error instanceof Error) return error.message;
@@ -227,7 +239,9 @@ export function explain(error: unknown, contract: ContractName = 'program'): Exp
   }
 
   const code = extractCode(error);
-  return code === null ? { ...UNKNOWN } : explainCode(contract, code);
+  if (code === null) return { ...UNKNOWN };
+  const override = overrides?.[code];
+  return override ? { ...override, code, contract } : explainCode(contract, code);
 }
 
 /** Whether this should be shown as a failure at all. */

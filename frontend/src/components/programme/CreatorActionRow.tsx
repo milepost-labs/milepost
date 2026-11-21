@@ -14,6 +14,8 @@ export interface CreatorActionRowProps {
   /** Why it is unavailable, or what will happen when it is. */
   reason?: ReactNode;
   onClick: () => void;
+  /** An inline form the action opens beneath its row. */
+  children?: ReactNode;
 }
 
 /**
@@ -32,6 +34,7 @@ export function CreatorActionRow({
   enabled,
   reason,
   onClick,
+  children,
 }: CreatorActionRowProps) {
   const reasonId = `creator-action-why-${id}`;
   return (
@@ -59,6 +62,7 @@ export function CreatorActionRow({
         ) : (
           <DisabledReason id={reasonId}>{reason}</DisabledReason>
         ))}
+      {children}
     </li>
   );
 }

@@ -118,6 +118,26 @@
   color: var(--ink-muted);
 }
 
+/* An inline form a creator action opens beneath its row. */
+.programme-action__form {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: var(--space-3);
+  margin-top: var(--space-3);
+}
+
+.programme-action__form .ui-field {
+  align-self: stretch;
+}
+
+.programme-action__current {
+  margin: 0;
+  font-size: var(--text-caption);
+  line-height: var(--leading-body);
+  color: var(--ink-muted);
+}
+
 .programme-actions__manage {
   display: flex;
   flex-direction: column;

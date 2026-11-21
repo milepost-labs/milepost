@@ -3,6 +3,7 @@ import type { Programme } from '@milepost/program';
 import { useSoroban } from '../../context/useSoroban';
 import { isPhase, type Phase } from '../../lib/phaseGate';
 import { CancelAction } from './CancelAction';
+import { ExtendDeadlineAction } from './ExtendDeadlineAction';
 import { PauseAction } from './PauseAction';
 
 /** What every creator action needs to gate itself and refresh the page. */
@@ -51,6 +52,7 @@ export function CreatorActions({ programmeId, phase, verified, onChanged }: Crea
       <p className="programme-actions__group-note">Only you can see these. You created this programme.</p>
       <ul className="programme-actions__list">
         <PauseAction {...context} />
+        <ExtendDeadlineAction {...context} />
         <CancelAction {...context} />
       </ul>
     </section>
