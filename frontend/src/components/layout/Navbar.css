@@ -96,6 +96,7 @@
   background: var(--signal);
   flex: none;
 }
+.testnet-tag--mainnet { color: var(--ink-muted); }
 .testnet-tag--wrong { background: var(--danger-soft); color: var(--danger); }
 .testnet-tag--wrong .testnet-tag__dot { background: var(--danger); }
 

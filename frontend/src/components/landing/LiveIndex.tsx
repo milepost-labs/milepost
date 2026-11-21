@@ -10,6 +10,7 @@ import {
   type IndexerMeta,
 } from '../../lib/indexer';
 import { timeUntil, truncateAddress } from '../../lib/format';
+import { NETWORK } from '../../config/network';
 import { Button } from '../ui/Button';
 
 interface IndexSnapshot {
@@ -47,7 +48,7 @@ export function LiveIndex() {
       <div className="lp-wrap">
         <div className="lp-live__head">
           <div>
-            <p className="lp-eyebrow">Live on testnet</p>
+            <p className="lp-eyebrow">Live on {NETWORK.name}</p>
             <h2 id="lp-live-title" className="lp-h2 lp-h2--narrow">
               Real figures from the public index.
             </h2>
