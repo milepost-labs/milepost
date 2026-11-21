@@ -3,10 +3,14 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 // `api/metadata.ts`'s `backend` talks to Vercel Blob through `head`/`fetch`/`put`.
 // Mocked here so these tests never touch the network, per the project's rule
 // that nothing may touch the network in tests.
-class MockBlobNotFoundError extends Error {}
-
-const mockHead = vi.fn();
-const mockPut = vi.fn();
+//
+// `vi.mock`'s factory is hoisted above regular top-level declarations, so the
+// mocks it returns must come from `vi.hoisted` (itself hoisted, in order,
+// above the `vi.mock` call) rather than a plain `const`/`class` here.
+const { mockHead, mockPut, MockBlobNotFoundError } = vi.hoisted(() => {
+  class MockBlobNotFoundError extends Error {}
+  return { mockHead: vi.fn(), mockPut: vi.fn(), MockBlobNotFoundError };
+});
 
 vi.mock('@vercel/blob', () => ({
   head: mockHead,
