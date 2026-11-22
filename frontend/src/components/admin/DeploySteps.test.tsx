@@ -468,6 +468,73 @@ describe('PeopleStep component and restricted authority rule', () => {
     expect(screen.queryByText(/The schema is restricted: only/)).toBeNull();
     expect(screen.queryByRole('button', { name: 'Add it as a verifier' })).toBeNull();
   });
+
+  it('renders "Payees you plan to verify" with copy saying naming is not verifying', () => {
+    const handleUpdate = vi.fn();
+    const PAYEE_ADDR = 'GD6X33SKLUEMANS67ID3LJL572FFGERMMJCIFRW7P7EKZQLH35XT67C6';
+    const draft = makeBaseDraft({
+      payees: [PAYEE_ADDR],
+      labels: { [PAYEE_ADDR]: 'District Maternity' },
+    });
+    const errors = peopleErrors(draft, null);
+
+    render(
+      <PeopleStep
+        titleId="people-title"
+        draft={draft}
+        update={handleUpdate}
+        errors={errors}
+        restrictedAuthority={null}
+      />,
+    );
+
+    expect(screen.getByText('Payees you plan to verify')).toBeDefined();
+    expect(
+      screen.getByText('Naming a payee does not verify it. Verification happens after deploy on the Payees page.'),
+    ).toBeDefined();
+
+    // The payee item is rendered in the list
+    expect(screen.getByRole('list', { name: 'Payees you plan to verify' })).toBeDefined();
+    expect(screen.getByDisplayValue('District Maternity')).toBeDefined();
+  });
+
+  it('allows adding and removing a planned payee and handles duplicate rejection', () => {
+    const handleUpdate = vi.fn();
+    const PAYEE_A = 'GD6X33SKLUEMANS67ID3LJL572FFGERMMJCIFRW7P7EKZQLH35XT67C6';
+    const PAYEE_B = 'GCSW2JNZG3XY6Q5Q4QNY7QXZV7WQZ6WXYZ6QWXYZ6QWXYZ6QWXYZ6QWX';
+    const draft = makeBaseDraft({
+      payees: [PAYEE_A],
+    });
+
+    render(
+      <PeopleStep
+        titleId="people-title"
+        draft={draft}
+        update={handleUpdate}
+        errors={{}}
+        restrictedAuthority={null}
+      />,
+    );
+
+    // Adding payee
+    const input = screen.getByLabelText('Add payee address');
+    fireEvent.change(input, { target: { value: PAYEE_B } });
+    const addButtons = screen.getAllByRole('button', { name: 'Add' });
+    // The payee add button is the 3rd Add button on the page (Reviewers, Verifiers, Payees)
+    const payeeAddBtn = addButtons[2];
+    fireEvent.click(payeeAddBtn);
+    expect(handleUpdate).toHaveBeenCalledWith({ payees: [PAYEE_A, PAYEE_B] });
+
+    // Removing payee
+    const removeBtn = screen.getByRole('button', { name: `Remove payee ${PAYEE_A.slice(0, 6)}…${PAYEE_A.slice(-4)}` });
+    fireEvent.click(removeBtn);
+    expect(handleUpdate).toHaveBeenCalledWith({ payees: [] });
+
+    // Duplicate rejection
+    fireEvent.change(input, { target: { value: PAYEE_A } });
+    fireEvent.click(payeeAddBtn);
+    expect(screen.getByText('Already listed.')).toBeDefined();
+  });
 });
 
 describe('TimelineStep component and deadline ordering', () => {

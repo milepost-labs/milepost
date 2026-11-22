@@ -24,7 +24,17 @@ const common = { networkPassphrase: NETWORK.passphrase, rpcUrl: RPC_URL };
 
 export function SorobanProvider({ children }: { children: ReactNode }) {
   const value = useMemo<SorobanState>(() => {
-    const programmeAt = (contractId: string) => new Programme({ contractId, ...common });
+    // One client per contract id. Reads key on the client they were given, so a
+    // fresh client on every call would look like a new programme each render.
+    const clients = new Map<string, Programme>();
+    const programmeAt = (contractId: string) => {
+      let client = clients.get(contractId);
+      if (!client) {
+        client = new Programme({ contractId, ...common });
+        clients.set(contractId, client);
+      }
+      return client;
+    };
     return {
       registry: new Registry({ ...common, contractId: NETWORK.contracts.registry }),
       attest: new Attest({ ...common, contractId: NETWORK.contracts.attest }),

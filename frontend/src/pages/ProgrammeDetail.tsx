@@ -7,7 +7,7 @@ import {
   ShieldCheck,
   UsersRound,
 } from "lucide-react";
-import { AsyncView, ErrorState } from "../components/state/AsyncStates";
+import { AsyncView, Empty, ErrorState, Loading } from "../components/state/AsyncStates";
 import { PausedBanner } from "../components/programme/PausedBanner";
 import { ProgrammeHeader } from "../components/programme/ProgrammeHeader";
 import { WhereTheMoneyIs } from "../components/programme/WhereTheMoneyIs";
@@ -18,15 +18,17 @@ import { DescriptionBand, MetadataPanel } from "../components/programme/Programm
 import { useProgrammeMetadata } from "../hooks/useProgrammeMetadata";
 import { AddToCalendar, AddressChip, Badge, Card, Deadline, List, ListRow, Notice, PageHead, SampleTag, StatTile } from "../components/ui";
 import { useSoroban } from "../context/useSoroban";
-import { useContractRead, useContractResult, useIndexedList, useProgramme } from "../hooks";
+import { useContractRead, useContractResult, useIndexedList, useProgramme, type ContractRead } from "../hooks";
 import { useLedgerCloseTime } from "../hooks/useLedgerCloseTime";
 import { fetchProgrammes } from "../lib/indexer";
 import { directoryHref } from "../lib/programmeView";
 import { formatAmount, percentOf } from "../lib/amount";
-import { formatFigure, isSampleProgrammeId, programmeAsset, programmeRouteState } from "../lib/programmeView";
+import { formatFigure, isSampleProgrammeId, programmeRouteState } from "../lib/programmeView";
 import { registryVerificationCopy } from "../lib/registryVerification";
-import { FIXTURE_PROGRAMMES, chainFor } from "../fixtures/programmes";
+import { FIXTURE_ASSET_CODE, FIXTURE_PROGRAMMES, chainFor } from "../fixtures/programmes";
+import { readFeeSwept, readNothingToSweep } from "../lib/sweepActions";
 import { fetchTokenName, parseTokenName } from "../lib/token";
+import { isRpcFailure } from "../lib/rpcHealth";
 import "./ProgrammeDetail.css";
 
 const ZERO = 0n;
@@ -173,10 +175,11 @@ interface ProgrammeDetailBodyProps {
   programmeId: string;
   programme: ReturnType<typeof useProgramme>["client"];
   isDefault: boolean;
+  /** The registry's answer, read once by {@link ProgrammeAddressGate}. */
+  isRegistered: ContractRead<boolean>;
 }
 
-const ProgrammeDetailBody = ({ programmeId, programme, isDefault }: ProgrammeDetailBodyProps) => {
-  const { registry } = useSoroban();
+const ProgrammeDetailBody = ({ programmeId, programme, isDefault, isRegistered }: ProgrammeDetailBodyProps) => {
   const location = useLocation();
   const [nowMs, setNowMs] = useState(() => Date.now());
 
@@ -184,12 +187,6 @@ const ProgrammeDetailBody = ({ programmeId, programme, isDefault }: ProgrammeDet
   // off and the page is filled from the fixture set instead, tagged Sample
   // data. This is decided before the reads so their `enabled` flags can use it.
   const isSample = isSampleProgrammeId(programmeId);
-
-  const isRegistered = useContractRead(
-    () => registry.is_programme({ addr: programmeId }),
-    [registry, programmeId],
-    { enabled: !isSample },
-  );
 
   const config = useContractResult(() => programme.get_config(), [programme], {
     enabled: !isSample,
@@ -229,6 +226,27 @@ const ProgrammeDetailBody = ({ programmeId, programme, isDefault }: ProgrammeDet
     enabled: !isSample,
   });
   const refetchPhase = phase.refetch;
+
+  // The contract has no getter for "fee already sent", so ask it what a
+  // sweep would do now. Only once applications have closed: before that the
+  // answer is always "not yet", for a different reason.
+  const feeSweepOpen = phase.data !== null && phase.data.tag !== "Open";
+  const feeSwept = useContractRead(
+    async () => ({ result: await readFeeSwept(programme) }),
+    [programme],
+    { enabled: feeSweepOpen },
+  );
+  const refetchFeeSwept = feeSwept.refetch;
+
+  // Likewise for unclaimed refunds: once the sweep deadline has passed, ask
+  // the contract whether a sweep would find anything to send.
+  const sweepDeadlinePassed = config.data ? nowMs / 1000 >= Number(config.data.sweep_deadline) : null;
+  const nothingToSweep = useContractRead(
+    async () => ({ result: await readNothingToSweep(programme) }),
+    [programme],
+    { enabled: sweepDeadlinePassed === true },
+  );
+  const refetchNothingToSweep = nothingToSweep.refetch;
 
   useEffect(() => {
     if (isSample) return; // Nothing to re-read for a sample.
@@ -377,12 +395,16 @@ const ProgrammeDetailBody = ({ programmeId, programme, isDefault }: ProgrammeDet
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [coreFetching, isSample]);
 
+  // Bumped after a creator write so the paused banner re-reads with the rest.
+  const [chainVersion, setChainVersion] = useState(0);
+
   const handleRefetch = useCallback(() => {
     if (isSample) return;
     setLastReadAt(null);
     phase.refetch();
     config.refetch();
     refetchMoney();
+    setChainVersion((version) => version + 1);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [phase.refetch, config.refetch, isSample]);
 
@@ -444,7 +466,7 @@ const ProgrammeDetailBody = ({ programmeId, programme, isDefault }: ProgrammeDet
   }, [configData, nowMs]);
 
   // Sample programmes pay in the sample asset; real ones in XLM for now.
-  const asset = isSample ? programmeAsset({ sample: true }) : ASSET_LABEL;
+  const asset = isSample ? FIXTURE_ASSET_CODE : ASSET_LABEL;
   const deadlines = configData
     ? {
         apply: Number(configData.apply_deadline),
@@ -523,7 +545,7 @@ const ProgrammeDetailBody = ({ programmeId, programme, isDefault }: ProgrammeDet
 
       {metadata?.status === "ok" && <DescriptionBand doc={metadata.doc} />}
 
-      {!isSample && <PausedBanner client={programme} />}
+      {!isSample && <PausedBanner client={programme} version={chainVersion} />}
 
       {!isSample && Boolean(isRegistered.error) && (
         <ErrorState error={isRegistered.error} contract="registry" onRetry={isRegistered.refetch} />
@@ -613,6 +635,7 @@ const ProgrammeDetailBody = ({ programmeId, programme, isDefault }: ProgrammeDet
             isSample={isSample}
             asset={asset}
             labels={metadata?.status === "ok" ? metadata.doc.labels : undefined}
+            version={chainVersion}
           />
 
           <ProgrammeActivityPanel programmeId={programmeId} isSample={isSample} />
@@ -625,6 +648,41 @@ const ProgrammeDetailBody = ({ programmeId, programme, isDefault }: ProgrammeDet
             refundsOpen={refundsOpen}
             refundable={refundable > ZERO ? formatAmount(refundable, { asset }) : null}
             verified={!isSample ? (isRegistered.error ? false : isRegistered.data) : true}
+            creator={config.data?.creator ?? null}
+            onChanged={handleRefetch}
+            sweep={{
+              fee: fee.data,
+              treasury: config.data?.treasury ?? null,
+              // Pending until the check has answered; a failed check counts as
+              // "not sent", because the sheet simulates before anything is
+              // signed and explains the contract's own refusal.
+              feeSwept: !feeSweepOpen
+                ? false
+                : feeSwept.data !== null
+                  ? feeSwept.data
+                  : feeSwept.error
+                    ? false
+                    : null,
+              asset,
+              sample: isSample,
+              sweepDeadlinePassed,
+              sweepDeadline: config.data ? config.data.sweep_deadline : null,
+              // Pending until the check has answered; a failed check counts as
+              // "something left", for the same reason as the fee above.
+              nothingToSweep:
+                sweepDeadlinePassed !== true
+                  ? false
+                  : nothingToSweep.data !== null
+                    ? nothingToSweep.data
+                    : nothingToSweep.error
+                      ? false
+                      : null,
+              onChanged: () => {
+                refetchFeeSwept();
+                refetchNothingToSweep();
+                refetchMoney();
+              },
+            }}
           />
 
           <section className="programme-timeline" aria-labelledby="programme-timeline-title">
@@ -804,12 +862,84 @@ const ProgrammeDetailBody = ({ programmeId, programme, isDefault }: ProgrammeDet
 };
 
 /**
+ * Asks "is there a programme here?" before the page reads anything else.
+ *
+ * An address that is no programme fails every panel on its own, seven red boxes
+ * saying less than one sentence would. So the registry's `is_programme` is
+ * read first, and when the registry did not deploy the address the programme's
+ * own `get_config` is the tie-breaker (a programme deployed some other way
+ * still answers it). Only when both say no does the page show one notice, and
+ * it sends no other read. A real programme, or one whose reads fail for want of
+ * a network, still renders in full with each panel carrying its own error.
+ */
+const ProgrammeAddressGate = ({ programmeId, programme, isDefault }: Omit<ProgrammeDetailBodyProps, "isRegistered">) => {
+  const { registry } = useSoroban();
+  const location = useLocation();
+
+  // A sample has no contract to ask about: it goes straight to the body, which
+  // fills it from the sample data.
+  const isSample = isSampleProgrammeId(programmeId);
+  const isRegistered = useContractRead(
+    () => registry.is_programme({ addr: programmeId }),
+    [registry, programmeId],
+    { enabled: !isSample },
+  );
+  const probe = useContractResult(() => programme.get_config(), [programme], {
+    enabled: !isSample && isRegistered.data === false,
+  });
+
+  // Nothing else is read until the registry has answered. The heading stays,
+  // so the page is never without one while it checks.
+  const checking = (
+    <div className="programme-detail">
+      <PageHead eyebrow="Programmes" title="Programme" />
+      <Loading label="Checking this address" rows={2} />
+    </div>
+  );
+  if (isRegistered.loading) return checking;
+
+  if (isRegistered.data === false) {
+    if (probe.loading) return checking;
+    // A network failure says nothing about the address: keep the full page and its retries.
+    if (probe.error && !isRpcFailure(probe.error)) {
+      return (
+        <div className="programme-detail">
+          <PageHead eyebrow="Programmes" title="Not a programme" />
+          <Empty
+            title="No Milepost programme at this address"
+            description="The registry did not deploy a programme here, and the address does not answer like one. Check it, or pick a programme from the directory."
+            action={
+              <>
+                <AddressChip address={programmeId} showExplorerLink copyLabel="Copy address" />
+                <Link to={directoryHref(location.search)} className="ui-button ui-button--primary ui-button--md">
+                  Browse programmes
+                </Link>
+              </>
+            }
+          />
+        </div>
+      );
+    }
+  }
+
+  return (
+    <ProgrammeDetailBody
+      programmeId={programmeId}
+      programme={programme}
+      isDefault={isDefault}
+      isRegistered={isRegistered}
+    />
+  );
+};
+
+/**
  * A sample programme has no contract and no mainnet presence. Without samples,
  * its address is not a programme on this network, so say that rather than
  * reading a made-up contract and showing a wall of failed reads.
  */
 export const ProgrammeDetail = () => {
-  const { id, client, isDefault } = useProgramme();
+  // The page reads its own figures once the address gate lets it through.
+  const { id, client, isDefault } = useProgramme({ totals: false });
   const routeState = programmeRouteState(id);
 
   if (routeState === 'directory' || id === null) return <Navigate to="/directory" replace />;
@@ -827,5 +957,5 @@ export const ProgrammeDetail = () => {
     );
   }
 
-  return <ProgrammeDetailBody programmeId={id} programme={client} isDefault={isDefault} />;
+  return <ProgrammeAddressGate programmeId={id} programme={client} isDefault={isDefault} />;
 };

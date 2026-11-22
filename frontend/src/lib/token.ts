@@ -1,4 +1,5 @@
-import { contract, Networks } from '@milepost/program';
+import { contract } from '@milepost/program';
+import { NETWORK } from '../config/network';
 
 /**
  * Base64-encoded XDR for Soroban SEP-41 Token interface function:
@@ -56,7 +57,7 @@ export function parseTokenName(rawName: string): TokenAssetInfo {
 export async function fetchTokenName(
   contractId: string,
   rpcUrl: string,
-  networkPassphrase = Networks.TESTNET,
+  networkPassphrase: string = NETWORK.passphrase,
 ): Promise<{ result: string }> {
   const spec = new contract.Spec([TOKEN_NAME_SPEC_XDR]);
   const client = new contract.Client(spec, {

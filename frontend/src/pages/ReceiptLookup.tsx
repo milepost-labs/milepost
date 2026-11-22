@@ -14,7 +14,8 @@ import { formatDateTime, explorerUrl, truncateAddress } from '../lib/format';
 import { formatShare, formatIn } from '../lib/funding';
 import { explain } from '../lib/errors';
 import { fetchProgrammes } from '../lib/indexer';
-import { programmeAsset, shortId } from '../lib/programmeView';
+import { formatFigure, shortId } from '../lib/programmeView';
+import { useProgrammeAsset } from '../hooks/useProgrammeAsset';
 import { isValidTxHash, lookupTransaction, rpcServer, type ContributionTx, type RefundTx, type TxLookup } from '../lib/txLookup';
 import './ReceiptLookup.css';
 
@@ -214,7 +215,7 @@ function RebuiltReceipt({
 }) {
   const { programmeAt } = useSoroban();
   const client = useMemo(() => programmeAt(tx.programmeId), [programmeAt, tx.programmeId]);
-  const asset = programmeAsset({ sample: false });
+  const asset = useProgrammeAsset(tx.programmeId);
   const config = useContractResult<ProgrammeConfig>(() => client.get_config(), [client], { contract: 'program' });
   const byDonor = useContractRead(() => client.contributed_by({ donor: tx.donor }), [client, tx.donor], {
     contract: 'program',
@@ -282,8 +283,8 @@ function RebuiltReceipt({
         <div className="ui-stat-tiles ui-stat-tiles--three">
           <StatTile
             label="This address has given"
-            value={byDonor.data != null ? formatIn(byDonor.data, asset).replace(` ${asset}`, '') : '—'}
-            unit={asset}
+            value={byDonor.data != null ? formatFigure(byDonor.data) : '—'}
+            unit={asset ?? undefined}
             hint="To this programme, in total"
           />
           <StatTile
@@ -317,7 +318,7 @@ function RebuiltRefundReceipt({
   createdAt: number | null;
   programmeName: string | null;
 }) {
-  const asset = programmeAsset({ sample: false });
+  const asset = useProgrammeAsset(tx.programmeId);
   const name = programmeName ?? shortId(tx.programmeId);
   const title = tx.partial
     ? `Partial refund · ${formatIn(tx.amount, asset)}`

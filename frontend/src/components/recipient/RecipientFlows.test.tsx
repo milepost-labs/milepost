@@ -14,6 +14,15 @@ vi.mock('../../context/useAnnouncer', () => ({
   useAnnouncer: () => mockAnnounce,
 }));
 
+// The asset read has its own tests (hooks/useProgrammeAsset.test.tsx). Here a
+// sample programme is in its stand-in asset and a deployed one pays in XLM.
+vi.mock('../../hooks/useProgrammeAsset', async () => {
+  const { isSampleProgrammeId } = await import('../../lib/programmeView');
+  return {
+    useProgrammeAsset: (id: string | null | undefined) => (!id ? null : isSampleProgrammeId(id) ? 'USDC' : 'XLM'),
+  };
+});
+
 // useOpenProgrammes (used by ApplyForm) fetches the programme index.
 // Return an empty list so only the sample fixtures show up.
 vi.mock('../../lib/indexer', async (importOriginal) => ({
@@ -130,9 +139,11 @@ function makeProgramme(opts: {
 
 let programme = makeProgramme();
 
-vi.mock('../../context/useSoroban', () => ({
-  useSoroban: () => ({ programmeAt: () => programme }),
-}));
+vi.mock('../../context/useSoroban', () => {
+  // Built once: reads key on the clients, and the real context is memoized.
+  const soroban = { programmeAt: () => programme };
+  return { useSoroban: () => soroban, useOptionalSoroban: () => soroban };
+});
 
 describe('Recipient Issues Suite (#272, #273, #274, #275)', () => {
   beforeEach(() => {

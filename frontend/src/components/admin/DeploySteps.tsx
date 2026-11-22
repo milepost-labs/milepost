@@ -429,7 +429,7 @@ export function PeopleStep({
           knows the addresses.
         </p>
       ) : (
-        <p className="deploy-step__note">Turn on the public description (in Details) to name reviewers and verifiers.</p>
+        <p className="deploy-step__note">Turn on the public description (in Details) to name reviewers, verifiers, and payees.</p>
       )}
 
       <AddressList
@@ -480,6 +480,17 @@ export function PeopleStep({
           </Button>
         </Notice>
       )}
+
+      <AddressList
+        label="Payees you plan to verify"
+        noun="payee"
+        items={draft.payees ?? []}
+        labels={draft.describe ? draft.labels : undefined}
+        onLabel={(a, v) => update({ labels: { ...draft.labels, [a]: v } })}
+        onChange={(payees) => update({ payees })}
+        error={draft.payees && draft.payees.length > 0 ? errors.payees : undefined}
+        help="Naming a payee does not verify it. Verification happens after deploy on the Payees page."
+      />
     </>
   );
 }
@@ -577,7 +588,9 @@ export function ReviewStep({
       k: 'People',
       v: `${draft.reviewers.length} reviewer${draft.reviewers.length === 1 ? '' : 's'} · quorum ${draft.quorum} · ${
         draft.verifiers.length
-      } verifier${draft.verifiers.length === 1 ? '' : 's'}`,
+      } verifier${draft.verifiers.length === 1 ? '' : 's'}${
+        (draft.payees?.length ?? 0) > 0 ? ` · ${draft.payees!.length} planned payee${draft.payees!.length === 1 ? '' : 's'}` : ''
+      }`,
       step: 1,
     },
     {
@@ -589,7 +602,7 @@ export function ReviewStep({
       k: 'Description',
       v: draft.describe
         ? `Published with the deploy${
-            Object.values(draft.labels).some((l) => l.trim()) ? ', with names for reviewers and verifiers' : ''
+            Object.values(draft.labels).some((l) => l.trim()) ? ', with names for reviewers, verifiers, and payees' : ''
           }`
         : draft.metadataHash.trim()
           ? 'Your own document, by hash'

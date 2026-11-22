@@ -9,8 +9,15 @@ import './PausedBanner.css';
  * is paused, not that their action mysteriously failed — this banner is what
  * lets them find that out before they even try.
  */
-export function PausedBanner({ client }: { client: ReturnType<typeof useProgramme>['client'] }) {
-  const paused = useContractRead(() => client.is_paused(), [client]);
+export function PausedBanner({
+  client,
+  version = 0,
+}: {
+  client: ReturnType<typeof useProgramme>['client'];
+  /** Change it to re-read, e.g. after the creator pauses or resumes. */
+  version?: number;
+}) {
+  const paused = useContractRead(() => client.is_paused(), [client, version]);
 
   if (!paused.data) return null;
 

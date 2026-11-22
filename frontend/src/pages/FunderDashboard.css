@@ -189,3 +189,10 @@
 .fund-card__estimate-tag {
   color: var(--ink-muted);
 }
+
+/* "Claim part" beside "Claim refund". */
+.fund-card__claims {
+  display: inline-flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+}

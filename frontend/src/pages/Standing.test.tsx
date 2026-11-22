@@ -34,15 +34,17 @@ const wallet = vi.hoisted(() => ({
 }));
 const announcer = vi.hoisted(() => ({ announce: vi.fn() }));
 
-vi.mock('../context/useSoroban', () => ({
-  useSoroban: () => ({
+vi.mock('../context/useSoroban', () => {
+  // Built once: reads key on the clients, and the real context is memoized.
+  const soroban = {
     record: {
       get: chain.get,
       keepalive: chain.keepalive,
       next_root: chain.next_root,
     },
-  }),
-}));
+  };
+  return { useSoroban: () => soroban, useOptionalSoroban: () => soroban };
+});
 vi.mock('../context/useWallet', () => ({
   useWallet: () => ({
     address: wallet.address,

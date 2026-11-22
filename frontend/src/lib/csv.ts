@@ -167,7 +167,7 @@ export function contributionsToCsv(cards: readonly ContributionCard[]): string {
       return csvRow([
         card.programmeId,
         card.name,
-        card.asset,
+        card.asset ?? '',
         numericCell(stroopsToUnits(card.amount.toString())),
         numericCell(stroopsToUnits(refundedAmount.toString())),
         numericCell(stroopsToUnits(refundableNow.toString())),

@@ -70,6 +70,9 @@ export interface FixtureChainRead {
   metadataHash?: string | null;
 }
 
+/** The asset the sample programmes' figures are written in. They have no token to read. */
+export const FIXTURE_ASSET_CODE = 'USDC';
+
 export const FIXTURE_PROGRAMMES: FixtureProgramme[] = [
   {
     id: 'CBJWECZ3EUVNAE73YIMT2KWWNRHRF7NNWVKOLQRVOHSKYRYE32XBRPW7',

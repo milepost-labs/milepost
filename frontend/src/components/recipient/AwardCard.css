@@ -306,3 +306,10 @@
   outline: 2px solid var(--focus);
   border-radius: var(--radius-sm);
 }
+
+/* "Release several at once", under the single release. */
+.award-card__batch {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}

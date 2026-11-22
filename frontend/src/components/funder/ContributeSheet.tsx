@@ -30,7 +30,8 @@ import {
   type TxReceipt,
 } from '../../lib/fundingTx';
 import type { Phase } from '../../lib/phaseGate';
-import { programmeAsset, shortId, type DirectoryProgramme } from '../../lib/programmeView';
+import { shortId, type DirectoryProgramme } from '../../lib/programmeView';
+import { useProgrammeAsset } from '../../hooks/useProgrammeAsset';
 import { TxDone, TxFailed, TxPending } from '../state/TxStatus';
 import { AmountField, Button, CopyButton, Modal, Notice, Receipt, SampleTag, Select, TxExplorerLink } from '../ui';
 import { restoreFromAssembled } from '../../lib/restore';
@@ -137,7 +138,8 @@ export function ContributeSheet({
   const selectedId = picked ?? linked?.id ?? openProgrammes[0]?.id ?? null;
   const programme = programmes.find((p) => p.id === selectedId);
   const blocked = programme ? contributeBlockedReason(programme.chain.phase) : null;
-  const asset = programme ? programmeAsset(programme) : 'USDC';
+  // The chosen programme's own asset; null (no unit shown) until it is read.
+  const asset = useProgrammeAsset(programme?.id);
 
   // Read from the chosen programme's token contract. `undefined` while it is
   // unknown, so an amount is never refused against a balance we do not have.

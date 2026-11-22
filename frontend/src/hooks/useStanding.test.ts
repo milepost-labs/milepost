@@ -5,9 +5,11 @@ import { useStanding } from './useStanding';
 const SUBJECT = 'GAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA';
 
 const clients = vi.hoisted(() => ({ get: vi.fn() }));
-vi.mock('../context/useSoroban', () => ({
-  useSoroban: () => ({ record: { get: clients.get } }),
-}));
+vi.mock('../context/useSoroban', () => {
+  // Built once: reads key on the clients, and the real context is memoized.
+  const soroban = { record: { get: clients.get } };
+  return { useSoroban: () => soroban, useOptionalSoroban: () => soroban };
+});
 
 /** The aggregates `record.get` returns, as `unwrap()` hands them back. */
 function standing(overrides: Record<string, unknown> = {}) {

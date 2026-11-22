@@ -22,11 +22,13 @@ vi.mock('../lib/indexer', () => ({
 }));
 
 const clients = vi.hoisted(() => ({ map: {} as Record<string, unknown> }));
-vi.mock('../context/useSoroban', () => ({
-  useSoroban: () => ({
+vi.mock('../context/useSoroban', () => {
+  // Built once: reads key on the clients, and the real context is memoized.
+  const soroban = {
     programmeAt: (id: string) => clients.map[id],
-  }),
-}));
+  };
+  return { useSoroban: () => soroban, useOptionalSoroban: () => soroban };
+});
 
 // ---------- helpers --------------------------------------------------------
 
