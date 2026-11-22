@@ -44,7 +44,7 @@ export function votesInLabel(application: RecipientApplicationFixture): string {
  */
 export function applicationStatus(
   application: RecipientApplicationFixture,
-  asset = 'USDC',
+  asset: string | null = 'USDC',
 ): string {
   const quorum = effectiveQuorum(application.quorum);
   const votes = application.votes.length;
@@ -86,7 +86,7 @@ export interface ApplicationStep {
 /** The four stages of an application, with the current one marked. */
 export function applicationSteps(
   application: RecipientApplicationFixture,
-  asset = 'USDC',
+  asset: string | null = 'USDC',
 ): ApplicationStep[] {
   const quorum = effectiveQuorum(application.quorum);
   const quorumLabel = `${votesInLabel(application)}.`;
@@ -154,7 +154,7 @@ function awardStep(
   application: RecipientApplicationFixture,
   quorum: number,
   award: bigint | null,
-  asset: string,
+  asset: string | null,
 ): ApplicationStep {
   if (application.withdrawn) {
     return {

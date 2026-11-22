@@ -6,6 +6,7 @@ import { Badge, ModePill, Notice, PageHead, PhaseBadge, SampleTag, Segmented } f
 import { Skeleton, Empty } from '../components/state/AsyncStates';
 import { describeAmount } from '../lib/amount';
 import { useIndexedList, useProgrammeChainReads, useRegistryProgrammes } from '../hooks';
+import { useProgrammeAsset } from '../hooks/useProgrammeAsset';
 import { useWallet } from '../context/useWallet';
 import { useAnnouncer } from '../context/useAnnouncer';
 import { fetchMeta, fetchProgrammes, indexMismatch, isStale } from '../lib/indexer';
@@ -20,7 +21,6 @@ import {
   sortProgrammes,
   formatAgo,
   formatFigure,
-  programmeAsset,
   hydrateRealProgrammes,
   mergeProgrammes,
   phaseCounts,
@@ -467,7 +467,9 @@ function ProgrammeCard({
   // A real programme whose read has not settled yet shows no figures at all:
   // its stand-in `chain` must never be mistaken for chain state.
   const reading = !programme.sample && !programme.real;
-  const asset = programmeAsset(programme);
+  // The programme's own asset, read from its token. Null until read (or if the
+  // read fails): the figures then show without a unit rather than a guess.
+  const asset = useProgrammeAsset(programme.id);
 
   return (
     <Link to={href} className={`directory-card directory-card--${chain.phase.toLowerCase()}`}>
@@ -479,8 +481,9 @@ function ProgrammeCard({
       <h2 className="directory-card__name">{programme.name}</h2>
       {/* A registry-only entry is named by its id already. */}
       <span className="directory-card__id numeric">
-        {programme.name !== programme.id && `${shortId(programme.id)} · `}
-        {asset}
+        {[programme.name !== programme.id ? shortId(programme.id) : null, asset]
+          .filter(Boolean)
+          .join(' · ')}
       </span>
 
       {programme.userRoles && programme.userRoles.length > 0 && (
@@ -534,7 +537,7 @@ function ProgrammeCard({
 }
 
 /** A bare figure; the card names the asset once, beside the id. */
-function Figure({ label, amount, asset }: { label: string; amount: bigint | string; asset: string }) {
+function Figure({ label, amount, asset }: { label: string; amount: bigint | string; asset: string | null }) {
   return (
     <span className="directory-card__figure">
       <span className="directory-card__figure-label">{label}</span>

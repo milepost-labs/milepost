@@ -5,7 +5,11 @@ import { DEMO_PROGRAMME_ID } from '../context/sorobanStore';
 import { useContractRead } from './useContractRead';
 import { useProgrammeParam } from './useProgrammeParam';
 
-export function useProgramme() {
+/**
+ * `totals: false` resolves the programme without reading its five totals, for
+ * a screen that must ask the registry before reading anything (the programme page).
+ */
+export function useProgramme({ totals = true }: { totals?: boolean } = {}) {
   const { programmeId } = useParams<{ programmeId?: string }>();
   const linkedProgramme = useProgrammeParam();
   const { programmeAt } = useSoroban();
@@ -14,7 +18,7 @@ export function useProgramme() {
     !programmeId && linkedProgramme.status === 'valid' ? linkedProgramme.programmeId : null;
   const id = programmeId ?? linkedProgrammeId ?? (DEMO_PROGRAMME_ID || null);
   const client = useMemo(() => programmeAt(id ?? ''), [id, programmeAt]);
-  const readsEnabled = !linkedProgramme.blocksProgramme || Boolean(programmeId);
+  const readsEnabled = totals && (!linkedProgramme.blocksProgramme || Boolean(programmeId));
 
   const { data: totalContributed } = useContractRead(
     () => client.total_contributed(),

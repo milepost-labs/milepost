@@ -123,12 +123,24 @@ function client(id: string) {
   return clients.get(id)!;
 }
 
-vi.mock('../context/useSoroban', () => ({
-  useSoroban: () => ({
-    attest,
+vi.mock('../context/useSoroban', () => {
+  // Built once: reads key on the clients, and the real context is memoized.
+  const soroban = {
+    // A getter: tests swap `attest` out, and the factory runs before it is set.
+    get attest() {
+      return attest;
+    },
     registry: { is_programme: mocks.isProgramme },
     programmeAt: (id: string) => client(id),
-  }),
+    rpcUrl: 'https://rpc.test',
+  };
+  return { useSoroban: () => soroban, useOptionalSoroban: () => soroban };
+});
+
+// Programmes name their real asset from the token contract; these hold native XLM.
+vi.mock('../lib/token', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('../lib/token')>()),
+  fetchTokenName: vi.fn(async () => ({ result: 'native' })),
 }));
 
 vi.mock('../lib/indexer', async (importOriginal) => ({

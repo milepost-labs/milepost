@@ -7,7 +7,8 @@ import type { RecipientAwardFixture } from '../../fixtures/recipientFixtures';
 import { describeAmount } from '../../lib/amount';
 import { looksLikeContractId, truncateAddress } from '../../lib/format';
 import { formatIn } from '../../lib/funding';
-import { formatFigure, isSampleProgrammeId, programmeAsset, shortId } from '../../lib/programmeView';
+import { formatFigure, isSampleProgrammeId, shortId } from '../../lib/programmeView';
+import { useProgrammeAsset } from '../../hooks/useProgrammeAsset';
 import { samplesEnabled } from '../../lib/samples';
 import { useAnnouncer } from '../../context/useAnnouncer';
 import { useWallet } from '../../context/useWallet';
@@ -113,7 +114,7 @@ function ReleaseSheet({
   open: boolean;
   onClose: () => void;
   award: RecipientAwardFixture;
-  asset: string;
+  asset: string | null;
   isReal: boolean;
   /** Which tranche, counting from 1. */
   tranche: number;
@@ -408,7 +409,8 @@ export function AwardCard({ award: initialAward, reply = null, sampleDelayMs = S
 
   // Sample ids have the contract shape too, so shape alone cannot tell them apart.
   const isReal = looksLikeContractId(initialAward.programmeId) && !isSampleProgrammeId(initialAward.programmeId);
-  const asset = programmeAsset({ sample: !isReal });
+  // The award's own asset, read from the programme's token; null until read.
+  const asset = useProgrammeAsset(initialAward.programmeId);
 
   const granted = BigInt(liveAward.granted);
   const released = BigInt(liveAward.released);
@@ -488,7 +490,7 @@ export function AwardCard({ award: initialAward, reply = null, sampleDelayMs = S
         </div>
         <div className="award-card__amount">
           <b className="numeric" aria-label={describeAmount(granted, asset)}>
-            {formatFigure(granted)} <small>{asset}</small>
+            {formatFigure(granted)} {asset && <small>{asset}</small>}
           </b>
           <span>
             <span className="numeric">{formatFigure(released)}</span> released · {tranchesReleased} of {tranches}{' '}
@@ -545,7 +547,7 @@ export function AwardCard({ award: initialAward, reply = null, sampleDelayMs = S
               Released money goes to your own wallet
             </b>
             <p>
-              The spending policy constrains one signer, not the wallet: it limits that signer to {asset},
+              The spending policy constrains one signer, not the wallet: it limits that signer to {asset ?? 'the programme’s asset'},
               verified payees and a cap. If the policy isn&rsquo;t set up, there is no restriction at all.
             </p>
           </div>

@@ -32,7 +32,7 @@ export interface FinalizeTarget {
   applicant: string;
   /** What finalize will settle on, as the contract computes it. */
   award: bigint;
-  asset: string;
+  asset: string | null;
   /** Budget left before this award. */
   left: bigint;
   /** A sample programme: nothing is sent. */

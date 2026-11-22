@@ -9,7 +9,8 @@ import { explain } from '../../lib/errors';
 import { looksLikeAddress, truncateAddress } from '../../lib/format';
 import { formatIn } from '../../lib/funding';
 import { validateAmount } from '../../lib/amount';
-import { programmeAsset, shortId } from '../../lib/programmeView';
+import { shortId } from '../../lib/programmeView';
+import { useProgrammeAsset } from '../../hooks/useProgrammeAsset';
 import { isProgrammeContractId } from '../../lib/registryVerification';
 import { FIXTURE_REVIEW_APPLICANTS, type ApplicantFixture } from '../../fixtures/reviewFixtures';
 import { samplesEnabled } from '../../lib/samples';
@@ -39,7 +40,7 @@ function VoteRow({ programmeId, applicant, gate }: VoteRowProps) {
   const announce = useAnnouncer();
   const inputId = useId();
   const errorId = useId();
-  const asset = programmeAsset({ sample: false });
+  const asset = useProgrammeAsset(programmeId);
   const programme = programmeAt(programmeId);
   const [amount, setAmount] = useState('');
   const [inputError, setInputError] = useState<string | null>(null);
@@ -143,7 +144,7 @@ function VoteRow({ programmeId, applicant, gate }: VoteRowProps) {
                   setInputError(null);
                 }}
               />
-              <span className="ui-field__suffix">{asset}</span>
+              {asset && <span className="ui-field__suffix">{asset}</span>}
             </div>
           </div>
           <Button

@@ -397,17 +397,6 @@ export function formatFigure(stroops: string | bigint): string {
 }
 
 /**
- * The asset a programme's amounts are in.
- *
- * A programme's token is not read yet, so this follows what is deployed: the
- * programmes on testnet pay in native XLM, and the sample set is written in
- * USDC. Replace with the programme's own token once that read exists.
- */
-export function programmeAsset(programme: { sample: boolean }): string {
-  return programme.sample ? 'USDC' : 'XLM';
-}
-
-/**
  * The n-square money row, coloured by bucket: released, then awarded-but-locked,
  * then refundable (from the right), with the remainder shown as unawarded.
  */

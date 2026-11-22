@@ -8,7 +8,8 @@ import { useWallet } from '../../context/useWallet';
 import { useSoroban } from '../../context/useSoroban';
 import { validateAmount, formatAmount } from '../../lib/amount';
 import { formatIn } from '../../lib/funding';
-import { isSampleProgrammeId, programmeAsset } from '../../lib/programmeView';
+import { isSampleProgrammeId } from '../../lib/programmeView';
+import { useProgrammeAsset } from '../../hooks/useProgrammeAsset';
 import { samplesEnabled } from '../../lib/samples';
 import { SAMPLE_TX_DELAY_MS, sampleSendable, sampleOutcome } from '../../lib/fundingTx';
 import { useAnnouncer } from '../../context/useAnnouncer';
@@ -90,7 +91,8 @@ export function ApplyForm({
       : allOpen[0]?.id ?? '';
 
   const selected = allOpen.find((p) => p.id === effectiveSelection);
-  const asset = selected ? programmeAsset(selected) : 'USDC';
+  // The selected programme's own asset; null (no unit shown) until it is read.
+  const asset = useProgrammeAsset(selected?.id);
   const isSampleSelection = selected ? isSampleProgrammeId(selected.id) || selected.sample : false;
 
   // Read the selected programme's minimum award from the chain.
@@ -133,7 +135,7 @@ export function ApplyForm({
       const notesText = notes.trim();
       const metadataHash = await sha256Buffer(notesText);
       const metadataHashHex = toHex(metadataHash);
-      const amountFormatted = formatIn(stroops, programmeAsset(selectedProg));
+      const amountFormatted = formatIn(stroops, asset);
       const progName = selectedProg.name;
       const progId = selectedProg.id;
 

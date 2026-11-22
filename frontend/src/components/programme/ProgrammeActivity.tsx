@@ -3,7 +3,8 @@ import { History } from 'lucide-react';
 import { activitySentence, type ActivityItem } from '../../lib/programmeActivity';
 import { describeWindow } from '../../lib/contractEvents';
 import { useProgrammeActivity } from '../../hooks/useProgrammeActivity';
-import { programmeAsset, shortId } from '../../lib/programmeView';
+import { useProgrammeAsset } from '../../hooks/useProgrammeAsset';
+import { shortId } from '../../lib/programmeView';
 import { FIXTURE_ACTIVITY } from '../../fixtures/activity';
 import { isSampleProgrammeId } from '../../lib/programmeView';
 import { SampleTag, Badge } from '../ui';
@@ -46,7 +47,7 @@ export const ProgrammeActivityPanel: FC<ProgrammeActivityPanelProps> = ({
   const sample = isSample && isSampleProgrammeId(programmeId);
   const read = useProgrammeActivity(programmeId, !sample);
 
-  const asset = programmeAsset({ sample });
+  const asset = useProgrammeAsset(programmeId);
   const window = read.data?.window;
   const items: ActivityItem[] = sample ? FIXTURE_ACTIVITY : read.data?.items ?? [];
 

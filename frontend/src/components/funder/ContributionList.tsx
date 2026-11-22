@@ -207,7 +207,7 @@ function ContributionItem({
     <li className={`fund-card${card.phase === 'Cancelled' ? ' fund-card--cancelled' : ''}`}>
       <div className="fund-card__top">
         <span className="fund-card__id numeric">
-          {shortId(card.programmeId)} · {card.asset}
+          {card.asset ? `${shortId(card.programmeId)} · ${card.asset}` : shortId(card.programmeId)}
         </span>
         <PhaseBadge phase={card.phase} />
       </div>

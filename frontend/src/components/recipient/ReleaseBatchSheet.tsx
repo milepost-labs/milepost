@@ -35,7 +35,8 @@ export interface ReleaseBatchSheetProps {
   open: boolean;
   onClose: () => void;
   award: RecipientAwardFixture;
-  asset: string;
+  /** Null while the asset is being read: amounts then show without a unit. */
+  asset: string | null;
   /** Tranches the award has left; the most ids the list may hold. */
   tranchesLeft: number;
   /** A verifier's reply link for this programme: fills in the first id and the attester. */

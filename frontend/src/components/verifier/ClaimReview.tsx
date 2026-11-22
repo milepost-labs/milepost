@@ -12,7 +12,8 @@ import { useTransaction } from '../../hooks/useTransaction';
 import { explain } from '../../lib/errors';
 import { formatDate, truncateAddress } from '../../lib/format';
 import { formatIn } from '../../lib/funding';
-import { programmeAsset, shortId } from '../../lib/programmeView';
+import { shortId } from '../../lib/programmeView';
+import { useProgrammeAsset } from '../../hooks/useProgrammeAsset';
 import { absoluteLink, referenceHash, replyPath, type ClaimRequest, type SignedRecord } from '../../lib/verifyLinks';
 import { Button, CopyButton, DisabledReason, Field, Modal, ModePill, Notice } from '../ui';
 import { ErrorPanel } from '../state/AsyncStates';
@@ -68,7 +69,7 @@ export function ClaimReview({ claim, programmeName, onSigned, onFinished, onDism
 
   const { programmeId, recipient } = claim;
   const programme = programmeAt(programmeId);
-  const asset = programmeAsset({ sample: false });
+  const asset = useProgrammeAsset(programmeId);
 
   // An attestation is valid for any programme that trusts this verifier and
   // schema, so a programme the registry did not deploy could name a real

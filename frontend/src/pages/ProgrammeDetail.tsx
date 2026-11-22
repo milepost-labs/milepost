@@ -6,7 +6,7 @@ import {
   ShieldCheck,
   UsersRound,
 } from "lucide-react";
-import { AsyncView, ErrorState } from "../components/state/AsyncStates";
+import { AsyncView, Empty, ErrorState, Loading } from "../components/state/AsyncStates";
 import { PausedBanner } from "../components/programme/PausedBanner";
 import { ProgrammeHeader } from "../components/programme/ProgrammeHeader";
 import { WhereTheMoneyIs } from "../components/programme/WhereTheMoneyIs";
@@ -17,7 +17,7 @@ import { DescriptionBand, MetadataPanel } from "../components/programme/Programm
 import { useProgrammeMetadata } from "../hooks/useProgrammeMetadata";
 import { AddToCalendar, AddressChip, Badge, Card, Deadline, List, ListRow, Notice, PageHead, StatTile } from "../components/ui";
 import { useSoroban } from "../context/useSoroban";
-import { useContractRead, useContractResult, useIndexedList, useProgramme } from "../hooks";
+import { useContractRead, useContractResult, useIndexedList, useProgramme, type ContractRead } from "../hooks";
 import { useLedgerCloseTime } from "../hooks/useLedgerCloseTime";
 import { fetchProgrammes } from "../lib/indexer";
 import { directoryHref } from "../lib/programmeView";
@@ -27,6 +27,7 @@ import { registryVerificationCopy } from "../lib/registryVerification";
 import { readFeeSwept, readNothingToSweep } from "../lib/sweepActions";
 import { FIXTURE_CHAIN } from "../fixtures/programmes";
 import { fetchTokenName, parseTokenName } from "../lib/token";
+import { isRpcFailure } from "../lib/rpcHealth";
 import "./ProgrammeDetail.css";
 
 const ZERO = 0n;
@@ -174,17 +175,13 @@ interface ProgrammeDetailBodyProps {
   programmeId: string;
   programme: ReturnType<typeof useProgramme>["client"];
   isDefault: boolean;
+  /** The registry's answer, read once by {@link ProgrammeAddressGate}. */
+  isRegistered: ContractRead<boolean>;
 }
 
-const ProgrammeDetailBody = ({ programmeId, programme, isDefault }: ProgrammeDetailBodyProps) => {
-  const { registry } = useSoroban();
+const ProgrammeDetailBody = ({ programmeId, programme, isDefault, isRegistered }: ProgrammeDetailBodyProps) => {
   const location = useLocation();
   const [nowMs, setNowMs] = useState(() => Date.now());
-
-  const isRegistered = useContractRead(
-    () => registry.is_programme({ addr: programmeId }),
-    [registry, programmeId],
-  );
 
   const config = useContractResult(() => programme.get_config(), [programme]);
   // The creator's description, resolved once from the hash the programme committed to.
@@ -717,12 +714,80 @@ const ProgrammeDetailBody = ({ programmeId, programme, isDefault }: ProgrammeDet
 };
 
 /**
+ * Asks "is there a programme here?" before the page reads anything else.
+ *
+ * An address that is no programme fails every panel on its own, seven red boxes
+ * saying less than one sentence would. So the registry's `is_programme` is
+ * read first, and when the registry did not deploy the address the programme's
+ * own `get_config` is the tie-breaker (a programme deployed some other way
+ * still answers it). Only when both say no does the page show one notice, and
+ * it sends no other read. A real programme, or one whose reads fail for want of
+ * a network, still renders in full with each panel carrying its own error.
+ */
+const ProgrammeAddressGate = ({ programmeId, programme, isDefault }: Omit<ProgrammeDetailBodyProps, "isRegistered">) => {
+  const { registry } = useSoroban();
+  const location = useLocation();
+
+  const isRegistered = useContractRead(
+    () => registry.is_programme({ addr: programmeId }),
+    [registry, programmeId],
+  );
+  const probe = useContractResult(() => programme.get_config(), [programme], {
+    enabled: isRegistered.data === false,
+  });
+
+  // Nothing else is read until the registry has answered. The heading stays,
+  // so the page is never without one while it checks.
+  const checking = (
+    <div className="programme-detail">
+      <PageHead eyebrow="Programmes" title="Programme" />
+      <Loading label="Checking this address" rows={2} />
+    </div>
+  );
+  if (isRegistered.loading) return checking;
+
+  if (isRegistered.data === false) {
+    if (probe.loading) return checking;
+    // A network failure says nothing about the address: keep the full page and its retries.
+    if (probe.error && !isRpcFailure(probe.error)) {
+      return (
+        <div className="programme-detail">
+          <PageHead eyebrow="Programmes" title="Not a programme" />
+          <Empty
+            title="No Milepost programme at this address"
+            description="The registry did not deploy a programme here, and the address does not answer like one. Check it, or pick a programme from the directory."
+            action={
+              <>
+                <AddressChip address={programmeId} showExplorerLink copyLabel="Copy address" />
+                <Link to={directoryHref(location.search)} className="ui-button ui-button--primary ui-button--md">
+                  Browse programmes
+                </Link>
+              </>
+            }
+          />
+        </div>
+      );
+    }
+  }
+
+  return (
+    <ProgrammeDetailBody
+      programmeId={programmeId}
+      programme={programme}
+      isDefault={isDefault}
+      isRegistered={isRegistered}
+    />
+  );
+};
+
+/**
  * A sample programme has no contract and no mainnet presence. Without samples,
  * its address is not a programme on this network, so say that rather than
  * reading a made-up contract and showing a wall of failed reads.
  */
 export const ProgrammeDetail = () => {
-  const { id, client, isDefault } = useProgramme();
+  // The page reads its own figures once the address gate lets it through.
+  const { id, client, isDefault } = useProgramme({ totals: false });
   const routeState = programmeRouteState(id);
 
   if (routeState === 'directory' || id === null) return <Navigate to="/directory" replace />;
@@ -740,5 +805,5 @@ export const ProgrammeDetail = () => {
     );
   }
 
-  return <ProgrammeDetailBody programmeId={id} programme={client} isDefault={isDefault} />;
+  return <ProgrammeAddressGate programmeId={id} programme={client} isDefault={isDefault} />;
 };

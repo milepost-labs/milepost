@@ -25,9 +25,9 @@ export interface FormatOptions {
    */
   grouped?: boolean;
   /**
-   * Asset code appended to the result, e.g. "XLM".
+   * Asset code appended to the result, e.g. "XLM". Null or absent: no unit.
    */
-  asset?: string;
+  asset?: string | null;
 }
 
 /**
@@ -135,7 +135,7 @@ export function tryParseAmount(input: string): { ok: true; value: bigint } | { o
  */
 export function validateAmount(
   input: string,
-  options: { balance?: bigint; asset?: string; overMessage?: string } = {},
+  options: { balance?: bigint; asset?: string | null; overMessage?: string } = {},
 ): { ok: true; value: bigint } | { ok: false; error: string } {
   const parsed = tryParseAmount(input);
   if (!parsed.ok) return parsed;
@@ -154,9 +154,9 @@ export function validateAmount(
  * What a screen reader should say. "1,000.00" read aloud is ambiguous; the
  * asset and the word "point" are not.
  */
-export function describeAmount(stroops: bigint | string | number, asset = 'XLM'): string {
+export function describeAmount(stroops: bigint | string | number, asset: string | null = 'XLM'): string {
   const value = typeof stroops === 'bigint' ? stroops : BigInt(stroops);
-  return `${formatExact(value)} ${asset}`;
+  return asset ? `${formatExact(value)} ${asset}` : formatExact(value);
 }
 
 /** Percentage of `total` that `part` represents, for progress bars. Never divides by zero. */

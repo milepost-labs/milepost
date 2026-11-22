@@ -160,6 +160,112 @@ describe('useContractRead', () => {
     expect(call).toHaveBeenCalledTimes(1);
   });
 
+  it("never returns the previous key's data after a dependency changes", async () => {
+    const second = deferred<{ result: string }>();
+    const call = vi
+      .fn()
+      .mockResolvedValueOnce({ result: 'programme-1' })
+      .mockImplementationOnce(() => second.promise);
+
+    const { result, rerender } = renderHook(
+      ({ id }: { id: number }) => useContractRead(call, [id]),
+      { initialProps: { id: 1 } },
+    );
+    await waitFor(() => expect(result.current.data).toBe('programme-1'));
+
+    rerender({ id: 2 });
+
+    // On the very render the key changed: nothing of programme 1 is shown.
+    expect(result.current.data).toBeNull();
+    expect(result.current.loading).toBe(true);
+    expect(result.current.fetching).toBe(true);
+
+    await act(async () => {
+      second.resolve({ result: 'programme-2' });
+    });
+    expect(result.current.data).toBe('programme-2');
+    expect(result.current.loading).toBe(false);
+  });
+
+  it("never returns the previous key's error after a dependency changes", async () => {
+    const second = deferred<{ result: string }>();
+    const call = vi
+      .fn()
+      .mockRejectedValueOnce(new Error('programme 1 down'))
+      .mockImplementationOnce(() => second.promise);
+
+    const { result, rerender } = renderHook(
+      ({ id }: { id: number }) => useContractRead(call, [id]),
+      { initialProps: { id: 1 } },
+    );
+    await waitFor(() => expect(result.current.error).toBeInstanceOf(Error));
+
+    rerender({ id: 2 });
+
+    expect(result.current.error).toBeNull();
+    expect(result.current.archived).toBe(false);
+    expect(result.current.loading).toBe(true);
+
+    await act(async () => {
+      second.resolve({ result: 'ok' });
+    });
+    expect(result.current.data).toBe('ok');
+    expect(result.current.error).toBeNull();
+  });
+
+  it('reports loading for a read enabled late, until it settles', async () => {
+    const pending = deferred<{ result: string }>();
+    const call = vi.fn().mockImplementation(() => pending.promise);
+
+    const { result, rerender } = renderHook(
+      ({ enabled }: { enabled: boolean }) => useContractRead(call, [], { enabled }),
+      { initialProps: { enabled: false } },
+    );
+    expect(result.current.loading).toBe(false);
+
+    rerender({ enabled: true });
+
+    // Loading from the render it became enabled, not one render later.
+    expect(result.current.loading).toBe(true);
+    expect(result.current.fetching).toBe(true);
+
+    await act(async () => {
+      pending.resolve({ result: 'late' });
+    });
+    expect(result.current.data).toBe('late');
+    expect(result.current.loading).toBe(false);
+    expect(result.current.fetching).toBe(false);
+  });
+
+  it('keeps the last value while refetching the same key', async () => {
+    const second = deferred<{ result: string }>();
+    const call = vi
+      .fn()
+      .mockResolvedValueOnce({ result: 'first' })
+      .mockImplementationOnce(() => second.promise);
+
+    const { result, rerender } = renderHook(
+      ({ id }: { id: number }) => useContractRead(call, [id]),
+      { initialProps: { id: 1 } },
+    );
+    await waitFor(() => expect(result.current.data).toBe('first'));
+
+    // Same deps, new render: still the same key.
+    rerender({ id: 1 });
+    act(() => {
+      result.current.refetch();
+    });
+
+    expect(result.current.data).toBe('first');
+    expect(result.current.loading).toBe(false);
+    expect(result.current.fetching).toBe(true);
+
+    await act(async () => {
+      second.resolve({ result: 'second' });
+    });
+    expect(result.current.data).toBe('second');
+  });
+
   it('does not refetch when a caller passes a fresh inline closure each render', async () => {
     const inner = vi.fn().mockResolvedValue({ result: 1 });
 
