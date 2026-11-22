@@ -2,9 +2,5 @@
   {
     "file": "src/components/landing/RoadDemo.tsx",
     "reason": "Landing illustration: the hero's road walks through one made-up award to show the mechanism, and is labelled \"Example\" above it. Nothing in it claims to be chain state."
-  },
-  {
-    "file": "src/pages/ProgrammeDetail.tsx",
-    "reason": "Reads FIXTURE_CHAIN only for a sample programme's planned mode, which it hands to ProgrammeHeader together with sample={isSample}; ProgrammeHeader renders the \"Sample data\" tag beside that mode."
   }
 ]
