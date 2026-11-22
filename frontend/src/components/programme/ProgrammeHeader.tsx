@@ -129,11 +129,13 @@ export function ProgrammeHeader({
   const current = currentStep(phase, deadlines, now);
   const progress = stepProgress(current, deadlines, now);
   const chainAge = useChainAge(lastReadAt ?? null, onRefetch ?? (() => {}));
-  const readLine = phase
-    ? 'Phase read on-chain just now'
-    : phaseError
-      ? 'Could not read the phase on-chain'
-      : 'Reading the phase on-chain…';
+  const readLine = sample
+    ? 'Sample data · nothing is read from the chain'
+    : phase
+      ? 'Phase read on-chain just now'
+      : phaseError
+        ? 'Could not read the phase on-chain'
+        : 'Reading the phase on-chain…';
   const registry = verified === undefined ? null : registryVerificationCopy(verified);
 
   return (

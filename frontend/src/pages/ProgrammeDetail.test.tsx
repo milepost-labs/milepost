@@ -211,6 +211,18 @@ describe('ProgrammeDetail — a deployed programme', () => {
     expect(screen.queryByRole('button', { name: /to your calendar/ })).toBeNull();
   });
 
+  it('fills a sample programme from the sample data without asking the chain', async () => {
+    const sample = FIXTURE_PROGRAMMES[0];
+    renderProgramme(`/programme/${sample.id}`);
+
+    expect(await screen.findByRole('heading', { name: sample.name ?? '' })).toBeTruthy();
+    expect(screen.queryByText('No Milepost programme at this address')).toBeNull();
+    // No registry check and no programme read: a sample has no contract.
+    expect(registry.is_programme).not.toHaveBeenCalled();
+    expect(programme.get_config).not.toHaveBeenCalled();
+    expect(programme.get_phase).not.toHaveBeenCalled();
+  });
+
   it('says when it is showing the seeded demo programme', async () => {
     renderProgramme('/programme');
 

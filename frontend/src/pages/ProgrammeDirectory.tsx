@@ -9,6 +9,8 @@ import { useIndexedList, useProgrammeChainReads, useRegistryProgrammes } from '.
 import { useProgrammeAsset } from '../hooks/useProgrammeAsset';
 import { useWallet } from '../context/useWallet';
 import { useAnnouncer } from '../context/useAnnouncer';
+import { useProgrammeMetadata } from '../hooks/useProgrammeMetadata';
+import { VERTICALS } from '../lib/metadata';
 import { fetchMeta, fetchProgrammes, indexMismatch, isStale } from '../lib/indexer';
 import { samplesEnabled } from '../lib/samples';
 import { FIXTURE_USER_ROLES, ROLE_LABELS } from '../fixtures/userRoles';
@@ -461,6 +463,16 @@ function ProgrammeCard({
   const budget = BigInt(chain.contributed) - BigInt(chain.fee);
   const href = `/programme/${encodeURIComponent(programme.id)}${carriedSearch ? `?${carriedSearch}` : ''}`;
 
+  // The programme's published description, resolved from the metadata store by
+  // the hash the chain read carries. Only real programmes have a hash; samples
+  // and programmes still reading have none, so the card shows nothing extra.
+  const metadata = useProgrammeMetadata(chain.metadataHash ?? null);
+  const doc = metadata?.status === 'ok' ? metadata.doc : null;
+  const sectorLabel = doc
+    ? VERTICALS.find((v) => v.value === doc.vertical)?.label ?? doc.vertical
+    : null;
+  const summary = doc?.description ?? null;
+
   const tag = readError !== undefined
     ? 'Chain read failed'
     : programmeSourceTag(programme);
@@ -485,6 +497,13 @@ function ProgrammeCard({
           .filter(Boolean)
           .join(' · ')}
       </span>
+
+      {sectorLabel && (
+        <span className="directory-card__sector">{sectorLabel}</span>
+      )}
+      {summary && (
+        <span className="directory-card__summary">{summary}</span>
+      )}
 
       {programme.userRoles && programme.userRoles.length > 0 && (
         <span className="directory-card__roles" aria-label="Your roles">

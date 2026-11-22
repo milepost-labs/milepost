@@ -1,4 +1,5 @@
-import { useRef, useState, type FC, type KeyboardEvent } from 'react';
+import { useRef, type FC, type KeyboardEvent } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import { AwardsTab } from './AwardsTab';
 import { VerifiersTab } from './VerifiersTab';
 import { TermsTab } from './TermsTab';
@@ -36,7 +37,13 @@ export const ProgrammeTabs: FC<ProgrammeTabsProps> = ({
   version,
   defaultTab = 'awards',
 }) => {
-  const [activeTab, setActiveTab] = useState<TabKey>(defaultTab);
+  const [searchParams, setSearchParams] = useSearchParams();
+  // The tab lives in the URL (?tab=verifiers|terms), omitted for Awards, so a
+  // link to a programme's terms opens there and Back returns to the tab you
+  // were on. An unknown or absent value falls back to the default (Awards).
+  const rawTab = searchParams.get('tab');
+  const activeTab: TabKey =
+    rawTab === 'verifiers' || rawTab === 'terms' ? rawTab : defaultTab;
   // Own refs rather than document.getElementById: the ids are only unique while
   // one ProgrammeTabs is mounted, and a lookup by id silently focuses the wrong
   // tab as soon as a second programme is on the page (the directory renders one
@@ -54,7 +61,15 @@ export const ProgrammeTabs: FC<ProgrammeTabsProps> = ({
   ];
 
   const select = (id: TabKey) => {
-    setActiveTab(id);
+    setSearchParams(
+      (prev) => {
+        const next = new URLSearchParams(prev);
+        if (id === 'awards') next.delete('tab');
+        else next.set('tab', id);
+        return next;
+      },
+      { replace: true },
+    );
     buttons.current[id]?.focus();
   };
 
