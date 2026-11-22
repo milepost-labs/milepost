@@ -53,6 +53,7 @@ function blankForm(prefill: { name?: string; tranches?: number; purpose?: string
     labels: {},
     reviewers: [],
     verifiers: [],
+    payees: [],
     quorum: 1,
     applyDeadline: null,
     reviewDeadline: null,

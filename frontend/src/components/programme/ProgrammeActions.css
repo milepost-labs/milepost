@@ -244,3 +244,12 @@
   outline-offset: var(--focus-offset);
   border-radius: var(--radius-sm);
 }
+
+/* The transaction hash row on a sweep receipt. */
+.programme-actions__hash {
+  display: inline-flex;
+  align-items: center;
+  justify-content: flex-end;
+  flex-wrap: wrap;
+  gap: var(--space-1);
+}

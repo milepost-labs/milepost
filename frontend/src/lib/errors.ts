@@ -141,6 +141,20 @@ const POLICY: Table = {
   11: { kind: 'none', message: 'That payee was not on the allowlist.' },
 };
 
+/**
+ * `release_batch` wording, passed as `overrides` on that write. The program
+ * contract reuses one `BatchTooLarge` (36) for payee batches and for
+ * `release_batch`, and the payee wording would be wrong for a recipient
+ * releasing tranches.
+ */
+export const RELEASE_BATCH_ERRORS: CodeOverrides = {
+  36: {
+    kind: 'invalid',
+    message: 'That is too many proofs for one release batch.',
+    action: 'A batch takes at most 50 proofs, and no more than the tranches left on the award. Remove some and try again.',
+  },
+};
+
 const TABLES: Record<ContractName, Table> = {
   program: PROGRAM,
   attest: ATTEST,

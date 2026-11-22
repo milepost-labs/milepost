@@ -57,6 +57,25 @@
   color: var(--ink);
 }
 
+.awards-tab__payee-wrap {
+  display: inline-flex;
+  flex-direction: column;
+  gap: var(--space-1);
+}
+
+.awards-tab__payee-name {
+  font-weight: var(--weight-medium);
+  color: var(--ink);
+  font-size: var(--text-sm);
+  word-break: break-word;
+}
+
+.awards-tab__claim-tag {
+  font-weight: var(--weight-normal);
+  color: var(--ink-muted);
+  font-size: var(--text-xs);
+}
+
 .awards-tab__muted {
   color: var(--ink-muted);
   font-size: var(--text-caption);

@@ -104,4 +104,57 @@ describe('the published description', () => {
     expect(doc.labels).toEqual([{ address: B, role: 'verifier', label: 'District clinic lead' }]);
     expect(createArgs(d, A, 'ab'.repeat(32)).metadata_hash.toString('hex')).toBe('ab'.repeat(32));
   });
+
+  it('publishes planned payees with role payee, validates them, and ignores empty lists', () => {
+    const PAYEE = `GPAY${'P'.repeat(52)}`;
+    const d = draft({
+      describe: true,
+      description: 'Monthly stipends.',
+      vertical: 'health',
+      contactName: 'Kano Health Trust',
+      contactEmail: 'grants@kano.example',
+      payees: [PAYEE],
+      labels: { [PAYEE]: 'St Jude Maternity Ward' },
+    });
+    const doc = buildMetadata(d);
+    expect(validateMetadata(doc).ok).toBe(true);
+    expect(doc.labels).toEqual([{ address: PAYEE, role: 'payee', label: 'St Jude Maternity Ward' }]);
+
+    // Empty payee list publishes nothing
+    const noPayees = draft({
+      describe: true,
+      description: 'Monthly stipends.',
+      vertical: 'health',
+      contactName: 'Kano Health Trust',
+      contactEmail: 'grants@kano.example',
+      payees: [],
+      labels: {},
+    });
+    expect(buildMetadata(noPayees).labels).toBeUndefined();
+  });
+
+  it('allows the same address as reviewer/verifier and payee, trims over-long names to 80 chars', () => {
+    const d = draft({
+      describe: true,
+      description: 'Monthly stipends.',
+      vertical: 'health',
+      contactName: 'Kano Health Trust',
+      contactEmail: 'grants@kano.example',
+      reviewers: [A],
+      payees: [A],
+      labels: { [A]: 'X'.repeat(100) },
+    });
+    const doc = buildMetadata(d);
+    expect(validateMetadata(doc).ok).toBe(true);
+    expect(doc.labels).toEqual([
+      { address: A, role: 'reviewer', label: 'X'.repeat(80) },
+      { address: A, role: 'payee', label: 'X'.repeat(80) },
+    ]);
+  });
+
+  it('detects duplicate payees in peopleErrors', () => {
+    const PAYEE = `GPAY${'P'.repeat(52)}`;
+    const errors = peopleErrors(draft({ payees: [PAYEE, PAYEE] }), null);
+    expect(errors.payees).toBe('An address is listed twice in payees you plan to verify.');
+  });
 });
