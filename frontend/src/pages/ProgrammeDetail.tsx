@@ -674,15 +674,23 @@ const ProgrammeAddressGate = ({ programmeId, programme, isDefault }: Omit<Progra
     enabled: isRegistered.data === false,
   });
 
-  // Nothing else is read until the registry has answered.
-  if (isRegistered.loading) return <Loading label="Checking this address" rows={2} />;
+  // Nothing else is read until the registry has answered. The heading stays,
+  // so the page is never without one while it checks.
+  const checking = (
+    <div className="programme-detail">
+      <PageHead eyebrow="Programmes" title="Programme" />
+      <Loading label="Checking this address" rows={2} />
+    </div>
+  );
+  if (isRegistered.loading) return checking;
 
   if (isRegistered.data === false) {
-    if (probe.loading) return <Loading label="Checking this address" rows={2} />;
+    if (probe.loading) return checking;
     // A network failure says nothing about the address: keep the full page and its retries.
     if (probe.error && !isRpcFailure(probe.error)) {
       return (
         <div className="programme-detail">
+          <PageHead eyebrow="Programmes" title="Not a programme" />
           <Empty
             title="No Milepost programme at this address"
             description="The registry did not deploy a programme here, and the address does not answer like one. Check it, or pick a programme from the directory."
@@ -716,7 +724,8 @@ const ProgrammeAddressGate = ({ programmeId, programme, isDefault }: Omit<Progra
  * reading a made-up contract and showing a wall of failed reads.
  */
 export const ProgrammeDetail = () => {
-  const { id, client, isDefault } = useProgramme();
+  // The page reads its own figures once the address gate lets it through.
+  const { id, client, isDefault } = useProgramme({ totals: false });
   const routeState = programmeRouteState(id);
 
   if (routeState === 'directory' || id === null) return <Navigate to="/directory" replace />;

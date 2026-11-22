@@ -153,7 +153,10 @@ describe('ProgrammeDetail — a deployed programme', () => {
     renderProgramme(`/programme/${REAL_ID}`);
 
     // The header: index name and ledger, the phase read live from the chain.
-    expect(await screen.findByRole('heading', { name: 'Riverside horticulture grants' })).toBeTruthy();
+    // The body renders only after the registry answers, one step later than before.
+    expect(
+      await screen.findByRole('heading', { name: 'Riverside horticulture grants' }, { timeout: 3000 }),
+    ).toBeTruthy();
     expect(screen.getByText('Phase read on-chain just now')).toBeTruthy();
     expect(screen.getByText('4,811,204')).toBeTruthy();
     expect(screen.queryByText(/Showing the seeded demo programme/)).toBeNull();
@@ -222,7 +225,8 @@ describe('ProgrammeDetail — a deployed programme', () => {
 
     // Stated in the registry notice and again where write actions are refused.
     expect((await screen.findAllByText(/This address was not deployed by the Milepost registry/)).length).toBeGreaterThan(0);
-    expect(screen.getByText(/That is not a verdict on the creator/)).toBeTruthy();
+    // The rules panel lands after the gate lets the page through.
+    expect(await screen.findByText(/That is not a verdict on the creator/)).toBeTruthy();
     expect(screen.getAllByText('Not registry-deployed')).toHaveLength(2);
   });
 

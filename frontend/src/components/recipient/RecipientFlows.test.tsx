@@ -139,9 +139,11 @@ function makeProgramme(opts: {
 
 let programme = makeProgramme();
 
-vi.mock('../../context/useSoroban', () => ({
-  useSoroban: () => ({ programmeAt: () => programme }),
-}));
+vi.mock('../../context/useSoroban', () => {
+  // Built once: reads key on the clients, and the real context is memoized.
+  const soroban = { programmeAt: () => programme };
+  return { useSoroban: () => soroban, useOptionalSoroban: () => soroban };
+});
 
 describe('Recipient Issues Suite (#272, #273, #274, #275)', () => {
   beforeEach(() => {
