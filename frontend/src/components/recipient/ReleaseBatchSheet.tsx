@@ -5,7 +5,7 @@ import { useAnnouncer } from '../../context/useAnnouncer';
 import { useSoroban } from '../../context/useSoroban';
 import { useWallet } from '../../context/useWallet';
 import { useTransaction } from '../../hooks/useTransaction';
-import type { Explained } from '../../lib/errors';
+import { RELEASE_BATCH_ERRORS, type Explained } from '../../lib/errors';
 import { formatIn } from '../../lib/funding';
 import { receiptOf } from '../../lib/fundingTx';
 import { shortId } from '../../lib/programmeView';
@@ -94,7 +94,7 @@ export function ReleaseBatchSheet({
 
   const tx = useTransaction<BatchReleased>({
     contract: 'program',
-    context: 'release-batch',
+    overrides: RELEASE_BATCH_ERRORS,
     onError: (error) => {
       void diagnose(error);
     },

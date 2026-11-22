@@ -302,11 +302,15 @@ const ProgrammeDetailBody = ({ programmeId, programme, isDefault }: ProgrammeDet
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [coreFetching]);
 
+  // Bumped after a creator write so the paused banner re-reads with the rest.
+  const [chainVersion, setChainVersion] = useState(0);
+
   const handleRefetch = useCallback(() => {
     setLastReadAt(null);
     phase.refetch();
     config.refetch();
     refetchMoney();
+    setChainVersion((version) => version + 1);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [phase.refetch, config.refetch]);
 
@@ -420,7 +424,7 @@ const ProgrammeDetailBody = ({ programmeId, programme, isDefault }: ProgrammeDet
 
       {metadata?.status === "ok" && <DescriptionBand doc={metadata.doc} />}
 
-      <PausedBanner client={programme} />
+      <PausedBanner client={programme} version={chainVersion} />
 
       {Boolean(isRegistered.error) && (
         <ErrorState error={isRegistered.error} contract="registry" onRetry={isRegistered.refetch} />
@@ -510,6 +514,7 @@ const ProgrammeDetailBody = ({ programmeId, programme, isDefault }: ProgrammeDet
             isSample={isSample}
             asset={asset}
             labels={metadata?.status === "ok" ? metadata.doc.labels : undefined}
+            version={chainVersion}
           />
 
           <ProgrammeActivityPanel programmeId={programmeId} isSample={isSample} />
@@ -522,6 +527,8 @@ const ProgrammeDetailBody = ({ programmeId, programme, isDefault }: ProgrammeDet
             refundsOpen={refundsOpen}
             refundable={refundable > ZERO ? formatXlm(refundable) : null}
             verified={isRegistered.error ? false : isRegistered.data}
+            creator={config.data?.creator ?? null}
+            onChanged={handleRefetch}
             sweep={{
               fee: fee.data,
               treasury: config.data?.treasury ?? null,

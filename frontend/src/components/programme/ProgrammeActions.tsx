@@ -9,6 +9,7 @@ import { programmeActions } from '../../lib/programmeActions';
 import { formatDate } from '../../lib/format';
 import { sweepFeeGate, sweepUnclaimedGate } from '../../lib/sweepActions';
 import { Button, DisabledReason } from '../ui';
+import { CreatorActions } from './CreatorActions';
 import { SweepFeeSheet } from './SweepFeeSheet';
 import { SweepUnclaimedSheet } from './SweepUnclaimedSheet';
 import './ProgrammeActions.css';
@@ -31,6 +32,10 @@ export interface ProgrammeActionsProps {
    * errors never grant unverified programmes write access.
    */
   verified: boolean | null;
+  /** `get_config().creator`. The Creator group shows only when the signed-in address matches. */
+  creator?: string | null;
+  /** Called after a creator write lands, so the page re-reads what it changed. */
+  onChanged?: () => void;
   /**
    * What the "send to the treasury" actions need. Omit to leave them off the
    * panel (screens that have not read the programme's figures).
@@ -70,12 +75,22 @@ export interface ProgrammeSweep {
  * reading), every write action is disabled and a warning banner explains why,
  * linking to the directory where trustworthy programmes can be found.
  */
-export function ProgrammeActions({ programmeId, phase, refundsOpen, refundable, verified, sweep }: ProgrammeActionsProps) {
+export function ProgrammeActions({
+  programmeId,
+  phase,
+  refundsOpen,
+  refundable,
+  verified,
+  creator = null,
+  onChanged,
+  sweep,
+}: ProgrammeActionsProps) {
   const { address } = useWallet();
   const [signInOpen, setSignInOpen] = useState(false);
   const [sweepingFee, setSweepingFee] = useState(false);
   const [sweepingUnclaimed, setSweepingUnclaimed] = useState(false);
   const signedIn = Boolean(address);
+  const isCreator = Boolean(address && creator && address === creator);
 
   const feeGate = sweep
     ? sweepFeeGate({
@@ -277,6 +292,10 @@ export function ProgrammeActions({ programmeId, phase, refundsOpen, refundable, 
           </li>
         )}
       </ul>
+
+      {isCreator && (
+        <CreatorActions programmeId={programmeId} phase={phase} verified={verified} onChanged={() => onChanged?.()} />
+      )}
 
       <div className="programme-actions__manage">
         <Link

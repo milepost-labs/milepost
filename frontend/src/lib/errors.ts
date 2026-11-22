@@ -41,6 +41,14 @@ export type ContractName = 'program' | 'attest' | 'record' | 'registry' | 'polic
 
 type Table = Record<number, Omit<Explained, 'code' | 'contract'>>;
 
+/**
+ * Wording for particular codes when one call means something different by them
+ * than the shared table does. Reuse of an error for a second purpose is common
+ * in the contracts (`RefundsNotOpen` is also "too late to extend"), and a
+ * shared table can only carry one meaning. Pass a module-level constant.
+ */
+export type CodeOverrides = Table;
+
 const PROGRAM: Table = {
   1: { kind: 'denied', message: 'This account is not allowed to do that here.' },
   2: { kind: 'blocked', message: 'The window for this action is not open.', action: 'Check the programme timeline for when it opens or closed.' },
@@ -134,22 +142,16 @@ const POLICY: Table = {
 };
 
 /**
- * Where an error means something different from its usual table entry. The
- * program contract reuses one `BatchTooLarge` (36) for payee batches and for
+ * `release_batch` wording, passed as `overrides` on that write. The program
+ * contract reuses one `BatchTooLarge` (36) for payee batches and for
  * `release_batch`, and the payee wording would be wrong for a recipient
  * releasing tranches.
  */
-export type ExplainContext = 'release-batch';
-
-const CONTEXT: Record<ExplainContext, Partial<Record<ContractName, Table>>> = {
-  'release-batch': {
-    program: {
-      36: {
-        kind: 'invalid',
-        message: 'That is too many proofs for one release batch.',
-        action: 'A batch takes at most 50 proofs, and no more than the tranches left on the award. Remove some and try again.',
-      },
-    },
+export const RELEASE_BATCH_ERRORS: CodeOverrides = {
+  36: {
+    kind: 'invalid',
+    message: 'That is too many proofs for one release batch.',
+    action: 'A batch takes at most 50 proofs, and no more than the tranches left on the award. Remove some and try again.',
   },
 };
 
@@ -193,8 +195,8 @@ export function extractCode(error: unknown): number | null {
 }
 
 /** Translate a raw contract error code. */
-export function explainCode(contract: ContractName, code: number, context?: ExplainContext): Explained {
-  const entry = (context && CONTEXT[context][contract]?.[code]) || TABLES[contract][code];
+export function explainCode(contract: ContractName, code: number): Explained {
+  const entry = TABLES[contract][code];
   return entry ? { ...entry, code, contract } : { ...UNKNOWN, code, contract };
 }
 
@@ -203,12 +205,12 @@ export function explainCode(contract: ContractName, code: number, context?: Expl
  *
  * Handles the two non-contract cases that users actually hit: a rejected
  * signature, which is a choice rather than a failure, and an unreachable
- * network.
+ * network. `overrides` re-words specific codes for one call only.
  */
 export function explain(
   error: unknown,
   contract: ContractName = 'program',
-  context?: ExplainContext,
+  overrides?: CodeOverrides,
 ): Explained {
   const text = (() => {
     if (typeof error === 'string') return error;
@@ -251,7 +253,9 @@ export function explain(
   }
 
   const code = extractCode(error);
-  return code === null ? { ...UNKNOWN } : explainCode(contract, code, context);
+  if (code === null) return { ...UNKNOWN };
+  const override = overrides?.[code];
+  return override ? { ...override, code, contract } : explainCode(contract, code);
 }
 
 /** Whether this should be shown as a failure at all. */

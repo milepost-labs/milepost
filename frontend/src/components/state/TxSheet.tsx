@@ -21,6 +21,8 @@ export interface TxSheetProps<T> {
   confirmLabel?: string;
   /** Called when the user confirms signing. Defaults to `tx.confirm()`. */
   onConfirm?: () => void;
+  /** Holds the sign button back, e.g. until a typed confirmation matches. */
+  confirmDisabled?: boolean;
   /** While pending, e.g. "Installing the policy signer". */
   pendingTitle: string;
   /** Once confirmed, e.g. "Policy installed". */
@@ -56,6 +58,7 @@ export function TxSheet<T>({
   confirmText,
   confirmLabel = 'Sign and send',
   onConfirm,
+  confirmDisabled = false,
   pendingTitle,
   doneTitle,
   doneText,
@@ -78,7 +81,7 @@ export function TxSheet<T>({
   const balanceCheck = checkXlmForFee(effectiveXlm, tx.estimatedFee);
 
   const handleConfirm = () => {
-    if (balanceCheck.insufficient) return;
+    if (balanceCheck.insufficient || confirmDisabled) return;
     if (onConfirm) {
       onConfirm();
     } else {
@@ -132,7 +135,7 @@ export function TxSheet<T>({
             <Button variant="secondary" onClick={close}>
               Cancel
             </Button>
-            <Button onClick={handleConfirm} disabled={balanceCheck.insufficient}>
+            <Button onClick={handleConfirm} disabled={balanceCheck.insufficient || confirmDisabled}>
               {confirmLabel}
             </Button>
           </div>
