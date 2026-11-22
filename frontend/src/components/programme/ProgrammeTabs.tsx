@@ -38,12 +38,12 @@ export const ProgrammeTabs: FC<ProgrammeTabsProps> = ({
   defaultTab = 'awards',
 }) => {
   const [searchParams, setSearchParams] = useSearchParams();
-  // The tab lives in the URL (?tab=verifiers|terms), omitted for Awards, so a
-  // link to a programme's terms opens there and Back returns to the tab you
-  // were on. An unknown or absent value falls back to the default (Awards).
+  // The tab lives in the URL (?tab=awards|verifiers|terms), omitted for the
+  // default tab, so a link to a programme's terms opens there and Back returns
+  // to the tab you were on. An unknown or absent value falls back to the default.
   const rawTab = searchParams.get('tab');
   const activeTab: TabKey =
-    rawTab === 'verifiers' || rawTab === 'terms' ? rawTab : defaultTab;
+    rawTab === 'awards' || rawTab === 'verifiers' || rawTab === 'terms' ? rawTab : defaultTab;
   // Own refs rather than document.getElementById: the ids are only unique while
   // one ProgrammeTabs is mounted, and a lookup by id silently focuses the wrong
   // tab as soon as a second programme is on the page (the directory renders one
@@ -64,7 +64,9 @@ export const ProgrammeTabs: FC<ProgrammeTabsProps> = ({
     setSearchParams(
       (prev) => {
         const next = new URLSearchParams(prev);
-        if (id === 'awards') next.delete('tab');
+        // Only the default may drop the parameter: dropping it for any other
+        // tab would fall back to the default and make that tab unreachable.
+        if (id === defaultTab) next.delete('tab');
         else next.set('tab', id);
         return next;
       },
