@@ -230,7 +230,7 @@ export function useTransaction<T = unknown>(
     } finally {
       inFlight.current = false;
     }
-  }, [checkWalletReady, wallet.signTransaction, contract, onSuccess, onError]);
+  }, [checkWalletReady, wallet.signTransaction, contract, overrides, onSuccess, onError]);
 
   const send = useCallback(
     async (build: () => Promise<Sendable<T>>): Promise<T | null> => {

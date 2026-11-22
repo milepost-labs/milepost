@@ -1,5 +1,5 @@
 import { useMemo } from 'react';
-import type { Programme } from '@milepost/program';
+import type { Client as Programme } from '@milepost/program';
 import { useSoroban } from '../../context/useSoroban';
 import { isPhase, type Phase } from '../../lib/phaseGate';
 import { CancelAction } from './CancelAction';

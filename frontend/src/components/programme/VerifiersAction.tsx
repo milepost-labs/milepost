@@ -1,3 +1,4 @@
+import { Buffer } from 'buffer';
 import { useState } from 'react';
 import { useSoroban } from '../../context/useSoroban';
 import { useContractRead, useContractResult, useAnnounceTransaction, useTransaction } from '../../hooks';

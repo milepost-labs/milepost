@@ -41,6 +41,8 @@ export function ExtendDeadlineAction({ client, phase, verified, onChanged }: Cre
   // after the config refetches.
   const [sent, setSent] = useState<{ release: number; sweep: number; sweepMoved: boolean } | null>(null);
   const [open, setOpen] = useState(false);
+  // Read once per mount, as ProgrammeHeader does: the render must stay pure.
+  const [mountedAt] = useState(() => Date.now() / 1000);
 
   const tx = useTransaction<true>({
     contract: 'program',
@@ -60,7 +62,7 @@ export function ExtendDeadlineAction({ client, phase, verified, onChanged }: Cre
 
   const release = config.data ? Number(config.data.release_deadline) : null;
   const sweep = config.data ? Number(config.data.sweep_deadline) : null;
-  const closed = release !== null && Date.now() / 1000 >= release;
+  const closed = release !== null && mountedAt >= release;
 
   let reason: string | null = null;
   if (verified !== true) {
