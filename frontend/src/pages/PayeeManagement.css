@@ -173,6 +173,25 @@
   font-size: var(--text-sm);
 }
 
+.payee-mgmt__creator-name {
+  color: var(--ink);
+  font-size: var(--text-sm);
+}
+
+.payee-mgmt__creator-claim {
+  font-weight: var(--weight-normal);
+  color: var(--ink-muted);
+  font-size: var(--text-xs);
+}
+
+.payee-mgmt__named {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+  padding-top: var(--space-4);
+  box-shadow: inset 0 1px 0 var(--line);
+}
+
 @media (max-width: 1080px) {
   .payee-mgmt__grid {
     grid-template-columns: minmax(0, 1fr);

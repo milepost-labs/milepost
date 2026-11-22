@@ -1,4 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
+import type { ResolvedMetadata } from '../lib/metadata';
 import { fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
 import { Buffer } from 'buffer';
@@ -9,18 +10,39 @@ import { FinalizeAwards } from './FinalizeAwards';
 // on the chain; each award is finalized in a sheet that asks for the mode and
 // the payee that mode needs, following the contract's rules per mode.
 
-const ADDRESS = `GFIN${'A'.repeat(52)}`;
-const AWARDED = `GAWD${'B'.repeat(52)}`;
-const APPLICANT = `GAPP${'C'.repeat(52)}`;
-const PAYEE = `GPAY${'D'.repeat(52)}`;
-const WALLET = `CWAL${'E'.repeat(52)}`;
-const REAL_ID = `CREA${'F'.repeat(52)}`;
-const POLICY_ID = `CPOL${'G'.repeat(52)}`;
+// Hoisted: the vi.hoisted/vi.mock factories below read these before module code runs.
+const { ADDRESS, AWARDED, APPLICANT, PAYEE, WALLET, REAL_ID, POLICY_ID } = vi.hoisted(() => ({
+  ADDRESS: `GFIN${'A'.repeat(52)}`,
+  AWARDED: `GAWD${'B'.repeat(52)}`,
+  APPLICANT: `GAPP${'C'.repeat(52)}`,
+  PAYEE: `GPAY${'D'.repeat(52)}`,
+  WALLET: `CWAL${'E'.repeat(52)}`,
+  REAL_ID: `CREA${'F'.repeat(52)}`,
+  POLICY_ID: `CPOL${'G'.repeat(52)}`,
+}));
 
 const mocks = vi.hoisted(() => ({
   address: null as string | null,
   announce: vi.fn(),
   isInstalled: vi.fn(),
+  metadata: {
+    status: 'ok' as const,
+    doc: {
+      schema_version: '1.1.0',
+      name: 'Programme',
+      description: 'Desc',
+      vertical: 'health',
+      contact: { name: 'Trust', email: 'test@example.com' },
+      labels: [
+        { address: PAYEE, role: 'payee', label: 'St Jude Hospital' },
+        { address: WALLET, role: 'reviewer', label: 'Reviewer Wallet' },
+      ],
+    },
+  } as ResolvedMetadata | null,
+}));
+
+vi.mock('../hooks/useProgrammeMetadata', () => ({
+  useProgrammeMetadata: () => mocks.metadata,
 }));
 
 vi.mock('../context/useWallet', () => ({
@@ -80,7 +102,13 @@ function makeProgramme() {
     total_granted: vi.fn(async () => ({ result: 3_000_000_000n })),
     budget: vi.fn(() => ok(10_000_000_000n)),
     get_config: vi.fn(() =>
-      ok({ quorum: 3, minimum_award: 0n, policy: POLICY_ID, apply_deadline: 1_900_000_000n }),
+      ok({
+        quorum: 3,
+        minimum_award: 0n,
+        policy: POLICY_ID,
+        apply_deadline: 1_900_000_000n,
+        metadata_hash: new Uint8Array(32).fill(1),
+      }),
     ),
     get_phase: vi.fn(() => ok({ tag: 'Review' })),
     get_application: vi.fn(({ applicant }: { applicant: string }) =>
@@ -288,5 +316,68 @@ describe('FinalizeAwards — a sample programme', () => {
     fireEvent.click(within(sheet).getByRole('button', { name: 'Finalize award' }));
     await waitFor(() => expect(within(sheet).getByText(/The award is fixed/)).toBeTruthy(), { timeout: 3000 });
     expect(programme.finalize).not.toHaveBeenCalled();
+  });
+
+  describe('creator payee names in FinalizeSheet (Issue #632)', () => {
+    it('shows creator payee name beside address and verified badge when is_payee is true', async () => {
+      programme.is_payee.mockResolvedValue({ result: true });
+      const sheet = await openSheet();
+
+      fireEvent.click(within(sheet).getByRole('radio', { name: /Direct/ }));
+      fireEvent.change(within(sheet).getByLabelText('Verified payee'), { target: { value: PAYEE } });
+
+      await waitFor(() => {
+        expect(within(sheet).getByText('St Jude Hospital')).toBeDefined();
+        expect(within(sheet).getByText('Verified payee')).toBeDefined();
+      });
+    });
+
+    it('says "Not a verified payee" in words when named payee is not verified on chain', async () => {
+      programme.is_payee.mockResolvedValue({ result: false });
+      const sheet = await openSheet();
+
+      fireEvent.click(within(sheet).getByRole('radio', { name: /Direct/ }));
+      fireEvent.change(within(sheet).getByLabelText('Verified payee'), { target: { value: PAYEE } });
+
+      await waitFor(() => {
+        expect(within(sheet).getByText('St Jude Hospital')).toBeDefined();
+        expect(within(sheet).getAllByText('Not a verified payee').length).toBeGreaterThan(0);
+      });
+    });
+
+    it('shows no creator name for an unnamed address', async () => {
+      const UNNAMED_PAYEE = `GPAY${'Z'.repeat(52)}`;
+      const sheet = await openSheet();
+
+      fireEvent.click(within(sheet).getByRole('radio', { name: /Direct/ }));
+      fireEvent.change(within(sheet).getByLabelText('Verified payee'), { target: { value: UNNAMED_PAYEE } });
+
+      await waitFor(() => {
+        expect(within(sheet).queryByText('St Jude Hospital')).toBeNull();
+      });
+    });
+
+    it('ignores labels for the same address with a different role', async () => {
+      const sheet = await openSheet();
+
+      fireEvent.click(within(sheet).getByRole('radio', { name: /Direct/ }));
+      fireEvent.change(within(sheet).getByLabelText('Verified payee'), { target: { value: WALLET } });
+
+      await waitFor(() => {
+        expect(within(sheet).queryByText('Reviewer Wallet')).toBeNull();
+      });
+    });
+
+    it('does not display creator payee name when metadata is unavailable', async () => {
+      mocks.metadata = { status: 'unavailable', reason: 'failed' };
+      const sheet = await openSheet();
+
+      fireEvent.click(within(sheet).getByRole('radio', { name: /Direct/ }));
+      fireEvent.change(within(sheet).getByLabelText('Verified payee'), { target: { value: PAYEE } });
+
+      await waitFor(() => {
+        expect(within(sheet).queryByText('St Jude Hospital')).toBeNull();
+      });
+    });
   });
 });
