@@ -19,7 +19,9 @@ import { useProgrammeMetadata } from "../hooks/useProgrammeMetadata";
 import { AddToCalendar, AddressChip, Badge, Card, Deadline, List, ListRow, Notice, PageHead, SampleTag, StatTile } from "../components/ui";
 import { useSoroban } from "../context/useSoroban";
 import { useContractRead, useContractResult, useIndexedList, useProgramme, type ContractRead } from "../hooks";
+import { useContractTokenBalance } from "../hooks/useProgrammeBalance";
 import { useLedgerCloseTime } from "../hooks/useLedgerCloseTime";
+import { balanceDiscrepancy, expectedContractBalance } from "../lib/contractBalance";
 import { fetchProgrammes } from "../lib/indexer";
 import { directoryHref } from "../lib/programmeView";
 import { formatAmount, percentOf } from "../lib/amount";
@@ -225,6 +227,11 @@ const ProgrammeDetailBody = ({ programmeId, programme, isDefault, isRegistered }
   const swept = useContractRead(() => programme.total_swept(), [programme], {
     enabled: !isSample,
   });
+  const contractBalance = useContractTokenBalance(
+    config.data?.token ?? null,
+    programmeId,
+    !isSample,
+  );
   const refetchPhase = phase.refetch;
 
   // The contract has no getter for "fee already sent", so ask it what a
@@ -373,6 +380,7 @@ const ProgrammeDetailBody = ({ programmeId, programme, isDefault, isRegistered }
     released.refetch();
     refunded.refetch();
     swept.refetch();
+    contractBalance.refetch();
   };
 
   // Track when both core reads last settled together. Using state rather than
@@ -467,6 +475,24 @@ const ProgrammeDetailBody = ({ programmeId, programme, isDefault, isRegistered }
 
   // Sample programmes pay in the sample asset; real ones in XLM for now.
   const asset = isSample ? FIXTURE_ASSET_CODE : ASSET_LABEL;
+
+  // Expected balance held by the programme contract, derived from its counters.
+  const feeSweptKnown = !feeSweepOpen ? false : feeSwept.data;
+  const expectedBalance =
+    !isSample && figures !== null && feeSweptKnown !== null
+      ? expectedContractBalance({
+          totalContributed: figures.totalContributed,
+          fee: figures.fee,
+          totalReleased: figures.totalReleased,
+          totalRefunded: figures.totalRefunded ?? ZERO,
+          totalSwept: figures.totalSwept ?? ZERO,
+          feeSwept: feeSweptKnown,
+        })
+      : null;
+  const balanceCheck =
+    !isSample && contractBalance.data !== null && expectedBalance !== null
+      ? balanceDiscrepancy(contractBalance.data, expectedBalance)
+      : null;
   const deadlines = configData
     ? {
         apply: Number(configData.apply_deadline),
@@ -750,6 +776,7 @@ const ProgrammeDetailBody = ({ programmeId, programme, isDefault, isRegistered }
           <Card title="Programme rules">
             <AsyncView {...configView} onRetry={configView.refetch} contract="program">
               {(value) => (
+                <>
                 <List className="programme-rules" label="Programme rules">
                   <ListRow
                     title="Creator"
@@ -780,7 +807,30 @@ const ProgrammeDetailBody = ({ programmeId, programme, isDefault, isRegistered }
                   {isSample ? (
                     <ListRow title="Asset" trailing={<span className="numeric">{asset}</span>} />
                   ) : (
-                    <ProgrammeAssetRules tokenAddress={value.token} />
+                    <>
+                      <ProgrammeAssetRules tokenAddress={value.token} />
+                      <ListRow
+                        title="Held by the contract"
+                        meta={
+                          expectedBalance !== null
+                            ? `Counters expect ${formatAmount(expectedBalance, { asset })}.`
+                            : undefined
+                        }
+                        trailing={
+                          contractBalance.loading ? (
+                            <span className="text-muted">Reading balance…</span>
+                          ) : contractBalance.error ? (
+                            <span className="text-muted">Could not read</span>
+                          ) : contractBalance.data !== null ? (
+                            <span className="numeric">
+                              {formatAmount(contractBalance.data, { asset })}
+                            </span>
+                          ) : (
+                            <span className="text-muted">—</span>
+                          )
+                        }
+                      />
+                    </>
                   )}
                   <ListRow
                     title="Reviewer votes needed"
@@ -804,6 +854,22 @@ const ProgrammeDetailBody = ({ programmeId, programme, isDefault, isRegistered }
                     <ListRow title="Deployment" meta={registryCopy.description} />
                   )}
                 </List>
+                {balanceCheck?.status === "mismatch" &&
+                  contractBalance.data !== null &&
+                  expectedBalance !== null && (
+                    <Notice tone="risk" role="alert" className="programme-balance-mismatch">
+                      <strong>Contract balance mismatch.</strong> The token contract holds{" "}
+                      <span className="numeric">
+                        {formatAmount(contractBalance.data, { asset })}
+                      </span>
+                      , while the programme counters expect{" "}
+                      <span className="numeric">
+                        {formatAmount(expectedBalance, { asset })}
+                      </span>
+                      .
+                    </Notice>
+                  )}
+                </>
               )}
             </AsyncView>
           </Card>

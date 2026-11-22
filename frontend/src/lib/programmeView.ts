@@ -70,7 +70,7 @@ export const DEFAULT_DIRECTORY_SORT: DirectorySort = 'newest';
  * from. Anything else in the URL did not come from the directory and is
  * dropped rather than replayed.
  */
-const DIRECTORY_PARAM_KEYS = ['q', 'phase', 'sort', 'yours'] as const;
+const DIRECTORY_PARAM_KEYS = ['q', 'phase', 'asset', 'sort', 'yours'] as const;
 
 /** The directory filter query a programme link carries, without the leading "?". */
 export function directorySearch(search: string): string {
@@ -277,17 +277,33 @@ export function matchesQuery(programme: DirectoryProgramme, query: string): bool
   return programme.name.toLowerCase().includes(q) || programme.id.toLowerCase().includes(q);
 }
 
-/** Programmes matching both the search text, phase pill and optionally the "yours" filter. */
+/** Unique, sorted asset codes seen across the given programmes. */
+export function availableAssets(
+  all: DirectoryProgramme[],
+  assetsById: Record<string, string | null | undefined>,
+): string[] {
+  const seen = new Set<string>();
+  for (const programme of all) {
+    const code = assetsById[programme.id];
+    if (code) seen.add(code);
+  }
+  return [...seen].sort((a, b) => a.localeCompare(b));
+}
+
+/** Programmes matching the search text, phase pill, asset filter, and optionally "yours". */
 export function filterProgrammes(
   all: DirectoryProgramme[],
   query: string,
   phase: DirectoryPhase,
   yoursOnly = false,
+  assetFilter = 'All',
+  assetsById?: Record<string, string | null | undefined>,
 ): DirectoryProgramme[] {
   return all.filter(
     (programme) =>
       matchesQuery(programme, query) &&
       (phase === 'All' || programme.chain.phase === phase) &&
+      (!assetFilter || assetFilter === 'All' || assetsById?.[programme.id] === assetFilter) &&
       (!yoursOnly || (programme.userRoles != null && programme.userRoles.length > 0)),
   );
 }
@@ -331,9 +347,18 @@ export function sortProgrammes(
   });
 }
 
-/** Counts per pill, over programmes matching the current search text. */
-export function phaseCounts(all: DirectoryProgramme[], query: string): Record<DirectoryPhase, number> {
-  const matching = all.filter((programme) => matchesQuery(programme, query));
+/** Counts per pill, over programmes matching the current search text and asset filter. */
+export function phaseCounts(
+  all: DirectoryProgramme[],
+  query: string,
+  assetFilter = 'All',
+  assetsById?: Record<string, string | null | undefined>,
+): Record<DirectoryPhase, number> {
+  const matching = all.filter(
+    (programme) =>
+      matchesQuery(programme, query) &&
+      (!assetFilter || assetFilter === 'All' || assetsById?.[programme.id] === assetFilter),
+  );
   const counts = {} as Record<DirectoryPhase, number>;
   for (const phase of DIRECTORY_PHASES) {
     counts[phase] =

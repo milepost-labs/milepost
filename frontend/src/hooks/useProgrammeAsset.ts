@@ -1,3 +1,4 @@
+import { useEffect, useMemo, useState } from 'react';
 import { useOptionalSoroban } from '../context/useSoroban';
 import { NETWORK } from '../config/network';
 import { FIXTURE_ASSET_CODE } from '../fixtures/programmes';
@@ -77,4 +78,53 @@ export function useProgrammeAsset(programmeId: string | null | undefined): strin
 
   if (sample) return FIXTURE_ASSET_CODE;
   return read.status === 'ok' ? read.data : null;
+}
+
+/**
+ * Asset codes for a list of programmes, keyed by programme id.
+ *
+ * Uses the same session cache as {@link useProgrammeAsset}, so reading the
+ * directory list does not trigger duplicate RPC calls when cards mount.
+ */
+export function useProgrammeAssets(programmeIds: readonly string[]): Record<string, string> {
+  const soroban = useOptionalSoroban();
+  const [loaded, setLoaded] = useState<Record<string, string>>({});
+
+  const realIds = useMemo(
+    () => programmeIds.filter((id) => Boolean(id) && !isSampleProgrammeId(id)),
+    [programmeIds],
+  );
+  const realKey = realIds.join('\n');
+
+  useEffect(() => {
+    if (!soroban || !realKey) return;
+    let cancelled = false;
+    const ids = realKey.split('\n');
+    for (const id of ids) {
+      readProgrammeAsset(id, soroban.programmeAt, soroban.rpcUrl)
+        .then((code) => {
+          if (cancelled) return;
+          setLoaded((prev) => (prev[id] === code ? prev : { ...prev, [id]: code }));
+        })
+        .catch(() => {
+          // Failed reads stay absent; callers treat missing as unknown, not a guess.
+        });
+    }
+    return () => {
+      cancelled = true;
+    };
+  }, [soroban, realKey]);
+
+  return useMemo(() => {
+    const out: Record<string, string> = {};
+    for (const id of programmeIds) {
+      if (!id) continue;
+      if (isSampleProgrammeId(id)) {
+        out[id] = FIXTURE_ASSET_CODE;
+      } else if (loaded[id]) {
+        out[id] = loaded[id];
+      }
+    }
+    return out;
+  }, [programmeIds, loaded]);
 }

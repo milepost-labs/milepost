@@ -112,10 +112,26 @@ vi.mock('../lib/indexer', async (importOriginal) => ({
 }));
 
 const tokenNameMock = vi.hoisted(() => vi.fn(async () => ({ result: 'native' })));
+const contractBalanceState = vi.hoisted(() => ({
+  data: 80000000000n as bigint | null,
+  loading: false,
+  fetching: false,
+  error: null as Error | null,
+  archived: false,
+  refetch: vi.fn(),
+}));
 
 vi.mock('../lib/token', async (importOriginal) => ({
   ...(await importOriginal<typeof import('../lib/token')>()),
   fetchTokenName: tokenNameMock,
+}));
+
+vi.mock('../hooks/useProgrammeBalance', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('../hooks/useProgrammeBalance')>()),
+  useContractTokenBalance: (_token: string | null, _contractAddress: string | null, enabled: boolean) =>
+    enabled
+      ? contractBalanceState
+      : { data: null, loading: false, fetching: false, error: null, archived: false, refetch: vi.fn() },
 }));
 
 function renderProgramme(path: string) {
@@ -141,6 +157,10 @@ beforeEach(() => {
   mocks.address = VIEWER;
   mocks.announce.mockClear();
   tokenNameMock.mockClear();
+  contractBalanceState.data = 80000000000n;
+  contractBalanceState.loading = false;
+  contractBalanceState.error = null;
+  contractBalanceState.refetch.mockClear();
 });
 
 afterEach(() => {
@@ -564,5 +584,31 @@ describe('ProgrammeDetail — the description', () => {
     programme.get_config.mockImplementation(() => unwrap(makeConfig({ metadata_hash: Buffer.alloc(32) })));
     renderProgramme(`/programme/${REAL_ID}`);
     expect(await screen.findByText(/No description was committed/)).toBeTruthy();
+  });
+});
+
+describe('ProgrammeDetail — contract held balance', () => {
+  it('shows the live contract balance beside what the counters expect, with no warning when they match', async () => {
+    contractBalanceState.data = 80000000000n;
+    renderProgramme(`/programme/${REAL_ID}`);
+    await moneyReady();
+
+    const rules = screen.getByRole('list', { name: 'Programme rules' });
+    expect(within(rules).getByText('Held by the contract')).toBeTruthy();
+    expect(within(rules).getByText('8,000.00 XLM')).toBeTruthy();
+    expect(within(rules).getByText('Counters expect 8,000.00 XLM.')).toBeTruthy();
+    expect(screen.queryByText(/Contract balance mismatch/)).toBeNull();
+  });
+
+  it('shows a risk warning naming both figures when the held balance differs beyond dust', async () => {
+    contractBalanceState.data = 75000000000n;
+    renderProgramme(`/programme/${REAL_ID}`);
+    await moneyReady();
+
+    const mismatch = await screen.findByText(/Contract balance mismatch/);
+    const alert = mismatch.closest('[role="alert"]');
+    expect(alert).toBeTruthy();
+    expect(alert?.textContent).toContain('7,500.00 XLM');
+    expect(alert?.textContent).toContain('8,000.00 XLM');
   });
 });

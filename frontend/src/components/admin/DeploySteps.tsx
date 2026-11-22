@@ -4,6 +4,7 @@ import { Minus, Plus, X } from 'lucide-react';
 import { truncateAddress, formatDate } from '../../lib/format';
 import {
   addAddresses,
+  buildMetadata,
   DEADLINES,
   MAX_QUORUM,
   type DeadlineKey,
@@ -12,6 +13,7 @@ import {
 import { MODE_INFO } from '../../lib/modes';
 import type { detailsErrors, peopleErrors, timelineErrors } from '../../lib/deployRules';
 import { Button, DateField, Field, ModePill, Notice, Select, TextArea } from '../ui';
+import { DescriptionBand } from '../programme/ProgrammeDescription';
 import { VERTICALS } from '../../lib/metadata';
 
 // ── Shared pieces ───────────────────────────────────────────────────────────
@@ -610,6 +612,7 @@ export function ReviewStep({
       step: 0,
     },
   ];
+  const previewDoc = draft.describe && draft.description.trim() ? buildMetadata(draft) : null;
   return (
     <>
       <StepHead id={titleId} title="Review & deploy">
@@ -631,6 +634,18 @@ export function ReviewStep({
           </div>
         ))}
       </dl>
+      {previewDoc && (
+        <section className="deploy-preview" aria-label="Description preview">
+          <div className="deploy-preview__head">
+            <span className="deploy-preview__eyebrow">Preview — as shown on the programme page</span>
+            <p className="deploy-preview__note">
+              Its hash goes on the chain when you deploy and can&rsquo;t be edited later. Check it for typos before
+              publishing.
+            </p>
+          </div>
+          <DescriptionBand doc={previewDoc} />
+        </section>
+      )}
       <Notice tone="info">
         Deploying costs network fees in XLM, paid by you. {feeLine} You’ll be the creator: you can verify payees,
         manage verifiers, pause, cancel or extend the release window. Reviewers, quorum, tranches and the schema stay

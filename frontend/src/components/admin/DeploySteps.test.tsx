@@ -625,4 +625,59 @@ describe('ReviewStep component', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Change timeline' }));
     expect(handleGoTo).toHaveBeenCalledWith(2);
   });
+
+  it('previews the description using DescriptionBand and reminds the admin it cannot be edited after deploy', () => {
+    const draft = makeBaseDraft({
+      describe: true,
+      description: 'First paragraph.\n\nSecond paragraph.',
+      contactName: 'Kano Health Trust',
+      contactEmail: 'grants@example.org',
+      vertical: 'health',
+    });
+
+    render(
+      <ReviewStep
+        titleId="review-title"
+        draft={draft}
+        assetCode="USDC"
+        schemaLabel="Standard Claim Schema"
+        feeLine="The protocol takes 2.5% of each contribution."
+        goTo={vi.fn()}
+      />,
+    );
+
+    expect(screen.getByRole('region', { name: 'Description preview' })).toBeDefined();
+    expect(screen.getByText(/can’t be edited later/i)).toBeDefined();
+    expect(screen.getByText(/First paragraph\./)).toBeDefined();
+    expect(screen.getByText(/Second paragraph\./)).toBeDefined();
+    expect(screen.getByText('Health worker stipends')).toBeDefined();
+  });
+
+  it('omits the description preview when describe is false or description is blank', () => {
+    const { rerender } = render(
+      <ReviewStep
+        titleId="review-title"
+        draft={makeBaseDraft({ describe: false })}
+        assetCode="USDC"
+        schemaLabel="Standard Claim Schema"
+        feeLine="The protocol takes 2.5% of each contribution."
+        goTo={vi.fn()}
+      />,
+    );
+
+    expect(screen.queryByRole('region', { name: 'Description preview' })).toBeNull();
+
+    rerender(
+      <ReviewStep
+        titleId="review-title"
+        draft={makeBaseDraft({ describe: true, description: '   ' })}
+        assetCode="USDC"
+        schemaLabel="Standard Claim Schema"
+        feeLine="The protocol takes 2.5% of each contribution."
+        goTo={vi.fn()}
+      />,
+    );
+
+    expect(screen.queryByRole('region', { name: 'Description preview' })).toBeNull();
+  });
 });

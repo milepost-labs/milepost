@@ -363,4 +363,21 @@ describe('ProgrammeDirectory', () => {
     });
     expect(document.querySelectorAll('.ui-mode-pill')).toHaveLength(FIXTURE_PROGRAMMES.length);
   });
+
+  it('filters by asset in the URL and clears it with clearFilters', async () => {
+    mockIndex();
+    renderDirectory('/directory?asset=EURC');
+
+    // No sample programme uses EURC, so the empty state appears with a clear button.
+    expect(await screen.findByText(/No EURC programmes right now/i)).toBeTruthy();
+    const assetSelect = screen.getByLabelText('Filter by asset') as HTMLSelectElement;
+    expect(assetSelect.value).toBe('EURC');
+
+    fireEvent.click(screen.getByRole('button', { name: /clear filters/i }));
+
+    await waitFor(async () => {
+      expect(await cardCount()).toBe(FIXTURE_PROGRAMMES.length);
+    });
+    expect(screen.getByLabelText('current location').textContent).toBe('/directory');
+  });
 });
