@@ -145,6 +145,12 @@ describe('programmeReads', () => {
           }
         }),
       );
+      // Settled up front: task 0 rejects during the waits below, before the
+      // assertion further down, and an unhandled rejection fails the whole run.
+      const firstOutcome = promises[0].then(
+        () => null,
+        (error: unknown) => error,
+      );
 
       await new Promise((r) => setTimeout(r, 0));
       expect(inFlight).toBe(4);
@@ -163,7 +169,7 @@ describe('programmeReads', () => {
         defs[i].resolve(`success-${i}`);
       }
 
-      await expect(promises[0]).rejects.toThrow('Simulated failure in slot 0');
+      expect(((await firstOutcome) as Error).message).toBe('Simulated failure in slot 0');
       const successfulResults = await Promise.all(promises.slice(1));
       expect(successfulResults).toEqual([
         'success-1',
