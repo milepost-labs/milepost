@@ -6,7 +6,7 @@ import { Badge, ModePill, Notice, PageHead, PhaseBadge, SampleTag, Segmented } f
 import { Skeleton, Empty } from '../components/state/AsyncStates';
 import { describeAmount } from '../lib/amount';
 import { useIndexedList, useProgrammeChainReads, useRegistryProgrammes } from '../hooks';
-import { useProgrammeAsset } from '../hooks/useProgrammeAsset';
+import { useProgrammeAsset, useProgrammeAssets } from '../hooks/useProgrammeAsset';
 import { useWallet } from '../context/useWallet';
 import { useAnnouncer } from '../context/useAnnouncer';
 import { useProgrammeMetadata } from '../hooks/useProgrammeMetadata';
@@ -18,6 +18,7 @@ import {
   DEFAULT_DIRECTORY_SORT,
   DIRECTORY_PHASES,
   DIRECTORY_SORTS,
+  availableAssets,
   directorySearch,
   filterProgrammes,
   sortProgrammes,
@@ -66,6 +67,7 @@ export const ProgrammeDirectory = () => {
   const [params, setParams] = useSearchParams();
   const query = params.get('q') ?? '';
   const phase = asPhase(params.get('phase'));
+  const assetFilter = params.get('asset') || 'All';
   const sort = asSort(params.get('sort'));
   const yoursOnly = params.get('yours') === '1';
   const rawPage = Number(params.get('page') ?? '1');
@@ -101,6 +103,17 @@ export const ProgrammeDirectory = () => {
     [params, setParams],
   );
 
+  const setAsset = useCallback(
+    (value: string) => {
+      const next = new URLSearchParams(params);
+      if (!value || value === 'All') next.delete('asset');
+      else next.set('asset', value);
+      next.delete('page');
+      setParams(next, { replace: true });
+    },
+    [params, setParams],
+  );
+
   const setSort = useCallback(
     (value: DirectorySort) => {
       const next = new URLSearchParams(params);
@@ -124,6 +137,7 @@ export const ProgrammeDirectory = () => {
     const next = new URLSearchParams(params);
     next.delete('q');
     next.delete('phase');
+    next.delete('asset');
     next.delete('yours');
     next.delete('page');
     setParams(next, { replace: true });
@@ -152,14 +166,27 @@ export const ProgrammeDirectory = () => {
     [indexProgrammes, userRoles, showSamples, registryRead.ids],
   );
 
+  const allIds = useMemo(() => all.map((p) => p.id), [all]);
+  const assetsById = useProgrammeAssets(allIds);
+  const assetOptions = useMemo(() => {
+    const seen = availableAssets(all, assetsById);
+    if (assetFilter !== 'All' && !seen.includes(assetFilter)) {
+      return [...seen, assetFilter].sort((a, b) => a.localeCompare(b));
+    }
+    return seen;
+  }, [all, assetsById, assetFilter]);
+
   // Counts and filtering need the full merged list. Chain reads fire only for
   // the programmes on the visible page so the RPC is not hammered on load.
   // The hydrated list reuses whatever reads have already settled (cached by
   // sessionRead) so previously-read cards stay hydrated when paging back.
-  const counts = useMemo(() => phaseCounts(all, query), [all, query]);
+  const counts = useMemo(
+    () => phaseCounts(all, query, assetFilter, assetsById),
+    [all, query, assetFilter, assetsById],
+  );
   const shown = useMemo(
-    () => sortProgrammes(filterProgrammes(all, query, phase, yoursOnly), sort),
-    [all, query, phase, sort, yoursOnly],
+    () => sortProgrammes(filterProgrammes(all, query, phase, yoursOnly, assetFilter, assetsById), sort),
+    [all, query, phase, sort, yoursOnly, assetFilter, assetsById],
   );
 
   // Pagination: clamp current page to valid range, then slice.
@@ -228,7 +255,7 @@ export const ProgrammeDirectory = () => {
   // first load says nothing, and `loading` holds the announcement until the
   // data lands rather than speaking a count that is about to change.
   const announce = useAnnouncer();
-  const filterKey = `${query}|${phase}|${sort}|${yoursOnly ? 'yours' : ''}`;
+  const filterKey = `${query}|${phase}|${assetFilter}|${sort}|${yoursOnly ? 'yours' : ''}`;
   const announcedKey = useRef(filterKey);
 
   useEffect(() => {
@@ -329,6 +356,26 @@ export const ProgrammeDirectory = () => {
         </div>
         <div className="directory-toolbar__filters">
           <Segmented label="Filter by phase" options={phaseOptions} value={phase} onChange={setPhase} />
+          {assetOptions.length > 0 && (
+            <>
+              <label className="visually-hidden" htmlFor="directory-asset">
+                Filter by asset
+              </label>
+              <select
+                id="directory-asset"
+                className="directory-sort"
+                value={assetFilter}
+                onChange={(event) => setAsset(event.target.value)}
+              >
+                <option value="All">All assets</option>
+                {assetOptions.map((code) => (
+                  <option key={code} value={code}>
+                    {code}
+                  </option>
+                ))}
+              </select>
+            </>
+          )}
           {isSignedIn && (
             <button type="button" className="directory-toggle" aria-pressed={yoursOnly} onClick={toggleYours}>
               Yours
@@ -384,9 +431,9 @@ export const ProgrammeDirectory = () => {
             title={
               query
                 ? `No programmes match “${query}”`
-                : `No ${phase === 'All' ? '' : `${phase.toLowerCase()} `}programmes right now`
+                : `No ${phase === 'All' ? '' : `${phase.toLowerCase()} `}${assetFilter === 'All' ? '' : `${assetFilter} `}programmes right now`
             }
-            description="Try another phase, or clear the search."
+            description="Try another phase or asset, or clear the search."
             onClearFilters={clearFilters}
           />
         )}

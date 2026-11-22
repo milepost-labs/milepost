@@ -13,7 +13,7 @@ import { useContractRead, useContractResult } from './useContractRead';
  * token contract, not the programme. `queryContract` simulates the call and
  * decodes the value, so nothing is built, signed or sent.
  */
-async function readTokenBalance(
+export async function readTokenBalance(
   rpcUrl: string,
   token: string,
   address: string,
@@ -21,6 +21,23 @@ async function readTokenBalance(
   const server = new rpc.Server(rpcUrl);
   const { result } = await server.queryContract<bigint>(token, 'balance', { id: address });
   return { result };
+}
+
+/**
+ * Live token balance held by a contract (e.g. a programme contract's own
+ * `balance(programmeId)` on its asset contract).
+ */
+export function useContractTokenBalance(
+  token: string | null,
+  contractAddress: string | null,
+  enabled: boolean,
+) {
+  const { rpcUrl } = useSoroban();
+  return useContractRead(
+    () => readTokenBalance(rpcUrl, token!, contractAddress!),
+    [rpcUrl, token, contractAddress],
+    { enabled: enabled && Boolean(token) && Boolean(contractAddress) },
+  );
 }
 
 export type ProgrammeBalanceStatus =

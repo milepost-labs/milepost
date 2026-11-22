@@ -253,3 +253,7 @@
   line-height: var(--leading-body);
   color: var(--ink-muted);
 }
+
+.programme-balance-mismatch {
+  margin-top: var(--space-4);
+}

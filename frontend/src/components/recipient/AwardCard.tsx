@@ -1,8 +1,8 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { Buffer } from 'buffer';
 import { TriangleAlert } from 'lucide-react';
-import type { Award } from '@milepost/program';
+import { rpc, type Award } from '@milepost/program';
 import type { RecipientAwardFixture } from '../../fixtures/recipientFixtures';
 import { describeAmount } from '../../lib/amount';
 import { looksLikeContractId, truncateAddress } from '../../lib/format';
@@ -17,6 +17,8 @@ import { useContractResult } from '../../hooks/useContractRead';
 import { useTransaction } from '../../hooks/useTransaction';
 import { isPhase } from '../../lib/phaseGate';
 import { releaseBatchGate } from '../../lib/releaseBatch';
+import { searchAttestations } from '../../lib/attestationSearch';
+import { filterReleaseAttestations, type EligibleAttestation } from '../../lib/releaseAttestations';
 import { sampleSendable, SAMPLE_TX_DELAY_MS } from '../../lib/fundingTx';
 import { absoluteLink, REQUEST_NOTE_MAX, requestPath, type ReleaseReply } from '../../lib/verifyLinks';
 import { Button, CopyButton, DisabledReason, Field, Modal, ModePill, Notice, SampleTag, TextArea, TxExplorerLink } from '../ui';
@@ -126,7 +128,7 @@ function ReleaseSheet({
 }) {
   const announce = useAnnouncer();
   const { address } = useWallet();
-  const { programmeAt } = useSoroban();
+  const { programmeAt, attest, rpcUrl } = useSoroban();
   const tx = useTransaction<Released>({ contract: 'program' });
 
   // Several at once is offered when more than one tranche is left, and only
@@ -138,7 +140,7 @@ function ReleaseSheet({
     enabled: offersBatch,
   });
   const configRead = useContractResult(() => programmeAt(award.programmeId).get_config(), [award.programmeId], {
-    enabled: offersBatch,
+    enabled: isReal && open,
   });
   const readFailed = Boolean(phaseRead.error || configRead.error);
   const phaseTag = phaseRead.data?.tag;
@@ -156,6 +158,53 @@ function ReleaseSheet({
   const batchEnabled = batchGate.enabled && !readFailed;
   const [attestationHex, setAttestationHex] = useState(reply?.attestation ?? '');
   const [attesterInput, setAttesterInput] = useState(reply?.attester ?? '');
+
+  // Look up recent attestations about this recipient under the programme's
+  // schema so they can pick one without needing a reply link.
+  const recipient = address ?? award.recipient;
+  const schemaHex = configRead.data?.schema
+    ? Buffer.from(configRead.data.schema).toString('hex')
+    : null;
+  const canSearchAttestations = Boolean(open && isReal && attest && rpcUrl && schemaHex && recipient);
+  const [foundState, setFoundState] = useState<{
+    key: string;
+    status: 'ready' | 'error';
+    items: EligibleAttestation[];
+  } | null>(null);
+  const searchKey = canSearchAttestations ? `${award.programmeId}:${recipient}:${schemaHex}` : '';
+
+  useEffect(() => {
+    if (!canSearchAttestations || !schemaHex || !attest || !rpcUrl) return;
+    let cancelled = false;
+    const client = programmeAt(award.programmeId);
+    const server = new rpc.Server(rpcUrl);
+
+    searchAttestations(server, attest, recipient)
+      .then((res) =>
+        filterReleaseAttestations({
+          matches: res.matches,
+          schemaHex,
+          isVerifier: async (addr) => (await client.is_verifier({ addr })).result,
+          isSpent: async (uid) => (await client.is_spent({ attestation: uid })).result,
+        }),
+      )
+      .then((items) => {
+        if (cancelled) return;
+        setFoundState({ key: searchKey, status: 'ready', items });
+      })
+      .catch(() => {
+        if (cancelled) return;
+        setFoundState({ key: searchKey, status: 'error', items: [] });
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [canSearchAttestations, schemaHex, attest, rpcUrl, programmeAt, award.programmeId, recipient, searchKey]);
+
+  const activeFound = foundState && foundState.key === searchKey ? foundState : null;
+  const searchingAttestations = canSearchAttestations && activeFound === null;
+  const foundAttestations = activeFound?.items ?? [];
 
   const granted = BigInt(award.granted);
   const trancheBase = award.tranches > 0 ? granted / BigInt(award.tranches) : 0n;
@@ -267,8 +316,52 @@ function ReleaseSheet({
               <p className="award-card__release-intro">
                 {reply
                   ? 'Filled in from your verifier’s reply link. The contract checks the attestation when you release.'
-                  : 'Your verifier gives you the attestation id once they have signed. One attestation releases one tranche, once.'}
+                  : 'Pick an unused attestation below, or paste the attestation id from your verifier. One attestation releases one tranche, once.'}
               </p>
+              {canSearchAttestations && (
+                <section className="award-card__found" aria-label="Attestations found for you">
+                  {searchingAttestations ? (
+                    <p className="award-card__found-note">Checking recent attestations for you…</p>
+                  ) : activeFound?.status === 'error' ? (
+                    <p className="award-card__found-note">
+                      Could not check recent attestations. You can still paste an id and attester below.
+                    </p>
+                  ) : foundAttestations.length > 0 ? (
+                    <>
+                      <p className="award-card__found-label">Recent attestations ready to use</p>
+                      <ul className="award-card__found-list">
+                        {foundAttestations.map((item) => {
+                          const selected =
+                            attestationHex.trim().toLowerCase() === item.uid.toLowerCase() &&
+                            attesterInput.trim() === item.attester;
+                          return (
+                            <li key={item.uid}>
+                              <button
+                                type="button"
+                                className="award-card__found-item"
+                                aria-pressed={selected}
+                                onClick={() => {
+                                  setAttestationHex(item.uid);
+                                  setAttesterInput(item.attester);
+                                }}
+                              >
+                                <span className="award-card__found-uid numeric">{shortId(item.uid)}</span>
+                                <span className="award-card__found-attester">
+                                  Verifier <span className="numeric">{truncateAddress(item.attester)}</span>
+                                </span>
+                              </button>
+                            </li>
+                          );
+                        })}
+                      </ul>
+                    </>
+                  ) : (
+                    <p className="award-card__found-note">
+                      No recent unused attestations found for this programme. You can still paste an id below.
+                    </p>
+                  )}
+                </section>
+              )}
               <Field
                 label="Attestation id (hex)"
                 placeholder="64 characters, e.g. 3f1a…"
