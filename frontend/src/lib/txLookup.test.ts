@@ -2,7 +2,7 @@
  * Unit and integration tests for transaction lookup and receipt reconstruction (Issue #633).
  *
  * NOTE ON FIXTURES:
- * As documented in src/fixtures/txFixtures.ts, the repository does not contain recorded
+ * As documented in src/test/txFixtures.ts, the repository does not contain recorded
  * testnet XDR captures. All fixtures used below are SDK-constructed using fixed test keys
  * and labeled accordingly. A mocked RPC server is used so no tests touch the live network.
  */
@@ -28,7 +28,7 @@ import {
   buildFeeBumpEnvelope,
   buildV0Envelope,
   buildUploadWasmEnvelope,
-} from '../fixtures/txFixtures';
+} from '../test/txFixtures';
 
 const PROGRAMME = FIXTURE_PROGRAMME_ID;
 const DONOR = FIXTURE_DONOR_ADDRESS;
@@ -45,7 +45,7 @@ describe('isValidTxHash', () => {
 
   it('accepts valid 64-character uppercase and mixed-case hex hashes', () => {
     expect(isValidTxHash('A'.repeat(64))).toBe(true);
-    expect(isValidTxHash('0123456789ABCDEFabcdef0123456789abcdef0123456789abcdef0123456789abcdef')).toBe(true);
+    expect(isValidTxHash('0123456789ABCDEF'.repeat(2) + '0123456789abcdef'.repeat(2))).toBe(true);
   });
 
   it('accepts hashes with leading or trailing whitespace (trimmed)', () => {

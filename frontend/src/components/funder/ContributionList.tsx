@@ -4,7 +4,7 @@ import { useAnnouncer } from '../../context/useAnnouncer';
 import { useSoroban } from '../../context/useSoroban';
 import { useWallet } from '../../context/useWallet';
 import { useTransaction } from '../../hooks/useTransaction';
-import { useRefundedTo } from '../../hooks/useRefundedTo';
+import { useRefundRemaining } from '../../hooks/useRefundRemaining';
 import { describeAmount } from '../../lib/amount';
 import { formatDate } from '../../lib/format';
 import { formatEstimatedRefund, formatIn, formatShare, type ContributionCard } from '../../lib/funding';
@@ -12,6 +12,7 @@ import { FIXTURE_TX } from '../../fixtures/funding';
 import { receiptOf, SAMPLE_TX_DELAY_MS, sampleSendable, type TxReceipt } from '../../lib/fundingTx';
 import { formatFigure, shortId } from '../../lib/programmeView';
 import { MoneyRow } from '../programme/MoneyRow';
+import { PartialRefundSheet } from './PartialRefundSheet';
 import { TxSheet } from '../state/TxSheet';
 import { Button, CopyButton, PhaseBadge, SampleTag, TxExplorerLink } from '../ui';
 import { restoreFromAssembled } from '../../lib/restore';
@@ -39,12 +40,15 @@ interface Refund {
  */
 function RefundSheet({
   card,
+  refundable,
   open,
   onClose,
   onRefunded,
   sampleDelayMs,
 }: {
   card: ContributionCard;
+  /** What this claim will send: the whole of what is still claimable. */
+  refundable: bigint;
   open: boolean;
   onClose: () => void;
   onRefunded: (programmeId: string) => void;
@@ -66,7 +70,7 @@ function RefundSheet({
     void tx.prepare(async () => {
       if (card.sample) {
         return sampleSendable(
-          () => ({ amount: card.refundable, receipt: { hash: FIXTURE_TX.hash, ledger: FIXTURE_TX.ledger } }),
+          () => ({ amount: refundable, receipt: { hash: FIXTURE_TX.hash, ledger: FIXTURE_TX.ledger } }),
           sampleDelayMs,
         );
       }
@@ -132,7 +136,7 @@ function RefundSheet({
       confirmTitle="Claim your refund"
       confirmText={
         <p>
-          Claim <span className="numeric">{formatIn(card.refundable, card.asset)}</span> back to your wallet, in
+          Claim <span className="numeric">{formatIn(refundable, card.asset)}</span> back to your wallet, in
           proportion to what you put in.
         </p>
       }
@@ -172,10 +176,23 @@ function ContributionItem({
 }) {
   const { address } = useWallet();
   const [claiming, setClaiming] = useState(false);
+  const [claimingPart, setClaimingPart] = useState(false);
+  // A sample has no contract to read, so what it has claimed is kept here.
+  const [sampleClaimed, setSampleClaimed] = useState(0n);
 
-  // On-chain read: how much this donor has already received back.
-  // Returns 0n for samples; skipped when no wallet is connected.
-  const { refundedSoFar } = useRefundedTo(card.programmeId, address ?? null, card.sample);
+  // On-chain read: how much this donor has received back and how much of
+  // their share is still theirs. Skipped for samples and without a wallet.
+  const chain = useRefundRemaining(card.programmeId, address ?? null, card.sample);
+  const refundedSoFar = card.sample ? sampleClaimed : chain.refundedSoFar;
+  // Null while it is being read.
+  const stillClaimable = card.sample
+    ? card.refundable > sampleClaimed
+      ? card.refundable - sampleClaimed
+      : 0n
+    : chain.remaining;
+  const sharePaidOut = stillClaimable !== null && stillClaimable <= 0n && refundedSoFar > 0n;
+  const claimable = card.claimable && !sharePaidOut;
+  const refreshAfterClaim = chain.refetch;
 
   const href = `/programme/${encodeURIComponent(card.programmeId)}`;
   const deadline = releaseDeadline !== null && releaseDeadline > 0n ? formatDate(releaseDeadline) : null;
@@ -190,7 +207,7 @@ function ContributionItem({
     <li className={`fund-card${card.phase === 'Cancelled' ? ' fund-card--cancelled' : ''}`}>
       <div className="fund-card__top">
         <span className="fund-card__id numeric">
-          {shortId(card.programmeId)} · {card.asset}
+          {card.asset ? `${shortId(card.programmeId)} · ${card.asset}` : shortId(card.programmeId)}
         </span>
         <PhaseBadge phase={card.phase} />
       </div>
@@ -226,7 +243,13 @@ function ContributionItem({
 
       {refundedSoFar > 0n && (
         <p className="fund-card__refunded-so-far">
-          Refunded so far <span className="numeric">{formatIn(refundedSoFar, card.asset)}</span>
+          Claimed so far <span className="numeric">{formatIn(refundedSoFar, card.asset)}</span>
+          {claimable && stillClaimable !== null && (
+            <>
+              {' '}
+              · Still claimable <span className="numeric">{formatIn(stillClaimable, card.asset)}</span>
+            </>
+          )}
         </p>
       )}
 
@@ -238,19 +261,37 @@ function ContributionItem({
       )}
 
       <div className="fund-card__foot">
-        {card.claimable ? (
+        {claimable ? (
           <>
             <span className="fund-card__refund">
-              <b className="numeric">{formatIn(card.refundable, card.asset)}</b> refundable
+              <b className="numeric">{formatIn(stillClaimable ?? card.refundable, card.asset)}</b> refundable
               <span className="visually-hidden">. {card.note}</span>
             </span>
-            <Button size="sm" onClick={() => setClaiming(true)}>
-              Claim refund
-            </Button>
+            <span className="fund-card__claims">
+              <Button
+                size="sm"
+                variant="secondary"
+                disabled={stillClaimable === null || !address}
+                aria-describedby={stillClaimable === null || !address ? `claim-part-why-${card.programmeId}` : undefined}
+                onClick={() => setClaimingPart(true)}
+              >
+                Claim part
+              </Button>
+              <Button size="sm" onClick={() => setClaiming(true)}>
+                Claim refund
+              </Button>
+            </span>
+            {(stillClaimable === null || !address) && (
+              <span id={`claim-part-why-${card.programmeId}`} className="fund-card__note">
+                {address ? 'Reading what is left of your share…' : 'Connect a wallet to claim part of your refund.'}
+              </span>
+            )}
           </>
         ) : (
           <>
-            <span className="fund-card__note">{card.refunded ? card.note : waiting}</span>
+            <span className="fund-card__note">
+              {sharePaidOut ? 'You have claimed your whole share.' : card.refunded ? card.note : waiting}
+            </span>
             <Link to={href} className="fund-card__follow">
               Follow releases
             </Link>
@@ -259,12 +300,30 @@ function ContributionItem({
       </div>
 
       {/* Stays mounted after the claim lands, so its receipt is still shown. */}
-      {(card.claimable || claiming) && (
+      {(claimable || claiming) && (
         <RefundSheet
           card={card}
+          refundable={stillClaimable ?? card.refundable}
           open={claiming}
           onClose={() => setClaiming(false)}
-          onRefunded={onRefunded}
+          onRefunded={(programmeId) => {
+            refreshAfterClaim();
+            onRefunded(programmeId);
+          }}
+          sampleDelayMs={sampleDelayMs}
+        />
+      )}
+      {(claimable || claimingPart) && (
+        <PartialRefundSheet
+          card={card}
+          open={claimingPart}
+          onClose={() => setClaimingPart(false)}
+          remaining={stillClaimable ?? 0n}
+          claimedSoFar={refundedSoFar}
+          onClaimed={(amount) => {
+            if (card.sample) setSampleClaimed((current) => current + amount);
+            else refreshAfterClaim();
+          }}
           sampleDelayMs={sampleDelayMs}
         />
       )}

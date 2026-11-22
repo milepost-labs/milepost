@@ -6,8 +6,11 @@ import { Badge, ModePill, Notice, PageHead, PhaseBadge, SampleTag, Segmented } f
 import { Skeleton, Empty } from '../components/state/AsyncStates';
 import { describeAmount } from '../lib/amount';
 import { useIndexedList, useProgrammeChainReads, useRegistryProgrammes } from '../hooks';
+import { useProgrammeAsset } from '../hooks/useProgrammeAsset';
 import { useWallet } from '../context/useWallet';
 import { useAnnouncer } from '../context/useAnnouncer';
+import { useProgrammeMetadata } from '../hooks/useProgrammeMetadata';
+import { VERTICALS } from '../lib/metadata';
 import { fetchMeta, fetchProgrammes, indexMismatch, isStale } from '../lib/indexer';
 import { samplesEnabled } from '../lib/samples';
 import { FIXTURE_USER_ROLES, ROLE_LABELS } from '../fixtures/userRoles';
@@ -20,7 +23,6 @@ import {
   sortProgrammes,
   formatAgo,
   formatFigure,
-  programmeAsset,
   hydrateRealProgrammes,
   mergeProgrammes,
   phaseCounts,
@@ -461,13 +463,25 @@ function ProgrammeCard({
   const budget = BigInt(chain.contributed) - BigInt(chain.fee);
   const href = `/programme/${encodeURIComponent(programme.id)}${carriedSearch ? `?${carriedSearch}` : ''}`;
 
+  // The programme's published description, resolved from the metadata store by
+  // the hash the chain read carries. Only real programmes have a hash; samples
+  // and programmes still reading have none, so the card shows nothing extra.
+  const metadata = useProgrammeMetadata(chain.metadataHash ?? null);
+  const doc = metadata?.status === 'ok' ? metadata.doc : null;
+  const sectorLabel = doc
+    ? VERTICALS.find((v) => v.value === doc.vertical)?.label ?? doc.vertical
+    : null;
+  const summary = doc?.description ?? null;
+
   const tag = readError !== undefined
     ? 'Chain read failed'
     : programmeSourceTag(programme);
   // A real programme whose read has not settled yet shows no figures at all:
   // its stand-in `chain` must never be mistaken for chain state.
   const reading = !programme.sample && !programme.real;
-  const asset = programmeAsset(programme);
+  // The programme's own asset, read from its token. Null until read (or if the
+  // read fails): the figures then show without a unit rather than a guess.
+  const asset = useProgrammeAsset(programme.id);
 
   return (
     <Link to={href} className={`directory-card directory-card--${chain.phase.toLowerCase()}`}>
@@ -479,9 +493,17 @@ function ProgrammeCard({
       <h2 className="directory-card__name">{programme.name}</h2>
       {/* A registry-only entry is named by its id already. */}
       <span className="directory-card__id numeric">
-        {programme.name !== programme.id && `${shortId(programme.id)} · `}
-        {asset}
+        {[programme.name !== programme.id ? shortId(programme.id) : null, asset]
+          .filter(Boolean)
+          .join(' · ')}
       </span>
+
+      {sectorLabel && (
+        <span className="directory-card__sector">{sectorLabel}</span>
+      )}
+      {summary && (
+        <span className="directory-card__summary">{summary}</span>
+      )}
 
       {programme.userRoles && programme.userRoles.length > 0 && (
         <span className="directory-card__roles" aria-label="Your roles">
@@ -534,7 +556,7 @@ function ProgrammeCard({
 }
 
 /** A bare figure; the card names the asset once, beside the id. */
-function Figure({ label, amount, asset }: { label: string; amount: bigint | string; asset: string }) {
+function Figure({ label, amount, asset }: { label: string; amount: bigint | string; asset: string | null }) {
   return (
     <span className="directory-card__figure">
       <span className="directory-card__figure-label">{label}</span>

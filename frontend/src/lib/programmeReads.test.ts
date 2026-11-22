@@ -1,4 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { Buffer } from 'buffer';
 import {
   sessionRead,
   readProgrammeChain,
@@ -36,7 +37,7 @@ describe('programmeReads', () => {
       const count = 10;
       const defs = Array.from({ length: count }, () => deferred<number>());
 
-      const promises = defs.map((d, index) =>
+      const promises = defs.map((d) =>
         sessionRead(nextKey(), async () => {
           inFlight += 1;
           peakInFlight = Math.max(peakInFlight, inFlight);
@@ -78,7 +79,7 @@ describe('programmeReads', () => {
       let peakInFlight = 0;
       const defs = Array.from({ length: 4 }, () => deferred<string>());
 
-      const promises = defs.map((d, i) =>
+      const promises = defs.map((d) =>
         sessionRead(nextKey(), async () => {
           inFlight += 1;
           peakInFlight = Math.max(peakInFlight, inFlight);
@@ -103,7 +104,7 @@ describe('programmeReads', () => {
       let peakInFlight = 0;
       const defs = Array.from({ length: 2 }, () => deferred<string>());
 
-      const promises = defs.map((d, i) =>
+      const promises = defs.map((d) =>
         sessionRead(nextKey(), async () => {
           inFlight += 1;
           peakInFlight = Math.max(peakInFlight, inFlight);
@@ -133,7 +134,7 @@ describe('programmeReads', () => {
       let peakInFlight = 0;
       const defs = Array.from({ length: 6 }, () => deferred<string>());
 
-      const promises = defs.map((d, index) =>
+      const promises = defs.map((d) =>
         sessionRead(nextKey(), async () => {
           inFlight += 1;
           peakInFlight = Math.max(peakInFlight, inFlight);
@@ -232,7 +233,8 @@ describe('programmeReads', () => {
         return def.promise;
       });
 
-      expect(callCount).toBe(1);
+      // The read starts once the limiter admits it, a tick later.
+      await vi.waitFor(() => expect(callCount).toBe(1));
       def.resolve('shared-result');
 
       const [res1, res2] = await Promise.all([p1, p2]);
@@ -295,10 +297,12 @@ describe('programmeReads', () => {
         total_refunded: vi.fn().mockResolvedValue({ result: 0n }),
         get_config: vi.fn().mockResolvedValue({
           result: {
+            // Shaped like the contract's ProgrammeConfig: u32 fields are numbers.
             unwrap: () => ({
-              fee_bps: 200n,
-              quorum: 3n,
+              fee_bps: 200,
+              quorum: 3,
               apply_deadline: 1_800_000_000n,
+              metadata_hash: Buffer.alloc(32, 0xab),
             }),
           },
         }),
@@ -316,6 +320,7 @@ describe('programmeReads', () => {
       expect(data.feeBps).toBe(200);
       expect(data.quorum).toBe(3);
       expect(data.applyDeadline).toBe(1_800_000_000n);
+      expect(data.metadataHash).toBe('ab'.repeat(32));
     });
 
     it('degrades optional totals and config to nulls when their calls fail', async () => {

@@ -116,6 +116,17 @@ describe('fundingTotals', () => {
     expect(formatIn(9_900_000_000n, 'XLM')).toBe('990 XLM');
   });
 
+  it('shows a figure without a unit while the asset is unread, never a guessed one', () => {
+    expect(formatIn(9_900_000_000n, null)).toBe('990');
+  });
+
+  it('names no asset for a real programme: the screen reads it from the token', () => {
+    const real = { ...programme({}), sample: false };
+    const card = contributionCard(contribution(), real);
+    expect(card.asset).toBeNull();
+    expect(contributionCard(contribution(), programme({})).asset).toBe('USDC');
+  });
+
   it('matches the fixture set', () => {
     expect(fundingTotals(FIXTURE_CONTRIBUTIONS.map((c) => contributionCard(c, undefined))).contributed).toBe(
       35_000_000_000n,

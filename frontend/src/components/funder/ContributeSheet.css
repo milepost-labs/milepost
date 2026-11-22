@@ -73,3 +73,10 @@
   width: 32px;
   height: 32px;
 }
+
+/* The amount step of a sheet that takes one figure before the write. */
+.contribute__amount-step {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+}

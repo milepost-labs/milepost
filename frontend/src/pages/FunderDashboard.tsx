@@ -3,7 +3,6 @@ import { Link } from 'react-router-dom';
 import { Download, Plus, Wallet } from 'lucide-react';
 import { ContributeSheet } from '../components/funder/ContributeSheet';
 import { ContributionList } from '../components/funder/ContributionList';
-import { SeededProgrammeTools } from '../components/funder/SeededProgrammeTools';
 import { SignInSheet } from '../components/layout/SignInSheet';
 import { MoneyLegend } from '../components/programme/MoneyRow';
 import { ProgrammeParamNotice } from '../components/programme/ProgrammeParamNotice';
@@ -12,7 +11,6 @@ import { Button, PageHead, SampleTag, StatTile } from '../components/ui';
 import { useWallet } from '../context/useWallet';
 import { FIXTURE_CONTRIBUTIONS } from '../fixtures/funding';
 import { samplesEnabled } from '../lib/samples';
-import { DEMO_PROGRAMME_ID } from '../context/sorobanStore';
 import { useIndexedList, useProgrammeParam } from '../hooks';
 import { usePageTitle } from '../hooks/usePageTitle';
 import { useReleaseDeadlines } from '../hooks/useReleaseDeadlines';
@@ -65,7 +63,7 @@ export const FunderDashboard = () => {
   const exportableCount = useMemo(() => cards.filter((c) => !c.sample).length, [cards]);
   const totals = fundingTotals(cards);
   // Every stand-in contribution is in its programme's asset; they share one.
-  const asset = cards[0]?.asset ?? 'USDC';
+  const asset = cards[0]?.asset ?? null;
   const sampleIds = useMemo(() => new Set(programmes.filter((p) => p.sample).map((p) => p.id)), [programmes]);
 
   const contributionProgrammeIds = useMemo(
@@ -161,19 +159,19 @@ export const FunderDashboard = () => {
             <StatTile
               label="Contributed"
               value={formatFigure(totals.contributed)}
-              unit={asset}
+              unit={asset ?? undefined}
               hint={`Across ${plural(totals.programmes, 'programme', 'programmes')}`}
             />
             <StatTile
               label="Released to people"
               value={formatFigure(totals.released)}
-              unit={asset}
+              unit={asset ?? undefined}
               hint="Your share of releases so far"
             />
             <StatTile
               label="Refundable now"
               value={formatFigure(totals.refundableNow)}
-              unit={asset}
+              unit={asset ?? undefined}
               hint={
                 totals.refundablePrograms > 0
                   ? `From ${plural(totals.refundablePrograms, 'programme', 'programmes')}`
@@ -196,8 +194,6 @@ export const FunderDashboard = () => {
           </p>
         </>
       )}
-
-      {DEMO_PROGRAMME_ID && <SeededProgrammeTools />}
 
       <ContributeSheet
         open={contributeOpen}

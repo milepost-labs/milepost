@@ -10,18 +10,18 @@ vi.mock('../context/useWallet', () => ({
   useWallet: () => ({ address: mocks.address, status: mocks.address ? 'connected' : 'disconnected', connect: vi.fn() }),
 }));
 vi.mock('../context/useAnnouncer', () => ({ useAnnouncer: () => mocks.announce }));
-vi.mock('../context/useSoroban', () => ({
-  useSoroban: () => ({
+vi.mock('../context/useSoroban', () => {
+  // Built once: reads key on the clients, and the real context is memoized.
+  const soroban = {
     programmeAt: vi.fn(),
     registry: { is_programme: vi.fn(async () => ({ result: true })) },
-  }),
-}));
+  };
+  return { useSoroban: () => soroban, useOptionalSoroban: () => soroban };
+});
 vi.mock('../lib/indexer', async (importOriginal) => ({
   ...(await importOriginal<typeof import('../lib/indexer')>()),
   fetchProgrammes: vi.fn(async () => []),
 }));
-// Live reads against the seeded testnet programme; covered by their own components.
-vi.mock('../components/funder/SeededProgrammeTools', () => ({ SeededProgrammeTools: () => null }));
 
 function renderPage() {
   return render(

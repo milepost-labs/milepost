@@ -20,12 +20,15 @@ vi.mock('../context/useWallet', () => ({
   useWallet: () => ({ address: 'GDONOR', status: 'connected' }),
 }));
 
-vi.mock('../context/useSoroban', () => ({
-  useSoroban: () => ({
+vi.mock('../context/useSoroban', () => {
+  // Built once: reads key on the clients, and the real context is memoized.
+  const client = { get_config: mocks.getConfig };
+  const soroban = {
     rpcUrl: 'https://rpc.testnet.stellar.org',
-    programmeAt: () => ({ get_config: mocks.getConfig }),
-  }),
-}));
+    programmeAt: () => client,
+  };
+  return { useSoroban: () => soroban, useOptionalSoroban: () => soroban };
+});
 
 const TOKEN = 'CTOKENCONTRACTFORTHEPROGRAMMEASSETAAAAAAAAAAAAAAAAAAAAA';
 const PROGRAMME = 'CPROGRAMMECONTRACTIDAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA';

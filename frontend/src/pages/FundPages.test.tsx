@@ -11,6 +11,15 @@ const HASH = 'ab'.repeat(32);
 
 const mocks = vi.hoisted(() => ({ lookup: vi.fn(), announce: vi.fn(), copied: [] as string[] }));
 
+// The asset read has its own tests (hooks/useProgrammeAsset.test.tsx). Here a
+// sample programme is in its stand-in asset and a deployed one pays in XLM.
+vi.mock('../hooks/useProgrammeAsset', async () => {
+  const { isSampleProgrammeId } = await import('../lib/programmeView');
+  return {
+    useProgrammeAsset: (id: string | null | undefined) => (!id ? null : isSampleProgrammeId(id) ? 'USDC' : 'XLM'),
+  };
+});
+
 vi.mock('../lib/txLookup', async (importOriginal) => ({
   ...(await importOriginal<typeof import('../lib/txLookup')>()),
   lookupTransaction: (...args: unknown[]) => mocks.lookup(...args),
@@ -26,16 +35,19 @@ function ok<T>(value: T) {
   return Promise.resolve({ result: { unwrap: () => value } });
 }
 
-vi.mock('../context/useSoroban', () => ({
-  useSoroban: () => ({
+vi.mock('../context/useSoroban', () => {
+  // Built once: reads key on the clients, and the real context is memoized.
+  const client = {
+    get_config: () => ok({ fee_bps: 250 }),
+    contributed_by: async () => ({ result: 1_000_000_000n }),
+    total_contributed: async () => ({ result: 4_000_000_000n }),
+  };
+  const soroban = {
     rpcUrl: 'https://rpc.test',
-    programmeAt: () => ({
-      get_config: () => ok({ fee_bps: 250 }),
-      contributed_by: async () => ({ result: 1_000_000_000n }),
-      total_contributed: async () => ({ result: 4_000_000_000n }),
-    }),
-  }),
-}));
+    programmeAt: () => client,
+  };
+  return { useSoroban: () => soroban, useOptionalSoroban: () => soroban };
+});
 
 function renderAt(element: React.ReactElement, url = '/') {
   return render(<MemoryRouter initialEntries={[url]}>{element}</MemoryRouter>);

@@ -66,7 +66,12 @@ export interface FixtureChainRead {
   quorum: number;
   applicants?: number;
   closesInDays?: number;
+  /** SHA-256 hex of the programme's committed description, or undefined when unknown. */
+  metadataHash?: string | null;
 }
+
+/** The asset the sample programmes' figures are written in. They have no token to read. */
+export const FIXTURE_ASSET_CODE = 'USDC';
 
 export const FIXTURE_PROGRAMMES: FixtureProgramme[] = [
   {

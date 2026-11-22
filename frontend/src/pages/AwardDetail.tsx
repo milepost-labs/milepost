@@ -9,7 +9,8 @@ import { useContractResult, useContractRead, useIndexedList } from '../hooks';
 import { usePageTitle } from '../hooks/usePageTitle';
 import { fetchProgrammes } from '../lib/indexer';
 import { formatAmount, describeAmount } from '../lib/amount';
-import { isSampleProgrammeId, programmeAsset, shortId } from '../lib/programmeView';
+import { isSampleProgrammeId, shortId } from '../lib/programmeView';
+import { useProgrammeAsset } from '../hooks/useProgrammeAsset';
 import './AwardDetail.css';
 
 /** How a mode pays out, on the award's own page. */
@@ -70,7 +71,8 @@ export const AwardDetail = () => {
     { enabled: client !== null && allocated, contract: 'program' },
   );
 
-  const asset = programmeAsset({ sample: false });
+  // The programme's own asset, read from its token; null (figures without a unit) until read.
+  const asset = useProgrammeAsset(programmeId);
 
   return (
     <div className="award-detail">

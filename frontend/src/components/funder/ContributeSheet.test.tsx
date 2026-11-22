@@ -19,6 +19,15 @@ const mocks = vi.hoisted(() => ({
 }));
 
 vi.mock('../../context/useAnnouncer', () => ({ useAnnouncer: () => mocks.announce }));
+
+// The asset read has its own tests (hooks/useProgrammeAsset.test.tsx). Here a
+// sample programme is in its stand-in asset and a deployed one pays in XLM.
+vi.mock('../../hooks/useProgrammeAsset', async () => {
+  const { isSampleProgrammeId } = await import('../../lib/programmeView');
+  return {
+    useProgrammeAsset: (id: string | null | undefined) => (!id ? null : isSampleProgrammeId(id) ? 'USDC' : 'XLM'),
+  };
+});
 vi.mock('../../context/useWallet', () => ({
   useWallet: () => ({
     address: 'GDONOR',
@@ -26,16 +35,19 @@ vi.mock('../../context/useWallet', () => ({
     signTransaction: mocks.signTransaction,
   }),
 }));
-vi.mock('../../context/useSoroban', () => ({
-  useSoroban: () => ({
-    programmeAt: () => ({
-      get_phase: mocks.getPhase,
-      contribute: mocks.contribute,
-      get_config: mocks.getConfig,
-      total_contributed: mocks.totalContributed,
-    }),
-  }),
-}));
+vi.mock('../../context/useSoroban', () => {
+  // Built once: reads key on the clients, and the real context is memoized.
+  const client = {
+    get_phase: mocks.getPhase,
+    contribute: mocks.contribute,
+    get_config: mocks.getConfig,
+    total_contributed: mocks.totalContributed,
+  };
+  const soroban = {
+    programmeAt: () => client,
+  };
+  return { useSoroban: () => soroban, useOptionalSoroban: () => soroban };
+});
 // The token-contract read has its own tests; here the flow only needs the result.
 vi.mock('../../hooks/useProgrammeBalance', () => ({
   useProgrammeBalance: () => mocks.balance,

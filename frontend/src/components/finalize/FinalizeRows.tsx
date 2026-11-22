@@ -6,6 +6,7 @@ import { useContractResult } from '../../hooks/useContractRead';
 import { explain } from '../../lib/errors';
 import { truncateAddress } from '../../lib/format';
 import { formatFigure } from '../../lib/programmeView';
+import { formatIn } from '../../lib/funding';
 import { awardFromVotes } from '../../lib/awardRule';
 import { Button, DisabledReason, SampleTag } from '../ui';
 import { ErrorPanel } from '../state/AsyncStates';
@@ -23,7 +24,7 @@ export interface RowFacts {
 
 export interface RowContext {
   quorum: number;
-  asset: string;
+  asset: string | null;
   left: bigint;
   minimum: bigint;
   /** Why nothing on this programme can be finalized right now, or null. */
@@ -75,9 +76,9 @@ function RowView({
     const why =
       ctx.gate ??
       (award > left
-        ? `Only ${formatFigure(left > 0n ? left : 0n)} ${asset} left`
+        ? `Only ${formatIn(left > 0n ? left : 0n, asset)} left`
         : minimum > 0n && award < minimum
-          ? `Below the ${formatFigure(minimum)} ${asset} minimum`
+          ? `Below the ${formatIn(minimum, asset)} minimum`
           : null);
     action = (
       <span className="fin-row__act">
