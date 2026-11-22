@@ -444,6 +444,62 @@ describe('PayeeManagement bulk verify/remove', () => {
     expect(document.querySelector('.payee-mgmt__bulk-progress[role="status"]')).toBeNull();
     expect(document.querySelector('.payee-mgmt__bulk-results[aria-live]')).toBeNull();
   }, 15000);
+
+  it('stops on the failing batch in a multi-batch run without sending later batches or clearing the list', async () => {
+    programme.is_payee.mockResolvedValue({ result: false });
+    programme.allow_payees
+      .mockImplementationOnce(() => sendable(undefined))
+      .mockImplementationOnce(() => Promise.reject(new Error('network timeout')))
+      .mockImplementationOnce(() => sendable(undefined));
+    await renderPage();
+    fireEvent.change(screen.getByLabelText('Payee addresses'), {
+      target: { value: manyAddresses(110).join('\n') },
+    });
+    fireEvent.click(screen.getByRole('button', { name: 'Check addresses' }));
+    await screen.findByText(/sent as 3 batches/);
+
+    fireEvent.click(screen.getByRole('button', { name: 'Verify 110 payees' }));
+
+    await waitFor(
+      () =>
+        expect(mocks.announce).toHaveBeenCalledWith(
+          expect.stringContaining('Batch 2 of 3 failed. 50 of 110 payees verified before it failed'),
+          'alert',
+        ),
+      { timeout: 15000 },
+    );
+
+    expect(programme.allow_payees).toHaveBeenCalledTimes(2);
+    expect(screen.getByText(/Sending batch 2 of 3 \(1 done\)/)).toBeTruthy();
+    expect((screen.getByLabelText('Payee addresses') as HTMLTextAreaElement).value).not.toBe('');
+  }, 15000);
+
+  it('announces 0 succeeded when the first batch fails in remove mode and skips the second batch', async () => {
+    programme.is_payee.mockResolvedValue({ result: true });
+    programme.deny_payees
+      .mockImplementationOnce(() => Promise.reject(new Error('network timeout')))
+      .mockImplementationOnce(() => sendable(undefined));
+    await renderPage();
+    fireEvent.click(screen.getByRole('radio', { name: /Remove/ }));
+    fireEvent.change(screen.getByLabelText('Payee addresses'), {
+      target: { value: manyAddresses(60).join('\n') },
+    });
+    fireEvent.click(screen.getByRole('button', { name: 'Check addresses' }));
+    await screen.findByText(/sent as 2 batches/);
+
+    fireEvent.click(screen.getByRole('button', { name: 'Remove 60 payees' }));
+
+    await waitFor(
+      () =>
+        expect(mocks.announce).toHaveBeenCalledWith(
+          expect.stringContaining('Batch 1 of 2 failed. 0 of 60 payees removed before it failed'),
+          'alert',
+        ),
+      { timeout: 15000 },
+    );
+    expect(programme.deny_payees).toHaveBeenCalledTimes(1);
+    expect(screen.getByText(/Sending batch 1 of 2/)).toBeTruthy();
+  }, 15000);
 });
 
 describe('Issue #439 - Real vs Sample programmes payee management', () => {
