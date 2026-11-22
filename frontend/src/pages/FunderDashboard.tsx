@@ -11,7 +11,6 @@ import { Button, PageHead, SampleTag, StatTile } from '../components/ui';
 import { useWallet } from '../context/useWallet';
 import { FIXTURE_CONTRIBUTIONS } from '../fixtures/funding';
 import { samplesEnabled } from '../lib/samples';
-import { DEMO_PROGRAMME_ID } from '../context/sorobanStore';
 import { useIndexedList, useProgrammeParam } from '../hooks';
 import { usePageTitle } from '../hooks/usePageTitle';
 import { useReleaseDeadlines } from '../hooks/useReleaseDeadlines';

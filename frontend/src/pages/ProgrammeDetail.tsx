@@ -1,3 +1,4 @@
+import { Buffer } from "buffer";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { Link, Navigate, useLocation } from "react-router-dom";
 import type { ProgrammeConfig } from "@milepost/program";
