@@ -24,6 +24,7 @@ import { directoryHref } from "../lib/programmeView";
 import { formatAmount, percentOf } from "../lib/amount";
 import { formatFigure, isSampleProgrammeId, programmeRouteState } from "../lib/programmeView";
 import { registryVerificationCopy } from "../lib/registryVerification";
+import { readFeeSwept, readNothingToSweep } from "../lib/sweepActions";
 import { FIXTURE_CHAIN } from "../fixtures/programmes";
 import { fetchTokenName, parseTokenName } from "../lib/token";
 import "./ProgrammeDetail.css";
@@ -206,6 +207,27 @@ const ProgrammeDetailBody = ({ programmeId, programme, isDefault }: ProgrammeDet
   );
   const swept = useContractRead(() => programme.total_swept(), [programme]);
   const refetchPhase = phase.refetch;
+
+  // The contract has no getter for "fee already sent", so ask it what a
+  // sweep would do now. Only once applications have closed: before that the
+  // answer is always "not yet", for a different reason.
+  const feeSweepOpen = phase.data !== null && phase.data.tag !== "Open";
+  const feeSwept = useContractRead(
+    async () => ({ result: await readFeeSwept(programme) }),
+    [programme],
+    { enabled: feeSweepOpen },
+  );
+  const refetchFeeSwept = feeSwept.refetch;
+
+  // Likewise for unclaimed refunds: once the sweep deadline has passed, ask
+  // the contract whether a sweep would find anything to send.
+  const sweepDeadlinePassed = config.data ? nowMs / 1000 >= Number(config.data.sweep_deadline) : null;
+  const nothingToSweep = useContractRead(
+    async () => ({ result: await readNothingToSweep(programme) }),
+    [programme],
+    { enabled: sweepDeadlinePassed === true },
+  );
+  const refetchNothingToSweep = nothingToSweep.refetch;
 
   useEffect(() => {
     const interval = window.setInterval(() => {
@@ -500,6 +522,39 @@ const ProgrammeDetailBody = ({ programmeId, programme, isDefault }: ProgrammeDet
             refundsOpen={refundsOpen}
             refundable={refundable > ZERO ? formatXlm(refundable) : null}
             verified={isRegistered.error ? false : isRegistered.data}
+            sweep={{
+              fee: fee.data,
+              treasury: config.data?.treasury ?? null,
+              // Pending until the check has answered; a failed check counts as
+              // "not sent", because the sheet simulates before anything is
+              // signed and explains the contract's own refusal.
+              feeSwept: !feeSweepOpen
+                ? false
+                : feeSwept.data !== null
+                  ? feeSwept.data
+                  : feeSwept.error
+                    ? false
+                    : null,
+              asset,
+              sample: isSample,
+              sweepDeadlinePassed,
+              sweepDeadline: config.data ? config.data.sweep_deadline : null,
+              // Pending until the check has answered; a failed check counts as
+              // "something left", for the same reason as the fee above.
+              nothingToSweep:
+                sweepDeadlinePassed !== true
+                  ? false
+                  : nothingToSweep.data !== null
+                    ? nothingToSweep.data
+                    : nothingToSweep.error
+                      ? false
+                      : null,
+              onChanged: () => {
+                refetchFeeSwept();
+                refetchNothingToSweep();
+                refetchMoney();
+              },
+            }}
           />
 
           <section className="programme-timeline" aria-labelledby="programme-timeline-title">

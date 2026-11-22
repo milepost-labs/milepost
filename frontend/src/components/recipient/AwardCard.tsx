@@ -12,12 +12,16 @@ import { samplesEnabled } from '../../lib/samples';
 import { useAnnouncer } from '../../context/useAnnouncer';
 import { useWallet } from '../../context/useWallet';
 import { useSoroban } from '../../context/useSoroban';
+import { useContractResult } from '../../hooks/useContractRead';
 import { useTransaction } from '../../hooks/useTransaction';
+import { isPhase } from '../../lib/phaseGate';
+import { releaseBatchGate } from '../../lib/releaseBatch';
 import { sampleSendable, SAMPLE_TX_DELAY_MS } from '../../lib/fundingTx';
 import { absoluteLink, REQUEST_NOTE_MAX, requestPath, type ReleaseReply } from '../../lib/verifyLinks';
-import { Button, CopyButton, Field, Modal, ModePill, Notice, SampleTag, TextArea, TxExplorerLink } from '../ui';
+import { Button, CopyButton, DisabledReason, Field, Modal, ModePill, Notice, SampleTag, TextArea, TxExplorerLink } from '../ui';
 import { TxDone, TxFailed, TxPending } from '../state/TxStatus';
 import { AllocatedSpending } from './AllocatedSpending';
+import { ReleaseBatchSheet } from './ReleaseBatchSheet';
 import { restoreFromAssembled } from '../../lib/restore';
 import './AwardCard.css';
 
@@ -104,6 +108,7 @@ function ReleaseSheet({
   onReleased,
   sampleDelayMs,
   reply,
+  onBatch,
 }: {
   open: boolean;
   onClose: () => void;
@@ -115,11 +120,39 @@ function ReleaseSheet({
   onReleased: (result: Released, fresh: RecipientAwardFixture | null) => void;
   sampleDelayMs: number;
   reply: ReleaseReply | null;
+  /** Switch to releasing several tranches in one transaction. */
+  onBatch: () => void;
 }) {
   const announce = useAnnouncer();
   const { address } = useWallet();
   const { programmeAt } = useSoroban();
   const tx = useTransaction<Released>({ contract: 'program' });
+
+  // Several at once is offered when more than one tranche is left, and only
+  // inside the window where a release would go through.
+  const tranchesLeft = award.tranches - award.tranchesReleased;
+  const offersBatch = isReal && tranchesLeft >= 2;
+  const [nowMs] = useState(() => Date.now());
+  const phaseRead = useContractResult(() => programmeAt(award.programmeId).get_phase(), [award.programmeId], {
+    enabled: offersBatch,
+  });
+  const configRead = useContractResult(() => programmeAt(award.programmeId).get_config(), [award.programmeId], {
+    enabled: offersBatch,
+  });
+  const readFailed = Boolean(phaseRead.error || configRead.error);
+  const phaseTag = phaseRead.data?.tag;
+  const batchGate = releaseBatchGate({
+    phase: isPhase(phaseTag) ? phaseTag : null,
+    releaseDeadline: configRead.data?.release_deadline ?? null,
+    nowMs,
+    tranchesLeft,
+    signedIn: Boolean(address),
+    isRecipient: address === award.recipient,
+  });
+  const batchReason = readFailed
+    ? 'Could not read the programme’s phase and release window. Close this and try again.'
+    : batchGate.reason;
+  const batchEnabled = batchGate.enabled && !readFailed;
   const [attestationHex, setAttestationHex] = useState(reply?.attestation ?? '');
   const [attesterInput, setAttesterInput] = useState(reply?.attester ?? '');
 
@@ -267,6 +300,32 @@ function ReleaseSheet({
           <Button fullWidth disabled={!canRelease} onClick={() => void release()}>
             Sign and release
           </Button>
+          {offersBatch && (
+            <div className="award-card__batch">
+              {batchEnabled ? (
+                <Button fullWidth variant="secondary" onClick={onBatch} aria-describedby="award-batch-why">
+                  Release several at once
+                </Button>
+              ) : (
+                <button
+                  type="button"
+                  className="ui-button ui-button--secondary ui-button--md ui-button--full"
+                  aria-disabled="true"
+                  aria-describedby="award-batch-why"
+                >
+                  Release several at once
+                </button>
+              )}
+              {batchEnabled ? (
+                <p id="award-batch-why" className="award-card__release-intro">
+                  {tranchesLeft} tranches left. Use one attestation per tranche, all from the same verifier.{' '}
+                  {batchReason}
+                </p>
+              ) : (
+                <DisabledReason id="award-batch-why">{batchReason}</DisabledReason>
+              )}
+            </div>
+          )}
         </div>
       )}
     </Modal>
@@ -342,6 +401,7 @@ export function AwardCard({ award: initialAward, reply = null, sampleDelayMs = S
   // still names it after the award moves on. Null while closed.
   const [releasing, setReleasing] = useState<number | null>(null);
   const [asking, setAsking] = useState<number | null>(null);
+  const [batching, setBatching] = useState(false);
   // A reply link is spent once a release goes through.
   const [replyUsed, setReplyUsed] = useState(false);
   const activeReply = reply && reply.programmeId === initialAward.programmeId && !replyUsed ? reply : null;
@@ -377,6 +437,19 @@ export function AwardCard({ award: initialAward, reply = null, sampleDelayMs = S
           released: (BigInt(prev.released) + result.amount).toString(),
           tranchesReleased: prev.tranchesReleased + 1,
           // The proof that was just used is spent; the next needs its own.
+          attestationReady: false,
+        },
+    );
+  };
+
+  const onBatchReleased = (result: { amount: bigint; count: number; fresh: RecipientAwardFixture | null }) => {
+    setReplyUsed(true);
+    setLiveAward(
+      (prev) =>
+        result.fresh ?? {
+          ...prev,
+          released: (BigInt(prev.released) + result.amount).toString(),
+          tranchesReleased: prev.tranchesReleased + result.count,
           attestationReady: false,
         },
     );
@@ -493,6 +566,22 @@ export function AwardCard({ award: initialAward, reply = null, sampleDelayMs = S
           onReleased={onReleased}
           sampleDelayMs={sampleDelayMs}
           reply={activeReply}
+          onBatch={() => {
+            setReleasing(null);
+            setBatching(true);
+          }}
+        />
+      )}
+
+      {batching && (
+        <ReleaseBatchSheet
+          open
+          onClose={() => setBatching(false)}
+          award={liveAward}
+          asset={asset}
+          tranchesLeft={tranches - tranchesReleased}
+          reply={activeReply}
+          onReleased={onBatchReleased}
         />
       )}
 
