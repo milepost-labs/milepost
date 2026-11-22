@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { act, fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { useState } from 'react';
 import * as freighter from '@stellar/freighter-api';
 import { NETWORK } from '../config/network';
@@ -195,7 +195,7 @@ describe('WalletContext', () => {
 
   it('handles a declined connection attempt when user refuses Freighter prompt', async () => {
     vi.mocked(freighter.isAllowed).mockResolvedValue({ isAllowed: false });
-    vi.mocked(freighter.requestAccess).mockResolvedValue({ error: 'User declined access' });
+    vi.mocked(freighter.requestAccess).mockResolvedValue({ address: '', error: 'User declined access' });
 
     renderWallet();
 
@@ -212,7 +212,7 @@ describe('WalletContext', () => {
 
   it('handles declined connection with structured object error message', async () => {
     vi.mocked(freighter.isAllowed).mockResolvedValue({ isAllowed: false });
-    vi.mocked(freighter.requestAccess).mockResolvedValue({ error: { message: 'Rejected by user' } } as any);
+    vi.mocked(freighter.requestAccess).mockResolvedValue({ error: { message: 'Rejected by user' } } as never);
 
     renderWallet();
 
@@ -229,7 +229,7 @@ describe('WalletContext', () => {
 
   it('handles empty error object in unwrap with fallback message', async () => {
     vi.mocked(freighter.isAllowed).mockResolvedValue({ isAllowed: false });
-    vi.mocked(freighter.requestAccess).mockResolvedValue({ error: {} } as any);
+    vi.mocked(freighter.requestAccess).mockResolvedValue({ error: {} } as never);
 
     renderWallet();
 
@@ -261,7 +261,7 @@ describe('WalletContext', () => {
 
   it('flags wrong-network with unknown network fallback if network name is omitted', async () => {
     vi.mocked(freighter.getNetwork).mockResolvedValue({
-      network: undefined,
+      network: undefined as unknown as string,
       networkPassphrase: 'Wrong Network Passphrase',
     });
 
@@ -344,7 +344,7 @@ describe('WalletContext', () => {
   it('throws error when freighter.signTransaction returns an error', async () => {
     vi.mocked(freighter.signTransaction).mockResolvedValue({
       error: 'Hardware wallet rejected transaction',
-    } as any);
+    } as never);
 
     renderWallet();
 

@@ -272,7 +272,7 @@ export function FinalizeSheet({ target, onClose, onFinalized, sampleDelayMs = SA
                   <span className="fin-sheet__named-payee-label">
                     Name: <b>{payeeName}</b> <span className="fin-sheet__claim-tag">(creator’s claim)</span>
                   </span>
-                  {target.sample ? null : payeeCheck.loading ? (
+                  {target.sample ? null : payeeCheck.status === 'loading' ? (
                     <Badge tone="neutral">Checking…</Badge>
                   ) : payeeCheck.data === true ? (
                     <Badge tone="success">Verified payee</Badge>

@@ -1,5 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { fireEvent, render, screen, waitFor } from '@testing-library/react';
+import type { ResolvedMetadata } from '../lib/metadata';
+import { fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
 import {
   bulkBatchDone,
@@ -195,7 +196,7 @@ const mocks = vi.hoisted(() => ({
         { address: 'GCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCC', role: 'reviewer', label: 'Reviewer Account' },
       ],
     },
-  } as any,
+  } as ResolvedMetadata | null,
 }));
 
 vi.mock('../hooks/useProgrammeMetadata', () => ({
@@ -541,9 +542,11 @@ describe('Issue #439 - Real vs Sample programmes payee management', () => {
       fireEvent.change(input, { target: { value: VALID_A } });
       fireEvent.click(screen.getByRole('button', { name: 'Check address' }));
 
+      // The creator's list also names payees, so read the check result alone.
+      const result = () => document.querySelector('.payee-mgmt__check-result') as HTMLElement;
       await waitFor(() => {
-        expect(screen.getByText('St Jude Hospital')).toBeDefined();
-        expect(screen.getByText('Verified on-chain')).toBeDefined();
+        expect(within(result()).getByText('St Jude Hospital')).toBeDefined();
+        expect(within(result()).getByText('Verified on-chain')).toBeDefined();
       });
 
       // Check VALID_B (named but not verified)
@@ -551,8 +554,8 @@ describe('Issue #439 - Real vs Sample programmes payee management', () => {
       fireEvent.click(screen.getByRole('button', { name: 'Check address' }));
 
       await waitFor(() => {
-        expect(screen.getByText('City Clinic')).toBeDefined();
-        expect(screen.getByText('Not a verified payee')).toBeDefined();
+        expect(within(result()).getByText('City Clinic')).toBeDefined();
+        expect(within(result()).getByText('Not a verified payee')).toBeDefined();
       });
 
       // Check unnamed address
@@ -561,8 +564,9 @@ describe('Issue #439 - Real vs Sample programmes payee management', () => {
       fireEvent.click(screen.getByRole('button', { name: 'Check address' }));
 
       await waitFor(() => {
-        expect(screen.queryByText('St Jude Hospital')).toBeNull();
-        expect(screen.queryByText('City Clinic')).toBeNull();
+        expect(within(result()).getByText('Not a verified payee')).toBeDefined();
+        expect(within(result()).queryByText('St Jude Hospital')).toBeNull();
+        expect(within(result()).queryByText('City Clinic')).toBeNull();
       });
     });
 

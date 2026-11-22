@@ -1,10 +1,12 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { fireEvent, render, screen, waitFor, within } from '@testing-library/react';
+import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { Buffer } from 'buffer';
+import { MemoryRouter } from 'react-router-dom';
 import { AttestationRevoke } from './AttestationRevoke';
+import { explain } from '../../lib/errors';
 
-const ATTESTER = 'GAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA';
-const NON_ATTESTER = 'GBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB';
+// Hoisted: the vi.hoisted/vi.mock factories below read it before module code runs.
+const { ATTESTER } = vi.hoisted(() => ({ ATTESTER: 'GAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA' }));
 const UID_HEX = '1234567890abcdef1234567890abcdef1234567890abcdef1234567890abcdef';
 const LABEL = 'Attestation #1234';
 
@@ -48,12 +50,9 @@ function sendable(unwrapFn: () => void = () => undefined) {
 
 function renderRevoke(props: Partial<Parameters<typeof AttestationRevoke>[0]> = {}) {
   return render(
-    <AttestationRevoke
-      uidHex={UID_HEX}
-      label={LABEL}
-      sampleDelayMs={0}
-      {...props}
-    />,
+    <MemoryRouter>
+      <AttestationRevoke uidHex={UID_HEX} label={LABEL} sampleDelayMs={0} {...props} />
+    </MemoryRouter>,
   );
 }
 
@@ -208,9 +207,11 @@ describe('AttestationRevoke', () => {
   });
 
   it('handles declined signature when user rejects transaction in wallet', async () => {
+    const declined = new Error('User declined to sign transaction');
+    const { message } = explain(declined, 'attest');
     mocks.revoke.mockImplementation(() =>
       Promise.resolve({
-        signAndSend: vi.fn().mockRejectedValue(new Error('User declined to sign transaction')),
+        signAndSend: vi.fn().mockRejectedValue(declined),
       }),
     );
 
@@ -223,21 +224,19 @@ describe('AttestationRevoke', () => {
 
     await waitFor(() => {
       expect(within(dialog).getByText('Not revoked')).toBeDefined();
-      expect(within(dialog).getByText('User declined to sign transaction')).toBeDefined();
+      expect(within(dialog).getByText(message)).toBeDefined();
     });
 
-    expect(mocks.announce).toHaveBeenCalledWith(
-      'User declined to sign transaction',
-      'alert',
-    );
+    expect(mocks.announce).toHaveBeenCalledWith(message, 'alert');
   });
 
   it('handles generic contract call failure and permits retry', async () => {
+    const timeout = new Error('Horizon RPC timeout');
     let attempts = 0;
     mocks.revoke.mockImplementation(() => {
       attempts++;
       if (attempts === 1) {
-        return Promise.reject(new Error('Horizon RPC timeout'));
+        return Promise.reject(timeout);
       }
       return sendable();
     });
@@ -251,7 +250,7 @@ describe('AttestationRevoke', () => {
 
     await waitFor(() => {
       expect(within(dialog).getByText('Not revoked')).toBeDefined();
-      expect(within(dialog).getByText('Horizon RPC timeout')).toBeDefined();
+      expect(within(dialog).getByText(explain(timeout, 'attest').message)).toBeDefined();
     });
 
     // Retry should trigger second attempt
@@ -264,7 +263,8 @@ describe('AttestationRevoke', () => {
   });
 
   it('does not submit twice when clicked while revoke transaction is pending', async () => {
-    let resolveSignAndSend: () => void = () => undefined;
+    const noop = () => undefined;
+    let resolveSignAndSend: () => void = noop;
     mocks.revoke.mockImplementation(() =>
       Promise.resolve({
         signAndSend: () =>
@@ -287,8 +287,10 @@ describe('AttestationRevoke', () => {
 
     expect(mocks.revoke).toHaveBeenCalledTimes(1);
 
-    // Finish pending transaction
-    resolveSignAndSend();
+    // Wait until the wallet has actually been asked, then let it answer.
+    await screen.findByText('Revoking attestation');
+    await waitFor(() => expect(resolveSignAndSend).not.toBe(noop));
+    await act(async () => resolveSignAndSend());
 
     await waitFor(() => {
       expect(within(dialog).getByText('Attestation revoked')).toBeDefined();

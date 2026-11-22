@@ -7,7 +7,7 @@ import type { Award, ProgrammeConfig } from '@milepost/program';
 import type { IndexedAward } from '../../lib/indexer';
 import { fetchAwards } from '../../lib/indexer';
 import { useIndexedList } from '../../hooks/useIndexedList';
-import { useContractResult } from '../../hooks/useContractRead';
+import { useContractRead, useContractResult } from '../../hooks/useContractRead';
 import { useProgrammeMetadata } from '../../hooks/useProgrammeMetadata';
 import { SorobanContext } from '../../context/sorobanStore';
 import { formatAmount, parseAmount, describeAmount } from '../../lib/amount';
@@ -102,7 +102,7 @@ export const AwardRowItem: FC<AwardRowItemProps> = ({
 
   const payeeName = award.payee ? effectivePayeeNames.get(award.payee.trim()) : undefined;
 
-  const isPayee = useContractResult<boolean>(
+  const isPayee = useContractRead<boolean>(
     () => programme!.is_payee({ payee: award.payee! }),
     [programme, award.payee],
     { enabled: Boolean(programme && award.payee && payeeName) },

@@ -1,4 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
+import type { ResolvedMetadata } from '../../lib/metadata';
 import { render, screen, fireEvent, waitFor } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
 import { AwardsTab } from './AwardsTab';
@@ -47,9 +48,12 @@ vi.mock('../../hooks/useIndexedList', () => ({
   }),
 }));
 
-const NAMED_PAYEE = 'GBBD47IF6LWK7P7MDEVSCWR7DPUWV3NY3DTQEVFL4NAT4AQH3ZLLFLA5';
-const UNVERIFIED_PAYEE = 'GCSW2JNZG3XY6Q5Q4QNY7QXZV7WQZ6WXYZ6QWXYZ6QWXYZ6QWXYZ6QWX';
-const REVIEWER_ADDR = 'GD6X33SKLUEMANS67ID3LJL572FFGERMMJCIFRW7P7EKZQLH35XT67C6';
+// Hoisted: the vi.hoisted/vi.mock factories below read these before module code runs.
+const { NAMED_PAYEE, UNVERIFIED_PAYEE, REVIEWER_ADDR } = vi.hoisted(() => ({
+  NAMED_PAYEE: 'GBBD47IF6LWK7P7MDEVSCWR7DPUWV3NY3DTQEVFL4NAT4AQH3ZLLFLA5',
+  UNVERIFIED_PAYEE: 'GCSW2JNZG3XY6Q5Q4QNY7QXZV7WQZ6WXYZ6QWXYZ6QWXYZ6QWXYZ6QWX',
+  REVIEWER_ADDR: 'GD6X33SKLUEMANS67ID3LJL572FFGERMMJCIFRW7P7EKZQLH35XT67C6',
+}));
 
 const metadataMock = vi.hoisted(() => ({
   value: {
@@ -66,7 +70,7 @@ const metadataMock = vi.hoisted(() => ({
         { address: REVIEWER_ADDR, role: 'reviewer', label: 'Ignored Reviewer' },
       ],
     },
-  } as any,
+  } as ResolvedMetadata | null,
 }));
 
 vi.mock('../../hooks/useProgrammeMetadata', () => ({

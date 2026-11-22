@@ -1,3 +1,4 @@
+import { Buffer } from 'buffer';
 import { useEffect, useMemo, useRef, useState, type FormEvent } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import type { ProgrammeConfig } from '@milepost/program';

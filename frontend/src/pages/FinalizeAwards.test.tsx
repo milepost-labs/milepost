@@ -1,4 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
+import type { ResolvedMetadata } from '../lib/metadata';
 import { fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
 import { Buffer } from 'buffer';
@@ -9,13 +10,16 @@ import { FinalizeAwards } from './FinalizeAwards';
 // on the chain; each award is finalized in a sheet that asks for the mode and
 // the payee that mode needs, following the contract's rules per mode.
 
-const ADDRESS = `GFIN${'A'.repeat(52)}`;
-const AWARDED = `GAWD${'B'.repeat(52)}`;
-const APPLICANT = `GAPP${'C'.repeat(52)}`;
-const PAYEE = `GPAY${'D'.repeat(52)}`;
-const WALLET = `CWAL${'E'.repeat(52)}`;
-const REAL_ID = `CREA${'F'.repeat(52)}`;
-const POLICY_ID = `CPOL${'G'.repeat(52)}`;
+// Hoisted: the vi.hoisted/vi.mock factories below read these before module code runs.
+const { ADDRESS, AWARDED, APPLICANT, PAYEE, WALLET, REAL_ID, POLICY_ID } = vi.hoisted(() => ({
+  ADDRESS: `GFIN${'A'.repeat(52)}`,
+  AWARDED: `GAWD${'B'.repeat(52)}`,
+  APPLICANT: `GAPP${'C'.repeat(52)}`,
+  PAYEE: `GPAY${'D'.repeat(52)}`,
+  WALLET: `CWAL${'E'.repeat(52)}`,
+  REAL_ID: `CREA${'F'.repeat(52)}`,
+  POLICY_ID: `CPOL${'G'.repeat(52)}`,
+}));
 
 const mocks = vi.hoisted(() => ({
   address: null as string | null,
@@ -34,7 +38,7 @@ const mocks = vi.hoisted(() => ({
         { address: WALLET, role: 'reviewer', label: 'Reviewer Wallet' },
       ],
     },
-  } as any,
+  } as ResolvedMetadata | null,
 }));
 
 vi.mock('../hooks/useProgrammeMetadata', () => ({
@@ -98,7 +102,13 @@ function makeProgramme() {
     total_granted: vi.fn(async () => ({ result: 3_000_000_000n })),
     budget: vi.fn(() => ok(10_000_000_000n)),
     get_config: vi.fn(() =>
-      ok({ quorum: 3, minimum_award: 0n, policy: POLICY_ID, apply_deadline: 1_900_000_000n }),
+      ok({
+        quorum: 3,
+        minimum_award: 0n,
+        policy: POLICY_ID,
+        apply_deadline: 1_900_000_000n,
+        metadata_hash: new Uint8Array(32).fill(1),
+      }),
     ),
     get_phase: vi.fn(() => ok({ tag: 'Review' })),
     get_application: vi.fn(({ applicant }: { applicant: string }) =>
