@@ -132,7 +132,7 @@ export function ReleaseBatchSheet({
           const sent = await assembled.signAndSend(options);
           const amount = sent.result.unwrap();
           // Re-read the award so the signs reflect the chain, not a local count.
-          let fresh: RecipientAwardFixture | null = null;
+          let fresh: RecipientAwardFixture | null;
           try {
             const read = (await client.get_award({ recipient })).result.unwrap() as Award;
             fresh = {
