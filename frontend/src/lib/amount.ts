@@ -135,14 +135,16 @@ export function tryParseAmount(input: string): { ok: true; value: bigint } | { o
  */
 export function validateAmount(
   input: string,
-  options: { balance?: bigint; asset?: string | null } = {},
+  options: { balance?: bigint; asset?: string | null; overMessage?: string } = {},
 ): { ok: true; value: bigint } | { ok: false; error: string } {
   const parsed = tryParseAmount(input);
   if (!parsed.ok) return parsed;
   if (options.balance !== undefined && parsed.value > options.balance) {
     return {
       ok: false,
-      error: `More than your balance of ${formatAmount(options.balance, { asset: options.asset })}`,
+      error:
+        options.overMessage ??
+        `More than your balance of ${formatAmount(options.balance, { asset: options.asset })}`,
     };
   }
   return parsed;

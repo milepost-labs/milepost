@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { useWallet } from '../context/useWallet';
-import { explain, type ContractName, type Explained } from '../lib/errors';
+import { explain, type ContractName, type Explained, type ExplainContext } from '../lib/errors';
 import { restoreOf, type RestoreStep } from '../lib/restore';
 import { requestRestoreConsent } from '../lib/restoreConsent';
 
@@ -81,12 +81,14 @@ function extractFee<T>(transaction: Sendable<T>): bigint | null {
 export function useTransaction<T = unknown>(
   options: {
     contract?: ContractName;
+    /** Where an error reads differently for this call, e.g. `release-batch`. */
+    context?: ExplainContext;
     onSuccess?: (result: T) => void;
     /** Called whenever a send fails, including before signing is attempted. */
     onError?: (error: Explained) => void;
   } = {},
 ): TransactionState<T> {
-  const { contract = 'program', onSuccess, onError } = options;
+  const { contract = 'program', context, onSuccess, onError } = options;
   const wallet = useWallet();
 
   const [phase, setPhase] = useState<TransactionPhase>('idle');
@@ -186,7 +188,7 @@ export function useTransaction<T = unknown>(
         setPhase('confirming');
         return true;
       } catch (caught) {
-        const explained = explain(caught, contract);
+        const explained = explain(caught, contract, context);
         setError(explained);
         setPhase(explained.kind === 'none' ? 'idle' : 'error');
         onError?.(explained);
@@ -195,7 +197,7 @@ export function useTransaction<T = unknown>(
         inFlight.current = false;
       }
     },
-    [checkWalletReady, buildRestoring, contract, onError],
+    [checkWalletReady, buildRestoring, contract, context, onError],
   );
 
   const confirm = useCallback(async (): Promise<T | null> => {
@@ -220,7 +222,7 @@ export function useTransaction<T = unknown>(
       onSuccess?.(sent.result);
       return sent.result;
     } catch (caught) {
-      const explained = explain(caught, contract);
+      const explained = explain(caught, contract, context);
       setError(explained);
       setPhase(explained.kind === 'none' ? 'idle' : 'error');
       onError?.(explained);
@@ -228,7 +230,7 @@ export function useTransaction<T = unknown>(
     } finally {
       inFlight.current = false;
     }
-  }, [checkWalletReady, wallet.signTransaction, contract, onSuccess, onError]);
+  }, [checkWalletReady, wallet.signTransaction, contract, context, onSuccess, onError]);
 
   const send = useCallback(
     async (build: () => Promise<Sendable<T>>): Promise<T | null> => {
@@ -260,7 +262,7 @@ export function useTransaction<T = unknown>(
         onSuccess?.(sent.result);
         return sent.result;
       } catch (caught) {
-        const explained = explain(caught, contract);
+        const explained = explain(caught, contract, context);
         setError(explained);
         // A declined signature is a choice, not a failure. Treating it as an
         // error leaves a red banner over a decision someone deliberately made.
@@ -271,7 +273,7 @@ export function useTransaction<T = unknown>(
         inFlight.current = false;
       }
     },
-    [checkWalletReady, buildRestoring, wallet.signTransaction, contract, onSuccess, onError],
+    [checkWalletReady, buildRestoring, wallet.signTransaction, contract, context, onSuccess, onError],
   );
 
   return {

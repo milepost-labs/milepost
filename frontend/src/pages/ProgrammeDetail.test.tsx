@@ -347,7 +347,8 @@ describe('ProgrammeDetail — what each phase allows', () => {
     renderProgramme(`/programme/${REAL_ID}`);
 
     expect(await screen.findByText('Could not read the phase on-chain')).toBeTruthy();
-    expect(screen.getAllByText('Reading the phase on-chain…')).toHaveLength(5);
+    // Five phase-gated actions plus the protocol fee sweep.
+    expect(screen.getAllByText('Reading the phase on-chain…')).toHaveLength(6);
     expect(document.querySelector('[aria-current="step"]')).toBeNull();
   });
 });
