@@ -48,15 +48,15 @@ exclude_re = [
   # release_batch: `if award.tranches > 0` -> `>=`. The two differ only when an
   # award has zero tranches, and the constructor refuses `tranches == 0`, which
   # every award copies from the config. Unreachable, so equivalent.
-  'lib\.rs:1484:48: replace > with >= in Programme::release_batch$',
+  'lib\.rs:1502:48: replace > with >= in Programme::release_batch$',
   # review, amending and new-vote branches: `approved < existing` -> `<=` when
   # finding where to insert a vote. The two differ only in whether a vote goes
   # before or after an equal one, and equal i128s are indistinguishable, so the
   # sorted vector — and the median taken from it — is identical either way.
-  'lib\.rs:865:29: replace < with <= in Programme::review$',
-  'lib\.rs:892:29: replace < with <= in Programme::review$',
+  'lib\.rs:866:29: replace < with <= in Programme::review$',
+  'lib\.rs:893:29: replace < with <= in Programme::review$',
   # extend_release_deadline: `new_release_deadline > config.sweep_deadline` -> `>=`.
   # When the new deadline equals the current sweep deadline, both branches keep
   # the same value, so the mutant is behaviour-preserving and equivalent.
-  'lib\.rs:1808:38: replace > with >= in Programme::extend_release_deadline$',
+  'lib\.rs:1831:38: replace > with >= in Programme::extend_release_deadline$',
 ]
