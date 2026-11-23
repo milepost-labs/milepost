@@ -413,7 +413,7 @@ describe('useTransaction branches: network, simulation, submit, prepare/confirm,
 
   it('handles prepare() failures and confirm() when unprepared, wrong-network, declined, or failed', async () => {
     const onError = vi.fn();
-    const { result } = renderHook(() => useTransaction({ onError }));
+    const { result, rerender } = renderHook(() => useTransaction({ onError }));
 
     // confirm() before prepare() is a no-op.
     let earlyConfirm: unknown = 'unset';
@@ -424,15 +424,20 @@ describe('useTransaction branches: network, simulation, submit, prepare/confirm,
 
     // prepare() on wrong network returns false.
     useWallet.mockReturnValue(connectedWallet({ status: 'wrong-network', network: 'PUBLIC', networkError: null }));
+    rerender();
+    const build = vi.fn();
     let ready = true;
     await act(async () => {
-      ready = await result.current.prepare(vi.fn());
+      ready = await result.current.prepare(build);
     });
     expect(ready).toBe(false);
+    expect(build).not.toHaveBeenCalled();
     expect(result.current.phase).toBe('error');
+    expect(result.current.error?.kind).toBe('blocked');
 
     // prepare() simulation failure returns false and calls onError.
     useWallet.mockReturnValue(connectedWallet());
+    rerender();
     await act(async () => {
       ready = await result.current.prepare(async () => {
         throw new Error('Error(Contract, #3)');
@@ -451,15 +456,18 @@ describe('useTransaction branches: network, simulation, submit, prepare/confirm,
     expect(ready).toBe(true);
 
     useWallet.mockReturnValue(connectedWallet({ status: 'wrong-network', networkError: 'Wrong network' }));
+    rerender();
     let res: unknown = 'unset';
     await act(async () => {
       res = await result.current.confirm();
     });
     expect(res).toBeNull();
     expect(result.current.phase).toBe('error');
+    expect(result.current.error?.message).toBe('Wrong network');
 
     // Declining signature during confirm() returns to idle with error.kind === 'none'.
     useWallet.mockReturnValue(connectedWallet());
+    rerender();
     await act(async () => {
       res = await result.current.confirm();
     });

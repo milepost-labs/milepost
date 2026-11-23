@@ -2,6 +2,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { fireEvent, render, screen, within } from '@testing-library/react';
 import { Buffer } from 'buffer';
 import { FIXTURE_ATTESTATIONS } from '../fixtures/attestationFixtures';
+import { formatDateTime } from '../lib/format';
 import { AttestationLookup } from './AttestationLookup';
 
 // Issue #408 — the used/unused state comes from `program.is_spent` for the
@@ -24,7 +25,7 @@ const state = vi.hoisted(() => {
   return {
     isSpent: vi.fn(),
     getAttest: vi.fn(),
-    getSchema: vi.fn(() => Promise.reject(new Error('not found'))),
+    getSchema: vi.fn<(...args: unknown[]) => Promise<unknown>>(() => Promise.reject(new Error('not found'))),
     programmeAt,
     attest,
     search: vi.fn(),
@@ -284,7 +285,9 @@ describe('AttestationLookup on-chain states and claim check', () => {
     lookUp(UID);
 
     await screen.findByText(/The signer withdrew it\. It can’t unlock anything now/);
-    expect(screen.getByText('Revoked')).toBeTruthy();
+    // Once as the status, once as the label of the revocation time.
+    expect(screen.getAllByText('Revoked')).toHaveLength(2);
+    expect(screen.getByText(formatDateTime(1_700_000_500n))).toBeTruthy();
   });
 
   it('shows expired state and expiry timestamp for an expired attestation', async () => {
@@ -298,6 +301,7 @@ describe('AttestationLookup on-chain states and claim check', () => {
     await screen.findByText('Its expiry has passed, so it can’t unlock anything.');
     expect(screen.getByText('Expired')).toBeTruthy();
     expect(screen.getByText('Expires')).toBeTruthy();
+    expect(screen.getByText(formatDateTime(1n))).toBeTruthy();
   });
 
   it('shows not found for an unknown 64-hex UID and for an unrecognised non-hex query', async () => {
