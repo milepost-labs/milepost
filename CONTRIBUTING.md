@@ -148,6 +148,38 @@ rule, add an entry to `ACCESSIBILITY_EXCEPTIONS` in
 `frontend/src/test/accessibility.test.tsx` with a `reason`; the suite fails on
 an entry with no reason. Fixing the page is always preferred.
 
+### Browser checks
+
+The `browser` job in [`.github/workflows/ci.yml`](.github/workflows/ci.yml) opens
+the built app in Chromium, served with the headers [`frontend/vercel.json`](frontend/vercel.json)
+sends in production, and checks two things on every pull request:
+
+- **Smoke:** every page loads with no uncaught error, no console error and no
+  Content-Security-Policy violation. A page that loads a host the policy does
+  not allow fails the job and names the page.
+- **Reflow:** no page scrolls sideways at 320 CSS px, which is 400% zoom on a
+  1280 px screen (WCAG 1.4.10). The check runs signed in and signed out. A wide
+  table may scroll inside its own container; the page itself may not.
+
+Run it locally from `frontend/`:
+
+```bash
+cd frontend
+npm ci                                        # first time, or after a dependency change
+npx playwright install chromium --with-deps   # first time
+npm run build:browser                         # two builds: signed in, and signed out
+npm run test:browser
+```
+
+The signed-in build uses fixture mode, so the wallet is connected and the index
+is answered from `frontend/tests/fixtures/`. The signed-out build has no
+fixtures and is for layout only. A failure names the page and the element. The
+HTML report is in `frontend/playwright-report/`.
+
+Each allowed console error needs an entry in `ALLOWED_CONSOLE_ERRORS` in
+[`frontend/tests/browser/support.ts`](frontend/tests/browser/support.ts), with a
+reason in the comment above it.
+
 ### Local Development Modes
 - **Fixture Mode:** Run `VITE_FIXTURES=1 npm --prefix frontend run dev` to run and inspect UI screens locally without requiring an active wallet connection or testnet funds.
 - **Component Gallery:** In dev mode, open `/dev/ui` in the browser to inspect all components from `src/components/ui/` and `src/components/state/`. It is left out of production builds, and CI fails if it ever reaches one (`frontend/scripts/check-no-dev-pages.sh`).

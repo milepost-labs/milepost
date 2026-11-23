@@ -294,6 +294,45 @@ jobs:
       - name: Check every route with axe
         run: npm run test:a11y --prefix frontend
 
+  browser:
+    name: Browser checks
+    runs-on: ubuntu-latest
+    # Real browser, production headers from frontend/vercel.json. Smoke: every
+    # route loads with no uncaught or console error and no CSP violation.
+    # Reflow: no sideways page scroll at 320px, signed in and signed out.
+    # See frontend/tests/browser and "Browser checks" in CONTRIBUTING.md.
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 24
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Install
+        run: npm ci --prefix frontend
+
+      - name: Install Chromium
+        working-directory: frontend
+        run: npx playwright install chromium --with-deps
+
+      - name: Build the signed-in and signed-out builds
+        working-directory: frontend
+        run: npm run build:browser
+
+      - name: Run the browser checks
+        working-directory: frontend
+        run: npm run test:browser
+
+      - name: Upload Playwright report on failure
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: browser-checks-report
+          path: frontend/playwright-report/
+          retention-days: 14
+          if-no-files-found: ignore
+
   malware:
     name: Malware check
     runs-on: ubuntu-latest
