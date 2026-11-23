@@ -471,7 +471,7 @@
     grid-template-columns: minmax(0, 1fr) auto;
   }
 
-  .deploy-summary dd {
+  .deploy-summary dd:not(.deploy-summary__action) {
     grid-column: 1 / -1;
     grid-row: 2;
   }

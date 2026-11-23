@@ -623,14 +623,17 @@ export function ReviewStep({
           <div key={r.k}>
             <dt>{r.k}</dt>
             <dd>{r.v}</dd>
-            <button
-              type="button"
-              className="deploy-summary__edit"
-              aria-label={`Change ${r.k.toLowerCase()}`}
-              onClick={() => goTo(r.step)}
-            >
-              Change
-            </button>
+            {/* In its own <dd>: a <dl> group may hold only terms and details. */}
+            <dd className="deploy-summary__action">
+              <button
+                type="button"
+                className="deploy-summary__edit"
+                aria-label={`Change ${r.k.toLowerCase()}`}
+                onClick={() => goTo(r.step)}
+              >
+                Change
+              </button>
+            </dd>
           </div>
         ))}
       </dl>

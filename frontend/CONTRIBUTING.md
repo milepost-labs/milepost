@@ -83,6 +83,17 @@ npm run test:a11y   # every route, light and dark
 The `accessibility` job in the repository's `.github/workflows/ci.yml` runs this
 on every pull request to `dev` and on pushes to `dev` and `main`.
 
+The route check sees every page at rest, so each write sheet (contribute,
+release, batch release, partial refund, vote, attest, finalize, deploy) is also
+opened and walked through its steps (form, confirm, pending, done, failed, as
+far as the sheet has them), with axe run at every step and focus checked going
+into the sheet and back to whatever opened it. The helpers are in
+`src/test/sheetAccessibility.ts`; the checks sit beside each sheet's tests, and
+the sheets with no test file of their own are in
+`src/test/sheets.accessibility.test.tsx`. They run with `npm test`. A new sheet
+gets the same: open it from a button, call `expectSheetAccessible(step)` at each
+step, and `expectFocusReturnedTo(opener)` once it closes.
+
 A rule that genuinely cannot be fixed is recorded in
 `ACCESSIBILITY_EXCEPTIONS` in `src/test/accessibility.test.tsx`, with a `route`
 (optional), the `rule` id and a `reason`. The suite fails on an entry with no
