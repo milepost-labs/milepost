@@ -2,7 +2,7 @@ import { execSync } from 'node:child_process'
 import { loadEnv } from 'vite'
 import { defineConfig, type Plugin } from 'vitest/config'
 import react from '@vitejs/plugin-react'
-import { assertMainnetEnv } from './src/config/networkEnv.js'
+import { assertMainnetEnv, selectedNetwork } from './src/config/networkEnv.js'
 import { handleMetadataRequest, memoryBackend } from './src/lib/metadataStore.js'
 
 // The commit the app was built from, shown on /about. CI sets GITHUB_SHA;
@@ -61,11 +61,19 @@ function requireMainnetEnv(): Plugin {
   }
 }
 
+// The network as a build-time constant, from the same VITE_NETWORK that
+// src/config/network.ts reads. Branches on it fold away, so a mainnet bundle
+// carries neither the testnet defaults nor the sample fixtures.
+function buildNetwork({ mode }: { mode: string }): 'testnet' | 'mainnet' {
+  return selectedNetwork({ ...loadEnv(mode, process.cwd(), 'VITE_'), ...process.env })
+}
+
 // https://vite.dev/config/
-export default defineConfig({
+export default defineConfig(({ mode }) => ({
   plugins: [react(), devMetadataStore(), requireMainnetEnv()],
   define: {
     'import.meta.env.VITE_APP_VERSION': JSON.stringify(buildVersion()),
+    __MILEPOST_NETWORK__: JSON.stringify(buildNetwork({ mode })),
   },
   test: {
     environment: 'jsdom',
@@ -112,4 +120,4 @@ export default defineConfig({
       },
     },
   },
-})
+}))

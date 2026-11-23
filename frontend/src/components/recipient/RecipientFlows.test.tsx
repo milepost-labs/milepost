@@ -7,6 +7,13 @@ import { ApplyForm } from './ApplyForm';
 import { ApplicationTimelineList } from './ApplicationTimelineList';
 import type { RecipientAwardFixture, RecipientApplicationFixture } from '../../fixtures/recipientFixtures';
 import { explainCode } from '../../lib/errors';
+import {
+  expectFocusInSheet,
+  expectFocusReturnedTo,
+  expectSheetAccessible,
+  focusAndClick,
+  SHEET_TEST_TIMEOUT,
+} from '../../test/sheetAccessibility';
 
 // Mock useAnnouncer so we can assert on announcements
 const mockAnnounce = vi.fn();
@@ -1197,4 +1204,80 @@ describe('Recipient Issues Suite (#272, #273, #274, #275)', () => {
       expect(screen.getByText('No award will be set.')).toBeDefined();
     });
   });
+});
+
+describe('AwardCard release sheet — accessibility in every step (#696)', () => {
+  const ATTEST_HEX = 'a'.repeat(64);
+  const ATTESTER = 'G' + 'B'.repeat(55);
+  const award: RecipientAwardFixture = {
+    programmeId: REAL_PROGRAMME,
+    programmeName: 'Secondary School Bursaries 2026',
+    recipient: RECIPIENT,
+    granted: '30000000000',
+    released: '10000000000',
+    tranches: 3,
+    tranchesReleased: 1,
+    payee: null,
+    mode: 'Restricted',
+    updatedLedger: 4851002,
+    attestationReady: true,
+    condition: 'Milestone 2 completed and verified',
+  };
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    walletMocks.address = RECIPIENT;
+  });
+
+  // The release sheet has no separate confirm step: the form says where the
+  // money goes ("Where this goes") beside the sign button.
+  function openAndFill() {
+    render(
+      <MemoryRouter>
+        <AwardCard award={award} sampleDelayMs={0} />
+      </MemoryRouter>,
+    );
+    const opener = screen.getByRole('button', { name: /release tranche/i });
+    focusAndClick(opener, fireEvent.click);
+    expectFocusInSheet('form');
+    fireEvent.change(screen.getByLabelText(/attestation id/i), { target: { value: ATTEST_HEX } });
+    fireEvent.change(screen.getByLabelText(/attester address/i), { target: { value: ATTESTER } });
+    return opener;
+  }
+
+  it('form, pending and done', async () => {
+    let settle: (value: unknown) => void = () => {};
+    programme = makeProgramme();
+    programme.release = vi.fn(async () => ({
+      signAndSend: vi.fn(
+        () =>
+          new Promise<unknown>((resolve) => {
+            settle = resolve;
+          }),
+      ),
+    })) as unknown as typeof programme.release;
+    openAndFill();
+    await expectSheetAccessible('form');
+
+    fireEvent.click(screen.getByRole('button', { name: /sign and release/i }));
+    await screen.findByText('Releasing tranche 2');
+    await expectSheetAccessible('pending');
+
+    settle({ result: { unwrap: () => 10_000_000_000n }, sendTransactionResponse: { hash: 'RELEASEHASH1234567890' } });
+    expect(await screen.findByText('Tranche 2 released')).toBeTruthy();
+    await expectSheetAccessible('done');
+  }, SHEET_TEST_TIMEOUT);
+
+  it('failed, and Escape returns focus to the opener', async () => {
+    programme = makeProgramme({ releaseResult: 'invalidAttestation' });
+    const opener = openAndFill();
+    fireEvent.click(screen.getByRole('button', { name: /sign and release/i }));
+    expect(await screen.findByText('Tranche not released')).toBeTruthy();
+    expectFocusInSheet('failed');
+    await expectSheetAccessible('failed');
+
+    fireEvent.keyDown(document, { key: 'Escape' });
+    expect(screen.queryByRole('dialog')).toBeNull();
+    expectFocusReturnedTo(opener);
+  }, SHEET_TEST_TIMEOUT);
 });

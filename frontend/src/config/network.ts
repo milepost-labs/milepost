@@ -36,28 +36,27 @@ const TESTNET_PROGRAMME_ID = 'CD6X33SKLUEMANS67ID3LJL572FFGERMMJCIFRW7P7EKZQLH35
 
 const trimUrl = (url: string) => url.trim().replace(/\/+$/, '');
 
-/** Build the setting from an environment. Throws on a mainnet build with variables missing. */
-export function resolveNetwork(env: EnvSource): Readonly<NetworkConfig> {
-  if (selectedNetwork(env) === 'mainnet') {
-    assertMainnetEnv(env);
-    const get = (name: string) => (env[name] as string).trim();
-    return Object.freeze({
-      name: 'mainnet',
-      passphrase: Networks.PUBLIC,
-      rpcUrl: trimUrl(get(MAINNET_VARS.rpcUrl)),
-      indexerUrl: trimUrl(get(MAINNET_VARS.indexerUrl)),
-      contracts: Object.freeze({
-        registry: get(MAINNET_VARS.registry),
-        attest: get(MAINNET_VARS.attest),
-        record: get(MAINNET_VARS.record),
-        policy: get(MAINNET_VARS.policy),
-      }),
-      explorer: 'public',
-      friendbot: false,
-      demoProgrammeId: null,
-    });
-  }
+function resolveMainnet(env: EnvSource): Readonly<NetworkConfig> {
+  assertMainnetEnv(env);
+  const get = (name: string) => (env[name] as string).trim();
+  return Object.freeze({
+    name: 'mainnet',
+    passphrase: Networks.PUBLIC,
+    rpcUrl: trimUrl(get(MAINNET_VARS.rpcUrl)),
+    indexerUrl: trimUrl(get(MAINNET_VARS.indexerUrl)),
+    contracts: Object.freeze({
+      registry: get(MAINNET_VARS.registry),
+      attest: get(MAINNET_VARS.attest),
+      record: get(MAINNET_VARS.record),
+      policy: get(MAINNET_VARS.policy),
+    }),
+    explorer: 'public',
+    friendbot: false,
+    demoProgrammeId: null,
+  });
+}
 
+function resolveTestnet(env: EnvSource): Readonly<NetworkConfig> {
   return Object.freeze({
     name: 'testnet',
     passphrase: registryNetworks.testnet.networkPassphrase,
@@ -75,7 +74,19 @@ export function resolveNetwork(env: EnvSource): Readonly<NetworkConfig> {
   });
 }
 
-export const NETWORK = resolveNetwork(import.meta.env);
+/** Build the setting from an environment. Throws on a mainnet build with variables missing. */
+export function resolveNetwork(env: EnvSource): Readonly<NetworkConfig> {
+  return selectedNetwork(env) === 'mainnet' ? resolveMainnet(env) : resolveTestnet(env);
+}
+
+/**
+ * `__MILEPOST_NETWORK__` is replaced with "testnet" or "mainnet" at build time
+ * (see vite.config.ts), from the same `VITE_NETWORK`. Branching on it here,
+ * rather than inside `resolveNetwork`, lets a mainnet bundle drop the testnet
+ * branch, and the seeded testnet programme with it.
+ */
+export const NETWORK: Readonly<NetworkConfig> =
+  __MILEPOST_NETWORK__ === 'mainnet' ? resolveMainnet(import.meta.env) : resolveTestnet(import.meta.env);
 
 /**
  * The explorer path segment for a network name. A wallet reports "TESTNET" or

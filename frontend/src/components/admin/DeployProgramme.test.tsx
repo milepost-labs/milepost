@@ -6,6 +6,13 @@ import { DeployProgramme } from './DeployProgramme';
 import { handleMetadataRequest, memoryBackend } from '../../lib/metadataStore';
 import { metadataHash } from '../../lib/metadata';
 import { buildMetadata, type DeployDraft } from '../../lib/deployRules';
+import {
+  expectFocusInSheet,
+  expectFocusReturnedTo,
+  expectSheetAccessible,
+  focusAndClick,
+  SHEET_TEST_TIMEOUT,
+} from '../../test/sheetAccessibility';
 
 // The deploy wizard: Details, People, Timeline, Review & deploy. Every rule
 // the programme constructor enforces is checked on its own step, the asset
@@ -285,6 +292,67 @@ describe('DeployProgramme — people and timeline', () => {
     expect(screen.getAllByText('The dates must run in order: applications, review, release, then sweep.').length).toBeGreaterThan(0);
     expect(continueButton().disabled).toBe(true);
   });
+});
+
+// #696. The wizard's Review & deploy step is the form and confirm; the sheet
+// opens on Deploy and has publishing, pending, done and failed steps.
+describe('DeployProgramme — the deploy sheet, accessible in every step (#696)', () => {
+  async function openSheet() {
+    renderWizard();
+    await passDetails();
+    passPeople();
+    setDates([2, 3, 4, 5]);
+    fireEvent.click(continueButton());
+    await screen.findByRole('heading', { name: 'Review & deploy' });
+    const opener = screen.getByRole('button', { name: 'Deploy programme' });
+    focusAndClick(opener, fireEvent.click);
+    await screen.findByRole('dialog', { name: 'Deploy programme' });
+    return opener;
+  }
+
+  it('pending and done', async () => {
+    let settle: (value: unknown) => void = () => {};
+    mocks.create.mockResolvedValue({
+      signAndSend: vi.fn(
+        () =>
+          new Promise((resolve) => {
+            settle = resolve;
+          }),
+      ),
+    });
+    await openSheet();
+    await waitFor(() => expect(mocks.create).toHaveBeenCalled());
+    expectFocusInSheet('pending');
+    await expectSheetAccessible('pending');
+
+    settle({ result: { unwrap: () => NEW_PROGRAMME } });
+    expect(await screen.findByRole('heading', { name: 'Programme deployed', level: 3 })).toBeTruthy();
+    await expectSheetAccessible('done');
+  }, SHEET_TEST_TIMEOUT);
+
+  it('failed to publish the description', async () => {
+    storeDown = true;
+    const opener = await openSheet();
+    expect(await screen.findByText('The description wasn’t published.')).toBeTruthy();
+    expectFocusInSheet('description failed');
+    await expectSheetAccessible('description failed');
+
+    fireEvent.keyDown(document, { key: 'Escape' });
+    expect(screen.queryByRole('dialog')).toBeNull();
+    expectFocusReturnedTo(opener);
+  }, SHEET_TEST_TIMEOUT);
+
+  it('failed to deploy, and Escape returns focus to Deploy', async () => {
+    mocks.create.mockRejectedValue(new Error('HostError: Error(Contract, #5)'));
+    const opener = await openSheet();
+    expect(await screen.findByText('Programme not deployed')).toBeTruthy();
+    expectFocusInSheet('failed');
+    await expectSheetAccessible('failed');
+
+    fireEvent.keyDown(document, { key: 'Escape' });
+    expect(screen.queryByRole('dialog')).toBeNull();
+    expectFocusReturnedTo(opener);
+  }, SHEET_TEST_TIMEOUT);
 });
 
 describe('DeployProgramme — deploying', () => {

@@ -1,3 +1,5 @@
+import { SAMPLES_IN_BUILD } from './inBuild';
+
 /**
  * Verified-payee list stand-in, seeded per programme.
  *
@@ -15,8 +17,8 @@ export interface PayeeFixture {
   label: string;
 }
 
-export const FIXTURE_PAYEES: Record<string, PayeeFixture[]> = {
+export const FIXTURE_PAYEES: Record<string, PayeeFixture[]> = SAMPLES_IN_BUILD ? {
   CD6X33SKLUEMANS67ID3LJL572FFGERMMJCIFRW7P7EKZQLH35XT67C6: [
     { address: 'GAUHWES2VEBGS5IWDET2IUYZXG3HCXOV7QIMXWM3AH3KHXE4HWJOSC5A', label: 'Verified payee · Pharmacy' },
   ],
-};
+} : {};

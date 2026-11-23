@@ -1,3 +1,5 @@
+import { SAMPLES_IN_BUILD } from './inBuild';
+
 /**
  * Stand-in data for recipient awards, payees, and applications.
  *
@@ -49,7 +51,7 @@ export interface RecipientApplicationFixture {
  * Recipient awards fixture covering all four modes:
  * Restricted, Allocated, Direct, and Open.
  */
-export const FIXTURE_MY_AWARDS: RecipientAwardFixture[] = [
+export const FIXTURE_MY_AWARDS: RecipientAwardFixture[] = SAMPLES_IN_BUILD ? [
   {
     programmeId: 'CBAVXWACVVQIBYAZ2YCSIPWXA24E3NZ3CIRAWJ2UHEQUQP67POYS6GFM',
     programmeName: 'SME Microgrants Cohort 2',
@@ -107,7 +109,7 @@ export const FIXTURE_MY_AWARDS: RecipientAwardFixture[] = [
     attestationReady: true,
     condition: 'Preliminary research report published',
   },
-];
+] : [];
 
 /**
  * Verified payees roster stand-in.
@@ -126,7 +128,7 @@ export const FIXTURE_PAYEES: VerifiedPayeeFixture[] = [
 /**
  * Recipient applications stand-in.
  */
-export const FIXTURE_APPLICATIONS: RecipientApplicationFixture[] = [
+export const FIXTURE_APPLICATIONS: RecipientApplicationFixture[] = SAMPLES_IN_BUILD ? [
   {
     programmeId: 'CCOIACASOVO3ZQLXWWJFGZAU3Y545AGPXLBP4NYHYD77RDCBPXRVZ37C',
     programmeName: 'Vocational Training Stipends Q3',
@@ -145,4 +147,4 @@ export const FIXTURE_APPLICATIONS: RecipientApplicationFixture[] = [
     votes: [],
     quorum: 3,
   },
-];
+] : [];

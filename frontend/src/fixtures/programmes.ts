@@ -1,3 +1,5 @@
+import { SAMPLES_IN_BUILD } from './inBuild';
+
 /**
  * Stand-in data for the directory and programme screens.
  *
@@ -25,13 +27,13 @@
  */
 
 /** Seed behind each sample programme id (see the derivation above). */
-export const SAMPLE_PROGRAMME_SEEDS: Record<string, string> = {
+export const SAMPLE_PROGRAMME_SEEDS: Record<string, string> = SAMPLES_IN_BUILD ? {
   CBJWECZ3EUVNAE73YIMT2KWWNRHRF7NNWVKOLQRVOHSKYRYE32XBRPW7: 'community-resilience-2026',
   CB7WB66VLFJUD2WHZYHQF7PHM72THVJYMLZ7YPW2XQKUOUUGKVTWVDXI: 'smallholder-inputs-long-rains',
   CCOIACASOVO3ZQLXWWJFGZAU3Y545AGPXLBP4NYHYD77RDCBPXRVZ37C: 'workforce-skills-cohort-3',
   CBAVXWACVVQIBYAZ2YCSIPWXA24E3NZ3CIRAWJ2UHEQUQP67POYS6GFM: 'sme-supplier-microgrants-q2',
   CBUESJW3MUDDN2NVG7RPQK7N2JSJMSKHDQMIQZMDXZMR6GNNZWX46LNU: 'flood-response-cash-transfers',
-};
+} : {};
 
 /** Phase a programme can be in, mirrored from `@milepost/program`. */
 export type FixturePhase = 'Open' | 'Review' | 'Settled' | 'Cancelled';
@@ -73,7 +75,7 @@ export interface FixtureChainRead {
 /** The asset the sample programmes' figures are written in. They have no token to read. */
 export const FIXTURE_ASSET_CODE = 'USDC';
 
-export const FIXTURE_PROGRAMMES: FixtureProgramme[] = [
+export const FIXTURE_PROGRAMMES: FixtureProgramme[] = SAMPLES_IN_BUILD ? [
   {
     id: 'CBJWECZ3EUVNAE73YIMT2KWWNRHRF7NNWVKOLQRVOHSKYRYE32XBRPW7',
     name: 'Community resilience grants 2026',
@@ -104,9 +106,9 @@ export const FIXTURE_PROGRAMMES: FixtureProgramme[] = [
     creator: 'GAKR7W…D2QX',
     createdLedger: 4655420,
   },
-];
+] : [];
 
-export const FIXTURE_CHAIN: Record<string, FixtureChainRead> = {
+export const FIXTURE_CHAIN: Record<string, FixtureChainRead> = SAMPLES_IN_BUILD ? {
   CBJWECZ3EUVNAE73YIMT2KWWNRHRF7NNWVKOLQRVOHSKYRYE32XBRPW7: {
     phase: 'Open',
     mode: 'Direct',
@@ -164,7 +166,7 @@ export const FIXTURE_CHAIN: Record<string, FixtureChainRead> = {
     quorum: 3,
     applicants: 0,
   },
-};
+} : {};
 
 /** Used for index programmes the fixture set does not name. */
 export const FIXTURE_CHAIN_DEFAULT: FixtureChainRead = {

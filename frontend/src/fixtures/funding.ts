@@ -1,3 +1,5 @@
+import { SAMPLES_IN_BUILD } from './inBuild';
+
 /**
  * Stand-in data for the funding screens (`/funders`).
  *
@@ -25,7 +27,7 @@ export interface FixtureContribution {
   refunded: boolean;
 }
 
-export const FIXTURE_CONTRIBUTIONS: FixtureContribution[] = [
+export const FIXTURE_CONTRIBUTIONS: FixtureContribution[] = SAMPLES_IN_BUILD ? [
   {
     programmeId: 'CBJWECZ3EUVNAE73YIMT2KWWNRHRF7NNWVKOLQRVOHSKYRYE32XBRPW7',
     amount: '10000000000',
@@ -44,7 +46,7 @@ export const FIXTURE_CONTRIBUTIONS: FixtureContribution[] = [
     ledger: 4656011,
     refunded: false,
   },
-];
+] : [];
 
 /** Shaped like a sent transaction's hash and the ledger it landed in. */
 export interface FixtureTx {
@@ -63,6 +65,6 @@ export const FIXTURE_TX: FixtureTx = {
  * the transaction is in flight, so the contract refuses it with `WrongPhase`
  * (program error 2). Lets the failure state be seen without a real failure.
  */
-export const FIXTURE_TX_FAILURES: Record<string, string> = {
+export const FIXTURE_TX_FAILURES: Record<string, string> = SAMPLES_IN_BUILD ? {
   CB7WB66VLFJUD2WHZYHQF7PHM72THVJYMLZ7YPW2XQKUOUUGKVTWVDXI: 'HostError: Error(Contract, #2)',
-};
+} : {};
