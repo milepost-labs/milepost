@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { act, fireEvent, render, screen, within } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
 import { RoadDemo } from './RoadDemo';
@@ -28,6 +28,38 @@ vi.mock('../../lib/indexer', async (importOriginal) => ({
 beforeEach(() => {
   announce.mockClear();
 });
+
+afterEach(() => {
+  vi.useRealTimers();
+  vi.unstubAllGlobals();
+});
+
+function stubRoadEnv(reducedMotion: boolean) {
+  let fireInView: ((intersecting: boolean) => void) | null = null;
+  const FakeIO = vi.fn().mockImplementation(function (cb: (entries: IntersectionObserverEntry[]) => void) {
+    return {
+      observe(el: Element) {
+        fireInView = (isIntersecting: boolean) => cb([{ target: el, isIntersecting } as IntersectionObserverEntry]);
+      },
+      unobserve: vi.fn(),
+      disconnect: vi.fn(),
+    };
+  });
+  vi.stubGlobal('IntersectionObserver', FakeIO);
+  vi.stubGlobal(
+    'matchMedia',
+    vi.fn().mockImplementation(() => ({
+      matches: reducedMotion,
+      addEventListener: vi.fn(),
+      removeEventListener: vi.fn(),
+    })),
+  );
+  return {
+    setInView(intersecting: boolean) {
+      fireInView?.(intersecting);
+    },
+  };
+}
 
 describe('RoadDemo', () => {
   it('starts with everything locked and releases exactly one tranche per confirmation', () => {
@@ -72,6 +104,87 @@ describe('RoadDemo', () => {
   it('is labelled an example', () => {
     render(<RoadDemo />);
     expect(screen.getByText(/^Example:/)).toBeTruthy();
+  });
+
+  it('auto-plays while in view, resets after the last tranche, and never announces by itself', async () => {
+    vi.useFakeTimers();
+    const env = stubRoadEnv(false);
+    render(<RoadDemo />);
+
+    act(() => {
+      env.setInView(true);
+    });
+
+    // Step 0 -> 1 after 1800ms
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(1800);
+    });
+    expect(screen.getByRole('button', { name: 'Confirm term 2 as the registrar' })).toBeTruthy();
+    expect(announce).not.toHaveBeenCalled();
+
+    // Step 1 -> 2 after 2400ms
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(2400);
+    });
+    expect(screen.getByRole('button', { name: 'Confirm term 3 as the registrar' })).toBeTruthy();
+    expect(announce).not.toHaveBeenCalled();
+
+    // Step 2 -> 3 after 2400ms
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(2400);
+    });
+    expect((screen.getByRole('button', { name: 'All three tranches released' }) as HTMLButtonElement).disabled).toBe(true);
+    expect(announce).not.toHaveBeenCalled();
+
+    // Resets back to step 0 after 2600ms
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(2600);
+    });
+    expect(screen.getByRole('button', { name: 'Confirm term 1 as the registrar' })).toBeTruthy();
+    expect(announce).not.toHaveBeenCalled();
+
+    // Once the reader presses the button, auto-play stops and the announcer speaks once.
+    fireEvent.click(screen.getByRole('button', { name: 'Confirm term 1 as the registrar' }));
+    expect(announce).toHaveBeenCalledTimes(1);
+
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(5000);
+    });
+    expect(screen.getByRole('button', { name: 'Confirm term 2 as the registrar' })).toBeTruthy();
+    expect(announce).toHaveBeenCalledTimes(1);
+  });
+
+  it('does not auto-play and jumps straight to the paid total when reduced motion is preferred', async () => {
+    vi.useFakeTimers();
+    const env = stubRoadEnv(true);
+    render(<RoadDemo />);
+
+    act(() => {
+      env.setInView(true);
+    });
+
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(5000);
+    });
+    expect(screen.getByRole('button', { name: 'Confirm term 1 as the registrar' })).toBeTruthy();
+    expect(announce).not.toHaveBeenCalled();
+
+    fireEvent.click(screen.getByRole('button', { name: 'Confirm term 1 as the registrar' }));
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(0);
+    });
+
+    const payee = screen.getByText('Paid to the school').parentElement as HTMLElement;
+    expect(within(payee).getByText('500')).toBeTruthy();
+    expect(announce).toHaveBeenCalledTimes(1);
+
+    fireEvent.click(screen.getByRole('button', { name: 'Start over' }));
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(0);
+    });
+    expect(within(payee).getByText('0')).toBeTruthy();
+    expect(announce).toHaveBeenCalledTimes(2);
+    expect(announce.mock.calls[1][0]).toMatch(/1,500 USDC is awarded and locked/);
   });
 });
 
