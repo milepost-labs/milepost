@@ -281,6 +281,37 @@ jobs:
       - name: Check every route with axe
         run: npm run test:a11y --prefix frontend
 
+  network:
+    name: Network setting checks
+    runs-on: ubuntu-latest
+    # The app's network is one setting, src/config/network.ts, fixed per build
+    # by VITE_NETWORK. Every PR to dev, and every push to dev or main, checks
+    # that nothing else names testnet and that the mainnet build still builds
+    # and carries no sample data. See frontend/CONTRIBUTING.md.
+    if: github.event_name != 'pull_request' || github.base_ref == 'dev'
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 24
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Install
+        run: npm ci --prefix frontend
+
+      # Includes the no-restricted-syntax rule in frontend/eslint.config.js that
+      # rejects networks.testnet and testnet URLs outside src/config/ and tests.
+      - name: Lint, including no testnet literals outside the network setting
+        run: npm run lint --prefix frontend
+
+      # VITE_NETWORK=mainnet with placeholder ids, then fails if any address or
+      # contract id from frontend/src/fixtures/ is in the output.
+      - name: Build for mainnet and check no sample id reached it
+        run: npm run check:mainnet-build --prefix frontend
+
   malware:
     name: Malware check
     runs-on: ubuntu-latest

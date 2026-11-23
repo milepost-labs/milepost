@@ -89,6 +89,40 @@ A rule that genuinely cannot be fixed is recorded in
 reason, and review treats the list as something that should stay empty. Prefer
 fixing the page.
 
+### Network setting
+
+The app has one network setting, `src/config/network.ts`, fixed per build by
+`VITE_NETWORK`. Two checks keep it that way, and the `network` job in
+`.github/workflows/ci.yml` runs both on every pull request to `dev` and on
+pushes to `dev` and `main`.
+
+**No testnet outside the setting.** `npm run lint` fails on `networks.testnet`
+(or any `…Networks.testnet` from a binding) and on a string or template literal
+containing `testnet.stellar.org` or `stellar.expert/explorer/testnet`, anywhere
+except `src/config/` and tests (`*.test.ts(x)` and `src/test/`). Read the
+passphrase, RPC, contract ids and explorer from `NETWORK` instead. The rule is
+`no-restricted-syntax` in `eslint.config.js`.
+
+```sh
+npm run lint                 # the whole app
+npx eslint src/path/to/file  # one file
+```
+
+**The mainnet build.** `npm run check:mainnet-build` builds with
+`VITE_NETWORK=mainnet` and placeholder, valid-format values for every mainnet
+variable, into `dist-mainnet/` (git ignores it, and it leaves a testnet
+`dist/` alone). It then fails if any account or contract id written in
+`src/fixtures/` appears in the output, because sample data must not ship to
+mainnet. A mainnet build drops it through `SAMPLES_IN_BUILD`
+(`src/fixtures/inBuild.ts`), a build-time constant: a fixture export that holds
+an id is written as `SAMPLES_IN_BUILD ? [...] : []`. A new one needs the same,
+or this check names the id and the file it reached.
+
+```sh
+npm run check:mainnet-build            # build for mainnet, then check
+bash scripts/check-mainnet-build.sh --no-build   # check an existing dist-mainnet/
+```
+
 ### Test coverage
 
 CI runs the suite with coverage and writes the totals and the ten
