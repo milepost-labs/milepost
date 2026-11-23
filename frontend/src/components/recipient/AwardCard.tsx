@@ -17,7 +17,7 @@ import { useContractRead, useContractResult } from '../../hooks/useContractRead'
 import { useTransaction } from '../../hooks/useTransaction';
 import { isPhase } from '../../lib/phaseGate';
 import { releaseBatchGate } from '../../lib/releaseBatch';
-import { checkReleaseProof, releaseGate } from '../../lib/releaseProof';
+import { checkReleaseProof, policyBlock, releaseGate } from '../../lib/releaseProof';
 import { searchAttestations } from '../../lib/attestationSearch';
 import { filterReleaseAttestations, type EligibleAttestation } from '../../lib/releaseAttestations';
 import { sampleSendable, SAMPLE_TX_DELAY_MS } from '../../lib/fundingTx';
@@ -129,7 +129,7 @@ function ReleaseSheet({
 }) {
   const announce = useAnnouncer();
   const { address } = useWallet();
-  const { programmeAt, attest, rpcUrl } = useSoroban();
+  const { programmeAt, attest, policy, rpcUrl } = useSoroban();
   const tx = useTransaction<Released>({ contract: 'program' });
 
   // Several at once is offered when more than one tranche is left, and only
@@ -247,11 +247,39 @@ function ReleaseSheet({
   const proofChecking = isReal && proofKey !== null && Boolean(attest) && proofRead.loading;
   const proofProblem = proofRead.data && !proofRead.data.ok ? proofRead.data.reason : null;
 
+  // A Restricted award pays into the recipient's smart wallet, which the award
+  // names as its payee. The contract refuses unless the programme's spend
+  // policy is installed on it, so read that when the sheet opens.
+  const restricted = isReal && award.mode === 'Restricted';
+  const awardRead = useContractResult<Award>(
+    () => programmeAt(award.programmeId).get_award({ recipient: award.recipient }),
+    [programmeAt, award.programmeId, award.recipient],
+    { enabled: restricted && open },
+  );
+  const policyWallet = awardRead.data?.payee ?? null;
+  const policyMatches = Boolean(policy) && configRead.data?.policy === policy.options.contractId;
+  const installedRead = useContractRead<boolean>(
+    () => policy.is_installed({ wallet: policyWallet ?? '' }),
+    [policy, policyWallet],
+    { enabled: restricted && open && policyMatches && policyWallet !== null, contract: 'policy' },
+  );
+  const policyState = restricted
+    ? policyBlock({
+        restricted,
+        // Until the config answers there is nothing to compare, so wait for it.
+        // A failed read is left to the contract rather than blocking for good.
+        checkable: configRead.data ? policyMatches && !awardRead.error && !installedRead.error : !readFailed,
+        wallet: policyWallet,
+        installed: installedRead.data,
+      })
+    : null;
+
   /** Why signing is unavailable, the first reason that applies, or null. */
   const releaseReason = (() => {
     if (!isReal) return null;
     if (readFailed) return 'Could not read the programme’s phase and release window. Close this and try again.';
     if (!releaseState.enabled) return releaseState.reason;
+    if (policyState) return policyState.reason;
     if (attestationBuf === null || !attesterOk) return 'Enter the attestation id and the verifier’s address to continue.';
     if (proofChecking) return 'Checking the proof on the chain…';
     if (proofProblem) return proofProblem;
@@ -446,7 +474,17 @@ function ReleaseSheet({
           >
             Sign and release
           </Button>
-          {releaseReason && <DisabledReason id="award-release-why">{releaseReason}</DisabledReason>}
+          {releaseReason && (
+            <DisabledReason id="award-release-why">
+              {releaseReason}
+              {policyState?.missing && (
+                <>
+                  {' '}
+                  <Link to="/policy">Open the spend policy</Link>
+                </>
+              )}
+            </DisabledReason>
+          )}
           {offersBatch && (
             <div className="award-card__batch">
               {batchEnabled ? (

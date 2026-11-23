@@ -94,3 +94,36 @@ export function releaseGate(input: ReleaseGateInput): { enabled: boolean; reason
   }
   return { enabled: true, reason: '' };
 }
+
+export interface PolicyGateInput {
+  /** Whether the award pays into a smart wallet behind the programme's spend policy. */
+  restricted: boolean;
+  /**
+   * Whether the programme's own policy contract is the one this app reads. A
+   * different policy contract can't be asked, so it is left to the contract.
+   */
+  checkable: boolean;
+  /** The wallet the award pays into; null while it is being read. */
+  wallet: string | null;
+  /** `policy.is_installed(wallet)`; null while it is being read. */
+  installed: boolean | null;
+}
+
+/**
+ * Why a Restricted release can't go ahead yet, or null. The contract refuses
+ * with `PolicyNotInstalled` (34) unless the programme's spend policy is on the
+ * wallet the award pays into.
+ */
+export function policyBlock(input: PolicyGateInput): { missing: boolean; reason: string } | null {
+  if (!input.restricted || !input.checkable) return null;
+  if (input.wallet === null || input.installed === null) {
+    return { missing: false, reason: 'Checking the spend policy on the award’s wallet…' };
+  }
+  if (!input.installed) {
+    return {
+      missing: true,
+      reason: 'The programme’s spend policy is not installed on this award’s wallet. Install it first, then come back to release.',
+    };
+  }
+  return null;
+}
