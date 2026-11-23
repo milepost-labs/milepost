@@ -148,6 +148,41 @@ rule, add an entry to `ACCESSIBILITY_EXCEPTIONS` in
 `frontend/src/test/accessibility.test.tsx` with a `reason`; the suite fails on
 an entry with no reason. Fixing the page is always preferred.
 
+### Browser checks
+
+The `browser` job in [`.github/workflows/ci.yml`](.github/workflows/ci.yml) opens
+the built app in Chromium, served with the headers [`frontend/vercel.json`](frontend/vercel.json)
+sends in production, and checks two things on every pull request:
+
+- **Smoke:** every page loads with no uncaught error, no console error and no
+  Content-Security-Policy violation. A page that loads a host the policy does
+  not allow fails the job and names the page.
+- **Reflow:** no page scrolls sideways at 320 CSS px, which is 400% zoom on a
+  1280 px screen (WCAG 1.4.10). The check runs signed in and signed out. A wide
+  table may scroll inside its own container; the page itself may not.
+
+Run it locally from `frontend/`:
+
+```bash
+cd frontend
+npm ci                                        # first time, or after a dependency change
+npx playwright install chromium --with-deps   # first time
+npm run build:browser                         # two builds: signed in, and signed out
+npm run test:browser
+```
+
+The signed-in build uses fixture mode, so the wallet is connected and the index
+is answered from `frontend/tests/fixtures/`. The signed-out build has no
+fixtures and is for layout only. A failure names the page and the element. The
+HTML report is in `frontend/playwright-report/`.
+
+Each allowed console error needs an entry in `ALLOWED_CONSOLE_ERRORS` in
+[`frontend/tests/browser/support.ts`](frontend/tests/browser/support.ts), with a
+reason in the comment above it.
+A request whose 404 is an expected answer (the description store, which is a
+serverless function absent from a static build) goes in `ALLOWED_404_URLS` in the
+same file, matched on its URL, also with a reason.
+
 ### Local Development Modes
 - **Fixture Mode:** Run `VITE_FIXTURES=1 npm --prefix frontend run dev` to run and inspect UI screens locally without requiring an active wallet connection or testnet funds.
 - **Component Gallery:** In dev mode, open `/dev/ui` in the browser to inspect all components from `src/components/ui/` and `src/components/state/`. It is left out of production builds, and CI fails if it ever reaches one (`frontend/scripts/check-no-dev-pages.sh`).
@@ -284,6 +319,30 @@ covers reading the report, the full run, and how to tell the two apart.
 
 ---
 
+### Licences, duplicate crates and sources
+
+The `check` job runs `cargo deny check licenses bans sources` against
+[`deny.toml`](deny.toml):
+
+- **Licences:** each crate's licence must be on the allow-list. An expression
+  such as `MIT OR Apache-2.0` passes when any alternative is allowed.
+- **Duplicates:** two versions of one crate are reported as warnings, not
+  failures.
+- **Sources:** crates come from crates.io, and from the one git repository the
+  lockfile pins (`stellar/passkey-kit`). Any other source fails the check.
+
+To run it locally, install cargo-deny once and run it from the repository root:
+
+```bash
+cargo install cargo-deny --locked   # once
+cargo deny check licenses bans sources
+```
+
+A new licence or a new git source is a decision for the pull request that needs
+it. Add the entry to `deny.toml` in that PR, and say why in the description.
+
+---
+
 ## 5. Documentation Standards
 
 * **Code comments:** Only add a comment when the *why* is non-obvious — a hidden constraint, a subtle invariant, or a workaround for a specific bug. Do not comment on what the code does; well-named identifiers already do that.
@@ -324,6 +383,15 @@ script, if a package comes from outside the npm or crates.io registries, if a
 workflow uses `pull_request_target`, or if a file contains hidden Unicode. If
 your dependency is legitimately blocked, say why in the PR. A maintainer
 records the exception, with its reason, in `.github/malware-check-allowlist.json`.
+
+**Workflow permissions.** `ci.yml`, `mutants.yml` and `smoke-test.yml` start with
+`permissions: contents: read`, so a job cannot write to the repository, comment
+on a pull request or change a release unless it grants that to itself. Only
+`release.yml` asks for more, to publish. A new job that needs a write must add
+the grant to that job, and say why in the pull request. These checks cannot run
+locally, so push the change to your fork and read the Actions run: a step that
+needs a write it does not have fails with a 403 or "Resource not accessible by
+integration".
 
 ---
 

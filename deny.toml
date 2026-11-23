@@ -1,0 +1,42 @@
+# cargo-deny policy, read by the `check` job in .github/workflows/ci.yml:
+#   cargo deny check licenses bans sources
+#
+# Advisories are not checked here; `cargo audit` in the same job covers them
+# (see .cargo/audit.toml).
+#
+# To run it locally (needs `cargo install cargo-deny --locked`, or a prebuilt
+# binary from https://github.com/EmbarkStudios/cargo-deny/releases):
+#   cargo deny check licenses bans sources
+
+[licenses]
+version = 2
+# A licence not in this list fails the check. Expressions such as
+# "MIT OR Apache-2.0" pass when any alternative is in the list. Add a licence
+# here only in the PR that needs it, and say why in that PR.
+allow = [
+  "Apache-2.0",
+  "Apache-2.0 WITH LLVM-exception",
+  "BSD-2-Clause",
+  "BSD-3-Clause",
+  "MIT",
+  "Unicode-3.0",
+  "Unlicense",
+  "Zlib",
+]
+
+[bans]
+# Two versions of one crate is allowed, but each is worth a look. The
+# duplicates in the lockfile today are reported as warnings, not failures.
+multiple-versions = "warn"
+# Anything named in a `deny` entry fails the build. Empty for now.
+deny = []
+
+[sources]
+# Only crates.io, plus the one git dependency the lockfile pins by revision:
+# stellar/passkey-kit, used by `smart-wallet-interface` in
+# contracts/policy-spend and crates/integration. Any other git source or
+# alternative registry fails the check.
+unknown-registry = "deny"
+unknown-git = "deny"
+allow-registry = ["https://github.com/rust-lang/crates.io-index"]
+allow-git = ["https://github.com/stellar/passkey-kit"]
