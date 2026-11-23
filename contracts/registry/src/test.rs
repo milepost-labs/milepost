@@ -10,9 +10,10 @@ use soroban_sdk::{
 
 // Requires the programme wasm to exist, so `cargo build --target wasm32v1-none
 // --release` must run before this crate's tests. CI builds wasm before testing
-// for exactly this reason.
+// for exactly this reason. build.rs writes the import with an absolute path, so
+// it also resolves in cargo-mutants' copy of the workspace.
 mod programme {
-    soroban_sdk::contractimport!(file = "../../target/wasm32v1-none/release/milepost_program.wasm");
+    include!(concat!(env!("OUT_DIR"), "/import_wasm.rs"));
 }
 
 struct Fixture {

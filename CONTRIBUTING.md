@@ -259,28 +259,46 @@ cost review rounds.
 
 ### Mutation testing
 
-The programme contract is mutation-tested with
-[cargo-mutants](https://mutants.rs): each run makes small deliberate changes to
-the contract and checks that a test fails on every one. On every pull request CI
-mutates the programme lines you changed, and the `mutants` check **fails if any
-of those changes goes unnoticed by the tests**. A full run over the whole
-programme runs weekly and on demand.
+The load-bearing contracts (programme, registry, attest, record, policy-spend)
+are mutation-tested with [cargo-mutants](https://mutants.rs): each run makes
+small deliberate changes to a contract and checks that a test fails on every
+one. On every pull request CI mutates the lines you changed in those contracts,
+and the `mutants` check **fails if any of those changes goes unnoticed by the
+tests**. A full run over every contract runs weekly and on demand, in eight
+shards.
 
-If you change `contracts/program/src/lib.rs`, run the same check locally before
-pushing:
+Run the same check locally before pushing a contract change:
 
 ```bash
 cargo install --locked cargo-mutants   # once
+rustup target add wasm32v1-none        # once, if rustup has not already
 
 git diff dev... > /tmp/pr.diff
 ./scripts/mutants.sh --in-diff /tmp/pr.diff    # what CI runs on your PR
 ./scripts/mutants.sh -F 'Programme::refund'    # or just the functions you touched
+./scripts/mutants.sh --check-excludes          # only check .cargo/mutants.toml
 ```
 
 The script prints any surviving mutants grouped by function. Each one needs a
 test that fails on it, or, if it genuinely cannot change behaviour, an entry in
 `.cargo/mutants.toml` saying why. The [testing guide](docs/testing-guide.md#mutation-testing)
 covers reading the report, the full run, and how to tell the two apart.
+
+Two things the script does that a bare `cargo mutants` does not:
+
+- **It builds the wasm first.** cargo-mutants builds each mutant in a copy of
+  the workspace without `target/`, and the registry and record tests import
+  built wasm. Their `build.rs` writes that import with an absolute path taken
+  from `MILEPOST_WASM_DIR`, which the script points at this checkout's build.
+  Without it no mutant compiles: every one is reported "unviable" and nothing is
+  tested. The script fails a run in which more than 5% of mutants are unviable
+  (or all of them, for a run under 20), so that cannot pass quietly again.
+- **It checks the exclusions.** Entries in `exclude_re` match a mutant by
+  operator and function (`'replace < with <= in Programme::review$', # 2`),
+  never by line number, so they survive edits. Each ends with the number of
+  mutants it is meant to exclude, and the script fails when a pattern matches a
+  different number: a new comparison with the same operator in that function is
+  a real mutant, and must not be excluded without someone reading it.
 
 ---
 

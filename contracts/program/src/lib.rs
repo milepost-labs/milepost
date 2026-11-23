@@ -1499,7 +1499,10 @@ impl Programme {
             return Err(Error::AwardFullyReleased);
         }
 
-        let tranche_amount = if award.tranches > 0 {
+        // `!= 0` rather than `> 0`: the same test for a u32, but `> 0` gives
+        // cargo-mutants an equivalent `>= 0` mutant (the check above already
+        // refuses an award with no tranches) that no test could catch.
+        let tranche_amount = if award.tranches != 0 {
             award.granted / award.tranches as i128
         } else {
             0
