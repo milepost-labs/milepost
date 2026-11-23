@@ -352,6 +352,62 @@ describe('DeployProgramme — deploying', () => {
     expect(screen.queryByText(/HostError/)).toBeNull();
   });
 
+  it('retries publishing the description after a failure, then deploys', async () => {
+    mocks.create.mockResolvedValue({ signAndSend: vi.fn(async () => ({ result: { unwrap: () => NEW_PROGRAMME } })) });
+    storeDown = true;
+    await reachReview();
+    fireEvent.click(screen.getByRole('button', { name: 'Deploy programme' }));
+
+    const sheet = await screen.findByRole('dialog', { name: 'Deploy programme' });
+    expect(await within(sheet).findByText('The description wasn’t published.')).toBeTruthy();
+    expect(within(sheet).getByText(/Nothing has been deployed yet\./)).toBeTruthy();
+    expect(mocks.create).not.toHaveBeenCalled();
+    expect(mocks.announce).toHaveBeenCalledWith(expect.stringContaining('Description not published.'), 'alert');
+
+    storeDown = false;
+    fireEvent.click(within(sheet).getByRole('button', { name: 'Try again' }));
+
+    expect(await screen.findByRole('heading', { name: 'Programme deployed', level: 3 })).toBeTruthy();
+    expect(mocks.create).toHaveBeenCalledTimes(1);
+    const expectedHash = await metadataHash(buildMetadata({ ...draftFromScreen() }));
+    expect(Buffer.from(mocks.create.mock.calls[0][0].metadata_hash).toString('hex')).toBe(expectedHash);
+    expect(screen.getByRole('link', { name: 'Open its page' }).getAttribute('href')).toBe(`/programme/${NEW_PROGRAMME}`);
+  });
+
+  it('retries deploying after registry.create fails following a description publish', async () => {
+    mocks.create
+      .mockRejectedValueOnce(new Error('HostError: Error(Contract, #2)'))
+      .mockResolvedValueOnce({ signAndSend: vi.fn(async () => ({ result: { unwrap: () => NEW_PROGRAMME } })) });
+    await reachReview();
+    fireEvent.click(screen.getByRole('button', { name: 'Deploy programme' }));
+
+    const sheet = await screen.findByRole('dialog', { name: 'Deploy programme' });
+    expect(await within(sheet).findByText('Programme not deployed')).toBeTruthy();
+    expect(store.entries.size).toBe(1);
+    expect(mocks.announce).toHaveBeenCalledWith(expect.stringContaining('Programme not deployed.'), 'alert');
+
+    fireEvent.click(within(sheet).getByRole('button', { name: 'Try again' }));
+
+    expect(await screen.findByRole('heading', { name: 'Programme deployed', level: 3 })).toBeTruthy();
+    expect(mocks.create).toHaveBeenCalledTimes(2);
+    expect(screen.getByRole('link', { name: 'Open its page' }).getAttribute('href')).toBe(`/programme/${NEW_PROGRAMME}`);
+  });
+
+  it('closes the deploy sheet when publish fails and Close is clicked', async () => {
+    storeDown = true;
+    await reachReview();
+    fireEvent.click(screen.getByRole('button', { name: 'Deploy programme' }));
+
+    const sheet = await screen.findByRole('dialog', { name: 'Deploy programme' });
+    expect(await within(sheet).findByText('The description wasn’t published.')).toBeTruthy();
+    // The sheet's header has its own Close button; this is the one beside Try again.
+    const actions = within(sheet).getByRole('button', { name: 'Try again' }).parentElement!;
+    fireEvent.click(within(actions).getByRole('button', { name: 'Close' }));
+
+    await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull());
+    expect(mocks.create).not.toHaveBeenCalled();
+  });
+
   it('jumps back to a step from the summary', async () => {
     await reachReview();
     fireEvent.click(screen.getByRole('button', { name: 'Change people' }));
