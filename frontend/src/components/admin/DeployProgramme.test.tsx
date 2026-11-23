@@ -400,9 +400,11 @@ describe('DeployProgramme — deploying', () => {
 
     const sheet = await screen.findByRole('dialog', { name: 'Deploy programme' });
     expect(await within(sheet).findByText('The description wasn’t published.')).toBeTruthy();
-    fireEvent.click(within(sheet).getByRole('button', { name: 'Close' }));
+    // The sheet's header has its own Close button; this is the one beside Try again.
+    const actions = within(sheet).getByRole('button', { name: 'Try again' }).parentElement!;
+    fireEvent.click(within(actions).getByRole('button', { name: 'Close' }));
 
-    expect(screen.queryByRole('dialog')).toBeNull();
+    await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull());
     expect(mocks.create).not.toHaveBeenCalled();
   });
 
