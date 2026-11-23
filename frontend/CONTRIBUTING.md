@@ -148,6 +148,53 @@ The check only looks at the component that imports the fixture. A component
 that gets fixture values through a hook or a prop has to tag them by hand,
 and review is still what catches that.
 
+### Content-Security-Policy hosts
+
+The deployed app sends a Content-Security-Policy from `vercel.json`, and its
+`connect-src` lists every server the page may talk to. `npm run dev` and
+`npm run preview` send no policy, so a host missing from the list works on your
+machine and is blocked only on the live site. That is how the account balance
+and Friendbot once broke in production.
+
+`scripts/check-csp.mjs` reads every absolute `https://` or `wss://` URL in the
+app's source (`src/`, not tests, plus `VITE_*` URLs in `.env` and
+`.env.production`) and fails when `connect-src` does not allow its host,
+naming the host and each file and line that uses it:
+
+```
+frontend/vercel.json: connect-src does not allow https://friendbot.stellar.org, which the app uses in src/components/layout/AccountMenu.tsx:62 (fetch). ...
+```
+
+It checks every URL, not only those written inside a `fetch`, because the
+hosts that matter most are named once as constants (the RPC and index defaults
+in `src/config/network.ts`) and reach `rpc.Server` or `fetch` through the
+network setting. So when you add a host the app talks to, add it to
+`connect-src` in the same PR.
+
+A URL used as an `href` attribute is a link, not a connection, and needs no
+entry. A host the app only builds links to elsewhere, such as the explorer,
+goes in `scripts/csp-link-only-hosts.json` with a reason:
+
+```json
+{ "host": "stellar.expert", "reason": "The block explorer: ..." }
+```
+
+The check fails on an entry with no reason, on one nothing uses any more, and
+on a link-only host passed straight to `fetch`, an SDK `Server`, an
+`EventSource`, a `WebSocket` or `sendBeacon`.
+
+To run it locally:
+
+```sh
+npm run check:csp   # the check CI runs, in the bindings job
+npm run test:csp    # the check's own tests
+```
+
+It cannot see a URL that is only known at run time, such as the address a
+reader pastes into "Fetch from URL" on a programme page, or a mainnet RPC set
+by `VITE_MAINNET_RPC_URL` in the deployment's environment. Those hosts still
+have to be allowed by hand.
+
 The [testing guide](docs/testing-guide.md) covers mocking a contract client,
 the no-network rule, and what the reachability check means when it fires.
 

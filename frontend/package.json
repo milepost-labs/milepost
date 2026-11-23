@@ -11,6 +11,8 @@
     "test:design-system": "node --test scripts/check-design-system.test.mjs",
     "check:sample-tags": "node scripts/check-sample-tags.mjs",
     "test:sample-tags": "node --test scripts/check-sample-tags.test.mjs",
+    "check:csp": "node scripts/check-csp.mjs",
+    "test:csp": "node --test scripts/check-csp.test.mjs",
     "test": "vitest run",
     "test:a11y": "vitest run src/test/accessibility.test.tsx",
     "test:coverage": "vitest run --coverage",

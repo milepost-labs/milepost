@@ -201,6 +201,17 @@ jobs:
       - name: Test the sample-tag check
         run: npm run test:sample-tags --prefix frontend
 
+      # The deployed app's Content-Security-Policy (frontend/vercel.json) lists
+      # in connect-src every host the page may talk to, and `npm run dev` sends
+      # no policy, so a missing host breaks only the live site. That is how the
+      # account balance and Friendbot broke in production. Fails naming the
+      # host and the file that uses it; see frontend/CONTRIBUTING.md.
+      - name: Check the CSP allows every host the app connects to
+        run: npm run check:csp --prefix frontend
+
+      - name: Test the CSP check
+        run: npm run test:csp --prefix frontend
+
       # Not cosmetic. The React Compiler rules here catch render-purity and
       # cascading-setState bugs that type-check cleanly and misbehave at runtime.
       - name: Lint the app
