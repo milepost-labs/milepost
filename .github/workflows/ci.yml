@@ -306,13 +306,6 @@ jobs:
     if: github.event_name != 'pull_request' || github.base_ref == 'dev'
     permissions:
       contents: read
-  browser:
-    name: Browser checks
-    runs-on: ubuntu-latest
-    # Real browser, production headers from frontend/vercel.json. Smoke: every
-    # route loads with no uncaught or console error and no CSP violation.
-    # Reflow: no sideways page scroll at 320px, signed in and signed out.
-    # See frontend/tests/browser and "Browser checks" in CONTRIBUTING.md.
     steps:
       - uses: actions/checkout@v7
       - uses: actions/setup-node@v7
@@ -333,6 +326,25 @@ jobs:
       # contract id from frontend/src/fixtures/ is in the output.
       - name: Build for mainnet and check no sample id reached it
         run: npm run check:mainnet-build --prefix frontend
+
+  browser:
+    name: Browser checks
+    runs-on: ubuntu-latest
+    # Real browser, production headers from frontend/vercel.json. Smoke: every
+    # route loads with no uncaught or console error and no CSP violation.
+    # Reflow: no sideways page scroll at 320px, signed in and signed out.
+    # See frontend/tests/browser and "Browser checks" in CONTRIBUTING.md.
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 24
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Install
+        run: npm ci --prefix frontend
+
       - name: Install Chromium
         working-directory: frontend
         run: npx playwright install chromium --with-deps
