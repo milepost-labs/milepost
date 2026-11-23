@@ -13,10 +13,11 @@ import { samplesEnabled } from '../../lib/samples';
 import { useAnnouncer } from '../../context/useAnnouncer';
 import { useWallet } from '../../context/useWallet';
 import { useSoroban } from '../../context/useSoroban';
-import { useContractResult } from '../../hooks/useContractRead';
+import { useContractRead, useContractResult } from '../../hooks/useContractRead';
 import { useTransaction } from '../../hooks/useTransaction';
 import { isPhase } from '../../lib/phaseGate';
 import { releaseBatchGate } from '../../lib/releaseBatch';
+import { checkReleaseProof, releaseGate } from '../../lib/releaseProof';
 import { searchAttestations } from '../../lib/attestationSearch';
 import { filterReleaseAttestations, type EligibleAttestation } from '../../lib/releaseAttestations';
 import { sampleSendable, SAMPLE_TX_DELAY_MS } from '../../lib/fundingTx';
@@ -137,7 +138,7 @@ function ReleaseSheet({
   const offersBatch = isReal && tranchesLeft >= 2;
   const [nowMs] = useState(() => Date.now());
   const phaseRead = useContractResult(() => programmeAt(award.programmeId).get_phase(), [award.programmeId], {
-    enabled: offersBatch,
+    enabled: isReal && open,
   });
   const configRead = useContractResult(() => programmeAt(award.programmeId).get_config(), [award.programmeId], {
     enabled: isReal && open,
@@ -215,7 +216,48 @@ function ReleaseSheet({
   const attester = attesterInput.trim();
   const attesterOk = /^G[A-Z2-7]{55}$/.test(attester);
   const attesterError = attester.length > 0 && !attesterOk ? 'Enter a valid Stellar address (starts with G).' : '';
-  const canRelease = !tx.busy && (!isReal || (attestationBuf !== null && attesterOk));
+
+  // The gate: phase, release window and role, read from the chain, with the
+  // reason shown beside the button instead of letting the transaction fail.
+  const releaseState = releaseGate({
+    phase: isPhase(phaseTag) ? phaseTag : null,
+    releaseDeadline: configRead.data?.release_deadline ?? null,
+    nowMs,
+    signedIn: Boolean(address),
+    isRecipient: address === award.recipient,
+  });
+
+  // Read the proof before asking for a signature: verifier, spent, and
+  // `attest.verify`. A read that fails does not block; the contract still checks.
+  const proofKey = attestationBuf !== null && attesterOk && schemaHex !== null ? attestationHex.trim().toLowerCase() : null;
+  const proofRead = useContractRead(
+    async () => ({
+      result: await checkReleaseProof(
+        { uid: attestationHex, attester, recipient: award.recipient, schemaHex: schemaHex ?? '' },
+        {
+          attest: attest!,
+          isVerifier: async (addr) => (await programmeAt(award.programmeId).is_verifier({ addr })).result,
+          isSpent: async (uid) => (await programmeAt(award.programmeId).is_spent({ attestation: uid })).result,
+        },
+      ),
+    }),
+    [programmeAt, attest, award.programmeId, award.recipient, proofKey, attester, schemaHex],
+    { enabled: isReal && open && proofKey !== null && Boolean(attest) },
+  );
+  const proofChecking = isReal && proofKey !== null && Boolean(attest) && proofRead.loading;
+  const proofProblem = proofRead.data && !proofRead.data.ok ? proofRead.data.reason : null;
+
+  /** Why signing is unavailable, the first reason that applies, or null. */
+  const releaseReason = (() => {
+    if (!isReal) return null;
+    if (readFailed) return 'Could not read the programme’s phase and release window. Close this and try again.';
+    if (!releaseState.enabled) return releaseState.reason;
+    if (attestationBuf === null || !attesterOk) return 'Enter the attestation id and the verifier’s address to continue.';
+    if (proofChecking) return 'Checking the proof on the chain…';
+    if (proofProblem) return proofProblem;
+    return null;
+  })();
+  const canRelease = !tx.busy && releaseReason === null;
 
   const release = async () => {
     if (!canRelease) return;
@@ -391,9 +433,20 @@ function ReleaseSheet({
               {tx.error.message} {tx.error.action}
             </Notice>
           )}
-          <Button fullWidth disabled={!canRelease} onClick={() => void release()}>
+          {isReal && proofRead.error !== null && !proofProblem && !proofChecking && (
+            <Notice tone="info">
+              Couldn’t check this proof before signing. The contract will still check it when you release.
+            </Notice>
+          )}
+          <Button
+            fullWidth
+            disabled={!canRelease}
+            aria-describedby={releaseReason ? 'award-release-why' : undefined}
+            onClick={() => void release()}
+          >
             Sign and release
           </Button>
+          {releaseReason && <DisabledReason id="award-release-why">{releaseReason}</DisabledReason>}
           {offersBatch && (
             <div className="award-card__batch">
               {batchEnabled ? (
