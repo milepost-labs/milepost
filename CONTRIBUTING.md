@@ -179,6 +179,9 @@ HTML report is in `frontend/playwright-report/`.
 Each allowed console error needs an entry in `ALLOWED_CONSOLE_ERRORS` in
 [`frontend/tests/browser/support.ts`](frontend/tests/browser/support.ts), with a
 reason in the comment above it.
+A request whose 404 is an expected answer (the description store, which is a
+serverless function absent from a static build) goes in `ALLOWED_404_URLS` in the
+same file, matched on its URL, also with a reason.
 
 ### Local Development Modes
 - **Fixture Mode:** Run `VITE_FIXTURES=1 npm --prefix frontend run dev` to run and inspect UI screens locally without requiring an active wallet connection or testnet funds.

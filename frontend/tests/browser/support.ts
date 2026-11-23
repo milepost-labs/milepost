@@ -76,6 +76,17 @@ export async function cspViolations(page: Page): Promise<string[]> {
 export const ALLOWED_CONSOLE_ERRORS: RegExp[] = [];
 
 /**
+ * Requests whose 404 is an expected answer, matched on the request URL so a
+ * missing chunk or asset still fails. Each needs a reason.
+ */
+export const ALLOWED_404_URLS: RegExp[] = [
+  // The description store (`api/metadata.ts`) is a Vercel function, absent from
+  // a static build. Its 404 means "not stored", which the page shows as a
+  // missing description; the fixture programmes commit to placeholder hashes.
+  /\/api\/metadata\?hash=[0-9a-f]{64}$/,
+];
+
+/**
  * Starts collecting uncaught errors and console errors for `label`. Returns the
  * list that the listeners fill, so the caller reads it after the page settles.
  */
@@ -88,6 +99,8 @@ export function collectProblems(page: Page, label: string): string[] {
     if (message.type() !== 'error') return;
     const text = message.text();
     if (ALLOWED_CONSOLE_ERRORS.some((pattern) => pattern.test(text))) return;
+    const url = message.location().url;
+    if (/status of 404/.test(text) && ALLOWED_404_URLS.some((pattern) => pattern.test(url))) return;
     problems.push(`${label}: console error: ${text}`);
   });
   return problems;

@@ -425,3 +425,10 @@
     overflow-y: auto;
   }
 }
+
+/* At 320px (400% zoom) the header's call to action would push the page wider
+   than the screen. Its label carries the meaning, so the icon goes first. */
+@media (max-width: 400px) {
+  .app-header__cta { padding: 0 var(--space-3); }
+  .app-header__cta svg { display: none; }
+}
