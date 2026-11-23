@@ -1,4 +1,5 @@
 import { describe, it, expect } from 'vitest';
+import { NETWORK } from '../config/network';
 import { formatDate, timeUntil, hasPassed, truncateAddress, looksLikeAddress, toDate, explorerUrl, addressExplorerUrl } from './format';
 
 const NOW = new Date('2026-03-10T12:00:00Z');
@@ -106,3 +107,22 @@ describe('addressExplorerUrl', () => {
   });
 });
 
+
+describe('explorer links follow the network', () => {
+  const tx = 'abc123';
+  const account = 'GAH3D4RM45ETE4W7VDRCWZBPRPT63CJXAGXFYVBC2FGANBZTS4OTKXCA';
+  const contract = 'CD236SGR4CHW3N5WA5REW7CDLCS4ZLDEX6JVEAIHZK7NSN4W7WD7YDAL';
+
+  it('builds a transaction and an address link for each network', () => {
+    expect(explorerUrl(tx, 'TESTNET')).toBe(`https://stellar.expert/explorer/testnet/tx/${tx}`);
+    expect(explorerUrl(tx, 'PUBLIC')).toBe(`https://stellar.expert/explorer/public/tx/${tx}`);
+    expect(addressExplorerUrl(account, 'TESTNET')).toBe(`https://stellar.expert/explorer/testnet/account/${account}`);
+    expect(addressExplorerUrl(account, 'PUBLIC')).toBe(`https://stellar.expert/explorer/public/account/${account}`);
+    expect(addressExplorerUrl(contract, 'PUBLIC')).toBe(`https://stellar.expert/explorer/public/contract/${contract}`);
+  });
+
+  it('defaults to the network the app is built for', () => {
+    expect(explorerUrl(tx)).toBe(`https://stellar.expert/explorer/${NETWORK.explorer}/tx/${tx}`);
+    expect(addressExplorerUrl(account)).toBe(`https://stellar.expert/explorer/${NETWORK.explorer}/account/${account}`);
+  });
+});

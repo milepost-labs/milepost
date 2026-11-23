@@ -11,6 +11,15 @@ const HASH = 'ab'.repeat(32);
 
 const mocks = vi.hoisted(() => ({ lookup: vi.fn(), announce: vi.fn(), copied: [] as string[] }));
 
+// The asset read has its own tests (hooks/useProgrammeAsset.test.tsx). Here a
+// sample programme is in its stand-in asset and a deployed one pays in XLM.
+vi.mock('../hooks/useProgrammeAsset', async () => {
+  const { isSampleProgrammeId } = await import('../lib/programmeView');
+  return {
+    useProgrammeAsset: (id: string | null | undefined) => (!id ? null : isSampleProgrammeId(id) ? 'USDC' : 'XLM'),
+  };
+});
+
 vi.mock('../lib/txLookup', async (importOriginal) => ({
   ...(await importOriginal<typeof import('../lib/txLookup')>()),
   lookupTransaction: (...args: unknown[]) => mocks.lookup(...args),
@@ -26,16 +35,19 @@ function ok<T>(value: T) {
   return Promise.resolve({ result: { unwrap: () => value } });
 }
 
-vi.mock('../context/useSoroban', () => ({
-  useSoroban: () => ({
+vi.mock('../context/useSoroban', () => {
+  // Built once: reads key on the clients, and the real context is memoized.
+  const client = {
+    get_config: () => ok({ fee_bps: 250 }),
+    contributed_by: async () => ({ result: 1_000_000_000n }),
+    total_contributed: async () => ({ result: 4_000_000_000n }),
+  };
+  const soroban = {
     rpcUrl: 'https://rpc.test',
-    programmeAt: () => ({
-      get_config: () => ok({ fee_bps: 250 }),
-      contributed_by: async () => ({ result: 1_000_000_000n }),
-      total_contributed: async () => ({ result: 4_000_000_000n }),
-    }),
-  }),
-}));
+    programmeAt: () => client,
+  };
+  return { useSoroban: () => soroban, useOptionalSoroban: () => soroban };
+});
 
 function renderAt(element: React.ReactElement, url = '/') {
   return render(<MemoryRouter initialEntries={[url]}>{element}</MemoryRouter>);
@@ -54,6 +66,7 @@ describe('ReceiptLookup', () => {
       createdAt: 1_790_000_000,
       opCount: 1,
       contribution: { programmeId: PROGRAMME, donor: DONOR, amount: 250_000_000n },
+      refund: null,
     });
     renderAt(<ReceiptLookup />, `/funders/receipt?hash=${HASH}`);
 
@@ -78,6 +91,38 @@ describe('ReceiptLookup', () => {
     fireEvent.change(screen.getByLabelText('Transaction hash'), { target: { value: 'nope' } });
     expect(screen.getByText(/doesn’t look like a transaction hash/)).toBeTruthy();
     expect(mocks.lookup).not.toHaveBeenCalled();
+  });
+
+  it('rebuilds a full refund receipt with the returned amount', async () => {
+    mocks.lookup.mockResolvedValue({
+      status: 'SUCCESS',
+      ledger: 4_700_000,
+      createdAt: 1_790_100_000,
+      opCount: 1,
+      contribution: null,
+      refund: { programmeId: PROGRAMME, donor: DONOR, amount: 180_000_000n, partial: false },
+    });
+    renderAt(<ReceiptLookup />, `/funders/receipt?hash=${HASH}`);
+
+    expect(await screen.findByRole('heading', { name: 'Refund · 18 XLM' })).toBeTruthy();
+    // Does NOT show a "Partial refund" row for a refund of the whole share.
+    expect(screen.queryByText('Partial refund')).toBeNull();
+    expect(mocks.announce).toHaveBeenCalledWith('Refund receipt rebuilt from the transaction.');
+  });
+
+  it('rebuilds a partial refund receipt and labels it as partial', async () => {
+    mocks.lookup.mockResolvedValue({
+      status: 'SUCCESS',
+      ledger: 4_700_001,
+      createdAt: 1_790_200_000,
+      opCount: 1,
+      contribution: null,
+      refund: { programmeId: PROGRAMME, donor: DONOR, amount: 50_000_000n, partial: true },
+    });
+    renderAt(<ReceiptLookup />, `/funders/receipt?hash=${HASH}`);
+
+    expect(await screen.findByRole('heading', { name: 'Partial refund · 5 XLM' })).toBeTruthy();
+    expect(await screen.findByText('Partial refund')).toBeTruthy();
   });
 });
 

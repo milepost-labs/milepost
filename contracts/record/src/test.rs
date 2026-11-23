@@ -666,3 +666,97 @@ fn an_unauthorised_writer_credits_nothing_and_publishes_nothing() {
     assert_eq!(result, Err(Ok(Error::NotAuthorized)));
     assert_events(&f.env, &f.client.address, &[]);
 }
+
+// ---- TTL policy (#672) ----
+
+#[test]
+fn add_writer_bumps_writer_but_not_instance() {
+    use soroban_sdk::testutils::storage::{Instance as _, Persistent as _};
+
+    let f = setup();
+    let persistent_ttl = |key: &Key| {
+        f.env.as_contract(&f.client.address, || {
+            f.env.storage().persistent().get_ttl(key)
+        })
+    };
+    let instance_ttl = || {
+        f.env
+            .as_contract(&f.client.address, || f.env.storage().instance().get_ttl())
+    };
+
+    assert!(persistent_ttl(&Key::Writer(f.writer.clone())) >= BUMP_LEDGERS - 1);
+    assert!(instance_ttl() < BUMP_THRESHOLD);
+
+    f.env
+        .ledger()
+        .with_mut(|l| l.sequence_number += 40 * DAY_IN_LEDGERS);
+    assert!(persistent_ttl(&Key::Writer(f.writer.clone())) < BUMP_THRESHOLD);
+
+    // Re-adding after removal (or adding a new writer) writes and bumps the writer entry.
+    let writer2 = Address::generate(&f.env);
+    f.client.add_writer(&writer2);
+    assert!(persistent_ttl(&Key::Writer(writer2)) >= BUMP_LEDGERS - 1);
+}
+
+#[test]
+fn credit_bumps_standing_and_new_seen_entries() {
+    use soroban_sdk::testutils::storage::Persistent as _;
+
+    let f = setup();
+    let ttl = |key: &Key| {
+        f.env.as_contract(&f.client.address, || {
+            f.env.storage().persistent().get_ttl(key)
+        })
+    };
+
+    f.client
+        .credit(&f.writer, &f.subject, &f.programme, &500, &hash(&f.env, 1));
+    assert!(ttl(&Key::Standing(f.subject.clone())) >= BUMP_LEDGERS - 1);
+    assert!(ttl(&Key::Seen(f.subject.clone(), f.programme.clone())) >= BUMP_LEDGERS - 1);
+
+    // Advance past the 60-day bump threshold (90 - 40 = 50 days remaining).
+    f.env
+        .ledger()
+        .with_mut(|l| l.sequence_number += 40 * DAY_IN_LEDGERS);
+    assert!(ttl(&Key::Standing(f.subject.clone())) < BUMP_THRESHOLD);
+    assert!(ttl(&Key::Seen(f.subject.clone(), f.programme.clone())) < BUMP_THRESHOLD);
+    assert!(ttl(&Key::Writer(f.writer.clone())) < BUMP_THRESHOLD);
+
+    // A repeat credit for the same programme bumps Standing, but not Seen or Writer.
+    f.client
+        .credit(&f.writer, &f.subject, &f.programme, &250, &hash(&f.env, 2));
+    assert!(ttl(&Key::Standing(f.subject.clone())) >= BUMP_LEDGERS - 1);
+    assert!(ttl(&Key::Seen(f.subject.clone(), f.programme.clone())) < BUMP_THRESHOLD);
+    assert!(ttl(&Key::Writer(f.writer.clone())) < BUMP_THRESHOLD);
+
+    // A credit under a new programme creates and bumps its Seen marker.
+    let programme2 = Address::generate(&f.env);
+    f.client
+        .credit(&f.writer, &f.subject, &programme2, &100, &hash(&f.env, 3));
+    assert!(ttl(&Key::Seen(f.subject.clone(), programme2)) >= BUMP_LEDGERS - 1);
+}
+
+#[test]
+fn keepalive_bumps_standing_but_not_seen() {
+    use soroban_sdk::testutils::storage::Persistent as _;
+
+    let f = setup();
+    let ttl = |key: &Key| {
+        f.env.as_contract(&f.client.address, || {
+            f.env.storage().persistent().get_ttl(key)
+        })
+    };
+
+    f.client
+        .credit(&f.writer, &f.subject, &f.programme, &500, &hash(&f.env, 1));
+
+    f.env
+        .ledger()
+        .with_mut(|l| l.sequence_number += 40 * DAY_IN_LEDGERS);
+    assert!(ttl(&Key::Standing(f.subject.clone())) < BUMP_THRESHOLD);
+    assert!(ttl(&Key::Seen(f.subject.clone(), f.programme.clone())) < BUMP_THRESHOLD);
+
+    f.client.keepalive(&f.subject);
+    assert!(ttl(&Key::Standing(f.subject.clone())) >= BUMP_LEDGERS - 1);
+    assert!(ttl(&Key::Seen(f.subject.clone(), f.programme.clone())) < BUMP_THRESHOLD);
+}

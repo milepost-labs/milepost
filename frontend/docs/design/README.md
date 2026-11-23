@@ -6,7 +6,7 @@ behind the look, the voice, and the claims the app must never make.
 | File | What it is |
 | --- | --- |
 | `BRAND.md` | Voice, the money-square colours, the never-claim rules, visual foundations. |
-| `CLAUDE_CODE_HANDOFF.md` | The designer's handoff note: ground rules and a suggested build order. |
+| `HANDOFF.md` | The designer's handoff note: ground rules and a suggested build order. |
 | `prototypes/landing.html` | The landing page. Open it in a browser. |
 | `prototypes/app.html` | A clickable prototype of the app shell and every screen. The "Design review: states" button (bottom left) switches loading, empty, error, stale, signed-out and offline states. |
 | `prototypes/app-styles.css` | The app prototype's stylesheet, on its own for reading. |
@@ -83,8 +83,8 @@ the contracts and the index do not provide. The app follows the contracts.
 - **Standing writers** (`/admin/standing`) checks whether a contract is a
   writer and explains that the registry, as the record's admin, makes every
   programme it deploys one; the prototype's recipient lookup lives at
-  `/recipients/standing`. **Keepalive** works one programme at a time, with
-  real lifetimes, rather than a table of every programme. **Payees** shows
+  `/recipients/standing`. **Keepalive** lists every indexed programme's
+  contract lifetime in a table, and extends one programme at a time. **Payees** shows
   only the payees changed in this tab for a real programme, because the
   contract can confirm a payee but can't list them.
 - **Names** (sector, verifier, payee and reviewer labels) are not on the

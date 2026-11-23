@@ -9,9 +9,11 @@ import { usePageTitle } from '../hooks/usePageTitle';
 import { fetchAwards, fetchProgrammes } from '../lib/indexer';
 import { explain } from '../lib/errors';
 import { formatDate, looksLikeAddress } from '../lib/format';
-import { formatFigure, programmeAsset, shortId } from '../lib/programmeView';
+import { formatFigure, shortId } from '../lib/programmeView';
+import { useProgrammeAsset } from '../hooks/useProgrammeAsset';
 import { FIXTURE_PROGRAMMES, chainFor, isSampleProgrammeId } from '../fixtures/programmes';
-import { FIXTURE_REVIEW_APPLICATIONS } from '../fixtures/finalizeFixtures';
+import { samplesEnabled } from '../lib/samples';
+import { FIXTURE_REVIEW_APPLICATIONS, FIXTURE_REVIEW_PROGRAMME_ID } from '../fixtures/finalizeFixtures';
 import { awardFromVotes } from '../lib/awardRule';
 import { Button, Field, Notice, PageHead, PhaseBadge, SampleTag, Select } from '../components/ui';
 import { ErrorPanel } from '../components/state/AsyncStates';
@@ -20,9 +22,6 @@ import { ProgrammeParamNotice } from '../components/programme/ProgrammeParamNoti
 import { ChainRow, SampleRow, type RowContext, type RowFacts } from '../components/finalize/FinalizeRows';
 import { FinalizeSheet, type FinalizeTarget } from '../components/finalize/FinalizeSheet';
 import './FinalizeAwards.css';
-
-/** The sample programme whose applications stand in for the unwired list. */
-const SAMPLE_REVIEW_ID = 'CCOIACASOVO3ZQLXWWJFGZAU3Y545AGPXLBP4NYHYD77RDCBPXRVZ37C';
 
 interface ProgrammeOption {
   id: string;
@@ -61,6 +60,14 @@ export const FinalizeAwards = () => {
   const programmeParam = useProgrammeParam();
   const listRead = useIndexedList(() => fetchProgrammes(), []);
 
+  // A sample address is not a programme on mainnet, even if a link names it.
+  const linkedProgrammeId =
+    programmeParam.status === 'valid' &&
+    programmeParam.programmeId &&
+    (samplesEnabled() || !isSampleProgrammeId(programmeParam.programmeId))
+      ? programmeParam.programmeId
+      : null;
+
   const programmes: ProgrammeOption[] = useMemo(() => {
     const seen = new Set<string>();
     const list: ProgrammeOption[] = [];
@@ -70,26 +77,29 @@ export const FinalizeAwards = () => {
       list.push(p);
     };
     for (const p of listRead.data ?? []) push({ id: p.id, name: p.name, sample: false });
-    if (programmeParam.status === 'valid' && programmeParam.programmeId) {
-      push({ id: programmeParam.programmeId, name: null, sample: isSampleProgrammeId(programmeParam.programmeId) });
+    if (linkedProgrammeId) {
+      push({ id: linkedProgrammeId, name: null, sample: samplesEnabled() && isSampleProgrammeId(linkedProgrammeId) });
     }
-    for (const f of FIXTURE_PROGRAMMES) push({ id: f.id, name: f.name, sample: true });
+    if (samplesEnabled()) {
+      for (const f of FIXTURE_PROGRAMMES) push({ id: f.id, name: f.name, sample: true });
+    }
     return list;
-  }, [listRead.data, programmeParam.status, programmeParam.programmeId]);
+  }, [linkedProgrammeId, listRead.data]);
 
   const [chosen, setChosen] = useState<string | null>(null);
   const selectedId =
     chosen ??
-    (programmeParam.status === 'valid' && programmeParam.programmeId ? programmeParam.programmeId : null) ??
+    linkedProgrammeId ??
     programmes.find((p) => !p.sample)?.id ??
-    SAMPLE_REVIEW_ID;
+    (samplesEnabled() ? FIXTURE_REVIEW_PROGRAMME_ID : null);
   const selected = programmes.find((p) => p.id === selectedId) ?? {
-    id: selectedId,
+    id: selectedId ?? '',
     name: null,
-    sample: isSampleProgrammeId(selectedId),
+    sample: selectedId !== null && samplesEnabled() && isSampleProgrammeId(selectedId),
   };
   const sample = selected.sample;
-  const asset = programmeAsset({ sample });
+  const asset = useProgrammeAsset(selected.id || null);
+  const unit = asset ? ` ${asset}` : '';
   const programme = useMemo(() => programmeAt(selected.id), [programmeAt, selected.id]);
 
   // Real programme reads. Sample programmes read nothing.
@@ -126,7 +136,7 @@ export const FinalizeAwards = () => {
   const awarded = sample ? BigInt(chain.awarded) + sampleAwarded : (grantedRead.data ?? null);
   const left = budget !== null && awarded !== null ? budget - awarded : null;
 
-  const sampleList = sample && selected.id === SAMPLE_REVIEW_ID ? [...sampleRows.entries()] : [];
+  const sampleList = sample && selected.id === FIXTURE_REVIEW_PROGRAMME_ID ? [...sampleRows.entries()] : [];
   const pendingSampleTotal = sampleList.reduce((sum, [, facts]) => {
     const a = !facts.finalized ? awardFromVotes(facts.votes, quorum) : null;
     return sum + (a ?? 0n);
@@ -229,7 +239,7 @@ export const FinalizeAwards = () => {
             {quorum > 0 && <span className="finalize__quorum">Quorum {quorum}</span>}
             {minimum > 0n && (
               <span className="finalize__quorum">
-                Minimum award {formatFigure(minimum)} {asset}
+                Minimum award {formatFigure(minimum)}{unit}
               </span>
             )}
             {sample && <SampleTag />}
@@ -239,7 +249,7 @@ export const FinalizeAwards = () => {
             role="img"
             aria-label={
               budget !== null && awarded !== null
-                ? `${formatFigure(awarded)} of ${formatFigure(budget)} ${asset} awarded`
+                ? `${formatFigure(awarded)} of ${formatFigure(budget)}${unit} awarded`
                 : 'Budget not read yet'
             }
           >
@@ -251,7 +261,7 @@ export const FinalizeAwards = () => {
             </span>
             <span>
               <b className="numeric">{left !== null ? formatFigure(left) : '—'}</b> of{' '}
-              <span className="numeric">{budget !== null ? formatFigure(budget) : '—'}</span> {asset} left
+              <span className="numeric">{budget !== null ? formatFigure(budget) : '—'}</span>{unit} left
             </span>
           </div>
         </section>
@@ -260,7 +270,7 @@ export const FinalizeAwards = () => {
           <Notice tone="risk" role="note">
             <span>
               <b>This programme is oversubscribed.</b> The awards ready to finalize total{' '}
-              {formatFigure(pendingSampleTotal)} {asset} against {formatFigure(left)} left. The budget is protected and
+              {formatFigure(pendingSampleTotal)}{unit} against {formatFigure(left)} left. The budget is protected and
               can’t be exceeded, but <b>whoever finalizes first decides who gets funded</b>. Once the money runs out, the
               rest can’t be finalized.
             </span>

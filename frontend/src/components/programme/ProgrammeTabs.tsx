@@ -1,4 +1,5 @@
-import { useRef, useState, type FC, type KeyboardEvent } from 'react';
+import { useRef, type FC, type KeyboardEvent } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import { AwardsTab } from './AwardsTab';
 import { VerifiersTab } from './VerifiersTab';
 import { TermsTab } from './TermsTab';
@@ -14,9 +15,13 @@ export interface ProgrammeTabsProps {
   quorum?: number;
   isSample?: boolean;
   asset?: string;
+  /** Minimum award in stroops, from get_config(). */
+  minimumAward?: bigint;
   verifiers?: VerifierFixture[];
   /** The creator's names for addresses, from the verified description. */
   labels?: AddressLabel[];
+  /** Bumped after a creator write, so role checks in the tabs re-read. */
+  version?: number;
   defaultTab?: TabKey;
 }
 
@@ -26,11 +31,19 @@ export const ProgrammeTabs: FC<ProgrammeTabsProps> = ({
   quorum = 1,
   isSample = false,
   asset = 'USDC',
+  minimumAward,
   verifiers,
   labels,
+  version,
   defaultTab = 'awards',
 }) => {
-  const [activeTab, setActiveTab] = useState<TabKey>(defaultTab);
+  const [searchParams, setSearchParams] = useSearchParams();
+  // The tab lives in the URL (?tab=awards|verifiers|terms), omitted for the
+  // default tab, so a link to a programme's terms opens there and Back returns
+  // to the tab you were on. An unknown or absent value falls back to the default.
+  const rawTab = searchParams.get('tab');
+  const activeTab: TabKey =
+    rawTab === 'awards' || rawTab === 'verifiers' || rawTab === 'terms' ? rawTab : defaultTab;
   // Own refs rather than document.getElementById: the ids are only unique while
   // one ProgrammeTabs is mounted, and a lookup by id silently focuses the wrong
   // tab as soon as a second programme is on the page (the directory renders one
@@ -48,7 +61,17 @@ export const ProgrammeTabs: FC<ProgrammeTabsProps> = ({
   ];
 
   const select = (id: TabKey) => {
-    setActiveTab(id);
+    setSearchParams(
+      (prev) => {
+        const next = new URLSearchParams(prev);
+        // Only the default may drop the parameter: dropping it for any other
+        // tab would fall back to the default and make that tab unreachable.
+        if (id === defaultTab) next.delete('tab');
+        else next.set('tab', id);
+        return next;
+      },
+      { replace: true },
+    );
     buttons.current[id]?.focus();
   };
 
@@ -120,13 +143,14 @@ export const ProgrammeTabs: FC<ProgrammeTabsProps> = ({
           />
         )}
         {activeTab === 'verifiers' && (
-          <VerifiersTab verifiers={verifiers} programmeId={programmeId} isSample={isSample} labels={labels} />
+          <VerifiersTab verifiers={verifiers} programmeId={programmeId} isSample={isSample} labels={labels} version={version} />
         )}
         {activeTab === 'terms' && (
           <TermsTab
             programmeId={programmeId}
             quorum={quorum}
             asset={asset}
+            minimumAward={minimumAward}
           />
         )}
       </div>

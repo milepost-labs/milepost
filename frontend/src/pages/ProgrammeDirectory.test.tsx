@@ -4,6 +4,7 @@ import { MemoryRouter, useLocation } from 'react-router-dom';
 
 import { FIXTURE_PROGRAMMES } from '../fixtures/programmes';
 import { WalletProvider } from '../context/WalletContext';
+import { NETWORK } from '../config/network';
 import { ProgrammeDirectory } from './ProgrammeDirectory';
 
 // Issue #485: filter, search and sort changes announce the new count through
@@ -23,30 +24,32 @@ vi.mock('@stellar/freighter-api', () => ({
   signTransaction: vi.fn().mockResolvedValue({ signedTxXdr: '', signerAddress: '' }),
 }));
 
-const meta = (indexedAt: string) => ({
-  network: 'testnet',
-  registry: 'CREGISTRY',
+const meta = (indexedAt: string, overrides: Record<string, unknown> = {}) => ({
+  network: NETWORK.name,
+  registry: NETWORK.contracts.registry,
   fromLedger: 1,
   indexedToLedger: 2,
   indexedAt,
   complete: true,
   gap: false,
   unhandledEvents: {},
+  ...overrides,
 });
 
 function mockIndex(options: {
   programmes?: unknown[];
   indexedAt?: string;
   fail?: boolean;
+  meta?: Record<string, unknown>;
 } = {}) {
-  const { programmes = [], indexedAt = new Date().toISOString(), fail = false } = options;
+  const { programmes = [], indexedAt = new Date().toISOString(), fail = false, meta: metaOverrides } = options;
   vi.stubGlobal(
     'fetch',
     vi.fn(async (input: string | URL) => {
       if (fail) throw new Error('network down');
       const url = String(input);
       if (url.endsWith('meta.json')) {
-        return { ok: true, status: 200, json: async () => meta(indexedAt) };
+        return { ok: true, status: 200, json: async () => meta(indexedAt, metaOverrides) };
       }
       if (url.endsWith('programmes.json')) {
         return { ok: true, status: 200, json: async () => programmes };
@@ -317,6 +320,41 @@ describe('ProgrammeDirectory', () => {
     expect(mockAnnounce).toHaveBeenCalledTimes(1);
   });
 
+  it('refuses an index built for another network and names both values', async () => {
+    mockIndex({ meta: { network: 'mainnet' } });
+    renderDirectory();
+
+    const alert = await screen.findByRole('alert');
+    expect(alert.textContent).toContain('different deployment');
+    expect(alert.textContent).toContain(NETWORK.name);
+    expect(alert.textContent).toContain('mainnet');
+  });
+
+  it('refuses an index built for another registry and falls back to samples', async () => {
+    mockIndex({
+      meta: { registry: 'COTHERREGISTRY000000000000000000000000000000000000000000' },
+      programmes: [
+        {
+          id: 'CFOREIGNPROGRAMME1234567890ABCDEF',
+          name: 'A programme from another deployment',
+          creator: 'GCREATOR',
+          createdLedger: 1,
+        },
+      ],
+    });
+    renderDirectory();
+
+    const alert = await screen.findByRole('alert');
+    expect(alert.textContent).toContain(NETWORK.contracts.registry);
+    expect(alert.textContent).toContain('COTHERREGISTRY');
+    // None of the foreign index's programmes are shown.
+    expect(screen.queryByText('A programme from another deployment')).toBeNull();
+    // The page falls back to what it does with no index: the samples.
+    await waitFor(async () => {
+      expect(await cardCount()).toBe(FIXTURE_PROGRAMMES.length);
+    }, { timeout: 5000 });
+  });
+
   it('shows each card\'s planned mode, worded as a default', async () => {
     mockIndex();
     renderDirectory();
@@ -324,5 +362,22 @@ describe('ProgrammeDirectory', () => {
       expect(screen.getAllByText('Planned default')).toHaveLength(FIXTURE_PROGRAMMES.length);
     });
     expect(document.querySelectorAll('.ui-mode-pill')).toHaveLength(FIXTURE_PROGRAMMES.length);
+  });
+
+  it('filters by asset in the URL and clears it with clearFilters', async () => {
+    mockIndex();
+    renderDirectory('/directory?asset=EURC');
+
+    // No sample programme uses EURC, so the empty state appears with a clear button.
+    expect(await screen.findByText(/No EURC programmes right now/i)).toBeTruthy();
+    const assetSelect = screen.getByLabelText('Filter by asset') as HTMLSelectElement;
+    expect(assetSelect.value).toBe('EURC');
+
+    fireEvent.click(screen.getByRole('button', { name: /clear filters/i }));
+
+    await waitFor(async () => {
+      expect(await cardCount()).toBe(FIXTURE_PROGRAMMES.length);
+    });
+    expect(screen.getByLabelText('current location').textContent).toBe('/directory');
   });
 });

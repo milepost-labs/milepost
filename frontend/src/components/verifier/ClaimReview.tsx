@@ -12,11 +12,13 @@ import { useTransaction } from '../../hooks/useTransaction';
 import { explain } from '../../lib/errors';
 import { formatDate, truncateAddress } from '../../lib/format';
 import { formatIn } from '../../lib/funding';
-import { programmeAsset, shortId } from '../../lib/programmeView';
+import { shortId } from '../../lib/programmeView';
+import { useProgrammeAsset } from '../../hooks/useProgrammeAsset';
 import { absoluteLink, referenceHash, replyPath, type ClaimRequest, type SignedRecord } from '../../lib/verifyLinks';
 import { Button, CopyButton, DisabledReason, Field, Modal, ModePill, Notice } from '../ui';
 import { ErrorPanel } from '../state/AsyncStates';
 import { TxDone, TxFailed, TxPending } from '../state/TxStatus';
+import { restoreFromAssembled } from '../../lib/restore';
 
 export interface Claim extends ClaimRequest {
   /** Where the claim came from: a recipient's request link, or the verifier's own lookup. */
@@ -67,7 +69,7 @@ export function ClaimReview({ claim, programmeName, onSigned, onFinished, onDism
 
   const { programmeId, recipient } = claim;
   const programme = programmeAt(programmeId);
-  const asset = programmeAsset({ sample: false });
+  const asset = useProgrammeAsset(programmeId);
 
   // An attestation is valid for any programme that trusts this verifier and
   // schema, so a programme the registry did not deploy could name a real
@@ -165,6 +167,7 @@ export function ClaimReview({ claim, programmeName, onSigned, onFinished, onDism
         expires_at: undefined,
       });
       return {
+        restore: restoreFromAssembled(assembled),
         signAndSend: async (options: Parameters<typeof assembled.signAndSend>[0]) => {
           const sent = await assembled.signAndSend(options);
           return { result: sent.result.unwrap() };

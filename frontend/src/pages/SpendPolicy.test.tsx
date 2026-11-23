@@ -151,6 +151,7 @@ describe('SpendPolicy payees', () => {
         payee: PAYEE,
       }),
     );
+    fireEvent.click(await screen.findByRole('button', { name: 'Sign and send' }));
     await screen.findByText('Added this session');
   });
 
@@ -167,7 +168,9 @@ describe('SpendPolicy payees', () => {
     await renderPage();
     fireEvent.change(screen.getByLabelText('Add a payee'), { target: { value: PAYEE } });
     fireEvent.click(screen.getByRole('button', { name: 'Add payee' }));
+    fireEvent.click(await screen.findByRole('button', { name: 'Sign and send' }));
     await screen.findByText('Added this session');
+    fireEvent.click(await screen.findByRole('button', { name: 'Done' }));
 
     fireEvent.click(screen.getByRole('button', { name: 'Remove' }));
 

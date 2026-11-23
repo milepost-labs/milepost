@@ -1,10 +1,18 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
+import { useState } from 'react';
 import { chainFor } from '../../fixtures/programmes';
 import { explainCode } from '../../lib/errors';
 import { mergeProgrammes, type DirectoryProgramme } from '../../lib/programmeView';
 import { ContributeSheet } from './ContributeSheet';
+import {
+  expectFocusInSheet,
+  expectFocusReturnedTo,
+  expectSheetAccessible,
+  focusAndClick,
+  SHEET_TEST_TIMEOUT,
+} from '../../test/sheetAccessibility';
 
 const mocks = vi.hoisted(() => ({
   announce: vi.fn(),
@@ -19,6 +27,15 @@ const mocks = vi.hoisted(() => ({
 }));
 
 vi.mock('../../context/useAnnouncer', () => ({ useAnnouncer: () => mocks.announce }));
+
+// The asset read has its own tests (hooks/useProgrammeAsset.test.tsx). Here a
+// sample programme is in its stand-in asset and a deployed one pays in XLM.
+vi.mock('../../hooks/useProgrammeAsset', async () => {
+  const { isSampleProgrammeId } = await import('../../lib/programmeView');
+  return {
+    useProgrammeAsset: (id: string | null | undefined) => (!id ? null : isSampleProgrammeId(id) ? 'USDC' : 'XLM'),
+  };
+});
 vi.mock('../../context/useWallet', () => ({
   useWallet: () => ({
     address: 'GDONOR',
@@ -26,16 +43,19 @@ vi.mock('../../context/useWallet', () => ({
     signTransaction: mocks.signTransaction,
   }),
 }));
-vi.mock('../../context/useSoroban', () => ({
-  useSoroban: () => ({
-    programmeAt: () => ({
-      get_phase: mocks.getPhase,
-      contribute: mocks.contribute,
-      get_config: mocks.getConfig,
-      total_contributed: mocks.totalContributed,
-    }),
-  }),
-}));
+vi.mock('../../context/useSoroban', () => {
+  // Built once: reads key on the clients, and the real context is memoized.
+  const client = {
+    get_phase: mocks.getPhase,
+    contribute: mocks.contribute,
+    get_config: mocks.getConfig,
+    total_contributed: mocks.totalContributed,
+  };
+  const soroban = {
+    programmeAt: () => client,
+  };
+  return { useSoroban: () => soroban, useOptionalSoroban: () => soroban };
+});
 // The token-contract read has its own tests; here the flow only needs the result.
 vi.mock('../../hooks/useProgrammeBalance', () => ({
   useProgrammeBalance: () => mocks.balance,
@@ -297,4 +317,81 @@ describe('ContributeSheet — confirm, receipt and failure', () => {
     expect(signButton()).toBeTruthy();
     expect(screen.queryByText("Contribution didn't go through")).toBeNull();
   });
+});
+
+describe('ContributeSheet — accessibility in every step (#696)', () => {
+  beforeEach(() => vi.clearAllMocks());
+
+  // Opened from a button, as the funder pages do, so focus has an opener to
+  // return to.
+  function Opener({ withReal = false }: { withReal?: boolean }) {
+    const [open, setOpen] = useState(false);
+    const programmes = [...(withReal ? [real] : []), ...mergeProgrammes([])];
+    return (
+      <MemoryRouter>
+        <button type="button" onClick={() => setOpen(true)}>
+          Fund a programme
+        </button>
+        <ContributeSheet open={open} onClose={() => setOpen(false)} programmes={programmes} sampleDelayMs={0} />
+      </MemoryRouter>
+    );
+  }
+
+  const openFromButton = () => {
+    const opener = screen.getByRole('button', { name: 'Fund a programme' });
+    focusAndClick(opener, fireEvent.click);
+    return opener;
+  };
+
+  it('form, confirm, pending and done, with focus in and back to the opener', async () => {
+    let settle: (value: unknown) => void = () => {};
+    mocks.getPhase.mockResolvedValue(phaseRead('Open'));
+    mocks.contribute.mockResolvedValue({
+      signAndSend: vi.fn(
+        () =>
+          new Promise((resolve) => {
+            settle = resolve;
+          }),
+      ),
+    });
+    render(<Opener withReal />);
+    const opener = openFromButton();
+
+    expectFocusInSheet('form');
+    await expectSheetAccessible('form');
+
+    await toConfirm('Real testnet programme');
+    expectFocusInSheet('confirm');
+    await expectSheetAccessible('confirm');
+
+    fireEvent.click(signButton());
+    await screen.findByText(/^Sending /);
+    await expectSheetAccessible('pending');
+
+    settle({
+      result: { unwrap: () => undefined },
+      sendTransactionResponse: { hash: 'ab'.repeat(32) },
+      getTransactionResponse: { ledger: 5_000_123 },
+    });
+    expect(await screen.findByText('Contribution confirmed')).toBeTruthy();
+    await expectSheetAccessible('done');
+
+    fireEvent.click(screen.getByRole('button', { name: 'Done' }));
+    expect(screen.queryByRole('dialog')).toBeNull();
+    expectFocusReturnedTo(opener);
+  }, SHEET_TEST_TIMEOUT);
+
+  it('failed, and Escape returns focus to the opener', async () => {
+    render(<Opener />);
+    const opener = openFromButton();
+    await toConfirm('Smallholder inputs, long rains');
+    fireEvent.click(signButton());
+    expect(await screen.findByText("Contribution didn't go through")).toBeTruthy();
+    expectFocusInSheet('failed');
+    await expectSheetAccessible('failed');
+
+    fireEvent.keyDown(document, { key: 'Escape' });
+    expect(screen.queryByRole('dialog')).toBeNull();
+    expectFocusReturnedTo(opener);
+  }, SHEET_TEST_TIMEOUT);
 });

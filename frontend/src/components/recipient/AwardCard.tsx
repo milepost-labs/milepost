@@ -1,22 +1,31 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { Buffer } from 'buffer';
 import { TriangleAlert } from 'lucide-react';
-import type { Award } from '@milepost/program';
+import { rpc, type Award } from '@milepost/program';
 import type { RecipientAwardFixture } from '../../fixtures/recipientFixtures';
 import { describeAmount } from '../../lib/amount';
 import { looksLikeContractId, truncateAddress } from '../../lib/format';
 import { formatIn } from '../../lib/funding';
-import { formatFigure, isSampleProgrammeId, programmeAsset, shortId } from '../../lib/programmeView';
+import { formatFigure, isSampleProgrammeId, shortId } from '../../lib/programmeView';
+import { useProgrammeAsset } from '../../hooks/useProgrammeAsset';
+import { samplesEnabled } from '../../lib/samples';
 import { useAnnouncer } from '../../context/useAnnouncer';
 import { useWallet } from '../../context/useWallet';
 import { useSoroban } from '../../context/useSoroban';
+import { useContractResult } from '../../hooks/useContractRead';
 import { useTransaction } from '../../hooks/useTransaction';
+import { isPhase } from '../../lib/phaseGate';
+import { releaseBatchGate } from '../../lib/releaseBatch';
+import { searchAttestations } from '../../lib/attestationSearch';
+import { filterReleaseAttestations, type EligibleAttestation } from '../../lib/releaseAttestations';
 import { sampleSendable, SAMPLE_TX_DELAY_MS } from '../../lib/fundingTx';
 import { absoluteLink, REQUEST_NOTE_MAX, requestPath, type ReleaseReply } from '../../lib/verifyLinks';
-import { Button, CopyButton, Field, Modal, ModePill, Notice, SampleTag, TextArea, TxExplorerLink } from '../ui';
+import { Button, CopyButton, DisabledReason, Field, Modal, ModePill, Notice, SampleTag, TextArea, TxExplorerLink } from '../ui';
 import { TxDone, TxFailed, TxPending } from '../state/TxStatus';
 import { AllocatedSpending } from './AllocatedSpending';
+import { ReleaseBatchSheet } from './ReleaseBatchSheet';
+import { restoreFromAssembled } from '../../lib/restore';
 import './AwardCard.css';
 
 interface AwardCardProps {
@@ -102,24 +111,100 @@ function ReleaseSheet({
   onReleased,
   sampleDelayMs,
   reply,
+  onBatch,
 }: {
   open: boolean;
   onClose: () => void;
   award: RecipientAwardFixture;
-  asset: string;
+  asset: string | null;
   isReal: boolean;
   /** Which tranche, counting from 1. */
   tranche: number;
   onReleased: (result: Released, fresh: RecipientAwardFixture | null) => void;
   sampleDelayMs: number;
   reply: ReleaseReply | null;
+  /** Switch to releasing several tranches in one transaction. */
+  onBatch: () => void;
 }) {
   const announce = useAnnouncer();
   const { address } = useWallet();
-  const { programmeAt } = useSoroban();
+  const { programmeAt, attest, rpcUrl } = useSoroban();
   const tx = useTransaction<Released>({ contract: 'program' });
+
+  // Several at once is offered when more than one tranche is left, and only
+  // inside the window where a release would go through.
+  const tranchesLeft = award.tranches - award.tranchesReleased;
+  const offersBatch = isReal && tranchesLeft >= 2;
+  const [nowMs] = useState(() => Date.now());
+  const phaseRead = useContractResult(() => programmeAt(award.programmeId).get_phase(), [award.programmeId], {
+    enabled: offersBatch,
+  });
+  const configRead = useContractResult(() => programmeAt(award.programmeId).get_config(), [award.programmeId], {
+    enabled: isReal && open,
+  });
+  const readFailed = Boolean(phaseRead.error || configRead.error);
+  const phaseTag = phaseRead.data?.tag;
+  const batchGate = releaseBatchGate({
+    phase: isPhase(phaseTag) ? phaseTag : null,
+    releaseDeadline: configRead.data?.release_deadline ?? null,
+    nowMs,
+    tranchesLeft,
+    signedIn: Boolean(address),
+    isRecipient: address === award.recipient,
+  });
+  const batchReason = readFailed
+    ? 'Could not read the programme’s phase and release window. Close this and try again.'
+    : batchGate.reason;
+  const batchEnabled = batchGate.enabled && !readFailed;
   const [attestationHex, setAttestationHex] = useState(reply?.attestation ?? '');
   const [attesterInput, setAttesterInput] = useState(reply?.attester ?? '');
+
+  // Look up recent attestations about this recipient under the programme's
+  // schema so they can pick one without needing a reply link.
+  const recipient = address ?? award.recipient;
+  const schemaHex = configRead.data?.schema
+    ? Buffer.from(configRead.data.schema).toString('hex')
+    : null;
+  const canSearchAttestations = Boolean(open && isReal && attest && rpcUrl && schemaHex && recipient);
+  const [foundState, setFoundState] = useState<{
+    key: string;
+    status: 'ready' | 'error';
+    items: EligibleAttestation[];
+  } | null>(null);
+  const searchKey = canSearchAttestations ? `${award.programmeId}:${recipient}:${schemaHex}` : '';
+
+  useEffect(() => {
+    if (!canSearchAttestations || !schemaHex || !attest || !rpcUrl) return;
+    let cancelled = false;
+    const client = programmeAt(award.programmeId);
+    const server = new rpc.Server(rpcUrl);
+
+    searchAttestations(server, attest, recipient)
+      .then((res) =>
+        filterReleaseAttestations({
+          matches: res.matches,
+          schemaHex,
+          isVerifier: async (addr) => (await client.is_verifier({ addr })).result,
+          isSpent: async (uid) => (await client.is_spent({ attestation: uid })).result,
+        }),
+      )
+      .then((items) => {
+        if (cancelled) return;
+        setFoundState({ key: searchKey, status: 'ready', items });
+      })
+      .catch(() => {
+        if (cancelled) return;
+        setFoundState({ key: searchKey, status: 'error', items: [] });
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [canSearchAttestations, schemaHex, attest, rpcUrl, programmeAt, award.programmeId, recipient, searchKey]);
+
+  const activeFound = foundState && foundState.key === searchKey ? foundState : null;
+  const searchingAttestations = canSearchAttestations && activeFound === null;
+  const foundAttestations = activeFound?.items ?? [];
 
   const granted = BigInt(award.granted);
   const trancheBase = award.tranches > 0 ? granted / BigInt(award.tranches) : 0n;
@@ -143,6 +228,7 @@ function ReleaseSheet({
 
       const assembled = await client!.release({ recipient, attestation: attestationBuf!, attester });
       return {
+        restore: restoreFromAssembled(assembled),
         signAndSend: async (options: Parameters<typeof assembled.signAndSend>[0]) => {
           const sent = await assembled.signAndSend(options);
           const amount = sent.result.unwrap();
@@ -210,7 +296,7 @@ function ReleaseSheet({
           actions={<Button onClick={close}>Done</Button>}
         >
           <p>{modeDestination(award.mode, award.payee)}</p>
-          {!isReal && (
+          {!isReal && samplesEnabled() && (
             <p className="award-card__sample-note">
               <SampleTag>Sample receipt</SampleTag>
             </p>
@@ -230,8 +316,52 @@ function ReleaseSheet({
               <p className="award-card__release-intro">
                 {reply
                   ? 'Filled in from your verifier’s reply link. The contract checks the attestation when you release.'
-                  : 'Your verifier gives you the attestation id once they have signed. One attestation releases one tranche, once.'}
+                  : 'Pick an unused attestation below, or paste the attestation id from your verifier. One attestation releases one tranche, once.'}
               </p>
+              {canSearchAttestations && (
+                <section className="award-card__found" aria-label="Attestations found for you">
+                  {searchingAttestations ? (
+                    <p className="award-card__found-note">Checking recent attestations for you…</p>
+                  ) : activeFound?.status === 'error' ? (
+                    <p className="award-card__found-note">
+                      Could not check recent attestations. You can still paste an id and attester below.
+                    </p>
+                  ) : foundAttestations.length > 0 ? (
+                    <>
+                      <p className="award-card__found-label">Recent attestations ready to use</p>
+                      <ul className="award-card__found-list">
+                        {foundAttestations.map((item) => {
+                          const selected =
+                            attestationHex.trim().toLowerCase() === item.uid.toLowerCase() &&
+                            attesterInput.trim() === item.attester;
+                          return (
+                            <li key={item.uid}>
+                              <button
+                                type="button"
+                                className="award-card__found-item"
+                                aria-pressed={selected}
+                                onClick={() => {
+                                  setAttestationHex(item.uid);
+                                  setAttesterInput(item.attester);
+                                }}
+                              >
+                                <span className="award-card__found-uid numeric">{shortId(item.uid)}</span>
+                                <span className="award-card__found-attester">
+                                  Verifier <span className="numeric">{truncateAddress(item.attester)}</span>
+                                </span>
+                              </button>
+                            </li>
+                          );
+                        })}
+                      </ul>
+                    </>
+                  ) : (
+                    <p className="award-card__found-note">
+                      No recent unused attestations found for this programme. You can still paste an id below.
+                    </p>
+                  )}
+                </section>
+              )}
               <Field
                 label="Attestation id (hex)"
                 placeholder="64 characters, e.g. 3f1a…"
@@ -264,6 +394,32 @@ function ReleaseSheet({
           <Button fullWidth disabled={!canRelease} onClick={() => void release()}>
             Sign and release
           </Button>
+          {offersBatch && (
+            <div className="award-card__batch">
+              {batchEnabled ? (
+                <Button fullWidth variant="secondary" onClick={onBatch} aria-describedby="award-batch-why">
+                  Release several at once
+                </Button>
+              ) : (
+                <button
+                  type="button"
+                  className="ui-button ui-button--secondary ui-button--md ui-button--full"
+                  aria-disabled="true"
+                  aria-describedby="award-batch-why"
+                >
+                  Release several at once
+                </button>
+              )}
+              {batchEnabled ? (
+                <p id="award-batch-why" className="award-card__release-intro">
+                  {tranchesLeft} tranches left. Use one attestation per tranche, all from the same verifier.{' '}
+                  {batchReason}
+                </p>
+              ) : (
+                <DisabledReason id="award-batch-why">{batchReason}</DisabledReason>
+              )}
+            </div>
+          )}
         </div>
       )}
     </Modal>
@@ -339,13 +495,15 @@ export function AwardCard({ award: initialAward, reply = null, sampleDelayMs = S
   // still names it after the award moves on. Null while closed.
   const [releasing, setReleasing] = useState<number | null>(null);
   const [asking, setAsking] = useState<number | null>(null);
+  const [batching, setBatching] = useState(false);
   // A reply link is spent once a release goes through.
   const [replyUsed, setReplyUsed] = useState(false);
   const activeReply = reply && reply.programmeId === initialAward.programmeId && !replyUsed ? reply : null;
 
   // Sample ids have the contract shape too, so shape alone cannot tell them apart.
   const isReal = looksLikeContractId(initialAward.programmeId) && !isSampleProgrammeId(initialAward.programmeId);
-  const asset = programmeAsset({ sample: !isReal });
+  // The award's own asset, read from the programme's token; null until read.
+  const asset = useProgrammeAsset(initialAward.programmeId);
 
   const granted = BigInt(liveAward.granted);
   const released = BigInt(liveAward.released);
@@ -379,6 +537,19 @@ export function AwardCard({ award: initialAward, reply = null, sampleDelayMs = S
     );
   };
 
+  const onBatchReleased = (result: { amount: bigint; count: number; fresh: RecipientAwardFixture | null }) => {
+    setReplyUsed(true);
+    setLiveAward(
+      (prev) =>
+        result.fresh ?? {
+          ...prev,
+          released: (BigInt(prev.released) + result.amount).toString(),
+          tranchesReleased: prev.tranchesReleased + result.count,
+          attestationReady: false,
+        },
+    );
+  };
+
   /** What the next sign says, and whether it offers the release. */
   const nextNote = (state: TrancheState) => {
     if (state === 'proven' && activeReply) return 'Your verifier signed and sent a reply link. You can release it now.';
@@ -393,7 +564,7 @@ export function AwardCard({ award: initialAward, reply = null, sampleDelayMs = S
         <div className="award-card__title-group">
           <div className="award-card__badges">
             <ModePill mode={liveAward.mode} />
-            {!isReal && <SampleTag />}
+            {!isReal && samplesEnabled() && <SampleTag />}
           </div>
           <h3 className="award-card__name">
             <Link id={`award-${initialAward.programmeId}`} to={`/programme/${encodeURIComponent(initialAward.programmeId)}`}>
@@ -401,10 +572,18 @@ export function AwardCard({ award: initialAward, reply = null, sampleDelayMs = S
             </Link>
           </h3>
           <p className="award-card__mode-line">{modeLine(liveAward.mode, liveAward.payee)}</p>
+          {isReal && (
+            <Link
+              to={`/award/${encodeURIComponent(initialAward.programmeId)}/${encodeURIComponent(initialAward.recipient)}`}
+              className="award-card__detail-link"
+            >
+              View this award&apos;s detail →
+            </Link>
+          )}
         </div>
         <div className="award-card__amount">
           <b className="numeric" aria-label={describeAmount(granted, asset)}>
-            {formatFigure(granted)} <small>{asset}</small>
+            {formatFigure(granted)} {asset && <small>{asset}</small>}
           </b>
           <span>
             <span className="numeric">{formatFigure(released)}</span> released · {tranchesReleased} of {tranches}{' '}
@@ -461,7 +640,7 @@ export function AwardCard({ award: initialAward, reply = null, sampleDelayMs = S
               Released money goes to your own wallet
             </b>
             <p>
-              The spending policy constrains one signer, not the wallet: it limits that signer to {asset},
+              The spending policy constrains one signer, not the wallet: it limits that signer to {asset ?? 'the programme’s asset'},
               verified payees and a cap. If the policy isn&rsquo;t set up, there is no restriction at all.
             </p>
           </div>
@@ -482,6 +661,22 @@ export function AwardCard({ award: initialAward, reply = null, sampleDelayMs = S
           onReleased={onReleased}
           sampleDelayMs={sampleDelayMs}
           reply={activeReply}
+          onBatch={() => {
+            setReleasing(null);
+            setBatching(true);
+          }}
+        />
+      )}
+
+      {batching && (
+        <ReleaseBatchSheet
+          open
+          onClose={() => setBatching(false)}
+          award={liveAward}
+          asset={asset}
+          tranchesLeft={tranches - tranchesReleased}
+          reply={activeReply}
+          onReleased={onBatchReleased}
         />
       )}
 

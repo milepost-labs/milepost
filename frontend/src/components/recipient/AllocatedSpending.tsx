@@ -5,12 +5,14 @@ import { useContractRead, useTransaction } from '../../hooks';
 import { formatAmount, validateAmount } from '../../lib/amount';
 import { explain, explainCode, type Explained } from '../../lib/errors';
 import { looksLikeContractId, truncateAddress } from '../../lib/format';
-import { formatFigure, isSampleProgrammeId, programmeAsset } from '../../lib/programmeView';
+import { formatFigure, isSampleProgrammeId } from '../../lib/programmeView';
+import { useProgrammeAsset } from '../../hooks/useProgrammeAsset';
 import { isPhase, phaseRequirement, type Phase } from '../../lib/phaseGate';
 import { sampleSendable, SAMPLE_TX_DELAY_MS } from '../../lib/fundingTx';
 import { AmountField, Button, Field } from '../ui';
 import { ErrorPanel, PendingPulse, TransactionOutcome } from '../state/AsyncStates';
 import type { RecipientAwardFixture } from '../../fixtures/recipientFixtures';
+import { restoreFromAssembled } from '../../lib/restore';
 import './AllocatedSpending.css';
 
 /** A payee is a Stellar account — a `G` address. */
@@ -58,7 +60,8 @@ export function AllocatedSpending({ award, sampleDelayMs = SAMPLE_TX_DELAY_MS }:
 
   // Sample ids have the contract shape too, so shape alone cannot tell them apart.
   const isReal = looksLikeContractId(award.programmeId) && !isSampleProgrammeId(award.programmeId);
-  const ASSET = programmeAsset({ sample: !isReal });
+  // The programme's own asset, read from its token; null (no unit) until read.
+  const ASSET = useProgrammeAsset(award.programmeId);
   const recipient = wallet.address;
 
   const client = useMemo(
@@ -175,6 +178,7 @@ export function AllocatedSpending({ award, sampleDelayMs = SAMPLE_TX_DELAY_MS }:
       }
       const assembled = await client!.spend({ recipient, payee, amount: amountValue });
       return {
+        restore: restoreFromAssembled(assembled),
         signAndSend: async (options: Parameters<typeof assembled.signAndSend>[0]) => {
           const sent = await assembled.signAndSend(options);
           const remaining = sent.result.unwrap();
@@ -193,7 +197,7 @@ export function AllocatedSpending({ award, sampleDelayMs = SAMPLE_TX_DELAY_MS }:
             <PendingPulse label="Reading escrow balance" />
           ) : (
             <>
-              {formatFigure(allocation)} <small>{ASSET}</small>
+              {formatFigure(allocation)} {ASSET && <small>{ASSET}</small>}
             </>
           )}
         </span>

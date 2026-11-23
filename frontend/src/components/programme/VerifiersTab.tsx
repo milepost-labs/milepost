@@ -1,5 +1,6 @@
 import { useState, type FC } from 'react';
 import { FIXTURE_VERIFIERS, type VerifierFixture } from '../../fixtures/programmeFixtures';
+import { samplesEnabled } from '../../lib/samples';
 import { useOptionalSoroban } from '../../context/useSoroban';
 import { useContractRead } from '../../hooks/useContractRead';
 import { Badge, Button, Field, SampleTag } from '../ui';
@@ -14,6 +15,8 @@ export interface VerifiersTabProps {
   isSample?: boolean;
   /** The creator's names for addresses, from the programme's verified description. */
   labels?: AddressLabel[];
+  /** Change it to re-read every role, e.g. after the creator adds or removes a verifier. */
+  version?: number;
 }
 
 const ROLE_NAME: Record<AddressLabel['role'], string> = { reviewer: 'Reviewer', verifier: 'Verifier', payee: 'Payee' };
@@ -22,7 +25,11 @@ const ROLE_NAME: Record<AddressLabel['role'], string> = { reviewer: 'Reviewer', 
  * One named address. The name is the creator's claim; whether the address
  * still holds the role is read from the programme now.
  */
-const NamedRow: FC<{ entry: AddressLabel; programmeId: string }> = ({ entry, programmeId }) => {
+const NamedRow: FC<{ entry: AddressLabel; programmeId: string; version: number }> = ({
+  entry,
+  programmeId,
+  version,
+}) => {
   const soroban = useOptionalSoroban();
   const programme = soroban ? soroban.programmeAt(programmeId) : null;
   const read = useContractRead<boolean>(
@@ -32,7 +39,7 @@ const NamedRow: FC<{ entry: AddressLabel; programmeId: string }> = ({ entry, pro
         : entry.role === 'reviewer'
           ? programme!.is_reviewer({ addr: entry.address })
           : programme!.is_payee({ payee: entry.address }),
-    [programme, entry.address, entry.role],
+    [programme, entry.address, entry.role, version],
     { enabled: programme !== null },
   );
   return (
@@ -60,19 +67,20 @@ const NamedRow: FC<{ entry: AddressLabel; programmeId: string }> = ({ entry, pro
 };
 
 export const VerifiersTab: FC<VerifiersTabProps> = ({
-  verifiers = FIXTURE_VERIFIERS,
+  verifiers = samplesEnabled() ? FIXTURE_VERIFIERS : [],
   programmeId,
   isSample = false,
   labels,
+  version = 0,
 }) => {
   const soroban = useOptionalSoroban();
   const [addrInput, setAddrInput] = useState('');
   const [checkAddr, setCheckAddr] = useState('');
   const programme = programmeId && soroban ? soroban.programmeAt(programmeId) : null;
   const enabled = checkAddr !== '' && programme !== null;
-  const reviewer = useContractRead(() => programme!.is_reviewer({ addr: checkAddr }), [programme, checkAddr], { enabled });
-  const verifier = useContractRead(() => programme!.is_verifier({ addr: checkAddr }), [programme, checkAddr], { enabled });
-  const payee = useContractRead(() => programme!.is_payee({ payee: checkAddr }), [programme, checkAddr], { enabled });
+  const reviewer = useContractRead(() => programme!.is_reviewer({ addr: checkAddr }), [programme, checkAddr, version], { enabled });
+  const verifier = useContractRead(() => programme!.is_verifier({ addr: checkAddr }), [programme, checkAddr, version], { enabled });
+  const payee = useContractRead(() => programme!.is_payee({ payee: checkAddr }), [programme, checkAddr, version], { enabled });
 
   return (
     <div
@@ -119,7 +127,7 @@ export const VerifiersTab: FC<VerifiersTabProps> = ({
           </p>
           <ul className="verifiers-tab__list">
             {labels.map((entry) => (
-              <NamedRow key={`${entry.role}:${entry.address}`} entry={entry} programmeId={programmeId} />
+              <NamedRow key={`${entry.role}:${entry.address}`} entry={entry} programmeId={programmeId} version={version} />
             ))}
           </ul>
         </section>

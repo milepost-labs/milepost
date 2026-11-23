@@ -846,4 +846,99 @@ fn create_worst_case_stays_within_network_limits() {
     );
 
     assert!(f.client.is_programme(&programme));
+// ---- TTL policy (#673) ----
+
+#[test]
+fn create_bumps_programme_and_instance_ttl() {
+    use soroban_sdk::testutils::storage::{Instance as _, Persistent as _};
+
+    let f = setup();
+    let persistent_ttl = |key: &Key| {
+        f.env.as_contract(&f.client.address, || {
+            f.env.storage().persistent().get_ttl(key)
+        })
+    };
+    let instance_ttl = || {
+        f.env
+            .as_contract(&f.client.address, || f.env.storage().instance().get_ttl())
+    };
+
+    // Constructor bumps instance storage.
+    assert!(instance_ttl() >= BUMP_LEDGERS - 1);
+
+    let creator = Address::generate(&f.env);
+    let p1 = create(&f, &creator);
+    assert!(persistent_ttl(&Key::Programme(p1.clone())) >= BUMP_LEDGERS - 1);
+    assert!(instance_ttl() >= BUMP_LEDGERS - 1);
+
+    // Advance past the 60-day bump threshold (90 - 40 = 50 days remaining).
+    f.env
+        .ledger()
+        .with_mut(|l| l.sequence_number += 40 * DAY_IN_LEDGERS);
+    assert!(persistent_ttl(&Key::Programme(p1.clone())) < BUMP_THRESHOLD);
+    assert!(instance_ttl() < BUMP_THRESHOLD);
+
+    // Creating a second programme bumps its own entry and the instance, leaving p1 untouched.
+    let p2 = create(&f, &creator);
+    assert!(persistent_ttl(&Key::Programme(p2)) >= BUMP_LEDGERS - 1);
+    assert!(instance_ttl() >= BUMP_LEDGERS - 1);
+    assert!(persistent_ttl(&Key::Programme(p1)) < BUMP_THRESHOLD);
+}
+
+#[test]
+fn admin_setters_bump_instance_but_not_programmes() {
+    use soroban_sdk::testutils::storage::{Instance as _, Persistent as _};
+
+    let f = setup();
+    let persistent_ttl = |key: &Key| {
+        f.env.as_contract(&f.client.address, || {
+            f.env.storage().persistent().get_ttl(key)
+        })
+    };
+    let instance_ttl = || {
+        f.env
+            .as_contract(&f.client.address, || f.env.storage().instance().get_ttl())
+    };
+
+    let creator = Address::generate(&f.env);
+    let p1 = create(&f, &creator);
+    assert!(instance_ttl() >= BUMP_LEDGERS - 1);
+
+    f.env
+        .ledger()
+        .with_mut(|l| l.sequence_number += 40 * DAY_IN_LEDGERS);
+    assert!(instance_ttl() < BUMP_THRESHOLD);
+    f.client.set_fee(&100);
+    assert!(instance_ttl() >= BUMP_LEDGERS - 1);
+    // Admin setters only touch instance config, never individual programme entries.
+    assert!(persistent_ttl(&Key::Programme(p1)) < BUMP_THRESHOLD);
+
+    f.env
+        .ledger()
+        .with_mut(|l| l.sequence_number += 40 * DAY_IN_LEDGERS);
+    assert!(instance_ttl() < BUMP_THRESHOLD);
+    f.client.set_policy(&Address::generate(&f.env));
+    assert!(instance_ttl() >= BUMP_LEDGERS - 1);
+
+    f.env
+        .ledger()
+        .with_mut(|l| l.sequence_number += 40 * DAY_IN_LEDGERS);
+    assert!(instance_ttl() < BUMP_THRESHOLD);
+    f.client.set_treasury(&Address::generate(&f.env));
+    assert!(instance_ttl() >= BUMP_LEDGERS - 1);
+
+    f.env
+        .ledger()
+        .with_mut(|l| l.sequence_number += 40 * DAY_IN_LEDGERS);
+    assert!(instance_ttl() < BUMP_THRESHOLD);
+    f.client
+        .set_program_wasm(&BytesN::from_array(&f.env, &[9u8; 32]));
+    assert!(instance_ttl() >= BUMP_LEDGERS - 1);
+
+    f.env
+        .ledger()
+        .with_mut(|l| l.sequence_number += 40 * DAY_IN_LEDGERS);
+    assert!(instance_ttl() < BUMP_THRESHOLD);
+    f.client.set_admin(&Address::generate(&f.env));
+    assert!(instance_ttl() >= BUMP_LEDGERS - 1);
 }

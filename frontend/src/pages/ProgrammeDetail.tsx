@@ -1,29 +1,36 @@
-import { useEffect, useMemo, useState } from "react";
-import { useLocation } from "react-router-dom";
+import { Buffer } from "buffer";
+import { useCallback, useEffect, useMemo, useState } from "react";
+import { Link, Navigate, useLocation } from "react-router-dom";
 import type { ProgrammeConfig } from "@milepost/program";
 import {
   FileText,
   ShieldCheck,
   UsersRound,
 } from "lucide-react";
-import { AsyncView, ErrorState } from "../components/state/AsyncStates";
+import { AsyncView, Empty, ErrorState, Loading } from "../components/state/AsyncStates";
 import { PausedBanner } from "../components/programme/PausedBanner";
 import { ProgrammeHeader } from "../components/programme/ProgrammeHeader";
 import { WhereTheMoneyIs } from "../components/programme/WhereTheMoneyIs";
 import { ProgrammeTabs } from "../components/programme/ProgrammeTabs";
+import { ProgrammeActivityPanel } from "../components/programme/ProgrammeActivity";
 import { ProgrammeActions } from "../components/programme/ProgrammeActions";
 import { DescriptionBand, MetadataPanel } from "../components/programme/ProgrammeDescription";
 import { useProgrammeMetadata } from "../hooks/useProgrammeMetadata";
-import { AddToCalendar, AddressChip, Badge, Card, Deadline, List, ListRow, Notice, StatTile } from "../components/ui";
+import { AddToCalendar, AddressChip, Badge, Card, Deadline, List, ListRow, Notice, PageHead, SampleTag, StatTile } from "../components/ui";
 import { useSoroban } from "../context/useSoroban";
-import { useContractRead, useContractResult, useIndexedList, useProgramme } from "../hooks";
+import { useContractRead, useContractResult, useIndexedList, useProgramme, type ContractRead } from "../hooks";
+import { useContractTokenBalance } from "../hooks/useProgrammeBalance";
+import { useLedgerCloseTime } from "../hooks/useLedgerCloseTime";
+import { balanceDiscrepancy, expectedContractBalance } from "../lib/contractBalance";
 import { fetchProgrammes } from "../lib/indexer";
 import { directoryHref } from "../lib/programmeView";
 import { formatAmount, percentOf } from "../lib/amount";
-import { formatFigure, isSampleProgrammeId } from "../lib/programmeView";
+import { formatFigure, isSampleProgrammeId, programmeRouteState } from "../lib/programmeView";
 import { registryVerificationCopy } from "../lib/registryVerification";
-import { FIXTURE_CHAIN } from "../fixtures/programmes";
+import { FIXTURE_ASSET_CODE, FIXTURE_PROGRAMMES, chainFor } from "../fixtures/programmes";
+import { readFeeSwept, readNothingToSweep } from "../lib/sweepActions";
 import { fetchTokenName, parseTokenName } from "../lib/token";
+import { isRpcFailure } from "../lib/rpcHealth";
 import "./ProgrammeDetail.css";
 
 const ZERO = 0n;
@@ -76,7 +83,6 @@ const timelineSteps: TimelineStep[] = [
 
 /** The unit every amount on this page is labelled with. */
 const ASSET_LABEL = "XLM";
-const formatXlm = (amount: bigint) => formatAmount(amount, { asset: ASSET_LABEL });
 const formatAddress = (address: string) =>
   `${address.slice(0, 8)}...${address.slice(-8)}`;
 
@@ -167,49 +173,167 @@ function nextDeadline(
 }
 
 
-export const ProgrammeDetail = () => {
-  const { id: programmeId, client: programme, isDefault } = useProgramme();
-  const { registry } = useSoroban();
+interface ProgrammeDetailBodyProps {
+  programmeId: string;
+  programme: ReturnType<typeof useProgramme>["client"];
+  isDefault: boolean;
+  /** The registry's answer, read once by {@link ProgrammeAddressGate}. */
+  isRegistered: ContractRead<boolean>;
+}
+
+const ProgrammeDetailBody = ({ programmeId, programme, isDefault, isRegistered }: ProgrammeDetailBodyProps) => {
   const location = useLocation();
   const [nowMs, setNowMs] = useState(() => Date.now());
 
-  const isRegistered = useContractRead(
-    () => registry.is_programme({ addr: programmeId }),
-    [registry, programmeId],
-  );
+  // A sample programme has no contract behind it: every read below is gated
+  // off and the page is filled from the fixture set instead, tagged Sample
+  // data. This is decided before the reads so their `enabled` flags can use it.
+  const isSample = isSampleProgrammeId(programmeId);
 
-  const config = useContractResult(() => programme.get_config(), [programme]);
+  const config = useContractResult(() => programme.get_config(), [programme], {
+    enabled: !isSample,
+  });
   // The creator's description, resolved once from the hash the programme committed to.
-  const metadata = useProgrammeMetadata(config.data ? config.data.metadata_hash.toString("hex") : null);
-  const phase = useContractResult(() => programme.get_phase(), [programme]);
-  const budget = useContractResult(() => programme.budget(), [programme]);
-  const fee = useContractResult(() => programme.fee(), [programme]);
+  const metadata = useProgrammeMetadata(
+    !isSample && config.data ? config.data.metadata_hash.toString("hex") : null,
+  );
+  const phase = useContractResult(() => programme.get_phase(), [programme], {
+    enabled: !isSample,
+  });
+  const budget = useContractResult(() => programme.budget(), [programme], {
+    enabled: !isSample,
+  });
+  const fee = useContractResult(() => programme.fee(), [programme], {
+    enabled: !isSample,
+  });
   const contributed = useContractRead(
     () => programme.total_contributed(),
     [programme],
+    { enabled: !isSample },
   );
-  const granted = useContractRead(() => programme.total_granted(), [programme]);
+  const granted = useContractRead(() => programme.total_granted(), [programme], {
+    enabled: !isSample,
+  });
   const released = useContractRead(
     () => programme.total_released(),
     [programme],
+    { enabled: !isSample },
   );
   const refunded = useContractRead(
     () => programme.total_refunded(),
     [programme],
+    { enabled: !isSample },
   );
-  const swept = useContractRead(() => programme.total_swept(), [programme]);
+  const swept = useContractRead(() => programme.total_swept(), [programme], {
+    enabled: !isSample,
+  });
+  const contractBalance = useContractTokenBalance(
+    config.data?.token ?? null,
+    programmeId,
+    !isSample,
+  );
   const refetchPhase = phase.refetch;
 
+  // The contract has no getter for "fee already sent", so ask it what a
+  // sweep would do now. Only once applications have closed: before that the
+  // answer is always "not yet", for a different reason.
+  const feeSweepOpen = phase.data !== null && phase.data.tag !== "Open";
+  const feeSwept = useContractRead(
+    async () => ({ result: await readFeeSwept(programme) }),
+    [programme],
+    { enabled: feeSweepOpen },
+  );
+  const refetchFeeSwept = feeSwept.refetch;
+
+  // Likewise for unclaimed refunds: once the sweep deadline has passed, ask
+  // the contract whether a sweep would find anything to send.
+  const sweepDeadlinePassed = config.data ? nowMs / 1000 >= Number(config.data.sweep_deadline) : null;
+  const nothingToSweep = useContractRead(
+    async () => ({ result: await readNothingToSweep(programme) }),
+    [programme],
+    { enabled: sweepDeadlinePassed === true },
+  );
+  const refetchNothingToSweep = nothingToSweep.refetch;
+
   useEffect(() => {
+    if (isSample) return; // Nothing to re-read for a sample.
     const interval = window.setInterval(() => {
       setNowMs(Date.now());
       refetchPhase();
     }, REFRESH_INTERVAL_MS);
 
     return () => window.clearInterval(interval);
-  }, [refetchPhase]);
+  }, [refetchPhase, isSample]);
 
-  const figures: ProgrammeFigures | null =
+  // ── The sample stand-in world ─────────────────────────────────────────────
+  // FIXTURE_* values may appear only for sample programme ids, and every
+  // figure rendered from them sits under the page's Sample data tag.
+  const sampleEntry = useMemo(
+    () => (isSample ? FIXTURE_PROGRAMMES.find((p) => p.id === programmeId) ?? null : null),
+    [isSample, programmeId],
+  );
+  const sampleChain = useMemo(
+    () => (isSample ? chainFor(programmeId) : null),
+    [isSample, programmeId],
+  );
+
+  /** Deadline offsets per phase, in days relative to now: apply, review, release, sweep. */
+  const SAMPLE_DEADLINE_OFFSETS: Record<string, [number, number, number, number]> = {
+    Open: [9, 21, 45, 90],
+    Review: [-3, 10, 40, 120],
+    Settled: [-60, -40, -10, 20],
+    Cancelled: [-60, -40, -10, -1],
+  };
+  const DAY = 86_400;
+
+  const sampleConfig: ProgrammeConfig | null = useMemo(() => {
+    if (!isSample || !sampleChain || !sampleEntry) return null;
+    const [apply, review, release, sweep] =
+      SAMPLE_DEADLINE_OFFSETS[sampleChain.phase] ?? SAMPLE_DEADLINE_OFFSETS.Settled;
+    const nowS = BigInt(Math.floor(nowMs / 1000));
+    const at = (days: number) => nowS + BigInt(days * DAY);
+    return {
+      apply_deadline: at(apply),
+      review_deadline: at(review),
+      release_deadline: at(release),
+      sweep_deadline: at(sweep),
+      attest: "CAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAMLo",
+      creator: sampleEntry.creator ?? "",
+      fee_bps: 100,
+      metadata_hash: Buffer.alloc(32, 0xab),
+      minimum_award: 0n,
+      policy: "CAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAMLo",
+      quorum: sampleChain.quorum,
+      record: "CAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAMLo",
+      schema: Buffer.alloc(32, 0xcd),
+      token: "CAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAMLo",
+      tranches: 3,
+      treasury: "CAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAMLo",
+    };
+    // Deadlines are anchored to the page's clock; recomputing per tick keeps
+    // the phase bar honest as time passes.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isSample, sampleChain, sampleEntry, nowMs]);
+
+  const sampleFigures: ProgrammeFigures | null = useMemo(() => {
+    if (!isSample || !sampleChain) return null;
+    const contributedStroops = BigInt(sampleChain.contributed);
+    const feeStroops = BigInt(sampleChain.fee);
+    return {
+      budget: contributedStroops - feeStroops,
+      fee: feeStroops,
+      totalContributed: contributedStroops,
+      totalGranted: BigInt(sampleChain.awarded),
+      totalReleased: BigInt(sampleChain.released),
+      totalRefunded: 0n,
+      totalSwept: 0n,
+    };
+  }, [isSample, sampleChain]);
+
+  // ── Real-or-sample selectors ─────────────────────────────────────────────
+  const configData = isSample ? sampleConfig : config.data;
+  const phaseTag: string | null = isSample ? (sampleChain?.phase ?? null) : (phase.data?.tag ?? null);
+  const figures: ProgrammeFigures | null = isSample ? sampleFigures : (
     budget.data !== null &&
     fee.data !== null &&
     contributed.data !== null &&
@@ -226,25 +350,29 @@ export const ProgrammeDetail = () => {
           totalRefunded: refunded.data,
           totalSwept: swept.data,
         }
-      : null;
+      : null
+  );
 
-  const moneyLoading =
+  const moneyLoading = isSample ? false : (
     budget.loading ||
     fee.loading ||
     contributed.loading ||
     granted.loading ||
     released.loading ||
     refunded.loading ||
-    swept.loading;
-  const moneyError =
+    swept.loading
+  );
+  const moneyError = isSample ? null : (
     budget.error ||
     fee.error ||
     contributed.error ||
     granted.error ||
     released.error ||
     refunded.error ||
-    swept.error;
+    swept.error
+  );
   const refetchMoney = () => {
+    if (isSample) return;
     budget.refetch();
     fee.refetch();
     contributed.refetch();
@@ -252,29 +380,71 @@ export const ProgrammeDetail = () => {
     released.refetch();
     refunded.refetch();
     swept.refetch();
+    contractBalance.refetch();
   };
 
-  const phaseName = phase.data?.tag ?? "Loading";
-  const activeDeadline = config.data ? nextDeadline(config.data, nowMs) : null;
-  // Name and created ledger come from the published index; the phase is read
-  // on-chain and is never taken from the index or a sample.
+  // Track when both core reads last settled together. Using state rather than
+  // a ref so it drives a re-render when the chip's age label needs updating,
+  // and updated via useEffect so the write happens outside of render.
+  const [lastReadAt, setLastReadAt] = useState<number | null>(null);
+  const coreFetching = isSample ? false : (phase.fetching || config.fetching);
+  const coreReady = isSample ? false : (phase.data !== null && config.data !== null);
+
+  useEffect(() => {
+    if (isSample) return; // A sample never read anything; the chip stays hidden.
+    if (!coreFetching && coreReady) {
+      // This hook intentionally sets state inside an effect to record the
+      // exact moment a fetch settles, which is only knowable in an effect.
+      // eslint-disable-next-line react-hooks/set-state-in-effect
+      setLastReadAt(Date.now());
+    }
+    // We deliberately depend only on coreFetching so this fires when a fetch
+    // completes, not on every render. coreReady is stable once true.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [coreFetching, isSample]);
+
+  // Bumped after a creator write so the paused banner re-reads with the rest.
+  const [chainVersion, setChainVersion] = useState(0);
+
+  const handleRefetch = useCallback(() => {
+    if (isSample) return;
+    setLastReadAt(null);
+    phase.refetch();
+    config.refetch();
+    refetchMoney();
+    setChainVersion((version) => version + 1);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [phase.refetch, config.refetch, isSample]);
+
+  const phaseName = phaseTag ?? "Loading";
+  const activeDeadline = configData ? nextDeadline(configData, nowMs) : null;
+
+  // Name and created ledger come from the published index for real
+  // programmes; samples are named only by the fixture set. The phase is read
+  // on-chain for real programmes and never taken from the index or a sample.
   const indexRead = useIndexedList(() => fetchProgrammes(), []);
   const indexEntry = useMemo(
     () => (indexRead.data ?? []).find((entry) => entry.id === programmeId) ?? null,
     [indexRead.data, programmeId],
   );
+  const displayName = isSample
+    ? (sampleEntry?.name ?? "Programme detail")
+    : (indexEntry?.name ?? "Programme detail");
+  const createdLedger = isSample
+    ? (sampleEntry?.createdLedger ?? null)
+    : (indexEntry?.createdLedger ?? null);
+  const ledgerCloseTime = useLedgerCloseTime(isSample ? null : createdLedger);
   // Sample programmes live only in the fixtures: their planned mode is the
   // stand-in chain read, and the header tags it as sample data. A deployed
   // programme has no programme-level mode on-chain — the contracts pick one
   // per award at `finalize` — so it shows none rather than a guess.
-  const isSample = isSampleProgrammeId(programmeId);
-  const plannedMode = isSample ? (FIXTURE_CHAIN[programmeId]?.mode ?? null) : null;
+  const plannedMode = isSample ? (sampleChain?.mode ?? null) : null;
   // The contract opens refunds on cancellation or once the release deadline
   // has passed; the money panel shows refundable funds only from then.
   const refundsOpen =
     phaseName === "Cancelled" ||
-    (config.data !== null &&
-      nowMs / 1000 >= Number(config.data.release_deadline));
+    (configData !== null &&
+      nowMs / 1000 >= Number(configData.release_deadline));
   // Same rule as the money panel: once refunds open, whatever has not been
   // released, refunded or swept is refundable.
   const refundable =
@@ -286,7 +456,7 @@ export const ProgrammeDetail = () => {
       : ZERO;
 
   const timelineRows = useMemo(() => {
-    const programmeConfig = config.data;
+    const programmeConfig = configData;
 
     return programmeConfig
       ? timelineSteps.map((step) => {
@@ -301,48 +471,92 @@ export const ProgrammeDetail = () => {
           };
         })
       : [];
-  }, [config.data, nowMs]);
+  }, [configData, nowMs]);
 
-  const asset = ASSET_LABEL;
-  const deadlines = config.data
+  // Sample programmes pay in the sample asset; real ones in XLM for now.
+  const asset = isSample ? FIXTURE_ASSET_CODE : ASSET_LABEL;
+
+  // Expected balance held by the programme contract, derived from its counters.
+  const feeSweptKnown = !feeSweepOpen ? false : feeSwept.data;
+  const expectedBalance =
+    !isSample && figures !== null && feeSweptKnown !== null
+      ? expectedContractBalance({
+          totalContributed: figures.totalContributed,
+          fee: figures.fee,
+          totalReleased: figures.totalReleased,
+          totalRefunded: figures.totalRefunded ?? ZERO,
+          totalSwept: figures.totalSwept ?? ZERO,
+          feeSwept: feeSweptKnown,
+        })
+      : null;
+  const balanceCheck =
+    !isSample && contractBalance.data !== null && expectedBalance !== null
+      ? balanceDiscrepancy(contractBalance.data, expectedBalance)
+      : null;
+  const deadlines = configData
     ? {
-        apply: Number(config.data.apply_deadline),
-        review: Number(config.data.review_deadline),
-        release: Number(config.data.release_deadline),
-        sweep: Number(config.data.sweep_deadline),
+        apply: Number(configData.apply_deadline),
+        review: Number(configData.review_deadline),
+        release: Number(configData.release_deadline),
+        sweep: Number(configData.sweep_deadline),
       }
     : null;
   const registryCopy =
-    isRegistered.data === null || isRegistered.data === undefined
+    isSample || isRegistered.data === null || isRegistered.data === undefined
       ? null
       : registryVerificationCopy(isRegistered.data);
   // A figure for a stat tile: the read, a dash when it failed, an ellipsis
   // while it is on its way. The money panel below carries the retry.
-  const tileFigure = (read: { data: bigint | null; error: unknown }) =>
-    read.data !== null ? formatFigure(read.data) : read.error ? '—' : '…';
-  const tileUnit = (read: { data: bigint | null }) => (read.data !== null ? asset : undefined);
+  const tileFigure = (value: bigint | null, error: unknown) =>
+    value !== null ? formatFigure(value) : error ? '—' : '…';
+  const tileUnit = (value: bigint | null) => (value !== null ? asset : undefined);
+
+  // The stat tiles' per-read values, sample-aware in one place.
+  const tile = {
+    contributed: isSample ? (sampleFigures?.totalContributed ?? null) : contributed.data,
+    budget: isSample ? (sampleFigures?.budget ?? null) : budget.data,
+    granted: isSample ? (sampleFigures?.totalGranted ?? null) : granted.data,
+    released: isSample ? (sampleFigures?.totalReleased ?? null) : released.data,
+  };
+  const tileErrors = {
+    contributed: isSample ? null : contributed.error,
+    budget: isSample ? null : budget.error,
+    granted: isSample ? null : granted.error,
+    released: isSample ? null : released.error,
+  };
+
+  // A stand-in read view for the "On the chain" / Timeline AsyncViews when the
+  // page is a sample: the stand-in config is already in hand, nothing is
+  // loading, nothing failed.
+  const configView = isSample
+    ? { data: configData, loading: false, error: null, fetching: false, archived: false, refetch: () => {} }
+    : config;
 
   return (
     <div className="programme-detail">
       <ProgrammeHeader
         id={programmeId}
-        name={indexEntry?.name ?? "Programme detail"}
-        creator={config.data?.creator ?? null}
-        createdLedger={indexEntry?.createdLedger ?? null}
-        phase={phase.data?.tag ?? null}
-        phaseError={Boolean(phase.error)}
-        verified={isRegistered.data ?? undefined}
+        name={displayName}
+        creator={configData?.creator ?? null}
+        createdLedger={createdLedger}
+        createdAt={ledgerCloseTime.data?.closeTime ?? null}
+        createdAtIsEstimate={ledgerCloseTime.data?.isEstimate ?? false}
+        phase={phaseTag}
+        phaseError={!isSample && Boolean(phase.error)}
+        verified={!isSample ? (isRegistered.data ?? undefined) : undefined}
         backTo={directoryHref(location.search)}
         mode={plannedMode}
         sample={isSample}
         deadlines={deadlines}
         nowMs={nowMs}
+        lastReadAt={lastReadAt}
+        onRefetch={handleRefetch}
         action={
           /* A sample programme's dates are made up; they do not belong in
              anyone's calendar. */
           !isSample && timelineRows.length > 0 ? (
             <AddToCalendar
-              programmeName={indexEntry?.name ?? programmeId}
+              programmeName={displayName}
               programmeUrl={`${window.location.origin}/programme/${encodeURIComponent(programmeId)}`}
               deadlines={timelineRows.map((row) => ({
                 key: row.key,
@@ -357,9 +571,9 @@ export const ProgrammeDetail = () => {
 
       {metadata?.status === "ok" && <DescriptionBand doc={metadata.doc} />}
 
-      <PausedBanner client={programme} />
+      {!isSample && <PausedBanner client={programme} version={chainVersion} />}
 
-      {Boolean(isRegistered.error) && (
+      {!isSample && Boolean(isRegistered.error) && (
         <ErrorState error={isRegistered.error} contract="registry" onRetry={isRegistered.refetch} />
       )}
 
@@ -377,37 +591,37 @@ export const ProgrammeDetail = () => {
       >
         <StatTile
           label="Contributed"
-          value={tileFigure(contributed)}
-          unit={tileUnit(contributed)}
+          value={tileFigure(tile.contributed, tileErrors.contributed)}
+          unit={tileUnit(tile.contributed)}
           hint={
-            config.data
-              ? `${config.data.fee_bps / 100}% protocol fee`
+            configData
+              ? `${configData.fee_bps / 100}% protocol fee`
               : "Put in by funders"
           }
         />
         <StatTile
           label="Budget"
-          value={tileFigure(budget)}
-          unit={tileUnit(budget)}
+          value={tileFigure(tile.budget, tileErrors.budget)}
+          unit={tileUnit(tile.budget)}
           hint="Contributed, less the fee"
         />
         <StatTile
           label="Awarded"
-          value={tileFigure(granted)}
-          unit={tileUnit(granted)}
+          value={tileFigure(tile.granted, tileErrors.granted)}
+          unit={tileUnit(tile.granted)}
           hint={
-            granted.data !== null && budget.data !== null && budget.data > ZERO
-              ? `${Math.round(percentOf(granted.data, budget.data))}% of budget`
+            tile.granted !== null && tile.budget !== null && tile.budget > ZERO
+              ? `${Math.round(percentOf(tile.granted, tile.budget))}% of budget`
               : "Set by the reviewers’ votes"
           }
         />
         <StatTile
           label="Released"
-          value={tileFigure(released)}
-          unit={tileUnit(released)}
+          value={tileFigure(tile.released, tileErrors.released)}
+          unit={tileUnit(tile.released)}
           hint={
-            config.data
-              ? `${config.data.tranches} ${config.data.tranches === 1 ? "tranche" : "tranches"} per award`
+            configData
+              ? `${configData.tranches} ${configData.tranches === 1 ? "tranche" : "tranches"} per award`
               : "Paid out at mileposts"
           }
           highlight
@@ -432,8 +646,8 @@ export const ProgrammeDetail = () => {
                 refunded={value.totalRefunded ?? ZERO}
                 swept={value.totalSwept ?? ZERO}
                 refundsOpen={refundsOpen}
-                feeBps={config.data?.fee_bps}
-                quorum={config.data?.quorum ?? 1}
+                feeBps={configData?.fee_bps}
+                quorum={configData?.quorum ?? 1}
                 asset={asset}
               />
             )}
@@ -442,27 +656,71 @@ export const ProgrammeDetail = () => {
           <ProgrammeTabs
             programmeId={programmeId}
             phase={phaseName}
-            quorum={config.data?.quorum ?? 1}
+            quorum={configData?.quorum ?? 1}
+            minimumAward={configData?.minimum_award ?? 0n}
             isSample={isSample}
             asset={asset}
             labels={metadata?.status === "ok" ? metadata.doc.labels : undefined}
+            version={chainVersion}
           />
+
+          <ProgrammeActivityPanel programmeId={programmeId} isSample={isSample} />
         </div>
 
         <div className="programme-cols__side">
           <ProgrammeActions
             programmeId={programmeId}
-            phase={phase.data?.tag ?? null}
+            phase={phaseTag}
             refundsOpen={refundsOpen}
-            refundable={refundable > ZERO ? formatXlm(refundable) : null}
-            verified={isRegistered.error ? false : isRegistered.data}
+            refundable={refundable > ZERO ? formatAmount(refundable, { asset }) : null}
+            verified={!isSample ? (isRegistered.error ? false : isRegistered.data) : true}
+            creator={config.data?.creator ?? null}
+            onChanged={handleRefetch}
+            sweep={{
+              fee: fee.data,
+              treasury: config.data?.treasury ?? null,
+              // Pending until the check has answered; a failed check counts as
+              // "not sent", because the sheet simulates before anything is
+              // signed and explains the contract's own refusal.
+              feeSwept: !feeSweepOpen
+                ? false
+                : feeSwept.data !== null
+                  ? feeSwept.data
+                  : feeSwept.error
+                    ? false
+                    : null,
+              asset,
+              sample: isSample,
+              sweepDeadlinePassed,
+              sweepDeadline: config.data ? config.data.sweep_deadline : null,
+              // Pending until the check has answered; a failed check counts as
+              // "something left", for the same reason as the fee above.
+              nothingToSweep:
+                sweepDeadlinePassed !== true
+                  ? false
+                  : nothingToSweep.data !== null
+                    ? nothingToSweep.data
+                    : nothingToSweep.error
+                      ? false
+                      : null,
+              onChanged: () => {
+                refetchFeeSwept();
+                refetchNothingToSweep();
+                refetchMoney();
+              },
+            }}
           />
 
           <section className="programme-timeline" aria-labelledby="programme-timeline-title">
             <h2 id="programme-timeline-title" className="programme-timeline__title">
               Timeline
             </h2>
-            <AsyncView {...config} onRetry={config.refetch} contract="program">
+            {isSample && (
+              <p className="programme-timeline__sample-note">
+                <SampleTag /> Deadlines are stand-in, shaped like the programme&apos;s phase.
+              </p>
+            )}
+            <AsyncView {...configView} onRetry={configView.refetch} contract="program">
               {() => (
                 <>
                   <p className="programme-timeline__summary">
@@ -505,39 +763,75 @@ export const ProgrammeDetail = () => {
       <section className="programme-chain" aria-labelledby="programme-chain-title">
         <div className="programme-chain__head">
           <h2 id="programme-chain-title" className="programme-chain__title">
-            On the chain
+            {isSample ? "Programme setup" : "On the chain"}
           </h2>
           <p className="programme-chain__lead">
-            What the programme was deployed with, read from its contract.
+            {isSample
+              ? "What this sample programme would be deployed with — stand-in data, nothing is read from the chain."
+              : "What the programme was deployed with, read from its contract."}
           </p>
         </div>
 
         <div className="programme-chain__grid">
           <Card title="Programme rules">
-            <AsyncView {...config} onRetry={config.refetch} contract="program">
+            <AsyncView {...configView} onRetry={configView.refetch} contract="program">
               {(value) => (
+                <>
                 <List className="programme-rules" label="Programme rules">
                   <ListRow
                     title="Creator"
                     trailing={
-                      <AddressChip
-                        address={value.creator}
-                        showExplorerLink
-                        copyLabel="Copy creator address"
-                      />
+                      isSample ? (
+                        <span className="numeric">{value.creator}</span>
+                      ) : (
+                        <AddressChip
+                          address={value.creator}
+                          showExplorerLink
+                          copyLabel="Copy creator address"
+                        />
+                      )
                     }
                   />
-                  <ListRow
-                    title="Treasury"
-                    trailing={
-                      <AddressChip
-                        address={value.treasury}
-                        showExplorerLink
-                        copyLabel="Copy treasury address"
+                  {!isSample && (
+                    <ListRow
+                      title="Treasury"
+                      trailing={
+                        <AddressChip
+                          address={value.treasury}
+                          showExplorerLink
+                          copyLabel="Copy treasury address"
+                        />
+                      }
+                    />
+                  )}
+                  {isSample ? (
+                    <ListRow title="Asset" trailing={<span className="numeric">{asset}</span>} />
+                  ) : (
+                    <>
+                      <ProgrammeAssetRules tokenAddress={value.token} />
+                      <ListRow
+                        title="Held by the contract"
+                        meta={
+                          expectedBalance !== null
+                            ? `Counters expect ${formatAmount(expectedBalance, { asset })}.`
+                            : undefined
+                        }
+                        trailing={
+                          contractBalance.loading ? (
+                            <span className="text-muted">Reading balance…</span>
+                          ) : contractBalance.error ? (
+                            <span className="text-muted">Could not read</span>
+                          ) : contractBalance.data !== null ? (
+                            <span className="numeric">
+                              {formatAmount(contractBalance.data, { asset })}
+                            </span>
+                          ) : (
+                            <span className="text-muted">—</span>
+                          )
+                        }
                       />
-                    }
-                  />
-                  <ProgrammeAssetRules tokenAddress={value.token} />
+                    </>
+                  )}
                   <ListRow
                     title="Reviewer votes needed"
                     trailing={
@@ -560,20 +854,43 @@ export const ProgrammeDetail = () => {
                     <ListRow title="Deployment" meta={registryCopy.description} />
                   )}
                 </List>
+                {balanceCheck?.status === "mismatch" &&
+                  contractBalance.data !== null &&
+                  expectedBalance !== null && (
+                    <Notice tone="risk" role="alert" className="programme-balance-mismatch">
+                      <strong>Contract balance mismatch.</strong> The token contract holds{" "}
+                      <span className="numeric">
+                        {formatAmount(contractBalance.data, { asset })}
+                      </span>
+                      , while the programme counters expect{" "}
+                      <span className="numeric">
+                        {formatAmount(expectedBalance, { asset })}
+                      </span>
+                      .
+                    </Notice>
+                  )}
+                </>
               )}
             </AsyncView>
           </Card>
 
           <Card title="Description">
-            <AsyncView {...config} onRetry={config.refetch} contract="program">
-              {(value) => (
-                <MetadataPanel committedHash={value.metadata_hash.toString("hex")} resolved={metadata} />
-              )}
-            </AsyncView>
+            {isSample ? (
+              <p className="programme-chain__sample-desc">
+                <SampleTag /> A sample programme has no committed document; its
+                description lives only in this fixture&apos;s name.
+              </p>
+            ) : (
+              <AsyncView {...configView} onRetry={configView.refetch} contract="program">
+                {(value) => (
+                  <MetadataPanel committedHash={value.metadata_hash.toString("hex")} resolved={metadata} />
+                )}
+              </AsyncView>
+            )}
           </Card>
 
           <Card className="programme-chain__wide" title="Reviewers, verifiers and schema">
-            <AsyncView {...config} onRetry={config.refetch} contract="program">
+            <AsyncView {...configView} onRetry={configView.refetch} contract="program">
               {(value) => (
                 <List className="programme-access" label="Reviewers, verifiers and schema">
                   <ListRow
@@ -608,4 +925,103 @@ export const ProgrammeDetail = () => {
       </section>
     </div>
   );
+};
+
+/**
+ * Asks "is there a programme here?" before the page reads anything else.
+ *
+ * An address that is no programme fails every panel on its own, seven red boxes
+ * saying less than one sentence would. So the registry's `is_programme` is
+ * read first, and when the registry did not deploy the address the programme's
+ * own `get_config` is the tie-breaker (a programme deployed some other way
+ * still answers it). Only when both say no does the page show one notice, and
+ * it sends no other read. A real programme, or one whose reads fail for want of
+ * a network, still renders in full with each panel carrying its own error.
+ */
+const ProgrammeAddressGate = ({ programmeId, programme, isDefault }: Omit<ProgrammeDetailBodyProps, "isRegistered">) => {
+  const { registry } = useSoroban();
+  const location = useLocation();
+
+  // A sample has no contract to ask about: it goes straight to the body, which
+  // fills it from the sample data.
+  const isSample = isSampleProgrammeId(programmeId);
+  const isRegistered = useContractRead(
+    () => registry.is_programme({ addr: programmeId }),
+    [registry, programmeId],
+    { enabled: !isSample },
+  );
+  const probe = useContractResult(() => programme.get_config(), [programme], {
+    enabled: !isSample && isRegistered.data === false,
+  });
+
+  // Nothing else is read until the registry has answered. The heading stays,
+  // so the page is never without one while it checks.
+  const checking = (
+    <div className="programme-detail">
+      <PageHead eyebrow="Programmes" title="Programme" />
+      <Loading label="Checking this address" rows={2} />
+    </div>
+  );
+  if (isRegistered.loading) return checking;
+
+  if (isRegistered.data === false) {
+    if (probe.loading) return checking;
+    // A network failure says nothing about the address: keep the full page and its retries.
+    if (probe.error && !isRpcFailure(probe.error)) {
+      return (
+        <div className="programme-detail">
+          <PageHead eyebrow="Programmes" title="Not a programme" />
+          <Empty
+            title="No Milepost programme at this address"
+            description="The registry did not deploy a programme here, and the address does not answer like one. Check it, or pick a programme from the directory."
+            action={
+              <>
+                <AddressChip address={programmeId} showExplorerLink copyLabel="Copy address" />
+                <Link to={directoryHref(location.search)} className="ui-button ui-button--primary ui-button--md">
+                  Browse programmes
+                </Link>
+              </>
+            }
+          />
+        </div>
+      );
+    }
+  }
+
+  return (
+    <ProgrammeDetailBody
+      programmeId={programmeId}
+      programme={programme}
+      isDefault={isDefault}
+      isRegistered={isRegistered}
+    />
+  );
+};
+
+/**
+ * A sample programme has no contract and no mainnet presence. Without samples,
+ * its address is not a programme on this network, so say that rather than
+ * reading a made-up contract and showing a wall of failed reads.
+ */
+export const ProgrammeDetail = () => {
+  // The page reads its own figures once the address gate lets it through.
+  const { id, client, isDefault } = useProgramme({ totals: false });
+  const routeState = programmeRouteState(id);
+
+  if (routeState === 'directory' || id === null) return <Navigate to="/directory" replace />;
+
+  if (routeState === 'not-a-programme') {
+    return (
+      <div className="programme-detail">
+        <PageHead eyebrow="Programmes" title="Not a programme on this network">
+          <p>This address belongs to a sample programme, and samples exist only on testnet.</p>
+        </PageHead>
+        <Notice tone="info">
+          <Link to="/directory">Back to the programme directory</Link>
+        </Notice>
+      </div>
+    );
+  }
+
+  return <ProgrammeAddressGate programmeId={id} programme={client} isDefault={isDefault} />;
 };

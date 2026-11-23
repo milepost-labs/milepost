@@ -11,6 +11,7 @@
 import { formatAmount } from './amount';
 import type { IndexedProgramme } from './indexer';
 import { DEMO_PROGRAMME_ID } from '../context/sorobanStore';
+import { samplesEnabled } from './samples';
 import { chainFor,
   FIXTURE_CHAIN,
   FIXTURE_PROGRAMMES,
@@ -30,6 +31,20 @@ import type { UserRole } from '../fixtures/userRoles';
  */
 export function isSampleProgrammeId(id: string): boolean {
   return id !== DEMO_PROGRAMME_ID && FIXTURE_PROGRAMMES.some((p) => p.id === id);
+}
+
+/**
+ * What a `/programme` address means on this network. A network with no seeded
+ * programme sends the bare route to the directory; a sample address outside
+ * testnet is not a programme there, so it gets a not-a-programme state instead
+ * of a read against a contract that does not exist.
+ */
+export type ProgrammeRouteState = 'programme' | 'directory' | 'not-a-programme';
+
+export function programmeRouteState(id: string | null): ProgrammeRouteState {
+  if (id === null) return 'directory';
+  if (!samplesEnabled() && isSampleProgrammeId(id)) return 'not-a-programme';
+  return 'programme';
 }
 
 export type DirectoryPhase = 'All' | FixturePhase;
@@ -55,7 +70,7 @@ export const DEFAULT_DIRECTORY_SORT: DirectorySort = 'newest';
  * from. Anything else in the URL did not come from the directory and is
  * dropped rather than replayed.
  */
-const DIRECTORY_PARAM_KEYS = ['q', 'phase', 'sort', 'yours'] as const;
+const DIRECTORY_PARAM_KEYS = ['q', 'phase', 'asset', 'sort', 'yours'] as const;
 
 /** The directory filter query a programme link carries, without the leading "?". */
 export function directorySearch(search: string): string {
@@ -148,7 +163,7 @@ export function mergeProgrammes(
     });
   }
 
-  const includeSamples = options?.showSamples ?? true;
+  const includeSamples = options?.showSamples ?? samplesEnabled();
   if (includeSamples) {
     for (const entry of FIXTURE_PROGRAMMES) {
       if (seen.has(entry.id)) continue;
@@ -205,6 +220,7 @@ export function chainFromRead(
     refundable: (read.refunded ?? 0n).toString(),
     quorum: read.quorum ?? 0,
     closesInDays,
+    metadataHash: read.metadataHash,
   };
 }
 
@@ -261,17 +277,33 @@ export function matchesQuery(programme: DirectoryProgramme, query: string): bool
   return programme.name.toLowerCase().includes(q) || programme.id.toLowerCase().includes(q);
 }
 
-/** Programmes matching both the search text, phase pill and optionally the "yours" filter. */
+/** Unique, sorted asset codes seen across the given programmes. */
+export function availableAssets(
+  all: DirectoryProgramme[],
+  assetsById: Record<string, string | null | undefined>,
+): string[] {
+  const seen = new Set<string>();
+  for (const programme of all) {
+    const code = assetsById[programme.id];
+    if (code) seen.add(code);
+  }
+  return [...seen].sort((a, b) => a.localeCompare(b));
+}
+
+/** Programmes matching the search text, phase pill, asset filter, and optionally "yours". */
 export function filterProgrammes(
   all: DirectoryProgramme[],
   query: string,
   phase: DirectoryPhase,
   yoursOnly = false,
+  assetFilter = 'All',
+  assetsById?: Record<string, string | null | undefined>,
 ): DirectoryProgramme[] {
   return all.filter(
     (programme) =>
       matchesQuery(programme, query) &&
       (phase === 'All' || programme.chain.phase === phase) &&
+      (!assetFilter || assetFilter === 'All' || assetsById?.[programme.id] === assetFilter) &&
       (!yoursOnly || (programme.userRoles != null && programme.userRoles.length > 0)),
   );
 }
@@ -315,9 +347,18 @@ export function sortProgrammes(
   });
 }
 
-/** Counts per pill, over programmes matching the current search text. */
-export function phaseCounts(all: DirectoryProgramme[], query: string): Record<DirectoryPhase, number> {
-  const matching = all.filter((programme) => matchesQuery(programme, query));
+/** Counts per pill, over programmes matching the current search text and asset filter. */
+export function phaseCounts(
+  all: DirectoryProgramme[],
+  query: string,
+  assetFilter = 'All',
+  assetsById?: Record<string, string | null | undefined>,
+): Record<DirectoryPhase, number> {
+  const matching = all.filter(
+    (programme) =>
+      matchesQuery(programme, query) &&
+      (!assetFilter || assetFilter === 'All' || assetsById?.[programme.id] === assetFilter),
+  );
   const counts = {} as Record<DirectoryPhase, number>;
   for (const phase of DIRECTORY_PHASES) {
     counts[phase] =
@@ -379,17 +420,6 @@ export function formatUsdc(stroops: string | bigint): string {
 export function formatFigure(stroops: string | bigint): string {
   const value = typeof stroops === 'bigint' ? stroops : BigInt(stroops || '0');
   return formatAmount(value, { decimals: 2 }).replace(/\.00$/, '');
-}
-
-/**
- * The asset a programme's amounts are in.
- *
- * A programme's token is not read yet, so this follows what is deployed: the
- * programmes on testnet pay in native XLM, and the sample set is written in
- * USDC. Replace with the programme's own token once that read exists.
- */
-export function programmeAsset(programme: { sample: boolean }): string {
-  return programme.sample ? 'USDC' : 'XLM';
 }
 
 /**

@@ -30,6 +30,7 @@ import { Button, CopyButton, DisabledReason, Modal, Notice } from '../ui';
 import { ErrorPanel } from '../state/AsyncStates';
 import { TxDone, TxFailed, TxPending } from '../state/TxStatus';
 import { DetailsStep, OTHER, PeopleStep, ReviewStep, TimelineStep } from './DeploySteps';
+import { restoreFromAssembled } from '../../lib/restore';
 import './DeployProgramme.css';
 
 const STEPS = ['Details', 'People', 'Timeline', 'Review & deploy'] as const;
@@ -52,6 +53,7 @@ function blankForm(prefill: { name?: string; tranches?: number; purpose?: string
     labels: {},
     reviewers: [],
     verifiers: [],
+    payees: [],
     quorum: 1,
     applyDeadline: null,
     reviewDeadline: null,
@@ -101,7 +103,7 @@ export function DeployProgramme({ aside }: { aside?: ReactNode }) {
   const [nowSeconds] = useState(() => Math.floor(Date.now() / 1000));
 
   // The testnet pilot's asset and schema, offered as the first choice.
-  const pilotRead = useKeyedRead(DEMO_PROGRAMME_ID, async () => {
+  const pilotRead = useKeyedRead(DEMO_PROGRAMME_ID || null, async () => {
     const config = (await demoProgramme.get_config()).result.unwrap();
     const schemaHex = Buffer.from(config.schema).toString('hex');
     const [tokenName, definition] = await Promise.all([
@@ -190,6 +192,7 @@ export function DeployProgramme({ aside }: { aside?: ReactNode }) {
     const address = await tx.send(async () => {
       const assembled = await registry.create(args);
       return {
+        restore: restoreFromAssembled(assembled),
         signAndSend: async (options: Parameters<typeof assembled.signAndSend>[0]) => {
           const sent = await assembled.signAndSend(options);
           return { result: sent.result.unwrap() };

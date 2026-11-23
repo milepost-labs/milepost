@@ -284,3 +284,106 @@
   justify-content: flex-end;
   gap: var(--space-3);
 }
+
+/* The award's own page: linkable, shareable, live from the chain. */
+.award-card__detail-link {
+  display: inline-flex;
+  align-items: center;
+  min-height: var(--tap-min);
+  margin-top: var(--space-1);
+  font-size: var(--text-sm);
+  font-weight: var(--weight-semibold);
+  color: var(--accent);
+  text-decoration: none;
+  outline-offset: var(--focus-offset);
+}
+
+.award-card__detail-link:hover {
+  text-decoration: underline;
+}
+
+.award-card__detail-link:focus-visible {
+  outline: 2px solid var(--focus);
+  border-radius: var(--radius-sm);
+}
+
+/* "Release several at once", under the single release. */
+.award-card__batch {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+
+/* Recent eligible attestations offered inside the release sheet. */
+.award-card__found {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  padding: var(--space-3);
+  border-radius: var(--radius-md);
+  background: var(--bg-sunken);
+}
+
+.award-card__found-label {
+  margin: 0;
+  font-size: var(--text-caption);
+  font-weight: var(--weight-semibold);
+  color: var(--ink);
+}
+
+.award-card__found-note {
+  margin: 0;
+  font-size: var(--text-caption);
+  color: var(--ink-muted);
+}
+
+.award-card__found-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+
+.award-card__found-item {
+  width: 100%;
+  min-height: var(--tap-min);
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-2);
+  padding: var(--space-2) var(--space-3);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
+  background: var(--bg-raised);
+  color: var(--ink);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.award-card__found-item:hover {
+  border-color: var(--accent);
+}
+
+.award-card__found-item[aria-pressed='true'] {
+  border-color: var(--accent);
+  background: var(--accent-soft);
+}
+
+.award-card__found-item:focus-visible {
+  outline: 2px solid var(--focus);
+  outline-offset: var(--focus-offset);
+}
+
+.award-card__found-uid {
+  font-size: var(--text-sm);
+  font-weight: var(--weight-semibold);
+}
+
+.award-card__found-attester {
+  font-size: var(--text-caption);
+  color: var(--ink-muted);
+}

@@ -36,10 +36,12 @@ export interface DeployDraft {
   vertical: string;
   contactName: string;
   contactEmail: string;
-  /** The creator's names for reviewer and verifier addresses. Empty means unnamed. */
+  /** The creator's names for reviewer, verifier and planned payee addresses. Empty means unnamed. */
   labels: Record<string, string>;
   reviewers: string[];
   verifiers: string[];
+  /** Optional list of payees the creator plans to verify after deploy. Published in metadata labels. */
+  payees?: string[];
   quorum: number;
   applyDeadline: number | null;
   reviewDeadline: number | null;
@@ -98,7 +100,8 @@ export function addAddresses(list: string[], text: string): { list: string[]; er
 
 /** The minimum award in stroops, or why it cannot be used. */
 export function parseMinAward(input: string, tranches: number): { ok: true; value: bigint } | { ok: false; error: string } {
-  if (input.trim() === '') return { ok: true, value: 0n };
+  // Blank or zero means no minimum; parseAmount refuses zero for amounts sent.
+  if (/^\s*0*(\.0*)?\s*$/.test(input)) return { ok: true, value: 0n };
   const parsed = tryParseAmount(input);
   if (!parsed.ok) return parsed;
   if (parsed.value > 0n && parsed.value < BigInt(tranches)) {
@@ -140,7 +143,7 @@ export function detailsErrors(
 export function peopleErrors(
   draft: DeployDraft,
   schema: SchemaFacts | null,
-): Partial<Record<'reviewers' | 'quorum' | 'verifiers', string>> {
+): Partial<Record<'reviewers' | 'quorum' | 'verifiers' | 'payees', string>> {
   const errors: ReturnType<typeof peopleErrors> = {};
   if (draft.reviewers.length === 0) errors.reviewers = 'Add at least one reviewer.';
   if (draft.quorum < 1 || draft.quorum > MAX_QUORUM) errors.quorum = `Quorum must be 1 to ${MAX_QUORUM}.`;
@@ -150,6 +153,15 @@ export function peopleErrors(
   if (draft.verifiers.length === 0) errors.verifiers = 'Add at least one verifier, or no tranche could ever be released.';
   else if (schema?.restricted && !draft.verifiers.includes(schema.authority)) {
     errors.verifiers = 'The schema is restricted: only its authority can sign under it, so that address must be a verifier.';
+  }
+  const payees = draft.payees ?? [];
+  const seenPayees = new Set<string>();
+  for (const p of payees) {
+    if (seenPayees.has(p)) {
+      errors.payees = 'An address is listed twice in payees you plan to verify.';
+      break;
+    }
+    seenPayees.add(p);
   }
   return errors;
 }
@@ -175,16 +187,18 @@ export function timelineErrors(
 
 /**
  * The description document a deploy publishes: the spec's required fields and
- * the creator's names for reviewers and verifiers. Names are optional.
+ * the creator's names for reviewers, verifiers, and planned payees. Names are optional.
  */
 export function buildMetadata(draft: DeployDraft): ProgrammeMetadata {
   const labels: AddressLabel[] = [];
+  const payees = draft.payees ?? [];
   for (const [role, list] of [
     ['reviewer', draft.reviewers],
     ['verifier', draft.verifiers],
+    ['payee', payees],
   ] as const) {
     for (const address of list) {
-      const label = draft.labels[address]?.trim();
+      const label = draft.labels?.[address]?.trim();
       if (label) labels.push({ address, role, label: label.slice(0, 80) });
     }
   }

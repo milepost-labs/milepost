@@ -1,6 +1,8 @@
 import { execSync } from 'node:child_process'
+import { loadEnv } from 'vite'
 import { defineConfig, type Plugin } from 'vitest/config'
 import react from '@vitejs/plugin-react'
+import { assertMainnetEnv, selectedNetwork } from './src/config/networkEnv.js'
 import { handleMetadataRequest, memoryBackend } from './src/lib/metadataStore.js'
 
 // The commit the app was built from, shown on /about. CI sets GITHUB_SHA;
@@ -47,17 +49,38 @@ function devMetadataStore(): Plugin {
   }
 }
 
+// A mainnet build has no defaults: fail it up front, naming every variable
+// that is missing, rather than ship an app pointed at nothing.
+function requireMainnetEnv(): Plugin {
+  return {
+    name: 'milepost-require-mainnet-env',
+    apply: 'build',
+    config(_, { mode }) {
+      assertMainnetEnv({ ...loadEnv(mode, process.cwd(), 'VITE_'), ...process.env })
+    },
+  }
+}
+
+// The network as a build-time constant, from the same VITE_NETWORK that
+// src/config/network.ts reads. Branches on it fold away, so a mainnet bundle
+// carries neither the testnet defaults nor the sample fixtures.
+function buildNetwork({ mode }: { mode: string }): 'testnet' | 'mainnet' {
+  return selectedNetwork({ ...loadEnv(mode, process.cwd(), 'VITE_'), ...process.env })
+}
+
 // https://vite.dev/config/
-export default defineConfig({
-  plugins: [react(), devMetadataStore()],
+export default defineConfig(({ mode }) => ({
+  plugins: [react(), devMetadataStore(), requireMainnetEnv()],
   define: {
     'import.meta.env.VITE_APP_VERSION': JSON.stringify(buildVersion()),
+    __MILEPOST_NETWORK__: JSON.stringify(buildNetwork({ mode })),
   },
   test: {
     environment: 'jsdom',
-    // App tests only. scripts/*.test.mjs use node:test and run through
-    // `npm run test:design-system`.
-    include: ['src/**/*.test.{ts,tsx}'],
+    // App tests, plus the Vercel functions under api/ (e.g. the metadata
+    // store's Blob backend, which only lives there, not under src/).
+    // scripts/*.test.mjs use node:test and run through `npm run test:design-system`.
+    include: ['src/**/*.test.{ts,tsx}', 'api/**/*.test.{ts,tsx}'],
     setupFiles: ['./src/test/setup.ts'],
     // Tests mock the contract clients; nothing should touch the network.
     // Fail loudly if something tries.
@@ -68,9 +91,10 @@ export default defineConfig({
       // Listing every source file is the point. Without `include`, only files
       // some test imports are reported, so a screen with no test at all would
       // not appear in the report.
-      include: ['src/**/*.{ts,tsx}'],
+      include: ['src/**/*.{ts,tsx}', 'api/**/*.ts'],
       exclude: [
         'src/**/*.test.{ts,tsx}',
+        'api/**/*.test.{ts,tsx}',
         'src/test/**',
         // Stand-in data, not logic; counting it would inflate the figure.
         'src/fixtures/**',
@@ -96,4 +120,4 @@ export default defineConfig({
       },
     },
   },
-})
+}))

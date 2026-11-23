@@ -7,6 +7,8 @@
  * bursary paid in three tranches) lives in `components/landing/heroFixtures.ts`.
  */
 
+import { NETWORK } from '../config/network';
+
 /* ── "What brings you here?" ─────────────────────────────────────────────── */
 
 export interface RoleEntry {
@@ -439,7 +441,7 @@ export const STELLAR_POINTS: StellarPoint[] = [
   {
     today: true,
     title: 'Five Soroban contracts',
-    body: 'Programme logic, attestations and standing live on chain. Each programme pays in its own asset: XLM on testnet, USDC in our examples.',
+    body: `Programme logic, attestations and standing live on chain. Each programme pays in its own asset: XLM on ${NETWORK.name}, USDC in our examples.`,
   },
   {
     today: true,
@@ -573,6 +575,7 @@ export const FOOTER_GROUPS: FooterGroup[] = [
       { label: 'Standing', path: '/recipients/standing' },
       { label: 'Award progress', path: '/recipients/award-progress' },
       { label: 'Application timeline', path: '/recipients/application-timeline' },
+      { label: 'Award detail', path: '/award' },
       { label: 'Index status', path: '/status' },
     ],
   },

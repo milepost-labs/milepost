@@ -1,6 +1,7 @@
 import type { FC } from 'react';
 import { Link } from 'react-router-dom';
 import { ModePill } from '../ui';
+import { formatAmount } from '../../lib/amount';
 import './TermsTab.css';
 
 /** The four payment modes, as `Mode` documents them in the program contract. */
@@ -27,17 +28,34 @@ export interface TermsTabProps {
   programmeId: string;
   quorum?: number;
   asset?: string;
+  /** Minimum award in stroops. Zero or undefined means no minimum. */
+  minimumAward?: bigint;
 }
 
 export const TermsTab: FC<TermsTabProps> = ({
   programmeId,
   quorum = 1,
   asset = 'USDC',
+  minimumAward,
 }) => {
   const cappedQuorum = Math.min(Math.max(1, quorum), 16);
 
+  const minimumAwardValue = minimumAward ?? 0n;
+  const minimumAwardDisplay =
+    minimumAwardValue === 0n
+      ? 'No minimum'
+      : formatAmount(minimumAwardValue, { asset });
+
   const terms = [
     { k: 'Asset', v: asset },
+    {
+      k: 'Minimum award',
+      v: minimumAwardDisplay,
+      explanation:
+        minimumAwardValue === 0n
+          ? undefined
+          : 'Awards below this amount cannot be finalised.',
+    },
     {
       k: 'Payment mode',
       v: 'Chosen per award',

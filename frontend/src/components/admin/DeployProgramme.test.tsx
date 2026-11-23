@@ -6,6 +6,13 @@ import { DeployProgramme } from './DeployProgramme';
 import { handleMetadataRequest, memoryBackend } from '../../lib/metadataStore';
 import { metadataHash } from '../../lib/metadata';
 import { buildMetadata, type DeployDraft } from '../../lib/deployRules';
+import {
+  expectFocusInSheet,
+  expectFocusReturnedTo,
+  expectSheetAccessible,
+  focusAndClick,
+  SHEET_TEST_TIMEOUT,
+} from '../../test/sheetAccessibility';
 
 // The deploy wizard: Details, People, Timeline, Review & deploy. Every rule
 // the programme constructor enforces is checked on its own step, the asset
@@ -25,8 +32,21 @@ const mocks = vi.hoisted(() => ({
   address: null as string | null,
   announce: vi.fn(),
   create: vi.fn(),
+  getConfig: vi.fn(),
   getSchema: vi.fn(),
   tokenName: vi.fn(),
+}));
+
+// The seeded programme the wizard offers as a pilot; a network with none has
+// no pilot to offer.
+const demoProgramme = vi.hoisted(() => ({
+  id: 'CD6X33SKLUEMANS67ID3LJL572FFGERMMJCIFRW7P7EKZQLH35XT67C6' as string | null,
+}));
+vi.mock('../../context/sorobanStore', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('../../context/sorobanStore')>()),
+  get DEMO_PROGRAMME_ID() {
+    return demoProgramme.id;
+  },
 }));
 
 vi.mock('../../context/useWallet', () => ({
@@ -151,15 +171,17 @@ beforeEach(() => {
   mocks.address = CREATOR;
   mocks.announce.mockClear();
   mocks.create.mockReset();
+  mocks.getConfig.mockReset().mockImplementation(() => ok({ token: PILOT_TOKEN, schema: PILOT_SCHEMA }));
   mocks.getSchema.mockReset().mockImplementation(() => ok(schema()));
   mocks.tokenName.mockReset().mockImplementation(async (id: string) => ({
     result: id === PILOT_TOKEN ? 'native' : 'USDC:GISSUER',
   }));
+  demoProgramme.id = 'CD6X33SKLUEMANS67ID3LJL572FFGERMMJCIFRW7P7EKZQLH35XT67C6';
   soroban.value = {
     rpcUrl: 'https://rpc.test',
     registry: { create: mocks.create, get_config: () => ok({ fee_bps: 250 }) },
     attest: { get_schema: mocks.getSchema },
-    demoProgramme: { get_config: () => ok({ token: PILOT_TOKEN, schema: PILOT_SCHEMA }) },
+    demoProgramme: { get_config: mocks.getConfig },
   };
 });
 
@@ -180,6 +202,22 @@ describe('DeployProgramme — details', () => {
     expect(screen.getByText('Describe what the programme funds.')).toBeTruthy();
     describe_();
     await waitFor(() => expect(continueButton().disabled).toBe(false));
+  });
+
+  it('offers no pilot defaults when the network has no demo programme', async () => {
+    demoProgramme.id = null;
+    renderWizard();
+
+    await screen.findByLabelText('Asset');
+    // Nothing is read from a pilot, and none of its copy appears.
+    expect(mocks.getConfig).not.toHaveBeenCalled();
+    expect(screen.queryByText(/testnet pilot/i)).toBeNull();
+    expect(screen.queryByRole('option', { name: 'XLM (native)' })).toBeNull();
+
+    // Both choices start empty on "Another…", with the normal fields shown.
+    expect((screen.getByLabelText('Asset') as HTMLSelectElement).value).toBe('__other');
+    expect((screen.getByLabelText('What verifiers sign') as HTMLSelectElement).value).toBe('__other');
+    expect(screen.getByLabelText('Asset contract')).toBeTruthy();
   });
 
   it('blocks a schema id that is not registered, and never reads a malformed one', async () => {
@@ -256,6 +294,67 @@ describe('DeployProgramme — people and timeline', () => {
   });
 });
 
+// #696. The wizard's Review & deploy step is the form and confirm; the sheet
+// opens on Deploy and has publishing, pending, done and failed steps.
+describe('DeployProgramme — the deploy sheet, accessible in every step (#696)', () => {
+  async function openSheet() {
+    renderWizard();
+    await passDetails();
+    passPeople();
+    setDates([2, 3, 4, 5]);
+    fireEvent.click(continueButton());
+    await screen.findByRole('heading', { name: 'Review & deploy' });
+    const opener = screen.getByRole('button', { name: 'Deploy programme' });
+    focusAndClick(opener, fireEvent.click);
+    await screen.findByRole('dialog', { name: 'Deploy programme' });
+    return opener;
+  }
+
+  it('pending and done', async () => {
+    let settle: (value: unknown) => void = () => {};
+    mocks.create.mockResolvedValue({
+      signAndSend: vi.fn(
+        () =>
+          new Promise((resolve) => {
+            settle = resolve;
+          }),
+      ),
+    });
+    await openSheet();
+    await waitFor(() => expect(mocks.create).toHaveBeenCalled());
+    expectFocusInSheet('pending');
+    await expectSheetAccessible('pending');
+
+    settle({ result: { unwrap: () => NEW_PROGRAMME } });
+    expect(await screen.findByRole('heading', { name: 'Programme deployed', level: 3 })).toBeTruthy();
+    await expectSheetAccessible('done');
+  }, SHEET_TEST_TIMEOUT);
+
+  it('failed to publish the description', async () => {
+    storeDown = true;
+    const opener = await openSheet();
+    expect(await screen.findByText('The description wasn’t published.')).toBeTruthy();
+    expectFocusInSheet('description failed');
+    await expectSheetAccessible('description failed');
+
+    fireEvent.keyDown(document, { key: 'Escape' });
+    expect(screen.queryByRole('dialog')).toBeNull();
+    expectFocusReturnedTo(opener);
+  }, SHEET_TEST_TIMEOUT);
+
+  it('failed to deploy, and Escape returns focus to Deploy', async () => {
+    mocks.create.mockRejectedValue(new Error('HostError: Error(Contract, #5)'));
+    const opener = await openSheet();
+    expect(await screen.findByText('Programme not deployed')).toBeTruthy();
+    expectFocusInSheet('failed');
+    await expectSheetAccessible('failed');
+
+    fireEvent.keyDown(document, { key: 'Escape' });
+    expect(screen.queryByRole('dialog')).toBeNull();
+    expectFocusReturnedTo(opener);
+  }, SHEET_TEST_TIMEOUT);
+});
+
 describe('DeployProgramme — deploying', () => {
   async function reachReview() {
     renderWizard();
@@ -319,6 +418,62 @@ describe('DeployProgramme — deploying', () => {
       screen.getByText('The required reviewer votes must be at least 1 and no more than the number of reviewers.'),
     ).toBeTruthy();
     expect(screen.queryByText(/HostError/)).toBeNull();
+  });
+
+  it('retries publishing the description after a failure, then deploys', async () => {
+    mocks.create.mockResolvedValue({ signAndSend: vi.fn(async () => ({ result: { unwrap: () => NEW_PROGRAMME } })) });
+    storeDown = true;
+    await reachReview();
+    fireEvent.click(screen.getByRole('button', { name: 'Deploy programme' }));
+
+    const sheet = await screen.findByRole('dialog', { name: 'Deploy programme' });
+    expect(await within(sheet).findByText('The description wasn’t published.')).toBeTruthy();
+    expect(within(sheet).getByText(/Nothing has been deployed yet\./)).toBeTruthy();
+    expect(mocks.create).not.toHaveBeenCalled();
+    expect(mocks.announce).toHaveBeenCalledWith(expect.stringContaining('Description not published.'), 'alert');
+
+    storeDown = false;
+    fireEvent.click(within(sheet).getByRole('button', { name: 'Try again' }));
+
+    expect(await screen.findByRole('heading', { name: 'Programme deployed', level: 3 })).toBeTruthy();
+    expect(mocks.create).toHaveBeenCalledTimes(1);
+    const expectedHash = await metadataHash(buildMetadata({ ...draftFromScreen() }));
+    expect(Buffer.from(mocks.create.mock.calls[0][0].metadata_hash).toString('hex')).toBe(expectedHash);
+    expect(screen.getByRole('link', { name: 'Open its page' }).getAttribute('href')).toBe(`/programme/${NEW_PROGRAMME}`);
+  });
+
+  it('retries deploying after registry.create fails following a description publish', async () => {
+    mocks.create
+      .mockRejectedValueOnce(new Error('HostError: Error(Contract, #2)'))
+      .mockResolvedValueOnce({ signAndSend: vi.fn(async () => ({ result: { unwrap: () => NEW_PROGRAMME } })) });
+    await reachReview();
+    fireEvent.click(screen.getByRole('button', { name: 'Deploy programme' }));
+
+    const sheet = await screen.findByRole('dialog', { name: 'Deploy programme' });
+    expect(await within(sheet).findByText('Programme not deployed')).toBeTruthy();
+    expect(store.entries.size).toBe(1);
+    expect(mocks.announce).toHaveBeenCalledWith(expect.stringContaining('Programme not deployed.'), 'alert');
+
+    fireEvent.click(within(sheet).getByRole('button', { name: 'Try again' }));
+
+    expect(await screen.findByRole('heading', { name: 'Programme deployed', level: 3 })).toBeTruthy();
+    expect(mocks.create).toHaveBeenCalledTimes(2);
+    expect(screen.getByRole('link', { name: 'Open its page' }).getAttribute('href')).toBe(`/programme/${NEW_PROGRAMME}`);
+  });
+
+  it('closes the deploy sheet when publish fails and Close is clicked', async () => {
+    storeDown = true;
+    await reachReview();
+    fireEvent.click(screen.getByRole('button', { name: 'Deploy programme' }));
+
+    const sheet = await screen.findByRole('dialog', { name: 'Deploy programme' });
+    expect(await within(sheet).findByText('The description wasn’t published.')).toBeTruthy();
+    // The sheet's header has its own Close button; this is the one beside Try again.
+    const actions = within(sheet).getByRole('button', { name: 'Try again' }).parentElement!;
+    fireEvent.click(within(actions).getByRole('button', { name: 'Close' }));
+
+    await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull());
+    expect(mocks.create).not.toHaveBeenCalled();
   });
 
   it('jumps back to a step from the summary', async () => {

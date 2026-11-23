@@ -7,6 +7,8 @@ import { useWallet } from '../../context/useWallet';
 import { phaseLabel, useTransaction } from '../../hooks/useTransaction';
 import { useContractRead, useContractResult } from '../../hooks/useContractRead';
 import { useProgrammeBalance, type ProgrammeBalanceStatus } from '../../hooks/useProgrammeBalance';
+import { NETWORK } from '../../config/network';
+import { samplesEnabled } from '../../lib/samples';
 import { useBalances } from '../../hooks/useBalances';
 import { formatAmount, STROOPS_PER_UNIT, validateAmount } from '../../lib/amount';
 import { explain, explainCode, isFailure, type Explained } from '../../lib/errors';
@@ -28,9 +30,11 @@ import {
   type TxReceipt,
 } from '../../lib/fundingTx';
 import type { Phase } from '../../lib/phaseGate';
-import { programmeAsset, shortId, type DirectoryProgramme } from '../../lib/programmeView';
+import { shortId, type DirectoryProgramme } from '../../lib/programmeView';
+import { useProgrammeAsset } from '../../hooks/useProgrammeAsset';
 import { TxDone, TxFailed, TxPending } from '../state/TxStatus';
 import { AmountField, Button, CopyButton, Modal, Notice, Receipt, SampleTag, Select, TxExplorerLink } from '../ui';
+import { restoreFromAssembled } from '../../lib/restore';
 import './ContributeSheet.css';
 
 const PRESETS = ['50', '100', '250', '500', '1,000'];
@@ -134,7 +138,8 @@ export function ContributeSheet({
   const selectedId = picked ?? linked?.id ?? openProgrammes[0]?.id ?? null;
   const programme = programmes.find((p) => p.id === selectedId);
   const blocked = programme ? contributeBlockedReason(programme.chain.phase) : null;
-  const asset = programme ? programmeAsset(programme) : 'USDC';
+  // The chosen programme's own asset; null (no unit shown) until it is read.
+  const asset = useProgrammeAsset(programme?.id);
 
   // Read from the chosen programme's token contract. `undefined` while it is
   // unknown, so an amount is never refused against a balance we do not have.
@@ -222,6 +227,7 @@ export function ContributeSheet({
           (assembled as unknown as { simulationResponse?: { minResourceFee?: string } }).simulationResponse
             ?.minResourceFee ?? 0,
         ),
+        restore: restoreFromAssembled(assembled),
         signAndSend: async (options: Parameters<typeof assembled.signAndSend>[0]) => {
           const sent = await assembled.signAndSend(options);
           sent.result.unwrap();
@@ -398,8 +404,10 @@ export function ContributeSheet({
               xlmBalance.xlm !== null &&
               xlmBalance.xlm < tx.estimatedFee + MIN_XLM_RESERVE && (
                 <Notice tone="warn" role="alert">
-                  Your XLM balance cannot cover this fee while keeping the minimum reserve. Fund the wallet on
-                  testnet with Friendbot before signing.
+                  Your XLM balance cannot cover this fee while keeping the minimum reserve.{' '}
+                  {NETWORK.friendbot
+                    ? 'Fund the wallet on testnet with Friendbot before signing.'
+                    : 'Add XLM to the wallet before signing.'}
                 </Notice>
               )}
           </TxPending>
@@ -443,7 +451,7 @@ export function ContributeSheet({
               money stays locked in the programme until a verifier confirms each milepost, and whatever isn't
               paid out comes back to you in proportion.
             </p>
-            {programme.sample && (
+            {programme.sample && samplesEnabled() && (
               <p className="contribute__sample">
                 <SampleTag>Sample receipt</SampleTag>
               </p>

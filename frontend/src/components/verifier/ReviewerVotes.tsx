@@ -9,13 +9,16 @@ import { explain } from '../../lib/errors';
 import { looksLikeAddress, truncateAddress } from '../../lib/format';
 import { formatIn } from '../../lib/funding';
 import { validateAmount } from '../../lib/amount';
-import { programmeAsset, shortId } from '../../lib/programmeView';
+import { shortId } from '../../lib/programmeView';
+import { useProgrammeAsset } from '../../hooks/useProgrammeAsset';
 import { isProgrammeContractId } from '../../lib/registryVerification';
 import { FIXTURE_REVIEW_APPLICANTS, type ApplicantFixture } from '../../fixtures/reviewFixtures';
+import { samplesEnabled } from '../../lib/samples';
 import { Badge, Button, DisabledReason, Field, Modal, PhaseBadge, SampleTag, Select } from '../ui';
 import { ErrorPanel } from '../state/AsyncStates';
 import { TxDone, TxFailed, TxPending } from '../state/TxStatus';
 import type { RoleProgramme } from './useMyRoles';
+import { restoreFromAssembled } from '../../lib/restore';
 
 const OTHER = '__other';
 
@@ -37,7 +40,7 @@ function VoteRow({ programmeId, applicant, gate }: VoteRowProps) {
   const announce = useAnnouncer();
   const inputId = useId();
   const errorId = useId();
-  const asset = programmeAsset({ sample: false });
+  const asset = useProgrammeAsset(programmeId);
   const programme = programmeAt(programmeId);
   const [amount, setAmount] = useState('');
   const [inputError, setInputError] = useState<string | null>(null);
@@ -79,6 +82,7 @@ function VoteRow({ programmeId, applicant, gate }: VoteRowProps) {
         approved: parsed.value,
       });
       return {
+        restore: restoreFromAssembled(assembled),
         signAndSend: async (options: Parameters<typeof assembled.signAndSend>[0]) => {
           const sent = await assembled.signAndSend(options);
           return { result: sent.result.unwrap() };
@@ -140,7 +144,7 @@ function VoteRow({ programmeId, applicant, gate }: VoteRowProps) {
                   setInputError(null);
                 }}
               />
-              <span className="ui-field__suffix">{asset}</span>
+              {asset && <span className="ui-field__suffix">{asset}</span>}
             </div>
           </div>
           <Button
@@ -229,12 +233,15 @@ export function ReviewerVotes({ reviewerOf, allProgrammes, initialProgrammeId }:
   const isReviewerRead = useContractRead(
     () => programme.is_reviewer({ addr: address ?? '' }),
     [programme, address],
-    { contract: 'program', enabled: Boolean(address) },
+    { contract: 'program', enabled: Boolean(address) && Boolean(programmeId) },
   );
-  const phaseRead = useContractResult(() => programme.get_phase(), [programme], { contract: 'program' });
+  const phaseRead = useContractResult(() => programme.get_phase(), [programme], {
+    contract: 'program',
+    enabled: Boolean(programmeId),
+  });
   const phase = phaseRead.data?.tag ?? null;
 
-  const samples = FIXTURE_REVIEW_APPLICANTS[programmeId] ?? [];
+  const samples = samplesEnabled() ? (FIXTURE_REVIEW_APPLICANTS[programmeId] ?? []) : [];
   const applicants = [...(added[programmeId] ?? []), ...samples];
 
   const gate = !address

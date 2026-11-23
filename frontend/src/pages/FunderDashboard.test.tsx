@@ -10,18 +10,18 @@ vi.mock('../context/useWallet', () => ({
   useWallet: () => ({ address: mocks.address, status: mocks.address ? 'connected' : 'disconnected', connect: vi.fn() }),
 }));
 vi.mock('../context/useAnnouncer', () => ({ useAnnouncer: () => mocks.announce }));
-vi.mock('../context/useSoroban', () => ({
-  useSoroban: () => ({
+vi.mock('../context/useSoroban', () => {
+  // Built once: reads key on the clients, and the real context is memoized.
+  const soroban = {
     programmeAt: vi.fn(),
     registry: { is_programme: vi.fn(async () => ({ result: true })) },
-  }),
-}));
+  };
+  return { useSoroban: () => soroban, useOptionalSoroban: () => soroban };
+});
 vi.mock('../lib/indexer', async (importOriginal) => ({
   ...(await importOriginal<typeof import('../lib/indexer')>()),
   fetchProgrammes: vi.fn(async () => []),
 }));
-// Live reads against the seeded testnet programme; covered by their own components.
-vi.mock('../components/funder/SeededProgrammeTools', () => ({ SeededProgrammeTools: () => null }));
 
 function renderPage() {
   return render(
@@ -43,7 +43,7 @@ describe('Issue #82 — Cancel programme error explanations and logic', () => {
   it('translates NotCancellable (17) into a clear error explanation', () => {
     const explained = explainCode('program', 17);
     expect(explained.kind).toBe('denied');
-    expect(explained.message).toContain('A programme that holds funds or has made awards cannot be cancelled');
+    expect(explained.message).toContain('Money has already been paid out to a recipient');
   });
 });
 
@@ -95,10 +95,11 @@ describe('Funding dashboard', () => {
     await screen.findByRole('link', { name: 'Flood response cash transfers' });
     fireEvent.click(within(card('Flood response cash transfers')).getByRole('button', { name: 'Claim refund' }));
 
-    const sheet = screen.getByRole('dialog', { name: 'Claim your refund' });
-    expect(within(sheet).getByText('Claiming your refund')).toBeTruthy();
+    const sheet = await screen.findByRole('dialog', { name: 'Claim your refund' });
+    const signButton = await within(sheet).findByRole('button', { name: 'Sign and claim refund' });
+    fireEvent.click(signButton);
 
-    expect(await within(sheet).findByText('Refund claimed', {}, { timeout: 3000 })).toBeTruthy();
+    expect(await within(sheet).findAllByText('Refund claimed', {}, { timeout: 3000 })).toBeTruthy();
     expect(within(sheet).getByText(/495 USDC sent back to your wallet, in proportion/)).toBeTruthy();
     expect(within(sheet).getByText('4,853,391')).toBeTruthy();
     expect(mocks.announce).toHaveBeenCalledWith('Refund of 495 USDC sent to your wallet.');

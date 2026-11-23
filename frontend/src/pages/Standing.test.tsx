@@ -1,9 +1,15 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { fireEvent, render, screen, waitFor } from '@testing-library/react';
-import { MemoryRouter } from 'react-router-dom';
+import { act, fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { MemoryRouter, useLocation } from 'react-router-dom';
+import { Buffer } from 'buffer';
 
 import { Standing, StandingPanel, StandingStats } from './Standing';
 import { isTtlLow, standingStats } from '../lib/standing';
+import {
+  verifyStandingHistory,
+  type NextRoot,
+  type StandingHistoryEntry,
+} from '../lib/standingHistory';
 
 const SUBJECT = 'GAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA';
 const LOOKED_UP_SUBJECT = 'GBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB';
@@ -17,20 +23,37 @@ const STANDING_FIXTURE = {
 
 // The panel reads through `record.get`; only that call and the wallet it needs
 // for the keepalive row matter here.
-const chain = vi.hoisted(() => ({ get: vi.fn(), keepalive: vi.fn() }));
+const chain = vi.hoisted(() => ({
+  get: vi.fn(),
+  keepalive: vi.fn(),
+  next_root: vi.fn(),
+}));
 const wallet = vi.hoisted(() => ({
   address: 'GAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA' as string | null,
   signTransaction: vi.fn(),
 }));
-vi.mock('../context/useSoroban', () => ({
-  useSoroban: () => ({ record: { get: chain.get, keepalive: chain.keepalive } }),
-}));
+const announcer = vi.hoisted(() => ({ announce: vi.fn() }));
+
+vi.mock('../context/useSoroban', () => {
+  // Built once: reads key on the clients, and the real context is memoized.
+  const soroban = {
+    record: {
+      get: chain.get,
+      keepalive: chain.keepalive,
+      next_root: chain.next_root,
+    },
+  };
+  return { useSoroban: () => soroban, useOptionalSoroban: () => soroban };
+});
 vi.mock('../context/useWallet', () => ({
   useWallet: () => ({
     address: wallet.address,
     status: wallet.address ? 'connected' : 'disconnected',
     signTransaction: wallet.signTransaction,
   }),
+}));
+vi.mock('../context/useAnnouncer', () => ({
+  useAnnouncer: () => announcer.announce,
 }));
 vi.mock('../components/layout/SignInSheet', () => ({
   SignInSheet: () => null,
@@ -44,10 +67,10 @@ const standing = {
 };
 const read = (value: unknown) => ({ result: { unwrap: () => value } });
 
-const renderPanel = () =>
+const renderPanel = (subject: string = SUBJECT) =>
   render(
     <MemoryRouter>
-      <StandingPanel subject={SUBJECT} />
+      <StandingPanel subject={subject} />
     </MemoryRouter>,
   );
 const renderPage = () =>
@@ -195,6 +218,59 @@ describe('standing page', () => {
     await waitFor(() => expect(screen.getByText('1,230.00 XLM')).toBeTruthy());
     expect(screen.getByRole('button', { name: 'Clear lookup' })).toBeTruthy();
   });
+
+  it('disables the lookup button for invalid address input', () => {
+    renderPage();
+    const input = screen.getByLabelText('Recipient address');
+    const button = screen.getByRole('button', { name: 'Look up' }) as HTMLButtonElement;
+
+    // Initially empty -> button disabled
+    expect(button.disabled).toBe(true);
+
+    // Typing a malformed address (not starting with G or wrong length) -> stays disabled
+    fireEvent.change(input, { target: { value: 'invalid-address' } });
+    expect(button.disabled).toBe(true);
+
+    // Typing current subject -> disabled because it is already showing
+    fireEvent.change(input, { target: { value: SUBJECT } });
+    expect(button.disabled).toBe(true);
+
+    // Typing a valid 56-character G-prefixed address different from current -> enabled
+    fireEvent.change(input, { target: { value: LOOKED_UP_SUBJECT } });
+    expect(button.disabled).toBe(false);
+  });
+
+  it('switches back to user standing when clicking "Show my standing"', async () => {
+    chain.get.mockImplementation(async ({ subject }: { subject: string }) => {
+      if (subject === SUBJECT) return read(standing);
+      if (subject === LOOKED_UP_SUBJECT) {
+        return read({
+          programmes: 6,
+          total_received: 90_000_000_000n,
+          tranches: 8,
+        });
+      }
+      throw new Error(`Unexpected subject ${subject}`);
+    });
+
+    renderPage();
+    await waitFor(() => expect(screen.getByText('4,630.00 XLM')).toBeTruthy());
+
+    // Look up another address
+    fireEvent.change(screen.getByLabelText('Recipient address'), {
+      target: { value: LOOKED_UP_SUBJECT },
+    });
+    fireEvent.click(screen.getByRole('button', { name: 'Look up' }));
+    await waitFor(() => expect(screen.getByText('9,000.00 XLM')).toBeTruthy());
+
+    // Click "Show my standing"
+    const revertBtn = screen.getByRole('button', { name: 'Show my standing' });
+    fireEvent.click(revertBtn);
+
+    // Back to user standing
+    await waitFor(() => expect(screen.getByText('4,630.00 XLM')).toBeTruthy());
+    expect(screen.queryByRole('button', { name: 'Show my standing' })).toBeNull();
+  });
 });
 
 describe('TTL warning', () => {
@@ -225,5 +301,403 @@ describe('signed-out recipient explainer', () => {
 
     // The sheet itself is mocked out in this file; the way in is the button.
     expect(screen.getByRole('button', { name: 'Sign in with Freighter' })).toBeTruthy();
+  });
+});
+
+describe('StandingTtlRow keepalive extension', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    wallet.address = SUBJECT;
+  });
+
+  it('calls keepalive and announces extension when "Extend now" is clicked', async () => {
+    chain.get.mockResolvedValue(read(standing));
+    const signAndSend = vi.fn(async () => ({ result: { unwrap: () => ({}) } }));
+    chain.keepalive.mockResolvedValue({ signAndSend });
+
+    renderPanel();
+    await waitFor(() => expect(screen.getByRole('button', { name: 'Extend now' })).toBeTruthy());
+
+    const extendBtn = screen.getByRole('button', { name: 'Extend now' });
+    await act(async () => {
+      fireEvent.click(extendBtn);
+    });
+
+    await waitFor(() => {
+      expect(chain.keepalive).toHaveBeenCalledWith({ subject: SUBJECT });
+      expect(screen.getByRole('button', { name: 'Extended' })).toBeTruthy();
+    });
+    expect(announcer.announce).toHaveBeenCalledWith('Standing extended for about 90 days.');
+  });
+
+  it('disables "Extend now" when signed out', async () => {
+    wallet.address = null;
+    chain.get.mockResolvedValue(read(standing));
+
+    renderPanel();
+    await waitFor(() => expect(screen.getByText('Kept alive by anyone who extends it')).toBeTruthy());
+
+    const extendBtn = screen.getByRole('button', { name: 'Extend now' }) as HTMLButtonElement;
+    expect(extendBtn.disabled).toBe(true);
+    expect(screen.getByText(/Sign in to extend it\./)).toBeTruthy();
+  });
+});
+
+describe('HistoryVerifier component', () => {
+  const GENESIS_ROOT = Buffer.alloc(32, 0);
+  const KNOWN_ROOT = Buffer.alloc(32, 0x5a);
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    wallet.address = SUBJECT;
+  });
+
+  it('renders verify card with on-chain root when historyRoot is provided', async () => {
+    chain.get.mockResolvedValue(read({
+      ...standing,
+      history_root: KNOWN_ROOT,
+    }));
+
+    renderPanel();
+    await waitFor(() => expect(screen.getByRole('heading', { name: 'Verify a shared history' })).toBeTruthy());
+
+    expect(screen.getByText(KNOWN_ROOT.toString('hex'))).toBeTruthy();
+    expect(screen.getByLabelText(/Credit history/)).toBeTruthy();
+    const verifyBtn = screen.getByRole('button', { name: 'Verify history chain' }) as HTMLButtonElement;
+    expect(verifyBtn.disabled).toBe(true);
+  });
+
+  it('shows error for malformed JSON', async () => {
+    chain.get.mockResolvedValue(read({
+      ...standing,
+      history_root: GENESIS_ROOT,
+    }));
+
+    renderPanel();
+    await waitFor(() => expect(screen.getByLabelText(/Credit history/)).toBeTruthy());
+
+    fireEvent.change(screen.getByLabelText(/Credit history/), {
+      target: { value: '{ not json }' },
+    });
+    fireEvent.click(screen.getByRole('button', { name: 'Verify history chain' }));
+
+    expect(screen.getByText(/That is not valid JSON/)).toBeTruthy();
+  });
+
+  it('shows error for non-array JSON', async () => {
+    chain.get.mockResolvedValue(read({
+      ...standing,
+      history_root: GENESIS_ROOT,
+    }));
+
+    renderPanel();
+    await waitFor(() => expect(screen.getByLabelText(/Credit history/)).toBeTruthy());
+
+    fireEvent.change(screen.getByLabelText(/Credit history/), {
+      target: { value: '{"programme":"C123"}' },
+    });
+    fireEvent.click(screen.getByRole('button', { name: 'Verify history chain' }));
+
+    expect(screen.getByText('Expected a JSON array of credit entries.')).toBeTruthy();
+  });
+
+  it('shows "Genesis confirmed" when empty array matches all-zero on-chain root', async () => {
+    chain.get.mockResolvedValue(read({
+      ...standing,
+      history_root: GENESIS_ROOT,
+    }));
+
+    renderPanel();
+    await waitFor(() => expect(screen.getByLabelText(/Credit history/)).toBeTruthy());
+
+    fireEvent.change(screen.getByLabelText(/Credit history/), {
+      target: { value: '[]' },
+    });
+    fireEvent.click(screen.getByRole('button', { name: 'Verify history chain' }));
+
+    await waitFor(() => expect(screen.getByText('Genesis confirmed')).toBeTruthy());
+    expect(screen.getByText(/There are no claimed credits and the on-chain root is all zeroes/)).toBeTruthy();
+  });
+
+  it('shows "History verified" on matching folded chain', async () => {
+    const PROG = `C${'A'.repeat(55)}`;
+    const ATT = '12'.repeat(32);
+    const computedRoot = Buffer.alloc(32, 0x77);
+
+    chain.get.mockResolvedValue(read({
+      ...standing,
+      history_root: computedRoot,
+    }));
+    chain.next_root.mockResolvedValue({ result: computedRoot });
+
+    renderPanel();
+    await waitFor(() => expect(screen.getByLabelText(/Credit history/)).toBeTruthy());
+
+    const validHistory: StandingHistoryEntry[] = [
+      {
+        programme: PROG,
+        amount: '10000000',
+        attestation: ATT,
+        timestamp: '1700000000',
+        root: computedRoot.toString('hex'),
+      },
+    ];
+
+    fireEvent.change(screen.getByLabelText(/Credit history/), {
+      target: { value: JSON.stringify(validHistory) },
+    });
+    fireEvent.click(screen.getByRole('button', { name: 'Verify history chain' }));
+
+    await waitFor(() => expect(screen.getByText('History verified')).toBeTruthy());
+    expect(screen.getByText(/Folding these credits from the zero root reproduces the on-chain root exactly\./)).toBeTruthy();
+  });
+
+  it('shows "Mismatch" when chain does not reproduce expected root', async () => {
+    const PROG = `C${'A'.repeat(55)}`;
+    const ATT = '12'.repeat(32);
+    const targetRoot = Buffer.alloc(32, 0x99);
+    const returnedRoot = Buffer.alloc(32, 0x11);
+
+    chain.get.mockResolvedValue(read({
+      ...standing,
+      history_root: targetRoot,
+    }));
+    chain.next_root.mockResolvedValue({ result: returnedRoot });
+
+    renderPanel();
+    await waitFor(() => expect(screen.getByLabelText(/Credit history/)).toBeTruthy());
+
+    const historyWithWrongRoot: StandingHistoryEntry[] = [
+      {
+        programme: PROG,
+        amount: '10000000',
+        attestation: ATT,
+        timestamp: '1700000000',
+        root: targetRoot.toString('hex'),
+      },
+    ];
+
+    fireEvent.change(screen.getByLabelText(/Credit history/), {
+      target: { value: JSON.stringify(historyWithWrongRoot) },
+    });
+    fireEvent.click(screen.getByRole('button', { name: 'Verify history chain' }));
+
+    await waitFor(() => expect(screen.getByText('Mismatch')).toBeTruthy());
+    expect(screen.getByText(/Entry 1 is where the history first diverges\./)).toBeTruthy();
+  });
+
+  it('shows error when record.next_root throws an exception during verification', async () => {
+    const PROG = `C${'A'.repeat(55)}`;
+    const ATT = '12'.repeat(32);
+
+    chain.get.mockResolvedValue(read({
+      ...standing,
+      history_root: KNOWN_ROOT,
+    }));
+    chain.next_root.mockRejectedValue(new Error('RPC node connection failed'));
+
+    renderPanel();
+    await waitFor(() => expect(screen.getByLabelText(/Credit history/)).toBeTruthy());
+
+    fireEvent.change(screen.getByLabelText(/Credit history/), {
+      target: {
+        value: JSON.stringify([
+          {
+            programme: PROG,
+            amount: '5000000',
+            attestation: ATT,
+            timestamp: '1700000000',
+          },
+        ]),
+      },
+    });
+    fireEvent.click(screen.getByRole('button', { name: 'Verify history chain' }));
+
+    await waitFor(() =>
+      expect(screen.getByText('Could not complete verification: RPC node connection failed')).toBeTruthy(),
+    );
+  });
+});
+
+describe('verifyStandingHistory pure function vectors', () => {
+  const PROGRAMME = `C${'B'.repeat(55)}`;
+  const ATTESTATION = 'aa'.repeat(32);
+
+  // Hand-built nextRoot simulation for unit test vectors
+  const testNextRoot: NextRoot = async ({ root, amount }) => {
+    const out = Buffer.alloc(32);
+    out.fill(Number(amount % 256n));
+    out[0] = (root[0] + 1) % 256;
+    return out;
+  };
+
+  it('verifies a matching vector constructed from the derivation function', async () => {
+    let r = Buffer.alloc(32, 0);
+    r = await testNextRoot({
+      root: r,
+      programme: PROGRAMME,
+      amount: 100n,
+      attestation: Buffer.from(ATTESTATION, 'hex'),
+      timestamp: 1700000000n,
+    });
+    const expectedRootHex = r.toString('hex');
+
+    const history: StandingHistoryEntry[] = [
+      {
+        programme: PROGRAMME,
+        amount: '100',
+        attestation: ATTESTATION,
+        timestamp: '1700000000',
+        root: expectedRootHex,
+      },
+    ];
+
+    const verdict = await verifyStandingHistory(history, r, testNextRoot);
+    expect(verdict).toEqual({ kind: 'match' });
+  });
+
+  it('detects a non-matching vector where the entry root is tampered', async () => {
+    let r = Buffer.alloc(32, 0);
+    r = await testNextRoot({
+      root: r,
+      programme: PROGRAMME,
+      amount: 100n,
+      attestation: Buffer.from(ATTESTATION, 'hex'),
+      timestamp: 1700000000n,
+    });
+
+    const tamperedHistory: StandingHistoryEntry[] = [
+      {
+        programme: PROGRAMME,
+        amount: '100',
+        attestation: ATTESTATION,
+        timestamp: '1700000000',
+        root: 'ff'.repeat(32), // tampered claimed root
+      },
+    ];
+
+    const verdict = await verifyStandingHistory(tamperedHistory, r, testNextRoot);
+    expect(verdict.kind).toBe('mismatch');
+    if (verdict.kind === 'mismatch') {
+      expect(verdict.firstBadIndex).toBe(0);
+      expect(verdict.claimedRoot).toBe('ff'.repeat(32));
+    }
+  });
+
+  it('returns mismatch for empty history against non-zero on-chain root (negative case)', async () => {
+    const nonZeroRoot = Buffer.alloc(32, 1);
+    const verdict = await verifyStandingHistory([], nonZeroRoot, testNextRoot);
+    expect(verdict.kind).toBe('mismatch');
+    if (verdict.kind === 'mismatch') {
+      expect(verdict.message).toBe('The history is empty but the on-chain root is not the zero root.');
+    }
+  });
+});
+
+/** Shows the router's current path and query, so a test can read the URL. */
+function LocationProbe() {
+  const location = useLocation();
+  return <output data-testid="location">{location.pathname + location.search}</output>;
+}
+
+const renderAt = (entry: string) =>
+  render(
+    <MemoryRouter initialEntries={[entry]}>
+      <Standing />
+      <LocationProbe />
+    </MemoryRouter>,
+  );
+
+const lookedUpStanding = read({
+  programmes: 6,
+  total_received: 90_000_000_000n,
+  tranches: 8,
+});
+
+describe('standing links', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    wallet.address = SUBJECT;
+    chain.get.mockImplementation(async ({ subject }: { subject: string }) =>
+      subject === LOOKED_UP_SUBJECT ? lookedUpStanding : read(standing),
+    );
+  });
+
+  it('opens straight on the address in the link', async () => {
+    renderAt(`/recipients/standing?address=${LOOKED_UP_SUBJECT}`);
+
+    await waitFor(() => expect(screen.getByText('9,000.00 XLM')).toBeTruthy());
+    expect(chain.get).toHaveBeenCalledWith({ subject: LOOKED_UP_SUBJECT });
+    expect(chain.get).not.toHaveBeenCalledWith({ subject: SUBJECT });
+    expect(screen.getByText('Viewing')).toBeTruthy();
+  });
+
+  it('opens a linked standing for a signed-out visitor', async () => {
+    wallet.address = null;
+
+    renderAt(`/recipients/standing?address=${LOOKED_UP_SUBJECT}`);
+
+    await waitFor(() => expect(screen.getByText('9,000.00 XLM')).toBeTruthy());
+    expect(screen.getByRole('button', { name: 'Clear lookup' })).toBeTruthy();
+  });
+
+  it('keeps an invalid address in the lookup with its validation, and reads nothing for it', async () => {
+    renderAt('/recipients/standing?address=not-an-address');
+
+    expect(screen.getByLabelText('Recipient address')).toHaveProperty('value', 'not-an-address');
+    expect(screen.getByRole('alert').textContent).toMatch(/does not hold a Stellar address/);
+    expect(screen.getByRole('button', { name: 'Look up' })).toHaveProperty('disabled', true);
+    // The signed-in address's own standing still shows.
+    await waitFor(() => expect(screen.getByText('4,630.00 XLM')).toBeTruthy());
+    expect(chain.get).toHaveBeenCalledWith({ subject: SUBJECT });
+    expect(chain.get).not.toHaveBeenCalledWith({ subject: 'not-an-address' });
+
+    fireEvent.change(screen.getByLabelText('Recipient address'), { target: { value: LOOKED_UP_SUBJECT } });
+    expect(screen.queryByRole('alert')).toBeNull();
+    expect(screen.getByRole('button', { name: 'Look up' })).toHaveProperty('disabled', false);
+  });
+
+  it('shows the signed-in standing when the link has no address', async () => {
+    renderAt('/recipients/standing');
+
+    await waitFor(() => expect(screen.getByText('4,630.00 XLM')).toBeTruthy());
+    expect(screen.queryByText('Viewing')).toBeNull();
+    expect(screen.queryByRole('alert')).toBeNull();
+    expect(screen.getByTestId('location').textContent).toBe('/recipients/standing');
+  });
+
+  it('puts a looked-up address in the URL and takes it out again on clear', async () => {
+    renderAt('/recipients/standing');
+    await waitFor(() => expect(screen.getByText('4,630.00 XLM')).toBeTruthy());
+
+    fireEvent.change(screen.getByLabelText('Recipient address'), { target: { value: LOOKED_UP_SUBJECT } });
+    fireEvent.click(screen.getByRole('button', { name: 'Look up' }));
+
+    await waitFor(() =>
+      expect(screen.getByTestId('location').textContent).toBe(
+        `/recipients/standing?address=${LOOKED_UP_SUBJECT}`,
+      ),
+    );
+    await waitFor(() => expect(screen.getByText('9,000.00 XLM')).toBeTruthy());
+
+    fireEvent.click(screen.getByRole('button', { name: 'Show my standing' }));
+    await waitFor(() => expect(screen.getByTestId('location').textContent).toBe('/recipients/standing'));
+    await waitFor(() => expect(screen.getByText('4,630.00 XLM')).toBeTruthy());
+  });
+
+  it('copies a link that opens the standing being viewed', async () => {
+    const writeText = vi.fn().mockResolvedValue(undefined);
+    Object.defineProperty(navigator, 'clipboard', { value: { writeText }, configurable: true });
+
+    renderAt(`/recipients/standing?address=${LOOKED_UP_SUBJECT}`);
+    await waitFor(() => expect(screen.getByText('9,000.00 XLM')).toBeTruthy());
+
+    fireEvent.click(screen.getByRole('button', { name: 'Copy link to this standing' }));
+
+    await waitFor(() =>
+      expect(writeText).toHaveBeenCalledWith(
+        `${window.location.origin}/recipients/standing?address=${LOOKED_UP_SUBJECT}`,
+      ),
+    );
   });
 });

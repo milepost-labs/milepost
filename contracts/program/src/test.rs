@@ -5413,4 +5413,308 @@ fn finalize_worst_case_stays_within_network_limits() {
 
     assert_eq!(award.mode, Mode::Direct);
     assert!(award.granted > 0);
+// ---- TTL policy per write path ----
+
+fn persistent_ttl(f: &Fixture, key: &Key) -> u32 {
+    use soroban_sdk::testutils::storage::Persistent as _;
+    f.env.as_contract(&f.client.address, || {
+        f.env.storage().persistent().get_ttl(key)
+    })
+}
+
+fn instance_ttl(f: &Fixture) -> u32 {
+    use soroban_sdk::testutils::storage::Instance as _;
+    f.env
+        .as_contract(&f.client.address, || f.env.storage().instance().get_ttl())
+}
+
+fn advance_ledgers(f: &Fixture, n: u32) {
+    f.env.ledger().with_mut(|l| l.sequence_number += n);
+}
+
+#[test]
+fn contribute_bumps_donor_entry_and_instance() {
+    let f = setup(2, 3);
+    let donor = funded_donor(&f, 10_000);
+
+    f.client.contribute(&donor, &4_000);
+    assert!(persistent_ttl(&f, &Key::Donor(donor.clone())) >= BUMP_LEDGERS - 1);
+
+    advance_ledgers(&f, BUMP_THRESHOLD + 5);
+    assert!(persistent_ttl(&f, &Key::Donor(donor.clone())) < BUMP_THRESHOLD);
+    assert!(instance_ttl(&f) < BUMP_THRESHOLD);
+
+    f.client.contribute(&donor, &2_000);
+    assert!(persistent_ttl(&f, &Key::Donor(donor)) >= BUMP_LEDGERS - 1);
+    // The running total lives in instance storage, so the instance is bumped too.
+    assert!(instance_ttl(&f) >= BUMP_LEDGERS - 1);
+}
+
+#[test]
+fn apply_and_review_keep_application_reviewer_and_vote_entries_alive() {
+    let f = setup(2, 3);
+    let applicant = Address::generate(&f.env);
+    let reviewer = f.reviewers.get(0).unwrap();
+
+    f.client.apply(&applicant, &1_000, &hash(&f.env, 1));
+    assert!(persistent_ttl(&f, &Key::Application(applicant.clone())) >= BUMP_LEDGERS - 1);
+
+    advance_ledgers(&f, BUMP_THRESHOLD + 5);
+    let second_applicant = Address::generate(&f.env);
+    f.client.apply(&second_applicant, &800, &hash(&f.env, 2));
+    assert!(persistent_ttl(&f, &Key::Application(second_applicant)) >= BUMP_LEDGERS - 1);
+
+    to_review(&f);
+    f.client.review(&reviewer, &applicant, &900);
+    assert!(persistent_ttl(&f, &Key::Reviewer(reviewer.clone())) >= BUMP_LEDGERS - 1);
+    assert!(persistent_ttl(&f, &Key::Application(applicant.clone())) >= BUMP_LEDGERS - 1);
+    assert!(
+        persistent_ttl(&f, &Key::Voted(applicant.clone(), reviewer.clone())) >= BUMP_LEDGERS - 1
+    );
+
+    advance_ledgers(&f, BUMP_THRESHOLD + 5);
+    assert!(persistent_ttl(&f, &Key::Reviewer(reviewer.clone())) < BUMP_THRESHOLD);
+    assert!(persistent_ttl(&f, &Key::Application(applicant.clone())) < BUMP_THRESHOLD);
+    assert!(persistent_ttl(&f, &Key::Voted(applicant.clone(), reviewer.clone())) < BUMP_THRESHOLD);
+
+    // Amending a vote re-bumps Reviewer, Application, and Voted.
+    f.client.review(&reviewer, &applicant, &850);
+    assert!(persistent_ttl(&f, &Key::Reviewer(reviewer.clone())) >= BUMP_LEDGERS - 1);
+    assert!(persistent_ttl(&f, &Key::Application(applicant.clone())) >= BUMP_LEDGERS - 1);
+    assert!(persistent_ttl(&f, &Key::Voted(applicant, reviewer)) >= BUMP_LEDGERS - 1);
+}
+
+#[test]
+fn finalize_bumps_application_award_and_instance() {
+    let f = setup(2, 3);
+    let donor = funded_donor(&f, 100_000);
+    let applicant = Address::generate(&f.env);
+    let payee = Address::generate(&f.env);
+
+    f.client.contribute(&donor, &100_000);
+    f.client.apply(&applicant, &900, &hash(&f.env, 1));
+    to_review(&f);
+    for i in 0..2 {
+        f.client
+            .review(&f.reviewers.get(i).unwrap(), &applicant, &900);
+    }
+    f.client.allow_payee(&payee);
+
+    advance_ledgers(&f, BUMP_THRESHOLD + 5);
+    assert!(persistent_ttl(&f, &Key::Application(applicant.clone())) < BUMP_THRESHOLD);
+    assert!(instance_ttl(&f) < BUMP_THRESHOLD);
+
+    f.client.finalize(&applicant, &payee, &Mode::Direct);
+    assert!(persistent_ttl(&f, &Key::Application(applicant.clone())) >= BUMP_LEDGERS - 1);
+    assert!(persistent_ttl(&f, &Key::Award(applicant)) >= BUMP_LEDGERS - 1);
+    assert!(instance_ttl(&f) >= BUMP_LEDGERS - 1);
+}
+
+#[test]
+fn release_bumps_verifier_award_used_allocation_and_instance() {
+    let f = setup(2, 3);
+    let donor = funded_donor(&f, 100_000);
+    let recipient = Address::generate(&f.env);
+
+    f.client.contribute(&donor, &100_000);
+    f.client.apply(&recipient, &900, &hash(&f.env, 1));
+    to_review(&f);
+    for i in 0..2 {
+        f.client
+            .review(&f.reviewers.get(i).unwrap(), &recipient, &900);
+    }
+    f.client.finalize(&recipient, &recipient, &Mode::Allocated);
+
+    advance_ledgers(&f, BUMP_THRESHOLD + 5);
+    assert!(persistent_ttl(&f, &Key::Verifier(f.verifier.clone())) < BUMP_THRESHOLD);
+    assert!(persistent_ttl(&f, &Key::Award(recipient.clone())) < BUMP_THRESHOLD);
+    assert!(instance_ttl(&f) < BUMP_THRESHOLD);
+
+    let uid1 = proof(&f, &recipient, 1);
+    f.client.release(&recipient, &uid1, &f.verifier);
+    assert!(persistent_ttl(&f, &Key::Verifier(f.verifier.clone())) >= BUMP_LEDGERS - 1);
+    assert!(persistent_ttl(&f, &Key::Award(recipient.clone())) >= BUMP_LEDGERS - 1);
+    assert!(persistent_ttl(&f, &Key::Used(uid1)) >= BUMP_LEDGERS - 1);
+    assert!(persistent_ttl(&f, &Key::Allocation(recipient.clone())) >= BUMP_LEDGERS - 1);
+    assert!(instance_ttl(&f) >= BUMP_LEDGERS - 1);
+
+    advance_ledgers(&f, BUMP_THRESHOLD + 5);
+    let uid2 = proof(&f, &recipient, 2);
+    f.client.release(&recipient, &uid2, &f.verifier);
+    assert!(persistent_ttl(&f, &Key::Verifier(f.verifier.clone())) >= BUMP_LEDGERS - 1);
+    assert!(persistent_ttl(&f, &Key::Award(recipient.clone())) >= BUMP_LEDGERS - 1);
+    assert!(persistent_ttl(&f, &Key::Used(uid2)) >= BUMP_LEDGERS - 1);
+    assert!(persistent_ttl(&f, &Key::Allocation(recipient)) >= BUMP_LEDGERS - 1);
+}
+
+#[test]
+fn release_batch_bumps_verifier_award_used_allocation_and_instance() {
+    let f = setup(2, 3);
+    let donor = funded_donor(&f, 100_000);
+    let recipient = Address::generate(&f.env);
+
+    f.client.contribute(&donor, &100_000);
+    f.client.apply(&recipient, &900, &hash(&f.env, 1));
+    to_review(&f);
+    for i in 0..2 {
+        f.client
+            .review(&f.reviewers.get(i).unwrap(), &recipient, &900);
+    }
+    f.client.finalize(&recipient, &recipient, &Mode::Allocated);
+
+    let uid1 = proof(&f, &recipient, 1);
+    f.client
+        .release_batch(&recipient, &vec![&f.env, uid1.clone()], &f.verifier);
+    assert!(persistent_ttl(&f, &Key::Award(recipient.clone())) >= BUMP_LEDGERS - 1);
+    assert!(persistent_ttl(&f, &Key::Used(uid1)) >= BUMP_LEDGERS - 1);
+    assert!(persistent_ttl(&f, &Key::Allocation(recipient.clone())) >= BUMP_LEDGERS - 1);
+
+    advance_ledgers(&f, BUMP_THRESHOLD + 5);
+    assert!(persistent_ttl(&f, &Key::Verifier(f.verifier.clone())) < BUMP_THRESHOLD);
+    assert!(instance_ttl(&f) < BUMP_THRESHOLD);
+
+    let uid2 = proof(&f, &recipient, 2);
+    f.client
+        .release_batch(&recipient, &vec![&f.env, uid2.clone()], &f.verifier);
+    assert!(persistent_ttl(&f, &Key::Award(recipient.clone())) >= BUMP_LEDGERS - 1);
+    assert!(persistent_ttl(&f, &Key::Used(uid2)) >= BUMP_LEDGERS - 1);
+    assert!(persistent_ttl(&f, &Key::Allocation(recipient)) >= BUMP_LEDGERS - 1);
+    // Like `release`, a batch keeps the verifier resolvable and bumps the
+    // instance that holds the released total.
+    assert!(persistent_ttl(&f, &Key::Verifier(f.verifier.clone())) >= BUMP_LEDGERS - 1);
+    assert!(instance_ttl(&f) >= BUMP_LEDGERS - 1);
+}
+
+#[test]
+fn spend_keeps_allocation_entry_alive() {
+    let f = setup(2, 3);
+    let recipient = Address::generate(&f.env);
+    let payee = Address::generate(&f.env);
+    allocated_to(&f, &recipient, &900);
+    f.client.allow_payee(&payee);
+
+    advance_ledgers(&f, BUMP_THRESHOLD + 5);
+    assert!(persistent_ttl(&f, &Key::Allocation(recipient.clone())) < BUMP_THRESHOLD);
+
+    f.client.spend(&recipient, &payee, &100);
+    assert!(persistent_ttl(&f, &Key::Allocation(recipient.clone())) >= BUMP_LEDGERS - 1);
+
+    advance_ledgers(&f, BUMP_THRESHOLD + 5);
+    assert!(persistent_ttl(&f, &Key::Allocation(recipient.clone())) < BUMP_THRESHOLD);
+
+    f.client.spend(&recipient, &payee, &100);
+    assert!(persistent_ttl(&f, &Key::Allocation(recipient)) >= BUMP_LEDGERS - 1);
+}
+
+#[test]
+fn refund_and_refund_partial_bump_refunded_and_instance_but_not_donor() {
+    let f = setup(2, 3);
+    let donor_partial = funded_donor(&f, 10_000);
+    let donor_full = funded_donor(&f, 10_000);
+    f.client.contribute(&donor_partial, &10_000);
+    f.client.contribute(&donor_full, &10_000);
+
+    f.env.ledger().set_timestamp(RELEASE_DEADLINE + 1);
+    advance_ledgers(&f, BUMP_THRESHOLD + 5);
+    assert!(persistent_ttl(&f, &Key::Donor(donor_partial.clone())) < BUMP_THRESHOLD);
+    assert!(persistent_ttl(&f, &Key::Donor(donor_full.clone())) < BUMP_THRESHOLD);
+    assert!(instance_ttl(&f) < BUMP_THRESHOLD);
+
+    f.client.refund_partial(&donor_partial, &1_000);
+    assert!(persistent_ttl(&f, &Key::Refunded(donor_partial.clone())) >= BUMP_LEDGERS - 1);
+    // refund_partial reads Donor without writing it, so Donor is not bumped; the
+    // refunded total lives in instance storage, so the instance is.
+    assert!(persistent_ttl(&f, &Key::Donor(donor_partial.clone())) < BUMP_THRESHOLD);
+    assert!(instance_ttl(&f) >= BUMP_LEDGERS - 1);
+
+    advance_ledgers(&f, BUMP_THRESHOLD + 5);
+    assert!(instance_ttl(&f) < BUMP_THRESHOLD);
+    f.client.refund(&donor_full);
+    assert!(persistent_ttl(&f, &Key::Refunded(donor_full.clone())) >= BUMP_LEDGERS - 1);
+    assert!(persistent_ttl(&f, &Key::Donor(donor_full)) < BUMP_THRESHOLD);
+    assert!(instance_ttl(&f) >= BUMP_LEDGERS - 1);
+
+    // Advance past threshold again and claim the remainder via refund_partial.
+    f.client.keepalive(&donor_partial);
+    advance_ledgers(&f, BUMP_THRESHOLD + 5);
+    assert!(persistent_ttl(&f, &Key::Refunded(donor_partial.clone())) < BUMP_THRESHOLD);
+    f.client.refund_partial(&donor_partial, &1_000);
+    assert!(persistent_ttl(&f, &Key::Refunded(donor_partial)) >= BUMP_LEDGERS - 1);
+}
+
+#[test]
+fn allow_payee_allow_payees_and_add_verifier_bump_their_entries() {
+    let f = setup(2, 3);
+    let payee1 = Address::generate(&f.env);
+    let payee2 = Address::generate(&f.env);
+    let payee3 = Address::generate(&f.env);
+    let verifier2 = Address::generate(&f.env);
+
+    f.client.allow_payee(&payee1);
+    assert!(persistent_ttl(&f, &Key::Payee(payee1)) >= BUMP_LEDGERS - 1);
+
+    f.client
+        .allow_payees(&vec![&f.env, payee2.clone(), payee3.clone()]);
+    assert!(persistent_ttl(&f, &Key::Payee(payee2)) >= BUMP_LEDGERS - 1);
+    assert!(persistent_ttl(&f, &Key::Payee(payee3)) >= BUMP_LEDGERS - 1);
+
+    f.client.add_verifier(&verifier2);
+    assert!(persistent_ttl(&f, &Key::Verifier(verifier2)) >= BUMP_LEDGERS - 1);
+
+    advance_ledgers(&f, BUMP_THRESHOLD + 5);
+    let payee4 = Address::generate(&f.env);
+    let payee5 = Address::generate(&f.env);
+    let verifier3 = Address::generate(&f.env);
+
+    f.client.allow_payee(&payee4);
+    f.client.allow_payees(&vec![&f.env, payee5.clone()]);
+    f.client.add_verifier(&verifier3);
+
+    assert!(persistent_ttl(&f, &Key::Payee(payee4)) >= BUMP_LEDGERS - 1);
+    assert!(persistent_ttl(&f, &Key::Payee(payee5)) >= BUMP_LEDGERS - 1);
+    assert!(persistent_ttl(&f, &Key::Verifier(verifier3)) >= BUMP_LEDGERS - 1);
+}
+
+#[test]
+fn keepalive_bumps_instance_and_all_subject_entries_but_not_verifier() {
+    let f = setup(2, 3);
+    let donor = funded_donor(&f, 100_000);
+    let recipient = Address::generate(&f.env);
+
+    f.client.contribute(&donor, &100_000);
+    f.client.apply(&recipient, &900, &hash(&f.env, 1));
+    to_review(&f);
+    for i in 0..2 {
+        f.client
+            .review(&f.reviewers.get(i).unwrap(), &recipient, &900);
+    }
+    f.client.finalize(&recipient, &recipient, &Mode::Allocated);
+    f.client
+        .release(&recipient, &proof(&f, &recipient, 1), &f.verifier);
+
+    f.env.ledger().set_timestamp(RELEASE_DEADLINE + 1);
+    f.client.refund_partial(&donor, &100);
+
+    advance_ledgers(&f, BUMP_THRESHOLD + 5);
+    assert!(instance_ttl(&f) < BUMP_THRESHOLD);
+    assert!(persistent_ttl(&f, &Key::Application(recipient.clone())) < BUMP_THRESHOLD);
+    assert!(persistent_ttl(&f, &Key::Award(recipient.clone())) < BUMP_THRESHOLD);
+    assert!(persistent_ttl(&f, &Key::Allocation(recipient.clone())) < BUMP_THRESHOLD);
+    assert!(persistent_ttl(&f, &Key::Donor(donor.clone())) < BUMP_THRESHOLD);
+    assert!(persistent_ttl(&f, &Key::Refunded(donor.clone())) < BUMP_THRESHOLD);
+    assert!(persistent_ttl(&f, &Key::Verifier(f.verifier.clone())) < BUMP_THRESHOLD);
+
+    f.client.keepalive(&recipient);
+    assert!(instance_ttl(&f) >= BUMP_LEDGERS - 1);
+    assert!(persistent_ttl(&f, &Key::Application(recipient.clone())) >= BUMP_LEDGERS - 1);
+    assert!(persistent_ttl(&f, &Key::Award(recipient.clone())) >= BUMP_LEDGERS - 1);
+    assert!(persistent_ttl(&f, &Key::Allocation(recipient)) >= BUMP_LEDGERS - 1);
+
+    f.client.keepalive(&donor);
+    assert!(persistent_ttl(&f, &Key::Donor(donor.clone())) >= BUMP_LEDGERS - 1);
+    assert!(persistent_ttl(&f, &Key::Refunded(donor)) >= BUMP_LEDGERS - 1);
+
+    // keepalive only covers Application, Award, Allocation, Donor, and Refunded; Verifier is bumped on release.
+    f.client.keepalive(&f.verifier);
+    assert!(persistent_ttl(&f, &Key::Verifier(f.verifier.clone())) < BUMP_THRESHOLD);
 }

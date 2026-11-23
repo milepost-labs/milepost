@@ -1,17 +1,21 @@
-import { useId, useState } from 'react';
+import { useId, useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
-import type { Award, Mode } from '@milepost/program';
+import { Buffer } from 'buffer';
+import type { Award, Mode, ProgrammeConfig } from '@milepost/program';
 import { useSoroban } from '../../context/useSoroban';
 import { useAnnouncer } from '../../context/useAnnouncer';
 import { useKeyedRead } from '../../hooks/useKeyedRead';
+import { useContractResult } from '../../hooks/useContractRead';
+import { useProgrammeMetadata } from '../../hooks/useProgrammeMetadata';
 import { useTransaction } from '../../hooks/useTransaction';
 import { explainCode } from '../../lib/errors';
 import { looksLikeAddress, truncateAddress } from '../../lib/format';
 import { formatIn } from '../../lib/funding';
 import { sampleSendable, SAMPLE_TX_DELAY_MS } from '../../lib/fundingTx';
 import { MODE_INFO, type ModeName } from '../../lib/modes';
-import { Button, DisabledReason, Field, Modal, ModePill, Notice, SampleTag } from '../ui';
+import { Badge, Button, DisabledReason, Field, Modal, ModePill, Notice, SampleTag } from '../ui';
 import { TxDone, TxFailed, TxPending } from '../state/TxStatus';
+import { restoreFromAssembled } from '../../lib/restore';
 
 const MODES = Object.keys(MODE_INFO) as ModeName[];
 
@@ -28,7 +32,7 @@ export interface FinalizeTarget {
   applicant: string;
   /** What finalize will settle on, as the contract computes it. */
   award: bigint;
-  asset: string;
+  asset: string | null;
   /** Budget left before this award. */
   left: bigint;
   /** A sample programme: nothing is sent. */
@@ -74,6 +78,30 @@ export function FinalizeSheet({ target, onClose, onFinalized, sampleDelayMs = SA
     mode === 'Restricted' && looksLikeAddress(wallet.trim()) && !target.sample && policyMatches ? wallet.trim() : null;
   const policyCheck = useKeyedRead(walletKey, (w) => policy.is_installed({ wallet: w }).then((r) => r.result));
 
+  const config = useContractResult<ProgrammeConfig>(
+    () => programme.get_config(),
+    [programme],
+    { enabled: Boolean(programme && !target.sample) },
+  );
+  const hashHex = config.data
+    ? Buffer.from(config.data.metadata_hash).toString('hex')
+    : null;
+  const metadata = useProgrammeMetadata(hashHex);
+
+  const payeeNames = useMemo(() => {
+    if (metadata?.status !== 'ok' || !metadata.doc.labels) return new Map<string, string>();
+    const map = new Map<string, string>();
+    for (const l of metadata.doc.labels) {
+      if (l.role === 'payee' && l.label?.trim()) {
+        map.set(l.address.trim(), l.label.trim());
+      }
+    }
+    return map;
+  }, [metadata]);
+
+  const directPayeeTrimmed = directPayee.trim();
+  const payeeName = directPayeeTrimmed ? payeeNames.get(directPayeeTrimmed) : undefined;
+
   const payee =
     mode === 'Direct' ? directPayee.trim() : mode === 'Restricted' ? wallet.trim() : target.applicant;
 
@@ -116,6 +144,7 @@ export function FinalizeSheet({ target, onClose, onFinalized, sampleDelayMs = SA
         mode: { tag: chosen, values: undefined } as Mode,
       });
       return {
+        restore: restoreFromAssembled(assembled),
         signAndSend: async (options: Parameters<typeof assembled.signAndSend>[0]) => {
           const sent = await assembled.signAndSend(options);
           return { result: sent.result.unwrap() };
@@ -151,7 +180,15 @@ export function FinalizeSheet({ target, onClose, onFinalized, sampleDelayMs = SA
             { label: 'Award', value: formatIn(done.granted, target.asset) },
             { label: 'Paid by', value: mode, text: true },
             ...(mode === 'Direct' || mode === 'Restricted'
-              ? [{ label: mode === 'Direct' ? 'Payee' : 'Wallet', value: truncateAddress(payee) }]
+              ? [
+                  {
+                    label: mode === 'Direct' ? 'Payee' : 'Wallet',
+                    value:
+                      mode === 'Direct' && payeeName
+                        ? `${payeeName} (${truncateAddress(payee)})`
+                        : truncateAddress(payee),
+                  },
+                ]
               : []),
           ]}
           actions={<Button onClick={close}>Done</Button>}
@@ -230,6 +267,22 @@ export function FinalizeSheet({ target, onClose, onFinalized, sampleDelayMs = SA
                 autoComplete="off"
                 spellCheck={false}
               />
+              {payeeName && (
+                <div className="fin-sheet__named-payee">
+                  <span className="fin-sheet__named-payee-label">
+                    Name: <b>{payeeName}</b> <span className="fin-sheet__claim-tag">(creator’s claim)</span>
+                  </span>
+                  {target.sample ? null : payeeCheck.status === 'loading' ? (
+                    <Badge tone="neutral">Checking…</Badge>
+                  ) : payeeCheck.data === true ? (
+                    <Badge tone="success">Verified payee</Badge>
+                  ) : payeeCheck.data === false ? (
+                    <Badge tone="danger">Not a verified payee</Badge>
+                  ) : payeeCheck.status === 'error' ? (
+                    <Badge tone="warning">Couldn’t check</Badge>
+                  ) : null}
+                </div>
+              )}
             </>
           )}
           {mode === 'Allocated' && (

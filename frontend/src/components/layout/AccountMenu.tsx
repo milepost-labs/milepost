@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { Coins, HandCoins, LogOut, RefreshCw, ShieldCheck, Sparkles } from 'lucide-react';
 import { Link } from 'react-router-dom';
+import { NETWORK } from '../../config/network';
 import { useWallet } from '../../context/useWallet';
 import { useAnnouncer } from '../../context/useAnnouncer';
 import { truncateAddress } from '../../lib/format';
@@ -34,8 +35,6 @@ export function AccountMenu({ address }: { address: string }) {
   // comes back unchanged; `announcedRefresh` keeps one press to one sentence.
   const [refreshCount, setRefreshCount] = useState(0);
   const announcedRefresh = useRef(0);
-
-  const isTestnet = expectedNetwork.toLowerCase().includes('testnet');
 
   const handleRefresh = () => {
     setRefreshCount((count) => count + 1);
@@ -131,7 +130,7 @@ export function AccountMenu({ address }: { address: string }) {
           </button>
         </div>
 
-        {isTestnet && balances.isUnfunded && (
+        {NETWORK.friendbot && balances.isUnfunded && (
           <div className="nav-menu__group account-menu__friendbot" role="region" aria-label="Friendbot funding">
             <div className="account-menu__friendbot-header">
               <Sparkles size={14} className="text-accent" aria-hidden="true" />
@@ -160,6 +159,14 @@ export function AccountMenu({ address }: { address: string }) {
               // live role here would read the failure twice.
               <p className="account-menu__friendbot-error">{fundingError}</p>
             )}
+          </div>
+        )}
+
+        {!NETWORK.friendbot && balances.isUnfunded && (
+          <div className="nav-menu__group">
+            <p className="account-menu__friendbot-desc">
+              This account needs XLM before it can sign.
+            </p>
           </div>
         )}
 

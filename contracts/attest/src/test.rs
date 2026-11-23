@@ -786,4 +786,131 @@ fn registering_behind_a_chain_of_the_safe_depth_stays_within_network_limits() {
     // Pinned: the walk is read-only, so registering writes only what a
     // registration without a predecessor writes.
     assert_eq!(r.write_entries, 2);
+// ---- TTL policy (#671) ----
+
+#[test]
+fn register_schema_bumps_schema_and_predecessor_ttl() {
+    use soroban_sdk::testutils::storage::Persistent as _;
+
+    let f = setup();
+    let ttl = |key: &Key| {
+        f.env.as_contract(&f.client.address, || {
+            f.env.storage().persistent().get_ttl(key)
+        })
+    };
+
+    let s1 = open_schema(&f);
+    assert!(ttl(&Key::Schema(s1.clone())) >= BUMP_LEDGERS - 1);
+
+    // Advance past the 60-day bump threshold (90 - 40 = 50 days remaining).
+    f.env
+        .ledger()
+        .with_mut(|l| l.sequence_number += 40 * DAY_IN_LEDGERS);
+    assert!(ttl(&Key::Schema(s1.clone())) < BUMP_THRESHOLD);
+
+    // Registering a successor reads and bumps the predecessor schema too.
+    let s2 = f.client.register_schema(
+        &f.authority,
+        &String::from_str(&f.env, "enrolment:v2"),
+        &true,
+        &false,
+        &Some(s1.clone()),
+    );
+    assert!(ttl(&Key::Schema(s2)) >= BUMP_LEDGERS - 1);
+    assert!(ttl(&Key::Schema(s1)) >= BUMP_LEDGERS - 1);
+}
+
+#[test]
+fn attest_bumps_attestation_and_schema_but_not_instance() {
+    use soroban_sdk::testutils::storage::{Instance as _, Persistent as _};
+
+    let f = setup();
+    let persistent_ttl = |key: &Key| {
+        f.env.as_contract(&f.client.address, || {
+            f.env.storage().persistent().get_ttl(key)
+        })
+    };
+    let instance_ttl = || {
+        f.env
+            .as_contract(&f.client.address, || f.env.storage().instance().get_ttl())
+    };
+
+    let schema = open_schema(&f);
+    let a1 = f
+        .client
+        .attest(&f.authority, &schema, &f.subject, &hash(&f.env, 1), &None);
+
+    assert!(persistent_ttl(&Key::Attestation(a1.clone())) >= BUMP_LEDGERS - 1);
+    assert!(persistent_ttl(&Key::Schema(schema.clone())) >= BUMP_LEDGERS - 1);
+    // `Nonce` lives in instance storage and is not bumped on `attest`.
+    assert!(instance_ttl() < BUMP_THRESHOLD);
+
+    f.env
+        .ledger()
+        .with_mut(|l| l.sequence_number += 40 * DAY_IN_LEDGERS);
+    assert!(persistent_ttl(&Key::Schema(schema.clone())) < BUMP_THRESHOLD);
+
+    let a2 = f
+        .client
+        .attest(&f.authority, &schema, &f.subject, &hash(&f.env, 2), &None);
+    assert!(persistent_ttl(&Key::Attestation(a2)) >= BUMP_LEDGERS - 1);
+    assert!(persistent_ttl(&Key::Schema(schema)) >= BUMP_LEDGERS - 1);
+    // An unrelated attestation is not bumped when a new one is created.
+    assert!(persistent_ttl(&Key::Attestation(a1)) < BUMP_THRESHOLD);
+}
+
+#[test]
+fn revoke_bumps_attestation_and_schema_ttl() {
+    use soroban_sdk::testutils::storage::Persistent as _;
+
+    let f = setup();
+    let ttl = |key: &Key| {
+        f.env.as_contract(&f.client.address, || {
+            f.env.storage().persistent().get_ttl(key)
+        })
+    };
+
+    let schema = open_schema(&f);
+    let uid = f
+        .client
+        .attest(&f.authority, &schema, &f.subject, &hash(&f.env, 1), &None);
+    assert!(ttl(&Key::Attestation(uid.clone())) >= BUMP_LEDGERS - 1);
+
+    f.env
+        .ledger()
+        .with_mut(|l| l.sequence_number += 40 * DAY_IN_LEDGERS);
+    assert!(ttl(&Key::Attestation(uid.clone())) < BUMP_THRESHOLD);
+    assert!(ttl(&Key::Schema(schema.clone())) < BUMP_THRESHOLD);
+
+    f.client.revoke(&f.authority, &uid);
+    assert!(ttl(&Key::Attestation(uid)) >= BUMP_LEDGERS - 1);
+    assert!(ttl(&Key::Schema(schema)) >= BUMP_LEDGERS - 1);
+}
+
+#[test]
+fn keepalive_bumps_attestation_but_not_schema_ttl() {
+    use soroban_sdk::testutils::storage::Persistent as _;
+
+    let f = setup();
+    let ttl = |key: &Key| {
+        f.env.as_contract(&f.client.address, || {
+            f.env.storage().persistent().get_ttl(key)
+        })
+    };
+
+    let schema = open_schema(&f);
+    let uid = f
+        .client
+        .attest(&f.authority, &schema, &f.subject, &hash(&f.env, 1), &None);
+
+    f.env
+        .ledger()
+        .with_mut(|l| l.sequence_number += 40 * DAY_IN_LEDGERS);
+    assert!(ttl(&Key::Attestation(uid.clone())) < BUMP_THRESHOLD);
+    assert!(ttl(&Key::Schema(schema.clone())) < BUMP_THRESHOLD);
+
+    f.client.keepalive(&uid);
+    assert!(ttl(&Key::Attestation(uid)) >= BUMP_LEDGERS - 1);
+    // `keepalive` targets a single attestation and leaves its schema untouched.
+    assert!(ttl(&Key::Schema(schema)) < BUMP_THRESHOLD);
 }

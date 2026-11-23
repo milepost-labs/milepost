@@ -6,6 +6,9 @@ on:
     - cron: "0 6 * * *"
   workflow_dispatch:
 
+permissions:
+  contents: read
+
 # Never block PRs. This only runs on a schedule or manual trigger.
 # Failures report which step broke and with what error.
 env:

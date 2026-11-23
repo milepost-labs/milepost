@@ -1,3 +1,4 @@
+import { Buffer } from 'buffer';
 import { useEffect, useMemo, useRef, useState, type FormEvent } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import type { ProgrammeConfig } from '@milepost/program';
@@ -5,6 +6,7 @@ import { useSoroban } from '../context/useSoroban';
 import { useWallet } from '../context/useWallet';
 import { useAnnouncer } from '../context/useAnnouncer';
 import { useContractResult, useProgrammeParam, useTransaction } from '../hooks';
+import { useProgrammeMetadata } from '../hooks/useProgrammeMetadata';
 import { AddressChip, Badge, Button, DisabledReason, Field, Notice, PageHead, RadioGroup, TextArea, SampleTag } from '../components/ui';
 import { ProgrammeParamNotice } from '../components/programme/ProgrammeParamNotice';
 import { Empty, ErrorPanel, ErrorState, PendingState } from '../components/state/AsyncStates';
@@ -13,6 +15,7 @@ import { usePageTitle } from '../hooks/usePageTitle';
 import { truncateAddress } from '../lib/format';
 import { FIXTURE_PROGRAMMES } from '../fixtures/programmes';
 import { FIXTURE_PAYEES, type PayeeFixture } from '../fixtures/payeeFixtures';
+import { samplesEnabled } from '../lib/samples';
 import {
   bulkBatchDone,
   bulkBatchFailed,
@@ -33,7 +36,7 @@ const PAYEE_ADDRESS = /^G[A-Z2-7]{55}$/;
 type PayeeStatus = 'checking' | 'verified' | 'unverified' | 'error';
 
 function isSampleProgramme(programmeId: string): boolean {
-  return FIXTURE_PROGRAMMES.some((p) => p.id === programmeId);
+  return samplesEnabled() && FIXTURE_PROGRAMMES.some((p) => p.id === programmeId);
 }
 
 interface SessionChange {
@@ -107,6 +110,24 @@ export const PayeeManagement = () => {
   );
   const isSample = programmeId !== null && isSampleProgramme(programmeId);
 
+  const metadataHashHex = config.data
+    ? Buffer.from(config.data.metadata_hash).toString('hex')
+    : null;
+  const metadata = useProgrammeMetadata(metadataHashHex);
+
+  const creatorPayeeLabels = useMemo(() => {
+    if (metadata?.status !== 'ok' || !metadata.doc.labels) return [];
+    return metadata.doc.labels.filter((l) => l.role === 'payee' && l.label?.trim() !== '');
+  }, [metadata]);
+
+  const payeeNameByAddress = useMemo(() => {
+    const map = new Map<string, string>();
+    for (const l of creatorPayeeLabels) {
+      map.set(l.address.trim(), l.label.trim());
+    }
+    return map;
+  }, [creatorPayeeLabels]);
+
   const [sessionChanges, setSessionChanges] = useState<Record<string, SessionChange[]>>({});
   // Session changes are kept per programme; with no programme chosen there are none.
   const sessionKey = programmeId ?? '';
@@ -146,18 +167,25 @@ export const PayeeManagement = () => {
     return [...stored, ...extra];
   }, [programmeId, sessionAdds]);
 
+  const addressesToCheck = useMemo(() => {
+    const set = new Set<string>();
+    candidates.forEach((c) => set.add(c.address.trim()));
+    creatorPayeeLabels.forEach((l) => set.add(l.address.trim()));
+    return Array.from(set);
+  }, [candidates, creatorPayeeLabels]);
+
   const [statusByAddress, setStatusByAddress] = useState<Record<string, PayeeStatus>>({});
   useEffect(() => {
-    if (!programme || candidates.length === 0) return;
+    if (!programme || addressesToCheck.length === 0) return;
     let cancelled = false;
     (async () => {
       const entries = await Promise.all(
-        candidates.map(async (c): Promise<[string, PayeeStatus]> => {
+        addressesToCheck.map(async (addr): Promise<[string, PayeeStatus]> => {
           try {
-            const { result } = await programme.is_payee({ payee: c.address });
-            return [c.address, result ? 'verified' : 'unverified'];
+            const { result } = await programme.is_payee({ payee: addr });
+            return [addr, result ? 'verified' : 'unverified'];
           } catch {
-            return [c.address, 'error'];
+            return [addr, 'error'];
           }
         }),
       );
@@ -167,7 +195,7 @@ export const PayeeManagement = () => {
     return () => {
       cancelled = true;
     };
-  }, [programme, candidates]);
+  }, [programme, addressesToCheck]);
 
   const remember = (payee: PayeeFixture) => {
     if (!programmeId) return;
@@ -220,35 +248,39 @@ export const PayeeManagement = () => {
     setAddError(null);
     const lbl = labelInput.trim() || 'Verified payee';
     setSingle({ kind: 'verify', address, label: lbl });
-    void tx.send(() => programme.allow_payee({ payee: address })).then((res) => {
-      if (res === null) return;
-      remember({ address, label: lbl });
-      setSessionChanges((prev) => ({
-        ...prev,
-        [sessionKey]: [
-          { address, label: lbl, action: 'added' },
-          ...(prev[sessionKey] ?? []).filter((c) => c.address !== address),
-        ],
-      }));
-      setAddressInput('');
-      setLabelInput('');
-    });
+    void tx.prepare(() => programme.allow_payee({ payee: address }));
   };
 
   const handleRevoke = (address: string) => {
     if (!programme || !programmeId) return;
     setSingle({ kind: 'remove', address, label: '' });
-    void tx.send(() => programme.deny_payee({ payee: address })).then((res) => {
-      if (res !== null) {
-        setSessionChanges((prev) => ({
-          ...prev,
-          [sessionKey]: [
-            { address, label: 'Removed payee', action: 'removed' },
-            ...(prev[sessionKey] ?? []).filter((c) => c.address !== address),
-          ],
-        }));
-      }
-    });
+    void tx.prepare(() => programme.deny_payee({ payee: address }));
+  };
+
+  const confirmSingle = async () => {
+    if (!single) return;
+    const res = await tx.confirm();
+    if (res === null) return;
+    if (single.kind === 'verify') {
+      remember({ address: single.address, label: single.label });
+      setSessionChanges((prev) => ({
+        ...prev,
+        [sessionKey]: [
+          { address: single.address, label: single.label, action: 'added' },
+          ...(prev[sessionKey] ?? []).filter((c) => c.address !== single.address),
+        ],
+      }));
+      setAddressInput('');
+      setLabelInput('');
+    } else {
+      setSessionChanges((prev) => ({
+        ...prev,
+        [sessionKey]: [
+          { address: single.address, label: 'Removed payee', action: 'removed' },
+          ...(prev[sessionKey] ?? []).filter((c) => c.address !== single.address),
+        ],
+      }));
+    }
   };
 
   const canSubmit = Boolean(programme) && isCreator && PAYEE_ADDRESS.test(addressInput.trim());
@@ -519,6 +551,60 @@ export const PayeeManagement = () => {
                 Removing a payee doesn’t touch money already paid. Escrowed Allocated money can’t go to them afterwards.
               </p>
 
+              {!isSample && programmeId && creatorPayeeLabels.length > 0 && (
+                <div className="payee-mgmt__named" role="region" aria-label="Named by the creator">
+                  <h3>Named by the creator</h3>
+                  <p className="payee-mgmt__fine">
+                    The names come from the programme’s description, which the creator wrote and committed by hash. They are the
+                    creator’s claim; each address’s status is read from the programme now.
+                  </p>
+                  <ul className="payee-mgmt__list" aria-label="Payees named by the creator">
+                    {creatorPayeeLabels.map((entry) => {
+                      const status = statusByAddress[entry.address] ?? 'checking';
+                      const isVerified = status === 'verified';
+                      const tone = isVerified ? 'success' : status === 'error' ? 'warning' : status === 'checking' ? 'neutral' : 'danger';
+                      const label = isVerified
+                        ? 'Verified payee'
+                        : status === 'checking'
+                          ? 'Checking…'
+                          : status === 'error'
+                            ? 'Could not check'
+                            : 'Not a verified payee';
+                      return (
+                        <li key={entry.address}>
+                          <span className="payee-mgmt__who">
+                            <b>
+                              {entry.label} <span className="payee-mgmt__creator-claim">(creator’s claim)</span>
+                            </b>
+                            <AddressChip address={entry.address} copyLabel="Copy payee address" />
+                          </span>
+                          <span className="payee-mgmt__row-actions">
+                            <Badge tone={tone}>{label}</Badge>
+                            {isCreator && isVerified && (
+                              <Button size="sm" variant="danger" onClick={() => handleRevoke(entry.address)}>
+                                Remove
+                              </Button>
+                            )}
+                            {isCreator && !isVerified && status !== 'checking' && (
+                              <Button
+                                size="sm"
+                                variant="secondary"
+                                onClick={() => {
+                                  setAddressInput(entry.address);
+                                  setLabelInput(entry.label);
+                                }}
+                              >
+                                Verify
+                              </Button>
+                            )}
+                          </span>
+                        </li>
+                      );
+                    })}
+                  </ul>
+                </div>
+              )}
+
               <div className="payee-mgmt__check">
                 <h3>Check an address</h3>
                 <div className="payee-mgmt__row">
@@ -545,9 +631,15 @@ export const PayeeManagement = () => {
                 </div>
                 {checkResult && (
                   <p className="payee-mgmt__check-result" role="status">
+                    {payeeNameByAddress.has(checkResult.address) && (
+                      <span className="payee-mgmt__creator-name">
+                        <b>{payeeNameByAddress.get(checkResult.address)}</b>
+                        <span className="payee-mgmt__creator-claim"> (creator’s claim)</span>
+                      </span>
+                    )}
                     <AddressChip address={checkResult.address} copyLabel="Copy checked address" />
                     <Badge tone={checkResult.verified ? 'success' : 'danger'}>
-                      {checkResult.verified ? 'Verified on-chain' : 'Not verified'}
+                      {checkResult.verified ? 'Verified on-chain' : 'Not a verified payee'}
                     </Badge>
                   </p>
                 )}
@@ -708,12 +800,13 @@ export const PayeeManagement = () => {
             : 'The address can now receive Direct payments or be chosen from escrow.'
         }
         doneRows={single ? [{ label: 'Address', value: truncateAddress(single.address, 6, 6) }] : undefined}
+        onConfirm={() => void confirmSingle()}
         failTitle={single?.kind === 'remove' ? 'Payee not removed' : 'Payee not verified'}
         onRetry={
           single
             ? () => {
                 if (!programme) return;
-                void tx.send(() =>
+                void tx.prepare(() =>
                   single.kind === 'remove'
                     ? programme.deny_payee({ payee: single.address })
                     : programme.allow_payee({ payee: single.address }),
