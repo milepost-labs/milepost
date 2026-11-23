@@ -284,6 +284,30 @@ covers reading the report, the full run, and how to tell the two apart.
 
 ---
 
+### Licences, duplicate crates and sources
+
+The `check` job runs `cargo deny check licenses bans sources` against
+[`deny.toml`](deny.toml):
+
+- **Licences:** each crate's licence must be on the allow-list. An expression
+  such as `MIT OR Apache-2.0` passes when any alternative is allowed.
+- **Duplicates:** two versions of one crate are reported as warnings, not
+  failures.
+- **Sources:** crates come from crates.io, and from the one git repository the
+  lockfile pins (`stellar/passkey-kit`). Any other source fails the check.
+
+To run it locally, install cargo-deny once and run it from the repository root:
+
+```bash
+cargo install cargo-deny --locked   # once
+cargo deny check licenses bans sources
+```
+
+A new licence or a new git source is a decision for the pull request that needs
+it. Add the entry to `deny.toml` in that PR, and say why in the description.
+
+---
+
 ## 5. Documentation Standards
 
 * **Code comments:** Only add a comment when the *why* is non-obvious — a hidden constraint, a subtle invariant, or a workaround for a specific bug. Do not comment on what the code does; well-named identifiers already do that.

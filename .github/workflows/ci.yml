@@ -43,6 +43,14 @@ jobs:
       - name: Check dependencies for known vulnerabilities
         run: cargo audit
 
+      # Licences, duplicate versions and source registries, against deny.toml.
+      # Advisories stay with cargo-audit above. A prebuilt binary, as above.
+      - uses: taiki-e/install-action@v2
+        with:
+          tool: cargo-deny
+      - name: Check licences, bans and sources
+        run: cargo deny check licenses bans sources
+
       # Must precede both Clippy and Test. The registry's tests instantiate the
       # programme from its built wasm, the same way the registry does on-chain,
       # so the artifact has to exist before anything compiles a test target —
