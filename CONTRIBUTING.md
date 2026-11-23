@@ -257,6 +257,23 @@ wrong contract. See the [testing guide](docs/testing-guide.md) for the ordering
 rule, bindings regeneration, and the generated-file and fixture traps that have
 cost review rounds.
 
+### Coverage
+
+CI enforces a minimum line-coverage threshold on every pull request. It uses
+[`cargo-llvm-cov`](https://github.com/taiki-e/cargo-llvm-cov), installed as a
+prebuilt binary.
+
+To run the same check locally:
+
+```bash
+cargo install cargo-llvm-cov --locked   # once, or use a prebuilt binary
+cargo llvm-cov --all-features --summary-only --fail-under-lines 90
+```
+
+Omit `--fail-under-lines` to see the report without enforcing the threshold.
+The threshold and the exact command CI runs are in
+[`.github/workflows/ci.yml`](.github/workflows/ci.yml).
+
 ### Mutation testing
 
 The programme contract is mutation-tested with

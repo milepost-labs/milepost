@@ -85,7 +85,9 @@ jobs:
         run: ./scripts/check-sizes.sh >> "$GITHUB_STEP_SUMMARY"
 
       - name: Install cargo-llvm-cov
-        run: cargo install cargo-llvm-cov --locked
+        uses: taiki-e/install-action@v2
+        with:
+          tool: cargo-llvm-cov
 
       - name: Coverage
         env:
