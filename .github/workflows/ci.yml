@@ -5,6 +5,11 @@ on:
     branches: [main, dev]
   pull_request:
 
+# Read-only by default. No job here pushes, comments or edits anything; a job
+# that ever needs more must grant it on itself.
+permissions:
+  contents: read
+
 env:
   CARGO_TERM_COLOR: always
   RUSTFLAGS: -D warnings

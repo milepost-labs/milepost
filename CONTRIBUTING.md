@@ -325,6 +325,15 @@ workflow uses `pull_request_target`, or if a file contains hidden Unicode. If
 your dependency is legitimately blocked, say why in the PR. A maintainer
 records the exception, with its reason, in `.github/malware-check-allowlist.json`.
 
+**Workflow permissions.** `ci.yml`, `mutants.yml` and `smoke-test.yml` start with
+`permissions: contents: read`, so a job cannot write to the repository, comment
+on a pull request or change a release unless it grants that to itself. Only
+`release.yml` asks for more, to publish. A new job that needs a write must add
+the grant to that job, and say why in the pull request. These checks cannot run
+locally, so push the change to your fork and read the Actions run: a step that
+needs a write it does not have fails with a 403 or "Resource not accessible by
+integration".
+
 ---
 
 ## 7. Error Code Stability Policy

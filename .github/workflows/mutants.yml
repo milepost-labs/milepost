@@ -15,6 +15,11 @@ on:
     - cron: "0 4 * * 1"
   workflow_dispatch:
 
+# Read-only by default. Artifact upload and download need no repository
+# permission, so nothing here needs more than reading the code.
+permissions:
+  contents: read
+
 env:
   CARGO_TERM_COLOR: always
 
