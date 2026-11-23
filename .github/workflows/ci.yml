@@ -5,6 +5,11 @@ on:
     branches: [main, dev]
   pull_request:
 
+# Read-only by default. No job here pushes, comments or edits anything; a job
+# that ever needs more must grant it on itself.
+permissions:
+  contents: read
+
 env:
   CARGO_TERM_COLOR: always
   RUSTFLAGS: -D warnings
@@ -37,6 +42,14 @@ jobs:
 
       - name: Check dependencies for known vulnerabilities
         run: cargo audit
+
+      # Licences, duplicate versions and source registries, against deny.toml.
+      # Advisories stay with cargo-audit above. A prebuilt binary, as above.
+      - uses: taiki-e/install-action@v2
+        with:
+          tool: cargo-deny
+      - name: Check licences, bans and sources
+        run: cargo deny check licenses bans sources
 
       # Must precede both Clippy and Test. The registry's tests instantiate the
       # programme from its built wasm, the same way the registry does on-chain,
@@ -85,7 +98,9 @@ jobs:
         run: ./scripts/check-sizes.sh >> "$GITHUB_STEP_SUMMARY"
 
       - name: Install cargo-llvm-cov
-        run: cargo install cargo-llvm-cov --locked
+        uses: taiki-e/install-action@v2
+        with:
+          tool: cargo-llvm-cov
 
       - name: Coverage
         env:
@@ -291,6 +306,13 @@ jobs:
     if: github.event_name != 'pull_request' || github.base_ref == 'dev'
     permissions:
       contents: read
+  browser:
+    name: Browser checks
+    runs-on: ubuntu-latest
+    # Real browser, production headers from frontend/vercel.json. Smoke: every
+    # route loads with no uncaught or console error and no CSP violation.
+    # Reflow: no sideways page scroll at 320px, signed in and signed out.
+    # See frontend/tests/browser and "Browser checks" in CONTRIBUTING.md.
     steps:
       - uses: actions/checkout@v7
       - uses: actions/setup-node@v7
@@ -311,6 +333,26 @@ jobs:
       # contract id from frontend/src/fixtures/ is in the output.
       - name: Build for mainnet and check no sample id reached it
         run: npm run check:mainnet-build --prefix frontend
+      - name: Install Chromium
+        working-directory: frontend
+        run: npx playwright install chromium --with-deps
+
+      - name: Build the signed-in and signed-out builds
+        working-directory: frontend
+        run: npm run build:browser
+
+      - name: Run the browser checks
+        working-directory: frontend
+        run: npm run test:browser
+
+      - name: Upload Playwright report on failure
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: browser-checks-report
+          path: frontend/playwright-report/
+          retention-days: 14
+          if-no-files-found: ignore
 
   malware:
     name: Malware check

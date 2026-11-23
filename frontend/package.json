@@ -17,7 +17,9 @@
     "test:coverage": "vitest run --coverage",
     "preview": "vite preview",
     "screenshots": "playwright test",
-    "screenshots:update": "playwright test --update-snapshots"
+    "screenshots:update": "playwright test --update-snapshots",
+    "build:browser": "tsc -b && VITE_FIXTURES=1 VITE_INDEXER_URL=/index vite build --outDir dist-signed-in && VITE_INDEXER_URL=/index vite build --outDir dist-signed-out",
+    "test:browser": "playwright test --config playwright.browser.config.ts"
   },
   "dependencies": {
     "@milepost/attest": "^0.1.1",
