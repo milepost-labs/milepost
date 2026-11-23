@@ -675,8 +675,9 @@ fn add_writer_bumps_writer_but_not_instance() {
 
     let f = setup();
     let persistent_ttl = |key: &Key| {
-        f.env
-            .as_contract(&f.client.address, || f.env.storage().persistent().get_ttl(key))
+        f.env.as_contract(&f.client.address, || {
+            f.env.storage().persistent().get_ttl(key)
+        })
     };
     let instance_ttl = || {
         f.env
@@ -703,8 +704,9 @@ fn credit_bumps_standing_and_new_seen_entries() {
 
     let f = setup();
     let ttl = |key: &Key| {
-        f.env
-            .as_contract(&f.client.address, || f.env.storage().persistent().get_ttl(key))
+        f.env.as_contract(&f.client.address, || {
+            f.env.storage().persistent().get_ttl(key)
+        })
     };
 
     f.client
@@ -740,8 +742,9 @@ fn keepalive_bumps_standing_but_not_seen() {
 
     let f = setup();
     let ttl = |key: &Key| {
-        f.env
-            .as_contract(&f.client.address, || f.env.storage().persistent().get_ttl(key))
+        f.env.as_contract(&f.client.address, || {
+            f.env.storage().persistent().get_ttl(key)
+        })
     };
 
     f.client

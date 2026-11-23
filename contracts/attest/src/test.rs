@@ -714,8 +714,9 @@ fn register_schema_bumps_schema_and_predecessor_ttl() {
 
     let f = setup();
     let ttl = |key: &Key| {
-        f.env
-            .as_contract(&f.client.address, || f.env.storage().persistent().get_ttl(key))
+        f.env.as_contract(&f.client.address, || {
+            f.env.storage().persistent().get_ttl(key)
+        })
     };
 
     let s1 = open_schema(&f);
@@ -745,8 +746,9 @@ fn attest_bumps_attestation_and_schema_but_not_instance() {
 
     let f = setup();
     let persistent_ttl = |key: &Key| {
-        f.env
-            .as_contract(&f.client.address, || f.env.storage().persistent().get_ttl(key))
+        f.env.as_contract(&f.client.address, || {
+            f.env.storage().persistent().get_ttl(key)
+        })
     };
     let instance_ttl = || {
         f.env
@@ -783,8 +785,9 @@ fn revoke_bumps_attestation_and_schema_ttl() {
 
     let f = setup();
     let ttl = |key: &Key| {
-        f.env
-            .as_contract(&f.client.address, || f.env.storage().persistent().get_ttl(key))
+        f.env.as_contract(&f.client.address, || {
+            f.env.storage().persistent().get_ttl(key)
+        })
     };
 
     let schema = open_schema(&f);
@@ -810,8 +813,9 @@ fn keepalive_bumps_attestation_but_not_schema_ttl() {
 
     let f = setup();
     let ttl = |key: &Key| {
-        f.env
-            .as_contract(&f.client.address, || f.env.storage().persistent().get_ttl(key))
+        f.env.as_contract(&f.client.address, || {
+            f.env.storage().persistent().get_ttl(key)
+        })
     };
 
     let schema = open_schema(&f);

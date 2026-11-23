@@ -800,8 +800,9 @@ fn create_bumps_programme_and_instance_ttl() {
 
     let f = setup();
     let persistent_ttl = |key: &Key| {
-        f.env
-            .as_contract(&f.client.address, || f.env.storage().persistent().get_ttl(key))
+        f.env.as_contract(&f.client.address, || {
+            f.env.storage().persistent().get_ttl(key)
+        })
     };
     let instance_ttl = || {
         f.env
@@ -836,8 +837,9 @@ fn admin_setters_bump_instance_but_not_programmes() {
 
     let f = setup();
     let persistent_ttl = |key: &Key| {
-        f.env
-            .as_contract(&f.client.address, || f.env.storage().persistent().get_ttl(key))
+        f.env.as_contract(&f.client.address, || {
+            f.env.storage().persistent().get_ttl(key)
+        })
     };
     let instance_ttl = || {
         f.env
@@ -875,7 +877,8 @@ fn admin_setters_bump_instance_but_not_programmes() {
         .ledger()
         .with_mut(|l| l.sequence_number += 40 * DAY_IN_LEDGERS);
     assert!(instance_ttl() < BUMP_THRESHOLD);
-    f.client.set_program_wasm(&BytesN::from_array(&f.env, &[9u8; 32]));
+    f.client
+        .set_program_wasm(&BytesN::from_array(&f.env, &[9u8; 32]));
     assert!(instance_ttl() >= BUMP_LEDGERS - 1);
 
     f.env

@@ -705,8 +705,9 @@ fn configure_bumps_policy_ttl() {
 
     let f = setup();
     let ttl = |key: &Key| {
-        f.env
-            .as_contract(&f.client.address, || f.env.storage().persistent().get_ttl(key))
+        f.env.as_contract(&f.client.address, || {
+            f.env.storage().persistent().get_ttl(key)
+        })
     };
 
     assert!(ttl(&Key::Policy(f.wallet.clone())) >= BUMP_LEDGERS - 1);
@@ -729,8 +730,9 @@ fn allow_and_deny_payee_manage_payee_ttl() {
 
     let f = setup();
     let ttl = |key: &Key| {
-        f.env
-            .as_contract(&f.client.address, || f.env.storage().persistent().get_ttl(key))
+        f.env.as_contract(&f.client.address, || {
+            f.env.storage().persistent().get_ttl(key)
+        })
     };
 
     assert!(ttl(&Key::Payee(f.wallet.clone(), f.school.clone())) >= BUMP_LEDGERS - 1);
@@ -763,8 +765,9 @@ fn install_bumps_installed_ttl() {
 
     let f = setup();
     let ttl = |key: &Key| {
-        f.env
-            .as_contract(&f.client.address, || f.env.storage().persistent().get_ttl(key))
+        f.env.as_contract(&f.client.address, || {
+            f.env.storage().persistent().get_ttl(key)
+        })
     };
 
     f.client.install(&f.wallet);
@@ -785,8 +788,9 @@ fn policy_check_bumps_policy_but_not_payee_or_installed() {
 
     let f = setup();
     let ttl = |key: &Key| {
-        f.env
-            .as_contract(&f.client.address, || f.env.storage().persistent().get_ttl(key))
+        f.env.as_contract(&f.client.address, || {
+            f.env.storage().persistent().get_ttl(key)
+        })
     };
 
     f.client.install(&f.wallet);
