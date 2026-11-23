@@ -5338,8 +5338,9 @@ fn keeping_an_entry_alive_publishes_the_subject() {
 
 fn persistent_ttl(f: &Fixture, key: &Key) -> u32 {
     use soroban_sdk::testutils::storage::Persistent as _;
-    f.env
-        .as_contract(&f.client.address, || f.env.storage().persistent().get_ttl(key))
+    f.env.as_contract(&f.client.address, || {
+        f.env.storage().persistent().get_ttl(key)
+    })
 }
 
 fn instance_ttl(f: &Fixture) -> u32 {
@@ -5353,7 +5354,7 @@ fn advance_ledgers(f: &Fixture, n: u32) {
 }
 
 #[test]
-fn contribute_bumps_donor_entry_and_leaves_instance_unbumped() {
+fn contribute_bumps_donor_entry_and_instance() {
     let f = setup(2, 3);
     let donor = funded_donor(&f, 10_000);
 
@@ -5366,8 +5367,8 @@ fn contribute_bumps_donor_entry_and_leaves_instance_unbumped() {
 
     f.client.contribute(&donor, &2_000);
     assert!(persistent_ttl(&f, &Key::Donor(donor)) >= BUMP_LEDGERS - 1);
-    // Running totals in instance storage are bumped at construction and via keepalive, not per contribution.
-    assert!(instance_ttl(&f) < BUMP_THRESHOLD);
+    // The running total lives in instance storage, so the instance is bumped too.
+    assert!(instance_ttl(&f) >= BUMP_LEDGERS - 1);
 }
 
 #[test]
@@ -5405,7 +5406,7 @@ fn apply_and_review_keep_application_reviewer_and_vote_entries_alive() {
 }
 
 #[test]
-fn finalize_bumps_application_and_award_and_leaves_instance_unbumped() {
+fn finalize_bumps_application_award_and_instance() {
     let f = setup(2, 3);
     let donor = funded_donor(&f, 100_000);
     let applicant = Address::generate(&f.env);
@@ -5427,11 +5428,11 @@ fn finalize_bumps_application_and_award_and_leaves_instance_unbumped() {
     f.client.finalize(&applicant, &payee, &Mode::Direct);
     assert!(persistent_ttl(&f, &Key::Application(applicant.clone())) >= BUMP_LEDGERS - 1);
     assert!(persistent_ttl(&f, &Key::Award(applicant)) >= BUMP_LEDGERS - 1);
-    assert!(instance_ttl(&f) < BUMP_THRESHOLD);
+    assert!(instance_ttl(&f) >= BUMP_LEDGERS - 1);
 }
 
 #[test]
-fn release_bumps_verifier_award_used_and_allocation_entries() {
+fn release_bumps_verifier_award_used_allocation_and_instance() {
     let f = setup(2, 3);
     let donor = funded_donor(&f, 100_000);
     let recipient = Address::generate(&f.env);
@@ -5456,7 +5457,7 @@ fn release_bumps_verifier_award_used_and_allocation_entries() {
     assert!(persistent_ttl(&f, &Key::Award(recipient.clone())) >= BUMP_LEDGERS - 1);
     assert!(persistent_ttl(&f, &Key::Used(uid1)) >= BUMP_LEDGERS - 1);
     assert!(persistent_ttl(&f, &Key::Allocation(recipient.clone())) >= BUMP_LEDGERS - 1);
-    assert!(instance_ttl(&f) < BUMP_THRESHOLD);
+    assert!(instance_ttl(&f) >= BUMP_LEDGERS - 1);
 
     advance_ledgers(&f, BUMP_THRESHOLD + 5);
     let uid2 = proof(&f, &recipient, 2);
@@ -5468,7 +5469,7 @@ fn release_bumps_verifier_award_used_and_allocation_entries() {
 }
 
 #[test]
-fn release_batch_bumps_award_used_and_allocation_and_leaves_verifier_unbumped() {
+fn release_batch_bumps_verifier_award_used_allocation_and_instance() {
     let f = setup(2, 3);
     let donor = funded_donor(&f, 100_000);
     let recipient = Address::generate(&f.env);
@@ -5499,9 +5500,10 @@ fn release_batch_bumps_award_used_and_allocation_and_leaves_verifier_unbumped() 
     assert!(persistent_ttl(&f, &Key::Award(recipient.clone())) >= BUMP_LEDGERS - 1);
     assert!(persistent_ttl(&f, &Key::Used(uid2)) >= BUMP_LEDGERS - 1);
     assert!(persistent_ttl(&f, &Key::Allocation(recipient)) >= BUMP_LEDGERS - 1);
-    // release_batch does not extend Verifier or instance TTLs.
-    assert!(persistent_ttl(&f, &Key::Verifier(f.verifier.clone())) < BUMP_THRESHOLD);
-    assert!(instance_ttl(&f) < BUMP_THRESHOLD);
+    // Like `release`, a batch keeps the verifier resolvable and bumps the
+    // instance that holds the released total.
+    assert!(persistent_ttl(&f, &Key::Verifier(f.verifier.clone())) >= BUMP_LEDGERS - 1);
+    assert!(instance_ttl(&f) >= BUMP_LEDGERS - 1);
 }
 
 #[test]
@@ -5526,7 +5528,7 @@ fn spend_keeps_allocation_entry_alive() {
 }
 
 #[test]
-fn refund_and_refund_partial_bump_refunded_entry_only() {
+fn refund_and_refund_partial_bump_refunded_and_instance_but_not_donor() {
     let f = setup(2, 3);
     let donor_partial = funded_donor(&f, 10_000);
     let donor_full = funded_donor(&f, 10_000);
@@ -5541,14 +5543,17 @@ fn refund_and_refund_partial_bump_refunded_entry_only() {
 
     f.client.refund_partial(&donor_partial, &1_000);
     assert!(persistent_ttl(&f, &Key::Refunded(donor_partial.clone())) >= BUMP_LEDGERS - 1);
-    // refund_partial reads Donor without bumping it, and does not bump instance storage.
+    // refund_partial reads Donor without writing it, so Donor is not bumped; the
+    // refunded total lives in instance storage, so the instance is.
     assert!(persistent_ttl(&f, &Key::Donor(donor_partial.clone())) < BUMP_THRESHOLD);
-    assert!(instance_ttl(&f) < BUMP_THRESHOLD);
+    assert!(instance_ttl(&f) >= BUMP_LEDGERS - 1);
 
+    advance_ledgers(&f, BUMP_THRESHOLD + 5);
+    assert!(instance_ttl(&f) < BUMP_THRESHOLD);
     f.client.refund(&donor_full);
     assert!(persistent_ttl(&f, &Key::Refunded(donor_full.clone())) >= BUMP_LEDGERS - 1);
     assert!(persistent_ttl(&f, &Key::Donor(donor_full)) < BUMP_THRESHOLD);
-    assert!(instance_ttl(&f) < BUMP_THRESHOLD);
+    assert!(instance_ttl(&f) >= BUMP_LEDGERS - 1);
 
     // Advance past threshold again and claim the remainder via refund_partial.
     f.client.keepalive(&donor_partial);

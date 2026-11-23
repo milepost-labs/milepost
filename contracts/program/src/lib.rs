@@ -740,6 +740,7 @@ impl Programme {
             &Key::Contributed,
             &total.checked_add(amount).ok_or(Error::Overflow)?,
         );
+        Self::bump_instance(&env);
 
         Contributed { donor, amount }.publish(&env);
         Ok(())
@@ -1015,6 +1016,7 @@ impl Programme {
             .persistent()
             .extend_ttl(&key, BUMP_THRESHOLD, BUMP_LEDGERS);
         env.storage().instance().set(&Key::Granted, &committed);
+        Self::bump_instance(&env);
 
         let award = Award {
             recipient: applicant.clone(),
@@ -1353,6 +1355,7 @@ impl Programme {
             &Key::Released,
             &released.checked_add(amount).ok_or(Error::Overflow)?,
         );
+        Self::bump_instance(&env);
 
         Self::pay_out(&env, &config, &award, amount)?;
 
@@ -1375,6 +1378,14 @@ impl Programme {
         }
         .publish(&env);
         Ok(amount)
+    }
+
+    /// Config and the running totals live in instance storage and share its
+    /// TTL. Every write to them bumps it (docs/ttl-strategy.md).
+    fn bump_instance(env: &Env) {
+        env.storage()
+            .instance()
+            .extend_ttl(BUMP_THRESHOLD, BUMP_LEDGERS);
     }
 
     /// Put one released tranche where its mode says it goes.
@@ -1470,6 +1481,13 @@ impl Programme {
         {
             return Err(Error::NotAuthorized);
         }
+        // Same as `release`: the verifier is read on every release, so keep it
+        // resolvable for the programme's life.
+        env.storage().persistent().extend_ttl(
+            &Key::Verifier(attester.clone()),
+            BUMP_THRESHOLD,
+            BUMP_LEDGERS,
+        );
 
         let award_key = Key::Award(recipient.clone());
         let mut award: Award = env
@@ -1528,6 +1546,7 @@ impl Programme {
                 &Key::Released,
                 &released.checked_add(amount).ok_or(Error::Overflow)?,
             );
+            Self::bump_instance(&env);
 
             total_released += amount;
 
@@ -1586,6 +1605,7 @@ impl Programme {
             / BPS_DENOMINATOR;
 
         env.storage().instance().set(&Key::FeeSwept, &true);
+        Self::bump_instance(&env);
         if fee > 0 {
             token::Client::new(&env, &config.token).transfer(
                 &env.current_contract_address(),
@@ -1692,6 +1712,7 @@ impl Programme {
             &Key::RefundedTotal,
             &refunded_total.checked_add(amount).ok_or(Error::Overflow)?,
         );
+        Self::bump_instance(env);
 
         token::Client::new(env, &config.token).transfer(
             &env.current_contract_address(),
@@ -1746,6 +1767,7 @@ impl Programme {
             &Key::SweptTotal,
             &swept_total.checked_add(remaining).ok_or(Error::Overflow)?,
         );
+        Self::bump_instance(&env);
 
         UnclaimedSwept { amount: remaining }.publish(&env);
         Ok(remaining)
@@ -1775,6 +1797,7 @@ impl Programme {
         }
 
         env.storage().instance().set(&Key::Cancelled, &true);
+        Self::bump_instance(&env);
         ProgrammeCancelled {
             at: env.ledger().timestamp(),
         }
@@ -1818,6 +1841,7 @@ impl Programme {
         updated_config.release_deadline = new_release_deadline;
         updated_config.sweep_deadline = new_sweep_deadline;
         env.storage().instance().set(&key, &updated_config);
+        Self::bump_instance(&env);
 
         DeadlineExtended {
             old_release_deadline,
@@ -1893,6 +1917,7 @@ impl Programme {
         }
 
         env.storage().instance().set(&Key::Paused, &true);
+        Self::bump_instance(&env);
         Paused { by: config.creator }.publish(&env);
         Ok(())
     }
@@ -1911,6 +1936,7 @@ impl Programme {
         }
 
         env.storage().instance().remove(&Key::Paused);
+        Self::bump_instance(&env);
         Unpaused { by: config.creator }.publish(&env);
         Ok(())
     }

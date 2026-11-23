@@ -3,6 +3,10 @@ import type { ReactNode } from 'react';
 import { render, screen } from '@testing-library/react';
 import App from './App';
 
+// Every route below is a lazy chunk. On a cold run (CI, coverage) the first
+// import can take longer than findBy's 1s default.
+const ROUTE_LOAD = { timeout: 4_000 };
+
 const mocks = vi.hoisted(() => ({
   isProgramme: vi.fn(async () => ({ result: false })),
   getConfig: vi.fn(async () => {
@@ -62,7 +66,7 @@ describe('App router edge cases', () => {
     window.history.pushState({}, '', '/no-such-route');
     render(<App />);
 
-    expect(await screen.findByRole('heading', { level: 1, name: /There’s no milepost here/i })).toBeTruthy();
+    expect(await screen.findByRole('heading', { level: 1, name: /There’s no milepost here/i }, ROUTE_LOAD)).toBeTruthy();
     expect(screen.getByText('/no-such-route')).toBeTruthy();
     expect(screen.getByRole('link', { name: 'Go to programmes' }).getAttribute('href')).toBe('/directory');
   });
@@ -71,7 +75,7 @@ describe('App router edge cases', () => {
     window.history.pushState({}, '', '/programme/not-a-valid-address');
     render(<App />);
 
-    expect(await screen.findByRole('heading', { level: 1, name: 'Not a programme' })).toBeTruthy();
+    expect(await screen.findByRole('heading', { level: 1, name: 'Not a programme' }, ROUTE_LOAD)).toBeTruthy();
     expect(screen.getByText('No Milepost programme at this address')).toBeTruthy();
     expect(mocks.isProgramme).toHaveBeenCalledWith({ addr: 'not-a-valid-address' });
     expect(mocks.getConfig).toHaveBeenCalled();
@@ -81,7 +85,7 @@ describe('App router edge cases', () => {
     window.history.pushState({}, '', '/dev/ui');
     render(<App />);
 
-    expect(await screen.findByRole('heading', { level: 1, name: 'UI Component Gallery' })).toBeTruthy();
+    expect(await screen.findByRole('heading', { level: 1, name: 'UI Component Gallery' }, ROUTE_LOAD)).toBeTruthy();
   });
 
   it('keeps development-only pages out of the production build', async () => {
@@ -92,7 +96,7 @@ describe('App router edge cases', () => {
     window.history.pushState({}, '', '/dev/ui');
     render(<ProdApp />);
 
-    expect(await screen.findByRole('heading', { level: 1, name: /There’s no milepost here/i })).toBeTruthy();
+    expect(await screen.findByRole('heading', { level: 1, name: /There’s no milepost here/i }, ROUTE_LOAD)).toBeTruthy();
     expect(screen.queryByRole('heading', { level: 1, name: 'UI Component Gallery' })).toBeNull();
   });
 });
