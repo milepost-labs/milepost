@@ -32,6 +32,8 @@ export interface ProgrammeActionsProps {
    * errors never grant unverified programmes write access.
    */
   verified: boolean | null;
+  /** Whether the creator has paused the programme. Null or omitted while it is being read. */
+  paused?: boolean | null;
   /** `get_config().creator`. The Creator group shows only when the signed-in address matches. */
   creator?: string | null;
   /** Called after a creator write lands, so the page re-reads what it changed. */
@@ -81,6 +83,7 @@ export function ProgrammeActions({
   refundsOpen,
   refundable,
   verified,
+  paused = null,
   creator = null,
   onChanged,
   sweep,
@@ -129,6 +132,7 @@ export function ProgrammeActions({
     refundsOpen,
     refundable,
     verified,
+    paused,
   });
 
   // Show the warning banner whenever writes are blocked due to verification —

@@ -14,6 +14,7 @@ import { useAnnouncer } from '../../context/useAnnouncer';
 import { useWallet } from '../../context/useWallet';
 import { useSoroban } from '../../context/useSoroban';
 import { useContractRead, useContractResult } from '../../hooks/useContractRead';
+import { useProgrammePaused } from '../../hooks/useProgrammePaused';
 import { useTransaction } from '../../hooks/useTransaction';
 import { isPhase } from '../../lib/phaseGate';
 import { releaseBatchGate } from '../../lib/releaseBatch';
@@ -144,6 +145,8 @@ function ReleaseSheet({
     enabled: isReal && open,
   });
   const readFailed = Boolean(phaseRead.error || configRead.error);
+  // One shared read: `release` and `release_batch` are refused while paused.
+  const pausedState = useProgrammePaused(isReal && open ? programmeAt(award.programmeId) : null);
   const phaseTag = phaseRead.data?.tag;
   const batchGate = releaseBatchGate({
     phase: isPhase(phaseTag) ? phaseTag : null,
@@ -152,6 +155,7 @@ function ReleaseSheet({
     tranchesLeft,
     signedIn: Boolean(address),
     isRecipient: address === award.recipient,
+    paused: pausedState.paused,
   });
   const batchReason = readFailed
     ? 'Could not read the programme’s phase and release window. Close this and try again.'
@@ -225,6 +229,7 @@ function ReleaseSheet({
     nowMs,
     signedIn: Boolean(address),
     isRecipient: address === award.recipient,
+    paused: pausedState.paused,
   });
 
   // Read the proof before asking for a signature: verifier, spent, and

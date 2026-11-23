@@ -18,7 +18,7 @@ import { DescriptionBand, MetadataPanel } from "../components/programme/Programm
 import { useProgrammeMetadata } from "../hooks/useProgrammeMetadata";
 import { AddToCalendar, AddressChip, Badge, Card, Deadline, List, ListRow, Notice, PageHead, SampleTag, StatTile } from "../components/ui";
 import { useSoroban } from "../context/useSoroban";
-import { useContractRead, useContractResult, useIndexedList, useProgramme, type ContractRead } from "../hooks";
+import { useContractRead, useContractResult, useIndexedList, useProgramme, useProgrammePaused, type ContractRead } from "../hooks";
 import { useContractTokenBalance } from "../hooks/useProgrammeBalance";
 import { useLedgerCloseTime } from "../hooks/useLedgerCloseTime";
 import { balanceDiscrepancy, expectedContractBalance } from "../lib/contractBalance";
@@ -406,6 +406,9 @@ const ProgrammeDetailBody = ({ programmeId, programme, isDefault, isRegistered }
   // Bumped after a creator write so the paused banner re-reads with the rest.
   const [chainVersion, setChainVersion] = useState(0);
 
+  // One shared read of `is_paused`, also used by the banner and the sheets.
+  const { paused } = useProgrammePaused(isSample ? null : programme, chainVersion);
+
   const handleRefetch = useCallback(() => {
     if (isSample) return;
     setLastReadAt(null);
@@ -674,6 +677,7 @@ const ProgrammeDetailBody = ({ programmeId, programme, isDefault, isRegistered }
             refundsOpen={refundsOpen}
             refundable={refundable > ZERO ? formatAmount(refundable, { asset }) : null}
             verified={!isSample ? (isRegistered.error ? false : isRegistered.data) : true}
+            paused={paused}
             creator={config.data?.creator ?? null}
             onChanged={handleRefetch}
             sweep={{

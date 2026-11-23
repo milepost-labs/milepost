@@ -1,6 +1,7 @@
 import { Buffer } from 'buffer';
 import { formatDate } from './format';
 import { phaseRequirement, type Phase } from './phaseGate';
+import { PAUSED_REASON } from './paused';
 
 /**
  * Releasing several tranches in one transaction (`release_batch`).
@@ -121,6 +122,8 @@ export interface ReleaseBatchGateInput {
   signedIn: boolean;
   /** Whether the connected wallet is the award's recipient. */
   isRecipient: boolean;
+  /** Whether the creator has paused the programme: `release_batch` is refused (`Paused`, 39). */
+  paused?: boolean;
 }
 
 /** When may several tranches be released at once? Same window as one, with more than one left. */
@@ -137,6 +140,7 @@ export function releaseBatchGate(input: ReleaseBatchGateInput): { enabled: boole
   if (input.nowMs / 1000 >= Number(input.releaseDeadline)) {
     return { enabled: false, reason: `The release window closed on ${formatDate(input.releaseDeadline)}.` };
   }
+  if (input.paused) return { enabled: false, reason: PAUSED_REASON };
   if (input.tranchesLeft < 2) {
     return { enabled: false, reason: 'Only one tranche is left. Release it on its own.' };
   }

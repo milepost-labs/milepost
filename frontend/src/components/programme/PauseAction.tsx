@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { useContractRead, useAnnounceTransaction, useTransaction } from '../../hooks';
 import { explain } from '../../lib/errors';
+import { forgetPaused } from '../../lib/paused';
 import { creatorSendable } from '../../lib/creatorTx';
 import { TxSheet } from '../state/TxSheet';
 import { CreatorActionRow } from './CreatorActionRow';
@@ -25,6 +26,7 @@ export function PauseAction({ client, phase, verified, onChanged }: CreatorConte
   const tx = useTransaction<true>({
     contract: 'program',
     onSuccess: () => {
+      forgetPaused(client.options.contractId);
       paused.refetch();
       onChanged();
     },

@@ -1,4 +1,4 @@
-import { useContractRead, type useProgramme } from '../../hooks';
+import { useProgrammePaused, type useProgramme } from '../../hooks';
 import { Notice } from '../ui';
 import './PausedBanner.css';
 
@@ -17,9 +17,9 @@ export function PausedBanner({
   /** Change it to re-read, e.g. after the creator pauses or resumes. */
   version?: number;
 }) {
-  const paused = useContractRead(() => client.is_paused(), [client, version]);
+  const { paused } = useProgrammePaused(client, version);
 
-  if (!paused.data) return null;
+  if (!paused) return null;
 
   return (
     <Notice tone="warn" role="status" className="paused-banner">

@@ -3,6 +3,7 @@ import type { Client as AttestClient } from '@milepost/attest';
 import { verifyClaimOnChain } from './attestationVerify';
 import { formatDate } from './format';
 import { phaseRequirement, type Phase } from './phaseGate';
+import { PAUSED_REASON } from './paused';
 
 /**
  * Checks a recipient can run before signing a single release.
@@ -72,6 +73,8 @@ export interface ReleaseGateInput {
   signedIn: boolean;
   /** Whether the connected wallet is the award's recipient. */
   isRecipient: boolean;
+  /** Whether the creator has paused the programme: `release` is refused (`Paused`, 39). */
+  paused?: boolean;
 }
 
 /** When may a tranche be released? Settled, inside the release window, by the recipient. */
@@ -92,6 +95,7 @@ export function releaseGate(input: ReleaseGateInput): { enabled: boolean; reason
   if (input.nowMs / 1000 >= Number(input.releaseDeadline)) {
     return { enabled: false, reason: `The release window closed on ${formatDate(input.releaseDeadline)}.` };
   }
+  if (input.paused) return { enabled: false, reason: PAUSED_REASON };
   return { enabled: true, reason: '' };
 }
 
