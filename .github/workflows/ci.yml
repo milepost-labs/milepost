@@ -91,9 +91,8 @@ jobs:
 
       - name: Coverage
         env:
-          # Actual line coverage is about 98%; this leaves real headroom while
-          # still catching a meaningful regression.
-          COVERAGE_THRESHOLD: "90"
+          # Deliberate failure to demonstrate coverage gate enforcement.
+          COVERAGE_THRESHOLD: "101"
         run: |
           # `--fail-under-lines` does the threshold check itself. Parsing the
           # percentage out of the text table is fragile — the TOTAL row carries
