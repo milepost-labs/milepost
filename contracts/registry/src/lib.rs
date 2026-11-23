@@ -138,6 +138,9 @@ impl Registry {
             program_wasm,
         };
         env.storage().instance().set(&Key::Config, &config);
+        env.storage()
+            .instance()
+            .extend_ttl(BUMP_THRESHOLD, BUMP_LEDGERS);
         ConfigChanged { config }.publish(&env);
         Ok(())
     }
@@ -210,6 +213,9 @@ impl Registry {
         env.storage()
             .persistent()
             .extend_ttl(&key, BUMP_THRESHOLD, BUMP_LEDGERS);
+        env.storage()
+            .instance()
+            .extend_ttl(BUMP_THRESHOLD, BUMP_LEDGERS);
 
         ProgrammeCreated {
             programme: programme.clone(),
@@ -324,6 +330,9 @@ impl Registry {
 
     fn save(env: &Env, config: Config) {
         env.storage().instance().set(&Key::Config, &config);
+        env.storage()
+            .instance()
+            .extend_ttl(BUMP_THRESHOLD, BUMP_LEDGERS);
         ConfigChanged { config }.publish(env);
     }
 }

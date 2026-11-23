@@ -696,3 +696,118 @@ fn a_rejected_transfer_publishes_nothing() {
 
     assert_events(&f.env, &f.client.address, &[]);
 }
+
+// ---- TTL policy (#674) ----
+
+#[test]
+fn configure_bumps_policy_ttl() {
+    use soroban_sdk::testutils::storage::Persistent as _;
+
+    let f = setup();
+    let ttl = |key: &Key| {
+        f.env.as_contract(&f.client.address, || {
+            f.env.storage().persistent().get_ttl(key)
+        })
+    };
+
+    assert!(ttl(&Key::Policy(f.wallet.clone())) >= BUMP_LEDGERS - 1);
+
+    // Advance past the 60-day bump threshold (90 - 40 = 50 days remaining).
+    f.env
+        .ledger()
+        .with_mut(|l| l.sequence_number += 40 * DAY_IN_LEDGERS);
+    assert!(ttl(&Key::Policy(f.wallet.clone())) < BUMP_THRESHOLD);
+
+    // Re-configuring as steward pushes the policy TTL back out.
+    f.client
+        .configure(&f.steward, &f.wallet, &f.token, &(CAP * 2), &PERIOD);
+    assert!(ttl(&Key::Policy(f.wallet)) >= BUMP_LEDGERS - 1);
+}
+
+#[test]
+fn allow_and_deny_payee_manage_payee_ttl() {
+    use soroban_sdk::testutils::storage::Persistent as _;
+
+    let f = setup();
+    let ttl = |key: &Key| {
+        f.env.as_contract(&f.client.address, || {
+            f.env.storage().persistent().get_ttl(key)
+        })
+    };
+
+    assert!(ttl(&Key::Payee(f.wallet.clone(), f.school.clone())) >= BUMP_LEDGERS - 1);
+
+    f.env
+        .ledger()
+        .with_mut(|l| l.sequence_number += 40 * DAY_IN_LEDGERS);
+    assert!(ttl(&Key::Policy(f.wallet.clone())) < BUMP_THRESHOLD);
+
+    // Adding a new payee bumps that payee's entry; Policy itself is not bumped here.
+    let shop = Address::generate(&f.env);
+    f.client.allow_payee(&f.steward, &f.wallet, &shop);
+    assert!(ttl(&Key::Payee(f.wallet.clone(), shop.clone())) >= BUMP_LEDGERS - 1);
+    assert!(ttl(&Key::Policy(f.wallet.clone())) < BUMP_THRESHOLD);
+
+    // Denying removes the payee entry; re-allowing creates and bumps it anew.
+    f.client.deny_payee(&f.steward, &f.wallet, &shop);
+    assert!(!f.client.is_payee(&f.wallet, &shop));
+
+    f.env
+        .ledger()
+        .with_mut(|l| l.sequence_number += 40 * DAY_IN_LEDGERS);
+    f.client.allow_payee(&f.steward, &f.wallet, &shop);
+    assert!(ttl(&Key::Payee(f.wallet, shop)) >= BUMP_LEDGERS - 1);
+}
+
+#[test]
+fn install_bumps_installed_ttl() {
+    use soroban_sdk::testutils::storage::Persistent as _;
+
+    let f = setup();
+    let ttl = |key: &Key| {
+        f.env.as_contract(&f.client.address, || {
+            f.env.storage().persistent().get_ttl(key)
+        })
+    };
+
+    f.client.install(&f.wallet);
+    assert!(ttl(&Key::Installed(f.wallet.clone())) >= BUMP_LEDGERS - 1);
+
+    f.env
+        .ledger()
+        .with_mut(|l| l.sequence_number += 40 * DAY_IN_LEDGERS);
+    assert!(ttl(&Key::Installed(f.wallet.clone())) < BUMP_THRESHOLD);
+
+    f.client.install(&f.wallet);
+    assert!(ttl(&Key::Installed(f.wallet)) >= BUMP_LEDGERS - 1);
+}
+
+#[test]
+fn policy_check_bumps_policy_but_not_payee_or_installed() {
+    use soroban_sdk::testutils::storage::Persistent as _;
+
+    let f = setup();
+    let ttl = |key: &Key| {
+        f.env.as_contract(&f.client.address, || {
+            f.env.storage().persistent().get_ttl(key)
+        })
+    };
+
+    f.client.install(&f.wallet);
+
+    f.env
+        .ledger()
+        .with_mut(|l| l.sequence_number += 40 * DAY_IN_LEDGERS);
+    assert!(ttl(&Key::Policy(f.wallet.clone())) < BUMP_THRESHOLD);
+    assert!(ttl(&Key::Payee(f.wallet.clone(), f.school.clone())) < BUMP_THRESHOLD);
+    assert!(ttl(&Key::Installed(f.wallet.clone())) < BUMP_THRESHOLD);
+
+    f.client.policy__(
+        &f.wallet,
+        &signer(&f),
+        &transfer_context(&f, &f.wallet, &f.school, 100),
+    );
+    assert!(ttl(&Key::Policy(f.wallet.clone())) >= BUMP_LEDGERS - 1);
+    assert!(ttl(&Key::Payee(f.wallet.clone(), f.school.clone())) < BUMP_THRESHOLD);
+    assert!(ttl(&Key::Installed(f.wallet)) < BUMP_THRESHOLD);
+}
