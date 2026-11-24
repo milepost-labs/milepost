@@ -100,6 +100,35 @@ A rule that genuinely cannot be fixed is recorded in
 reason, and review treats the list as something that should stay empty. Prefer
 fixing the page.
 
+### Console errors in tests
+
+`npm test` fails any test that logs a `console.error` it did not expect (#690).
+React reports render, `act()` and prop-type problems this way, and a test can
+pass while one is logged. The guard is installed once for every test file, in
+`src/test/setup.ts`, and implemented in `src/test/consoleErrors.ts`.
+
+A test that logs an error on purpose says so first, with the message it expects
+and the reason:
+
+```ts
+import { expectConsoleError } from '../test/consoleErrors';
+
+expectConsoleError(/Loading chunk 123 failed/, 'the lazy chunk fails on purpose');
+```
+
+Call it in the test body, before the code that logs. The pattern is matched
+against the whole message, and a reason of ten characters or fewer throws. The
+opt-ins reset before each test. The error still prints, so it stays visible in
+the log. `console.warn` is not checked.
+
+To run it locally:
+
+```sh
+cd frontend
+npm ci            # first time, or after a dependency change
+npm test          # every test, including the console guard
+```
+
 ### Network setting
 
 The app has one network setting, `src/config/network.ts`, fixed per build by

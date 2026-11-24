@@ -20,12 +20,12 @@ jobs:
     permissions:
       contents: read
     steps:
-      - uses: actions/checkout@v7
-      - uses: dtolnay/rust-toolchain@stable
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+      - uses: dtolnay/rust-toolchain@39008827e6b4319a349e9a42dfc90579dd25f1ca # stable (branch, pinned at this commit)
         with:
           targets: wasm32v1-none
           components: rustfmt, clippy
-      - uses: Swatinem/rust-cache@v2
+      - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2
 
       - name: Format
         run: cargo fmt --all --check
@@ -36,7 +36,7 @@ jobs:
       # turned this job red on a green audit. Accepted advisories, each with its
       # reason, are in .cargo/audit.toml. A prebuilt binary, because
       # `cargo install cargo-audit` compiles from source on every run.
-      - uses: taiki-e/install-action@v2
+      - uses: taiki-e/install-action@fe3acb53a98b62c772db35de75ce0e4595e7ca8c # v2
         with:
           tool: cargo-audit
 
@@ -45,7 +45,7 @@ jobs:
 
       # Licences, duplicate versions and source registries, against deny.toml.
       # Advisories stay with cargo-audit above. A prebuilt binary, as above.
-      - uses: taiki-e/install-action@v2
+      - uses: taiki-e/install-action@fe3acb53a98b62c772db35de75ce0e4595e7ca8c # v2
         with:
           tool: cargo-deny
       - name: Check licences, bans and sources
@@ -76,7 +76,10 @@ jobs:
       # only finds out after a transaction is already submitted. Fail here
       # instead. `networks.testnet` on the four singletons is ignored so a
       # wasm-only regeneration cannot fail for the missing address.
-      - uses: stellar/stellar-cli@v28.0.0
+      - uses: stellar/stellar-cli@300aaf69ab100536678bdb641428b06f06b318ea # v28.0.0
+        # Pinned by commit, so the action cannot read the CLI version from its ref.
+        with:
+          version: 28.0.0
       - name: Check TypeScript bindings
         run: ./scripts/check-bindings.sh
 
@@ -98,7 +101,7 @@ jobs:
         run: ./scripts/check-sizes.sh >> "$GITHUB_STEP_SUMMARY"
 
       - name: Install cargo-llvm-cov
-        uses: taiki-e/install-action@v2
+        uses: taiki-e/install-action@fe3acb53a98b62c772db35de75ce0e4595e7ca8c # v2
         with:
           tool: cargo-llvm-cov
 
@@ -157,12 +160,12 @@ jobs:
     # indexer decoding an event, fails here rather than after the next release
     # reaches them.
     steps:
-      - uses: actions/checkout@v7
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
           repository: milepost-labs/milepost-indexer
           path: milepost-indexer
-      - uses: actions/setup-node@v7
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7
         with:
           node-version: 24
           cache: npm
@@ -279,8 +282,8 @@ jobs:
     # rather than at the next PR.
     if: github.event_name != 'pull_request' || github.base_ref == 'dev'
     steps:
-      - uses: actions/checkout@v7
-      - uses: actions/setup-node@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7
         with:
           node-version: 24
           cache: npm
@@ -307,8 +310,8 @@ jobs:
     permissions:
       contents: read
     steps:
-      - uses: actions/checkout@v7
-      - uses: actions/setup-node@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7
         with:
           node-version: 24
           cache: npm
@@ -335,8 +338,8 @@ jobs:
     # Reflow: no sideways page scroll at 320px, signed in and signed out.
     # See frontend/tests/browser and "Browser checks" in CONTRIBUTING.md.
     steps:
-      - uses: actions/checkout@v7
-      - uses: actions/setup-node@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7
         with:
           node-version: 24
           cache: npm
@@ -359,7 +362,7 @@ jobs:
 
       - name: Upload Playwright report on failure
         if: failure()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
           name: browser-checks-report
           path: frontend/playwright-report/
@@ -374,8 +377,8 @@ jobs:
     permissions:
       contents: read
     steps:
-      - uses: actions/checkout@v7
-      - uses: actions/setup-node@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7
         with:
           node-version: 24
 

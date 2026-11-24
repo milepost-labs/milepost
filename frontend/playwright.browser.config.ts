@@ -10,6 +10,8 @@
  *   - smoke-signed-in:   every route loads with no error and no CSP violation.
  *   - reflow-signed-in:  every route is free of horizontal page scroll at 320px.
  *   - reflow-signed-out: the same reflow check on the signed-out build.
+ *   - contrast-signed-in: axe colour contrast on every route, in light and dark.
+ *   - keyboard-signed-in: the money path, completed with the keyboard alone.
  *
  * Only the signed-in build is fixture mode, so only it can render the sample
  * data the smoke test expects. The signed-out build is for layout only.
@@ -59,6 +61,24 @@ export default defineConfig({
         ...devices['Desktop Chrome'],
         baseURL: SIGNED_OUT_URL,
         viewport: { width: 320, height: 640 },
+      },
+    },
+    {
+      name: 'contrast-signed-in',
+      testMatch: 'contrast.spec.ts',
+      use: {
+        ...devices['Desktop Chrome'],
+        baseURL: SIGNED_IN_URL,
+        viewport: { width: 1280, height: 900 },
+      },
+    },
+    {
+      name: 'keyboard-signed-in',
+      testMatch: 'keyboard.spec.ts',
+      use: {
+        ...devices['Desktop Chrome'],
+        baseURL: SIGNED_IN_URL,
+        viewport: { width: 1280, height: 900 },
       },
     },
   ],
