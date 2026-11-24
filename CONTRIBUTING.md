@@ -152,7 +152,7 @@ an entry with no reason. Fixing the page is always preferred.
 
 The `browser` job in [`.github/workflows/ci.yml`](.github/workflows/ci.yml) opens
 the built app in Chromium, served with the headers [`frontend/vercel.json`](frontend/vercel.json)
-sends in production, and checks two things on every pull request:
+sends in production, and checks these on every pull request:
 
 - **Smoke:** every page loads with no uncaught error, no console error and no
   Content-Security-Policy violation. A page that loads a host the policy does
@@ -160,6 +160,17 @@ sends in production, and checks two things on every pull request:
 - **Reflow:** no page scrolls sideways at 320 CSS px, which is 400% zoom on a
   1280 px screen (WCAG 1.4.10). The check runs signed in and signed out. A wide
   table may scroll inside its own container; the page itself may not.
+- **Contrast:** every page, in light and dark, passes axe-core's `color-contrast`
+  rule in Chromium, so text meets 4.5:1 against what is behind it
+  (`frontend/tests/browser/contrast.spec.ts`). Fix a colour in
+  `frontend/src/styles/tokens.css`, not on the page. A failure that cannot be
+  fixed goes in `CONTRAST_EXCEPTIONS` in that file, with a reason. The jsdom suite
+  cannot see colours, which is why this check exists.
+- **Keyboard:** contribute, apply and release each complete using only Tab,
+  Shift+Tab, Enter and typing, and every control the keyboard lands on shows a
+  focus ring (`frontend/tests/browser/keyboard.spec.ts`). Vote and attest are not
+  covered yet: in the fixture build they submit to the Soroban RPC, so they would
+  reach the testnet from CI.
 
 Run it locally from `frontend/`:
 
@@ -400,6 +411,23 @@ script, if a package comes from outside the npm or crates.io registries, if a
 workflow uses `pull_request_target`, or if a file contains hidden Unicode. If
 your dependency is legitimately blocked, say why in the PR. A maintainer
 records the exception, with its reason, in `.github/malware-check-allowlist.json`.
+
+**Pinned actions.** Every `uses:` in `ci.yml`, `mutants.yml` and `smoke-test.yml`
+names a full commit SHA, with the version in a trailing comment, for example
+`uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7`. A moved
+tag cannot change the code that runs with the repository's token. To pin a new
+action, resolve the tag to its commit, then put that SHA and the tag in the
+comment:
+
+```bash
+git ls-remote https://github.com/OWNER/ACTION refs/tags/vX refs/tags/vX^{}
+```
+
+An annotated tag lists a second `^{}` line; use that commit, not the tag object.
+`dtolnay/rust-toolchain` has no version tag, so it is pinned to the commit its
+`stable` branch points at, and is the one pin Dependabot cannot bump. Dependabot
+(`.github/dependabot.yml`) proposes updates for the rest. `release.yml` is
+maintainer-owned and not pinned here.
 
 **Workflow permissions.** `ci.yml`, `mutants.yml` and `smoke-test.yml` start with
 `permissions: contents: read`, so a job cannot write to the repository, comment
