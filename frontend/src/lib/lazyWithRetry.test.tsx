@@ -3,6 +3,7 @@ import { render, screen, waitFor } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { ErrorBoundary } from '../components/ErrorBoundary';
+import { expectConsoleError } from '../test/consoleErrors';
 import { lazyWithRetry } from './lazyWithRetry';
 
 describe('lazyWithRetry', () => {
@@ -18,6 +19,12 @@ describe('lazyWithRetry', () => {
       value: { ...window.location, reload },
     });
 
+    // The chunk fails on purpose. ErrorBoundary logs it, and React logs the
+    // error it caught, so both messages are expected here and nowhere else.
+    expectConsoleError(
+      /Loading chunk 123 failed|ErrorBoundary caught|error boundary/,
+      'the lazy chunk fails on purpose; ErrorBoundary and React log the caught error',
+    );
     const Lazy = lazyWithRetry(() => Promise.reject(new Error('Loading chunk 123 failed')));
 
     render(
@@ -42,6 +49,12 @@ describe('lazyWithRetry', () => {
       value: { ...window.location, reload },
     });
 
+    // The chunk fails on purpose. ErrorBoundary logs it, and React logs the
+    // error it caught, so both messages are expected here and nowhere else.
+    expectConsoleError(
+      /Loading chunk 123 failed|ErrorBoundary caught|error boundary/,
+      'the lazy chunk fails on purpose; ErrorBoundary and React log the caught error',
+    );
     const Lazy = lazyWithRetry(() => Promise.reject(new Error('Loading chunk 123 failed')));
 
     render(
