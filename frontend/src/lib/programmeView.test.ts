@@ -1,3 +1,4 @@
+import type { ProgrammeChainRead } from './programmeReads';
 import { describe, expect, it } from 'vitest';
 
 import { DEMO_PROGRAMME_ID } from '../context/sorobanStore';
@@ -107,8 +108,23 @@ describe('mergeProgrammes', () => {
 });
 
 describe('real programme reads', () => {
+  // Every field the chain read carries, unknown unless a test sets it.
+  const read = (fields: Partial<ProgrammeChainRead>): ProgrammeChainRead => ({
+    phase: null,
+    budget: null,
+    contributed: null,
+    granted: null,
+    released: null,
+    refunded: null,
+    feeBps: null,
+    quorum: null,
+    applyDeadline: null,
+    metadataHash: null,
+    ...fields,
+  });
+
   it('maps a complete chain read and leaves incomplete reads loading', () => {
-    const hydrated = chainFromRead({
+    const hydrated = chainFromRead(read({
       phase: 'Open',
       budget: 9_000n,
       feeBps: 500,
@@ -117,17 +133,17 @@ describe('real programme reads', () => {
       refunded: 0n,
       quorum: 2,
       applyDeadline: 1_700_086_400n,
-    }, new Date(1_700_000_000_000));
+    }), new Date(1_700_000_000_000));
     expect(hydrated?.phase).toBe('Open');
     expect(hydrated?.closesInDays).toBe(1);
-    expect(chainFromRead({ phase: null, budget: 1n, feeBps: null })).toBeNull();
+    expect(chainFromRead(read({ budget: 1n }))).toBeNull();
   });
 
   it('hydrates only real entries and labels their source', () => {
     const programme = directoryProgramme({ id: 'CREAL', contributed: '10', createdLedger: 1 });
     const real = { ...programme, sample: false, source: 'index' as const };
     const hydrated = hydrateRealProgrammes([real], {
-      CREAL: { phase: 'Settled', budget: 10n, feeBps: null },
+      CREAL: read({ phase: 'Settled', budget: 10n }),
     });
     expect(hydrated[0].real).toBe(true);
     expect(programmeSourceTag(hydrated[0])).toBe('Live on chain');

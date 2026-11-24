@@ -178,6 +178,12 @@ jobs:
       - name: Verify bindings are publishable
         run: ./scripts/check-bindings-publishable.sh
 
+      # The file list above cannot see a broken `exports` map, a missing type
+      # file or an ESM-only import. Install the real tarballs into an empty
+      # project and use them the way an integrator would.
+      - name: Install, import and typecheck each binding package
+        run: ./scripts/check-bindings-consumable.sh
+
       # Every contract error must have a plain-language explanation in the app,
       # and the app must not explain a code the contracts no longer have.
       - name: Check the app explains every contract error

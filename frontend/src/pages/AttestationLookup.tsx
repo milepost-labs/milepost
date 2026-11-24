@@ -439,51 +439,38 @@ export const AttestationLookup = () => {
                   {results.length} result{results.length === 1 ? '' : 's'}
                   {!current.sample && ' · read on the chain just now'}
                 </p>
-              </div>
-            )}
-
-            {addressSearch?.matches.map((match) => (
-              <MatchCard
-                key={match.uid}
-                match={match}
-                programme={programme}
-                programmeId={programmeId}
-                nowSeconds={nowSeconds}
-                onOpen={pick}
-              />
-            ))}
-
-            {!isHex64 && !isAddress && searchedYet && hits.length === 0 && (
-              <div className="attest-not-found" role="alert">
-                <span className="attest-not-found__title">Nothing found for &ldquo;{searched.trim()}&rdquo;</span>
-                <span className="attest-not-found__detail">
-                  Check the id. Attestations are read on-chain; archived ones need a keepalive
-                  before they can be read.
-                </span>
-              </div>
-            )}
-
-            {hits.map((attestation) => {
-              return (
-                <article key={attestation.uid} className="attest-result-card">
-                  <div className="attest-result-card__head">
-                    <span className="attest-result-card__uid">{attestation.uid}</span>
-                    <Badge tone="warning">Sample data</Badge>
-                    {attestation.revoked && <Badge tone="danger">Revoked</Badge>}
-                    {/* Still checked when revoked: a proof revoked after it
-                        released a tranche must not hide that money moved. */}
-                    <SpentStatus programme={programme} uid={attestation.uid} />
-                  </div>
-                  {programmeId && (
-                    <span className="attest-result-card__programme">
-                      Usage checked against <span className="numeric">{programmeId}</span>
-                    </span>
-                  )}
-                  {rowsFor(attestation).map((row) => (
-                    <div key={row.key} className="attest-result-row">
-                      <span className="attest-result-row__key">{row.key}</span>
-                      <span className="attest-result-row__value">{row.value}</span>
-                    </div>
+                <ul className="att-list">
+                  {results.map((r) => (
+                    <li key={r.uid}>
+                      <button
+                        type="button"
+                        className="att-item"
+                        aria-current={r.uid === current.uid ? 'true' : undefined}
+                        onClick={() => setSelected(r.uid)}
+                      >
+                        <span className="att-item__icon" aria-hidden="true">
+                          {r.status === 'revoked' ? <Ban size={18} /> : r.status === 'valid' ? <ShieldCheck size={18} /> : <Check size={18} />}
+                        </span>
+                        <span className="att-item__text">
+                          <b className="numeric">{short(r.uid)}</b>
+                          <span>
+                            {r.attestation ? (
+                              <>
+                                About <span className="numeric">{truncateAddress(r.attestation.subject)}</span> · signed by{' '}
+                                <span className="numeric">{truncateAddress(r.attestation.attester)}</span>
+                              </>
+                            ) : r.sample ? (
+                              <>
+                                About <span className="numeric">{truncateAddress(r.sample.subject)}</span> · sample
+                              </>
+                            ) : (
+                              'Entry not readable now'
+                            )}
+                          </span>
+                        </span>
+                        <StatusPill status={r.status} />
+                      </button>
+                    </li>
                   ))}
                 </ul>
               </section>

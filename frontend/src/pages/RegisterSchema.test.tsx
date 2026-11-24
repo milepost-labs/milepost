@@ -46,7 +46,7 @@ describe('RegisterSchema', () => {
     fireEvent.change(screen.getByLabelText('Schema name'), {
       target: { value: 'shifts-confirmed/v1' },
     });
-    fireEvent.change(screen.getByLabelText('Fields'), {
+    fireEvent.change(screen.getByLabelText('What does signing mean?'), {
       target: { value: 'programme: address, tranche: u32' },
     });
   }
@@ -141,7 +141,7 @@ describe('RegisterSchema', () => {
       </MemoryRouter>,
     );
     expect(await screen.findByText('Not registered on this network')).toBeTruthy();
-    expect(screen.getByText('Only the authority')).toBeTruthy();
+    expect(screen.getByText('Only the owner')).toBeTruthy();
   });
 
   it('allows resetting the form after a successful registration', async () => {
@@ -154,7 +154,9 @@ describe('RegisterSchema', () => {
     fillValidForm();
     fireEvent.click(screen.getByRole('checkbox'));
     fireEvent.click(screen.getByRole('button', { name: 'Register schema' }));
-    fireEvent.click(await screen.findByRole('button', { name: 'Register another' }));
+    fireEvent.click(await screen.findByRole('button', { name: 'Sign and send' }));
+    // Closing the receipt clears the form for the next schema.
+    fireEvent.click(await screen.findByRole('button', { name: 'Done' }));
     expect(screen.getByLabelText('Schema name')).toHaveProperty('value', '');
   });
 
@@ -235,7 +237,7 @@ describe('RegisterSchema', () => {
     fillValidForm();
     fireEvent.click(screen.getByRole('button', { name: 'Register schema' }));
 
-    expect(await screen.findByText(/Something went wrong/i)).toBeTruthy();
+    expect((await screen.findAllByText('Schema not registered')).length).toBeGreaterThan(0);
     expect(screen.getByText(/Nothing was transferred · attest error 2/)).toBeTruthy();
   });
 
@@ -248,7 +250,7 @@ describe('RegisterSchema', () => {
     });
     fireEvent.click(screen.getByRole('button', { name: 'Register schema' }));
 
-    expect(await screen.findByText(/Something went wrong/i)).toBeTruthy();
+    expect((await screen.findAllByText('Schema not registered')).length).toBeGreaterThan(0);
     expect(screen.getByText(/Nothing was transferred · attest error 1/)).toBeTruthy();
   });
 
@@ -258,8 +260,10 @@ describe('RegisterSchema', () => {
     fillValidForm();
     fireEvent.click(screen.getByRole('button', { name: 'Register schema' }));
 
-    expect(await screen.findByText(/Something went wrong/i)).toBeTruthy();
-    expect(screen.getByRole('alert')).toBeTruthy();
-    expect(screen.queryByRole('status', { name: /Schema registered/i })).toBeNull();
+    expect((await screen.findAllByText('Schema not registered')).length).toBeGreaterThan(0);
+    // A choice, not a failure: explained plainly, with no alert.
+    expect(screen.getByText(/You declined the signature\./)).toBeTruthy();
+    expect(screen.queryByRole('alert')).toBeNull();
+    expect(screen.queryByText('Schema registered')).toBeNull();
   });
 });
