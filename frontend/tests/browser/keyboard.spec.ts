@@ -15,7 +15,7 @@
  */
 
 import { test, expect, type Locator, type Page } from '@playwright/test';
-import { serveFixtureIndex, settle } from './support';
+import { settle } from './support';
 
 /**
  * Enough Tab presses to cross the header, its sub-navigation and a page's
@@ -27,18 +27,43 @@ const SETTLE_TIMEOUT_MS = 15_000;
 
 /** Asserts that the focused element shows a 2px outline, the app's focus ring. */
 async function expectFocusRing(page: Page, step: string): Promise<void> {
+  // Rings fade in (`transition: box-shadow`), so read them once it has finished.
+  await page.evaluate(() =>
+    Promise.all(
+      document
+        .getAnimations()
+        .filter((animation) => animation instanceof CSSTransition)
+        .map((animation) => animation.finished.catch(() => undefined)),
+    ),
+  );
   const focused = await page.evaluate(() => {
     const element = document.activeElement as HTMLElement | null;
     if (!element || element === document.body) return null;
     const style = getComputedStyle(element);
-    const label = (element.getAttribute('aria-label') ?? element.textContent ?? '').trim().slice(0, 40);
+    const label = (
+      element.getAttribute('aria-label') ??
+      (element as HTMLInputElement).labels?.[0]?.textContent ??
+      element.textContent ??
+      ''
+    )
+      .trim()
+      .slice(0, 40);
+    // A text field's ring is drawn by its wrapper (`.ui-field__control:focus-within`
+    // in ui.css), as an inset 2px box-shadow, so the input itself has no outline.
+    const wrapper = element.closest('.ui-field__control');
+    const wrapperRing = wrapper ? getComputedStyle(wrapper).boxShadow : 'none';
     return {
       name: `${element.tagName.toLowerCase()} "${label}"`,
       outlineStyle: style.outlineStyle,
       outlineWidth: parseFloat(style.outlineWidth),
+      wrapperRing,
     };
   });
   expect(focused, `${step}: nothing has focus`).not.toBeNull();
+  if (focused?.wrapperRing && focused.wrapperRing !== 'none') {
+    expect(focused.wrapperRing, `${step}: focus ring on ${focused.name} is under 2px`).toMatch(/0px 0px 0px ([2-9]|\d{2,})(\.\d+)?px inset/);
+    return;
+  }
   expect(focused?.outlineStyle, `${step}: no visible focus ring on ${focused?.name}`).toBe('solid');
   expect(focused?.outlineWidth, `${step}: focus ring on ${focused?.name} is under 2px`).toBeGreaterThanOrEqual(2);
 }
@@ -60,7 +85,13 @@ async function tabTo(page: Page, target: Locator, step: string): Promise<void> {
 }
 
 async function openPage(page: Page, path: string): Promise<void> {
-  await serveFixtureIndex(page);
+  // An empty index, as the screenshot tests use, so the pages show the built-in
+  // sample programmes. The fixture index lists programme ids that do not exist on
+  // the chain, and the recipient pages then show a read error instead of a form.
+  await page.route(
+    (url) => url.pathname.startsWith('/index/'),
+    (route) => route.fulfill({ status: 200, contentType: 'application/json', body: '[]' }),
+  );
   await page.goto(path, { waitUntil: 'load' });
   await settle(page);
 }

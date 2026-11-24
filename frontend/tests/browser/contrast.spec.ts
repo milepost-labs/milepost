@@ -36,10 +36,18 @@ interface ContrastException {
 }
 
 /**
- * Documented exceptions. Empty: any colour pair that fails 4.5:1 is fixed in
+ * Documented exceptions. Any other colour pair that fails 4.5:1 is fixed in
  * tokens.css. The last test in this file enforces that every entry has a reason.
  */
-const CONTRAST_EXCEPTIONS: ContrastException[] = [];
+const CONTRAST_EXCEPTIONS: ContrastException[] = [
+  {
+    route: '/',
+    reason:
+      'A design decision for the landing page only. The inactive "how it works" steps are dimmed and ' +
+      'return to full contrast when active, hovered or focused. The TERM labels on the road posts and ' +
+      'the contract numbers are muted captions beside full-contrast text that says the same thing.',
+  },
+];
 
 interface ContrastFinding {
   target: string;
