@@ -214,6 +214,15 @@ pub const MAX_QUORUM: u32 = 16;
 pub const MAX_FEE_BPS: u32 = 1_000;
 /// Maximum number of payees in a single batch operation.
 pub const MAX_PAYEE_BATCH: u32 = 50;
+/// Maximum number of tranches released in a single `release_batch` call.
+///
+/// Lower than [`MAX_PAYEE_BATCH`] because each released tranche publishes two
+/// events (`Released`, which carries the whole award, and the standing credit),
+/// and a transaction may carry only 16,384 bytes of events. Fifty tranches
+/// measured 62,588 bytes, nearly four times the limit, so a batch that size
+/// could never be submitted. See `release_batch_worst_case_stays_within_network_limits`,
+/// which holds this value to 80% of every network limit.
+pub const MAX_RELEASE_BATCH: u32 = 10;
 const BPS_DENOMINATOR: i128 = 10_000;
 
 #[contracterror]
@@ -1446,8 +1455,8 @@ impl Programme {
     /// Batch release multiple tranches in one transaction.
     ///
     /// Takes a bounded vector of attestation uids, verifying each independently
-    /// as the single-proof path does. The batch is bounded by MAX_PAYEE_BATCH
-    /// (reused from payee batching). Each proof must still be verified independently
+    /// as the single-proof path does. The batch is bounded by MAX_RELEASE_BATCH,
+    /// the largest batch whose events fit the network's per-transaction limit. Each proof must still be verified independently
     /// — batching must not weaken any check.
     ///
     /// Partial failure behaviour: if any proof fails verification or is already spent,
@@ -1459,7 +1468,7 @@ impl Programme {
         uids: Vec<BytesN<32>>,
         attester: Address,
     ) -> Result<i128, Error> {
-        if uids.len() > MAX_PAYEE_BATCH {
+        if uids.len() > MAX_RELEASE_BATCH {
             return Err(Error::BatchTooLarge);
         }
         if uids.is_empty() {

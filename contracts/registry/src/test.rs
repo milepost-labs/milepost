@@ -792,6 +792,61 @@ mod enumeration_proptests {
     }
 }
 
+/// Worst case for `create`: a quorum of 16 (the programme's `MAX_QUORUM`), 16
+/// reviewers and 16 verifiers, and the full programme wasm deployed and
+/// constructed in the same transaction.
+///
+/// The programme constructor has no limit on the reviewer or verifier lists
+/// beyond `quorum <= reviewers.len()`, so 16 each is the largest sets the quorum
+/// bound makes meaningful, not a limit the contract enforces. The schema is
+/// restricted, so its authority has to be among the verifiers; it is one of the
+/// 16. Every reviewer and verifier costs a persistent write and a TTL bump in
+/// the constructor, then the registry adds the nonce, the `add_writer` call on
+/// `record` and its own programme entry.
+///
+/// Run with `--nocapture` to see the measured figures.
+#[test]
+fn create_worst_case_stays_within_network_limits() {
+    let f = setup();
+    let creator = Address::generate(&f.env);
+
+    let mut reviewers = soroban_sdk::Vec::new(&f.env);
+    for _ in 0..16 {
+        reviewers.push_back(Address::generate(&f.env));
+    }
+    let mut verifiers = soroban_sdk::Vec::new(&f.env);
+    verifiers.push_back(f.verifier.clone());
+    for _ in 1..16 {
+        verifiers.push_back(Address::generate(&f.env));
+    }
+
+    // Measure the real figures rather than trip the SDK's own enforcement, so
+    // an overrun fails below with the numbers instead of a bare host error.
+    f.env.cost_estimate().disable_resource_limits();
+    f.env.cost_estimate().budget().reset_unlimited();
+    let programme = f.client.create(
+        &creator,
+        &f.token,
+        &f.schema,
+        &APPLY_DEADLINE,
+        &REVIEW_DEADLINE,
+        &RELEASE_DEADLINE,
+        &SWEEP_DEADLINE,
+        &16u32,
+        &3u32,
+        &BytesN::from_array(&f.env, &[7u8; 32]),
+        &reviewers,
+        &verifiers,
+        &String::from_str(&f.env, "Health worker stipend 2026"),
+        &0i128,
+    );
+    milepost_test_utils::assert_within_network_limits!(
+        "registry.create (quorum 16, 16 reviewers, 16 verifiers)",
+        f.env
+    );
+
+    assert!(f.client.is_programme(&programme));
+}
 // ---- TTL policy (#673) ----
 
 #[test]
