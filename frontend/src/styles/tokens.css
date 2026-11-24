@@ -300,7 +300,10 @@
   --danger: #f2867c;
   --danger-soft: #3a1a17;
   --focus: #f3c443;
-  --refund-strong: var(--money-refundable);
+  /* Lighter than money-refundable: that orange is 4.0 to 4.3:1 on the dark
+     tinted grounds (accent-soft, warning-soft), under AA for text. This step is
+     at least 5.1:1 on every dark ground. */
+  --refund-strong: #f19670;
   --warning: var(--signal);
   --warning-strong: var(--signal);
   --shadow-1: 0 1px 2px rgba(0, 0, 0, 0.4), 0 6px 20px rgba(0, 0, 0, 0.35);
