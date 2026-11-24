@@ -9,12 +9,20 @@
 #   ./scripts/mutants.sh --in-diff changes.diff   # only lines a diff touches
 #   ./scripts/mutants.sh --shard 2/8              # one CI shard
 #   ./scripts/mutants.sh --report DIR...          # report on earlier results only
+#   ./scripts/mutants.sh --check-excludes         # only check .cargo/mutants.toml
 #
 # Any other arguments go to cargo-mutants. The report goes to stdout, and to the
 # job summary when $GITHUB_STEP_SUMMARY is set.
 #
+# Before mutating, it builds the contracts' wasm and points MILEPOST_WASM_DIR at
+# it. The registry and record tests import that wasm (see their build.rs), and
+# cargo-mutants builds in a copy of the workspace that has no target/, so
+# without this no mutant compiles and the run tests nothing.
+#
 # Exit 0 when no mutant survived; 1 when one did, when the unmutated suite
-# failed, or when cargo-mutants could not run.
+# failed, when too many mutants were unviable to trust the run, when an
+# exclusion in .cargo/mutants.toml matches a different number of mutants than it
+# says, or when cargo-mutants could not run.
 
 set -uo pipefail
 
@@ -48,12 +56,25 @@ for o in outcomes:
 
 missed = by_status["MissedMutant"]
 timeouts = by_status["Timeout"]
+unviable = by_status["Unviable"]
 total = sum(len(v) for v in by_status.values())
+
+# A mutant that does not build tests nothing. A few are normal (a replacement
+# value that does not type-check), but when most are unviable the tree itself
+# does not build, and a report of "0 survived" means nothing was tested. Small
+# runs (a PR's changed lines) are too few to judge by share, except that every
+# mutant failing to build is never a pass.
+MAX_UNVIABLE_SHARE = 0.05
+if total and (len(unviable) == total or (total >= 20 and len(unviable) / total > MAX_UNVIABLE_SHARE)):
+    broken.append(
+        f"{len(unviable)} of {total} mutants were unviable (over {MAX_UNVIABLE_SHARE:.0%}), "
+        "so the run tested almost nothing; check that the unmutated tree builds in a copy of the workspace"
+    )
 
 lines = ["### Mutation testing: load-bearing contracts", ""]
 lines.append(
     f"{total} mutants: {len(by_status['CaughtMutant'])} caught, {len(missed)} survived, "
-    f"{len(timeouts)} timed out, {len(by_status['Unviable'])} unviable."
+    f"{len(timeouts)} timed out, {len(unviable)} unviable."
 )
 for b in broken:
     lines += ["", f"**Did not run:** {b}"]
@@ -97,6 +118,64 @@ sys.exit(1 if missed or broken else 0)
 EOF
 }
 
+# Each `exclude_re` entry in .cargo/mutants.toml ends with `# N`, the number of
+# mutants it is meant to exclude. Count what it matches in the unfiltered list
+# and fail on a difference, so an entry neither goes stale nor quietly swallows
+# a new, real mutant in the same function.
+check_excludes() {
+  local listing
+  listing="$(mktemp)"
+  # Plain text: CI sets CARGO_TERM_COLOR=always, and colour codes inside the
+  # names would stop every pattern below from matching.
+  if ! cargo mutants --list --no-config --colors=never >"$listing" 2>/dev/null; then
+    echo "cargo mutants --list failed, so the exclusions could not be checked" >&2
+    rm -f "$listing"
+    return 1
+  fi
+  python3 - .cargo/mutants.toml "$listing" <<'EOF'
+import re, sys
+
+config, listing = sys.argv[1], sys.argv[2]
+names = open(listing).read().splitlines()
+
+entries, inside = [], False
+for number, line in enumerate(open(config), 1):
+    if re.match(r"\s*exclude_re\s*=\s*\[", line):
+        inside = True
+        continue
+    if inside and line.strip().startswith("]"):
+        break
+    if inside:
+        entry = re.match(r"\s*'([^']*)'\s*,?\s*(?:#\s*(\d+))?\s*$", line)
+        if entry:
+            entries.append((number, entry.group(1), entry.group(2)))
+        elif line.strip() and not line.strip().startswith("#"):
+            print(f".cargo/mutants.toml:{number}: write each exclude_re entry as 'pattern', # N", file=sys.stderr)
+            sys.exit(1)
+
+problems = []
+print(f"Exclusions in .cargo/mutants.toml ({len(entries)} entries):")
+for number, pattern, count in entries:
+    matched = [name for name in names if re.search(pattern, name)]
+    print(f"  {pattern}")
+    for name in matched:
+        print(f"    excludes {name}")
+    if count is None:
+        problems.append(f".cargo/mutants.toml:{number}: '{pattern}' does not say how many mutants it excludes (end the line with # N)")
+    elif len(matched) != int(count):
+        problems.append(
+            f".cargo/mutants.toml:{number}: '{pattern}' should exclude {count} mutant(s) but matches {len(matched)}. "
+            "Re-check the reasoning before changing the count: a new comparison in that function is a real mutant."
+        )
+for problem in problems:
+    print(problem, file=sys.stderr)
+sys.exit(1 if problems else 0)
+EOF
+  local status=$?
+  rm -f "$listing"
+  return $status
+}
+
 if [[ "${1:-}" == "--report" ]]; then
   shift
   [[ $# -gt 0 ]] || { echo "usage: $0 --report DIR..." >&2; exit 1; }
@@ -108,6 +187,19 @@ command -v cargo-mutants >/dev/null || {
   echo "cargo-mutants is not installed: cargo install --locked cargo-mutants" >&2
   exit 1
 }
+
+check_excludes || exit 1
+[[ "${1:-}" == "--check-excludes" ]] && exit 0
+
+# cargo-mutants copies the workspace without target/, so the tests in the copy
+# read the wasm from this checkout's build, through the absolute path build.rs
+# writes from MILEPOST_WASM_DIR.
+echo "Building the contracts' wasm for the tests that import it"
+cargo build --target wasm32v1-none --release || {
+  echo "the wasm build failed, so no mutant could build either" >&2
+  exit 1
+}
+export MILEPOST_WASM_DIR="${CARGO_TARGET_DIR:-$ROOT/target}/wasm32v1-none/release"
 
 rm -rf mutants.out mutants.out.old
 cargo mutants "$@"

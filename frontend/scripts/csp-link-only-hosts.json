@@ -1,0 +1,14 @@
+[
+  {
+    "host": "stellar.expert",
+    "reason": "The block explorer. src/lib/format.ts builds transaction, account and contract URLs that pages render as links; the app never reads from it."
+  },
+  {
+    "host": "github.com",
+    "reason": "Repository links on the landing page (src/pages/homeContent.ts). Opened by the reader, never fetched."
+  },
+  {
+    "host": "www.freighter.app",
+    "reason": "Where to install the wallet, linked from the sign-in sheet. The wallet itself is reached through the browser extension, not over the network."
+  }
+]

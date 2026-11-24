@@ -240,9 +240,13 @@ and decide which of two things it is:
    `sweeping_unclaimed_closes_out_an_unswept_fee`,
    `batch_release_accepts_the_maximum_size`.
 2. **An equivalent mutant.** It cannot change behaviour, because the case it
-   differs on cannot happen. Add it to `exclude_re` in `.cargo/mutants.toml`
-   with a comment explaining why it is unreachable. An exclusion without a reason
-   will be sent back in review.
+   differs on cannot happen. If the code can be written so the mutant does not
+   arise (`!= 0` rather than `> 0` on an unsigned value), prefer that. Otherwise
+   add it to `exclude_re` in `.cargo/mutants.toml` with a comment explaining why
+   it is unreachable. An exclusion without a reason will be sent back in review.
+   Match it by operator and function, never by line, and end the entry with
+   `# N`, the number of mutants it excludes; `scripts/mutants.sh` fails when the
+   count stops matching.
 
 When in doubt it is (1). "No test would notice" is the finding; "it cannot
 happen" needs an argument.
@@ -251,8 +255,12 @@ happen" needs an argument.
 
 | Mutant | Why it is excluded |
 | :--- | :--- |
-| `release_batch`: `award.tranches > 0` → `>=` | Differs only for an award with zero tranches. The constructor refuses `tranches == 0`, and every award copies the config's value, so the branch is unreachable. |
 | `review` (both branches): `approved < existing` → `<=` | Changes only whether a vote is inserted before or after an equal vote. Equal `i128`s are indistinguishable, so the sorted votes and the median are identical. |
+| `extend_release_deadline`: `new_release_deadline > config.sweep_deadline` → `>=` | When the two are equal, both branches set the sweep deadline to the same value. |
+
+`release_batch` used to need an entry for `award.tranches > 0` → `>=`, which
+differs only for an award with zero tranches, which the line above it already
+refuses. It is now written `award.tranches != 0`, which has no such mutant.
 
 ## The full gate
 

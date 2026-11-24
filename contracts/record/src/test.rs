@@ -7,8 +7,10 @@ use soroban_sdk::{testutils::Address as _, testutils::Ledger as _, Env, Event as
 // Upgrading needs a real uploaded wasm to point at. Importing this crate's own
 // artifact means `cargo build --target wasm32v1-none --release` must run first,
 // which CI already does before testing — the registry's tests rely on the same.
+// build.rs writes the import with an absolute path, so it also resolves in
+// cargo-mutants' copy of the workspace.
 mod built {
-    soroban_sdk::contractimport!(file = "../../target/wasm32v1-none/release/milepost_record.wasm");
+    include!(concat!(env!("OUT_DIR"), "/import_wasm.rs"));
 }
 
 struct Fixture {

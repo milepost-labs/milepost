@@ -10,9 +10,10 @@ use soroban_sdk::{
 
 // Requires the programme wasm to exist, so `cargo build --target wasm32v1-none
 // --release` must run before this crate's tests. CI builds wasm before testing
-// for exactly this reason.
+// for exactly this reason. build.rs writes the import with an absolute path, so
+// it also resolves in cargo-mutants' copy of the workspace.
 mod programme {
-    soroban_sdk::contractimport!(file = "../../target/wasm32v1-none/release/milepost_program.wasm");
+    include!(concat!(env!("OUT_DIR"), "/import_wasm.rs"));
 }
 
 struct Fixture {
@@ -652,6 +653,137 @@ fn handing_over_admin_refuses_the_old_admin_and_accepts_the_new() {
     authorise(&f, &new_admin, "set_fee", (250u32,).into_val(&f.env));
     f.client.set_fee(&250);
     assert_eq!(f.client.get_config().fee_bps, 250);
+}
+
+// ---- changing the programme wasm ----
+//
+// `set_program_wasm` decides the code every future programme is deployed
+// with, and nothing else: programmes are deployed, not proxied, so one that
+// already exists keeps the code it was created with. These tests use a second,
+// distinguishable build to check both halves of that.
+
+/// Upload a second programme build and return its hash.
+///
+/// It is the built programme with a custom section appended that names a
+/// version. A custom section carries no code, so the contract behaves exactly
+/// as the original, but its bytes, and so its hash, differ: to the registry it
+/// is a new release, and a programme's executable says which of the two it
+/// runs.
+fn upload_programme_v2(env: &Env) -> BytesN<32> {
+    const NAME: &[u8] = b"milepost.test.version";
+    const VERSION: &[u8] = b"2";
+    // Both lengths fit in one LEB128 byte, so each is written as a plain u8.
+    let size = 1 + NAME.len() + VERSION.len();
+    assert!(size < 0x80);
+
+    let mut wasm = soroban_sdk::Bytes::from_slice(env, programme::WASM);
+    // Section id 0 is a custom section: id, size, name length, name, payload.
+    wasm.extend_from_array(&[0, size as u8, NAME.len() as u8]);
+    wasm.extend_from_slice(NAME);
+    wasm.extend_from_slice(VERSION);
+    env.deployer().upload_contract_wasm(wasm)
+}
+
+/// The wasm hash a deployed contract is running.
+fn running_wasm(contract: &Address) -> BytesN<32> {
+    match contract.executable() {
+        Some(Executable::Wasm(hash)) => hash,
+        other => panic!("{contract:?} is not running uploaded wasm: {other:?}"),
+    }
+}
+
+/// Contribute to a programme and check its balance, so "still works" means a
+/// state-changing call through the programme's own code, not just a read.
+fn contribute(f: &Fixture, programme: &Address, amount: i128) {
+    let donor = Address::generate(&f.env);
+    soroban_sdk::token::StellarAssetClient::new(&f.env, &f.token).mint(&donor, &amount);
+    let client = programme::Client::new(&f.env, programme);
+    let before = soroban_sdk::token::Client::new(&f.env, &f.token).balance(programme);
+    client.contribute(&donor, &amount);
+    assert_eq!(
+        soroban_sdk::token::Client::new(&f.env, &f.token).balance(programme),
+        before + amount
+    );
+}
+
+#[test]
+fn programmes_created_after_a_wasm_change_run_the_new_code() {
+    let f = setup();
+    let v1 = f.client.get_config().program_wasm;
+    let before = create(&f, &Address::generate(&f.env));
+
+    let v2 = upload_programme_v2(&f.env);
+    assert_ne!(v1, v2, "the second build must be a distinct wasm");
+    f.client.set_program_wasm(&v2);
+    assert_eq!(f.client.get_config().program_wasm, v2);
+
+    let after = create(&f, &Address::generate(&f.env));
+
+    // Each programme runs the code that was current when it was created.
+    assert_eq!(running_wasm(&before), v1);
+    assert_eq!(running_wasm(&after), v2);
+
+    // The registry vouches for both, and both may write standing.
+    assert!(f.client.is_programme(&before));
+    assert!(f.client.is_programme(&after));
+    assert!(f.record.is_writer(&before));
+    assert!(f.record.is_writer(&after));
+
+    // The new programme is fully wired: its constructor ran against the
+    // protocol config, and it takes contributions.
+    let config = programme::Client::new(&f.env, &after).get_config();
+    assert_eq!(config.treasury, f.treasury);
+    assert_eq!(config.fee_bps, FEE_BPS);
+    contribute(&f, &after, 5_000);
+}
+
+#[test]
+fn programmes_created_before_a_wasm_change_keep_working_on_the_old_code() {
+    let f = setup();
+    let v1 = f.client.get_config().program_wasm;
+    let before = create(&f, &Address::generate(&f.env));
+    contribute(&f, &before, 1_000);
+    let config_before = programme::Client::new(&f.env, &before).get_config();
+
+    f.client.set_program_wasm(&upload_programme_v2(&f.env));
+    let after = create(&f, &Address::generate(&f.env));
+
+    // Still on v1, with its state intact, and still taking calls.
+    assert_eq!(running_wasm(&before), v1);
+    assert_eq!(
+        programme::Client::new(&f.env, &before).get_config(),
+        config_before
+    );
+    contribute(&f, &before, 2_000);
+    assert!(f.client.is_programme(&before));
+
+    // The two are separate deployments, not one contract seen twice.
+    assert_ne!(before, after);
+}
+
+#[test]
+fn only_the_admin_can_change_the_programme_wasm() {
+    let f = setup();
+    let v1 = f.client.get_config().program_wasm;
+    let v2 = upload_programme_v2(&f.env);
+    let intruder = Address::generate(&f.env);
+
+    // Someone else's signature changes nothing, and the next programme is
+    // still deployed from v1.
+    let before = snapshot(&f);
+    authorise(&f, &intruder, "set_program_wasm", (&v2,).into_val(&f.env));
+    assert_refused(&f, before, f.client.try_set_program_wasm(&v2));
+    f.env.mock_all_auths();
+    let created = create(&f, &Address::generate(&f.env));
+    assert_eq!(running_wasm(&created), v1);
+
+    // The admin's signature, for exactly this call, is enough.
+    authorise(&f, &f.admin, "set_program_wasm", (&v2,).into_val(&f.env));
+    f.client.set_program_wasm(&v2);
+    assert_eq!(f.client.get_config().program_wasm, v2);
+    f.env.mock_all_auths();
+    let created = create(&f, &Address::generate(&f.env));
+    assert_eq!(running_wasm(&created), v2);
 }
 
 // ---- events ----
