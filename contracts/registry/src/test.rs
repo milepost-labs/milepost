@@ -846,6 +846,7 @@ fn create_worst_case_stays_within_network_limits() {
     );
 
     assert!(f.client.is_programme(&programme));
+}
 // ---- TTL policy (#673) ----
 
 #[test]

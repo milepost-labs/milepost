@@ -5413,6 +5413,7 @@ fn finalize_worst_case_stays_within_network_limits() {
 
     assert_eq!(award.mode, Mode::Direct);
     assert!(award.granted > 0);
+}
 // ---- TTL policy per write path ----
 
 fn persistent_ttl(f: &Fixture, key: &Key) -> u32 {

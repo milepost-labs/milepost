@@ -13,8 +13,8 @@ import { phaseRequirement, type Phase } from './phaseGate';
  * read, so that takes the clients as arguments.
  */
 
-/** Matches `MAX_PAYEE_BATCH` in `contracts/program/src/lib.rs`, which `release_batch` reuses. */
-export const MAX_RELEASE_BATCH = 50;
+/** Matches `MAX_RELEASE_BATCH` in `contracts/program/src/lib.rs`: the most tranches whose events fit one transaction. */
+export const MAX_RELEASE_BATCH = 10;
 
 const HEX_64 = /^[0-9a-f]{64}$/;
 

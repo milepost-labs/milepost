@@ -786,6 +786,7 @@ fn registering_behind_a_chain_of_the_safe_depth_stays_within_network_limits() {
     // Pinned: the walk is read-only, so registering writes only what a
     // registration without a predecessor writes.
     assert_eq!(r.write_entries, 2);
+}
 // ---- TTL policy (#671) ----
 
 #[test]
