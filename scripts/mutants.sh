@@ -125,7 +125,9 @@ EOF
 check_excludes() {
   local listing
   listing="$(mktemp)"
-  if ! cargo mutants --list --no-config >"$listing" 2>/dev/null; then
+  # Plain text: CI sets CARGO_TERM_COLOR=always, and colour codes inside the
+  # names would stop every pattern below from matching.
+  if ! cargo mutants --list --no-config --colors=never >"$listing" 2>/dev/null; then
     echo "cargo mutants --list failed, so the exclusions could not be checked" >&2
     rm -f "$listing"
     return 1
