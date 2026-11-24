@@ -4,6 +4,7 @@ import { MemoryRouter, useLocation } from 'react-router-dom';
 
 import { FIXTURE_PROGRAMMES } from '../fixtures/programmes';
 import { WalletProvider } from '../context/WalletContext';
+import { NETWORK } from '../config/network';
 import { ProgrammeDirectory } from './ProgrammeDirectory';
 
 // Issue #485: filter, search and sort changes announce the new count through
@@ -23,30 +24,32 @@ vi.mock('@stellar/freighter-api', () => ({
   signTransaction: vi.fn().mockResolvedValue({ signedTxXdr: '', signerAddress: '' }),
 }));
 
-const meta = (indexedAt: string) => ({
-  network: 'testnet',
-  registry: 'CREGISTRY',
+const meta = (indexedAt: string, overrides: Record<string, unknown> = {}) => ({
+  network: NETWORK.name,
+  registry: NETWORK.contracts.registry,
   fromLedger: 1,
   indexedToLedger: 2,
   indexedAt,
   complete: true,
   gap: false,
   unhandledEvents: {},
+  ...overrides,
 });
 
 function mockIndex(options: {
   programmes?: unknown[];
   indexedAt?: string;
   fail?: boolean;
+  meta?: Record<string, unknown>;
 } = {}) {
-  const { programmes = [], indexedAt = new Date().toISOString(), fail = false } = options;
+  const { programmes = [], indexedAt = new Date().toISOString(), fail = false, meta: metaOverrides } = options;
   vi.stubGlobal(
     'fetch',
     vi.fn(async (input: string | URL) => {
       if (fail) throw new Error('network down');
       const url = String(input);
       if (url.endsWith('meta.json')) {
-        return { ok: true, status: 200, json: async () => meta(indexedAt) };
+        return { ok: true, status: 200, json: async () => meta(indexedAt, metaOverrides) };
       }
       if (url.endsWith('programmes.json')) {
         return { ok: true, status: 200, json: async () => programmes };
@@ -73,9 +76,17 @@ function renderDirectory(path = '/directory') {
 }
 
 async function cardCount() {
-  const links = await screen.findAllByRole('link');
+  const links = await findCardLinks();
   return links.length;
 }
+
+
+/** The programme cards — each is one link — leaving out the page's own links. */
+const cardLinks = () => [...document.querySelectorAll<HTMLAnchorElement>('.directory-card')];
+const findCardLinks = async () => {
+  await waitFor(() => expect(cardLinks().length).toBeGreaterThan(0));
+  return cardLinks();
+};
 
 describe('ProgrammeDirectory', () => {
   beforeEach(() => {
@@ -98,33 +109,33 @@ describe('ProgrammeDirectory', () => {
 
   it('filters cards by search text', async () => {
     renderDirectory();
-    await screen.findAllByRole('link');
+    await findCardLinks();
 
     fireEvent.change(screen.getByLabelText(/search/i), { target: { value: 'flood' } });
 
     await waitFor(() => {
-      expect(screen.getAllByRole('link')).toHaveLength(1);
+      expect(cardLinks()).toHaveLength(1);
     });
     expect(screen.getByText(/Flood response cash transfers/i)).toBeTruthy();
   });
 
   it('filters cards by phase pill', async () => {
     renderDirectory();
-    await screen.findAllByRole('link');
+    await findCardLinks();
 
     fireEvent.click(screen.getByRole('button', { name: /Cancelled/ }));
 
     await waitFor(() => {
-      expect(screen.getAllByRole('link')).toHaveLength(1);
+      expect(cardLinks()).toHaveLength(1);
     });
   });
 
   it('restores filters from the URL', async () => {
     renderDirectory('/directory?phase=Review');
-    await screen.findAllByRole('link');
+    await findCardLinks();
 
     expect(screen.getByRole('button', { name: /Review/ }).getAttribute('aria-pressed')).toBe('true');
-    expect(screen.getAllByRole('link')).toHaveLength(1);
+    expect(cardLinks()).toHaveLength(1);
   });
 
   it('carries the current filters into the programme links', async () => {
@@ -138,7 +149,7 @@ describe('ProgrammeDirectory', () => {
 
   it('restores sort from the URL', async () => {
     renderDirectory('/directory?sort=largest-budget');
-    const links = await screen.findAllByRole('link');
+    const links = await findCardLinks();
 
     expect((screen.getByLabelText(/sort/i) as HTMLSelectElement).value).toBe('largest-budget');
     expect(links[0].textContent).toContain('SME supplier microgrants Q2');
@@ -146,7 +157,7 @@ describe('ProgrammeDirectory', () => {
 
   it('updates the URL while preserving search and phase filters', async () => {
     renderDirectory('/directory?phase=Open&q=community');
-    await screen.findAllByRole('link');
+    await findCardLinks();
 
     fireEvent.change(screen.getByLabelText(/sort/i), { target: { value: 'largest-budget' } });
 
@@ -178,14 +189,14 @@ describe('ProgrammeDirectory', () => {
 
   it('shows an empty state with a way out when nothing matches', async () => {
     renderDirectory();
-    await screen.findAllByRole('link');
+    await findCardLinks();
 
     fireEvent.change(screen.getByLabelText(/search/i), { target: { value: 'no-such-programme' } });
 
     expect(await screen.findByText(/clear filters/i)).toBeTruthy();
     fireEvent.click(screen.getByRole('button', { name: /clear filters/i }));
     await waitFor(() => {
-      expect(screen.getAllByRole('link')).toHaveLength(FIXTURE_PROGRAMMES.length);
+      expect(cardLinks()).toHaveLength(FIXTURE_PROGRAMMES.length);
     });
   });
 
@@ -213,7 +224,7 @@ describe('ProgrammeDirectory', () => {
     await waitFor(() => {
       expect(screen.getByText('Stellar Real Community Grant')).toBeTruthy();
       expect(screen.queryByText(/Showing sample programmes/i)).toBeNull();
-      expect(screen.getAllByRole('link')).toHaveLength(1);
+      expect(cardLinks()).toHaveLength(1);
     });
 
     const toggleButton = screen.getByRole('button', { name: 'Show sample programmes' });
@@ -225,7 +236,7 @@ describe('ProgrammeDirectory', () => {
     await waitFor(() => {
       expect(screen.getByLabelText(/current location/i).textContent).toContain('samples=1');
       expect(screen.getByRole('button', { name: 'Hide sample programmes' })).toBeTruthy();
-      expect(screen.getAllByRole('link')).toHaveLength(FIXTURE_PROGRAMMES.length + 1);
+      expect(cardLinks()).toHaveLength(FIXTURE_PROGRAMMES.length + 1);
     });
   });
 
@@ -243,13 +254,13 @@ describe('ProgrammeDirectory', () => {
     await waitFor(() => {
       expect(screen.getByText('Stellar Real Community Grant')).toBeTruthy();
       expect(screen.getByRole('button', { name: 'Hide sample programmes' }).getAttribute('aria-pressed')).toBe('true');
-      expect(screen.getAllByRole('link')).toHaveLength(FIXTURE_PROGRAMMES.length + 1);
+      expect(cardLinks()).toHaveLength(FIXTURE_PROGRAMMES.length + 1);
     });
   });
 
   it('does not make the card list a live region', async () => {
     const { container } = renderDirectory();
-    await screen.findAllByRole('link');
+    await findCardLinks();
 
     // Issue #485: replacing the cards must not be read aloud — the count is
     // announced through the shared announcer instead.
@@ -261,14 +272,14 @@ describe('ProgrammeDirectory', () => {
 
   it('announces nothing on the first load', async () => {
     renderDirectory();
-    await screen.findAllByRole('link');
+    await findCardLinks();
 
     expect(mockAnnounce).not.toHaveBeenCalled();
   });
 
   it('announces the count once per search change', async () => {
     renderDirectory();
-    await screen.findAllByRole('link');
+    await findCardLinks();
 
     fireEvent.change(screen.getByLabelText(/search/i), { target: { value: 'flood' } });
 
@@ -287,7 +298,7 @@ describe('ProgrammeDirectory', () => {
 
   it('announces the count once per phase pill change', async () => {
     renderDirectory();
-    await screen.findAllByRole('link');
+    await findCardLinks();
 
     fireEvent.click(screen.getByRole('button', { name: /Open/ }));
 
@@ -299,7 +310,7 @@ describe('ProgrammeDirectory', () => {
 
   it('announces the count once per sort change', async () => {
     renderDirectory();
-    await screen.findAllByRole('link');
+    await findCardLinks();
 
     fireEvent.change(screen.getByLabelText(/sort/i), { target: { value: 'largest-budget' } });
 
@@ -309,12 +320,64 @@ describe('ProgrammeDirectory', () => {
     expect(mockAnnounce).toHaveBeenCalledTimes(1);
   });
 
+  it('refuses an index built for another network and names both values', async () => {
+    mockIndex({ meta: { network: 'mainnet' } });
+    renderDirectory();
+
+    const alert = await screen.findByRole('alert');
+    expect(alert.textContent).toContain('different deployment');
+    expect(alert.textContent).toContain(NETWORK.name);
+    expect(alert.textContent).toContain('mainnet');
+  });
+
+  it('refuses an index built for another registry and falls back to samples', async () => {
+    mockIndex({
+      meta: { registry: 'COTHERREGISTRY000000000000000000000000000000000000000000' },
+      programmes: [
+        {
+          id: 'CFOREIGNPROGRAMME1234567890ABCDEF',
+          name: 'A programme from another deployment',
+          creator: 'GCREATOR',
+          createdLedger: 1,
+        },
+      ],
+    });
+    renderDirectory();
+
+    const alert = await screen.findByRole('alert');
+    expect(alert.textContent).toContain(NETWORK.contracts.registry);
+    expect(alert.textContent).toContain('COTHERREGISTRY');
+    // None of the foreign index's programmes are shown.
+    expect(screen.queryByText('A programme from another deployment')).toBeNull();
+    // The page falls back to what it does with no index: the samples.
+    await waitFor(async () => {
+      expect(await cardCount()).toBe(FIXTURE_PROGRAMMES.length);
+    }, { timeout: 5000 });
+  });
+
   it('shows each card\'s planned mode, worded as a default', async () => {
     mockIndex();
     renderDirectory();
     await waitFor(() => {
       expect(screen.getAllByText('Planned default')).toHaveLength(FIXTURE_PROGRAMMES.length);
     });
-    expect(screen.getAllByText(/ mode$/)).toHaveLength(FIXTURE_PROGRAMMES.length);
+    expect(document.querySelectorAll('.ui-mode-pill')).toHaveLength(FIXTURE_PROGRAMMES.length);
+  });
+
+  it('filters by asset in the URL and clears it with clearFilters', async () => {
+    mockIndex();
+    renderDirectory('/directory?asset=EURC');
+
+    // No sample programme uses EURC, so the empty state appears with a clear button.
+    expect(await screen.findByText(/No EURC programmes right now/i)).toBeTruthy();
+    const assetSelect = screen.getByLabelText('Filter by asset') as HTMLSelectElement;
+    expect(assetSelect.value).toBe('EURC');
+
+    fireEvent.click(screen.getByRole('button', { name: /clear filters/i }));
+
+    await waitFor(async () => {
+      expect(await cardCount()).toBe(FIXTURE_PROGRAMMES.length);
+    });
+    expect(screen.getByLabelText('current location').textContent).toBe('/directory');
   });
 });

@@ -1,4 +1,5 @@
 import { useMemo, type ReactNode } from 'react';
+import { RefreshCw, TriangleAlert } from 'lucide-react';
 import { useLocation } from 'react-router-dom';
 import { explain, formatErrorDetails, isFailure, type ContractName, type Explained } from '../../lib/errors';
 import { useAnnounceTransaction } from '../../hooks/useAnnounceTransaction';
@@ -46,17 +47,13 @@ export function PendingPulse({ label = 'Working…' }: { label?: string }) {
 }
 
 /**
- * The full pending treatment for a write: pulse plus a title and an optional
- * note. `role="status"` announces it without stealing focus.
+ * The full pending treatment for a write: a turning ring, a title and an
+ * optional note. `role="status"` announces it without stealing focus.
  */
 export function PendingState({ title, note, live = true }: { title: string; note?: string; live?: boolean }) {
   return (
     <div className="state-pending" role={live ? 'status' : undefined} aria-live={live ? 'polite' : undefined}>
-      <span aria-hidden="true" className="pending-pulse__squares">
-        {[0, 1, 2, 3].map((i) => (
-          <span key={i} className="pending-pulse__square" style={{ animationDelay: `${i * 0.15}s` }} />
-        ))}
-      </span>
+      <span aria-hidden="true" className="state-ring state-ring--pending" />
       <p className="state-pending__title">{title}</p>
       {note && <p className="state-pending__note">{note}</p>}
     </div>
@@ -121,16 +118,23 @@ export function Empty({
 }: {
   title: string;
   description?: string;
-  /** Decorative; hidden from assistive technology. */
+  /** Decorative; hidden from assistive technology. Defaults to three squares. */
   icon?: ReactNode;
   action?: ReactNode;
   onClearFilters?: () => void;
 }) {
   return (
     <div className="state-empty">
-      {icon && (
+      {icon ? (
         <span className="state-empty__icon" aria-hidden="true">
           {icon}
+        </span>
+      ) : (
+        // Two empty squares and one tinted: money that has not arrived yet.
+        <span className="state-empty__art" aria-hidden="true">
+          <i />
+          <i />
+          <i />
         </span>
       )}
       <p className="state-empty__title">{title}</p>
@@ -186,16 +190,22 @@ export function ErrorPanel({
   return (
     <div className={`state-error state-error--${explained.kind}`} role={live ? 'alert' : undefined}>
       <div className="state-error__head">
-        <p className="state-error__message">{explained.message}</p>
-        <CopyButton value={details} label="Copy error details" showLabel />
+        <p className="state-error__message">
+          <TriangleAlert aria-hidden="true" />
+          <span>{explained.message}</span>
+        </p>
       </div>
       {explained.action && <p className="state-error__action">{explained.action}</p>}
       {technical && <p className="state-error__technical numeric">{technical}</p>}
-      {onRetry && (
-        <button type="button" className="state-error__retry" onClick={onRetry}>
-          Try again
-        </button>
-      )}
+      <div className="state-error__actions">
+        {onRetry && (
+          <button type="button" className="state-error__retry" onClick={onRetry}>
+            <RefreshCw aria-hidden="true" />
+            Try again
+          </button>
+        )}
+        <CopyButton value={details} label="Copy error details" showLabel />
+      </div>
     </div>
   );
 }

@@ -38,8 +38,8 @@ cases are the entries that are written once and only read afterwards.
 
 | Entry | Written | Bumped | Lifetime decision |
 | --- | --- | --- | --- |
-| `Config`, `Contributed`, `Granted`, `Released` (instance) | constructor | constructor + every contribution/finalize/release/sweep via instance `extend_ttl` | Instance sub-keys share the instance TTL and are re-bumped on every write. Constructor also bumps explicitly. |
-| `Reviewer(addr)`, `Verifier(addr)` | constructor | constructor + on use (`review` bumps `Reviewer`, `release` bumps `Verifier`) | Written once; read on every review/release, so use-time bumps keep them alive for the programme's active life. |
+| `Config`, `Contributed`, `Granted`, `Released`, `RefundedTotal`, `SweptTotal`, `FeeSwept`, `Cancelled`, `Paused` (instance) | constructor | constructor + every write to one of them (contribute, finalize, release, release_batch, refunds, both sweeps, cancel, pause/unpause, deadline extension) via instance `extend_ttl` | Instance sub-keys share the instance TTL and are re-bumped on every write. Constructor also bumps explicitly. |
+| `Reviewer(addr)`, `Verifier(addr)` | constructor | constructor + on use (`review` bumps `Reviewer`, `release` and `release_batch` bump `Verifier`) | Written once; read on every review/release, so use-time bumps keep them alive for the programme's active life. |
 | `Application(addr)` | `apply`/`review`/`withdraw`/`finalize` | each of those writes | Active until finalised. |
 | `Award(addr)` | `finalize`/`release` | each of those writes | Active until fully released. |
 | `Allocation(addr)` | `release`/`spend` | each of those writes | Active until directed/emptied. |

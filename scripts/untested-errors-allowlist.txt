@@ -1,0 +1,30 @@
+# Contract error variants that scripts/check-untested-errors.py lets through
+# untested. One per line:
+#
+#   <contract> <Enum>::<Variant>  <reason>
+#
+# Every entry needs a reason. An entry for a variant that is now tested, or
+# that no longer exists, fails the check, so remove it in the same change.
+
+# ---- unreachable ----
+#
+# Declared but never returned, so no test can produce them. Removing the
+# variant would renumber nothing (codes are explicit) but is still an
+# interface change, which is why they stay listed rather than deleted.
+
+registry Error::NotAuthorized  Never returned: admin entry points call require_auth, so the host rejects a non-admin before the contract can return its own error.
+registry Error::NotInitialized  Returned only when Config is missing, and the constructor always writes it; the instance entry cannot be absent while the contract exists.
+program AttestError::SchemaNotFound  Decode-only mirror of attest's error for the get_schema return; the programme never returns it (it maps it to Error::SchemaNotFound).
+program Error::AlreadyReviewed  Never returned by any entry point.
+program Error::ReleaseDeadlineExtended  Never returned by any entry point.
+policy-spend SpendError::AlreadyConfigured  Never returned by any entry point.
+
+# ---- reachable, test pending ----
+#
+# These can be returned but no test asserts them yet. Writing those tests was
+# out of scope for the check itself (#551); each entry comes out with the PR
+# that adds its test, which the stale-entry rule enforces.
+
+program Error::Overflow  Reachable, test pending (see #551).
+program Error::SchemaAuthorityNotVerifier  Reachable, test pending (see #551).
+program Error::SchemaNotFound  Reachable, test pending (see #551).

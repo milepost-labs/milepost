@@ -1,10 +1,13 @@
-import { Address, xdr } from '@stellar/stellar-sdk';
+import { Address, StrKey, xdr } from '@stellar/stellar-sdk';
+import { Buffer } from 'buffer';
 import { describe, expect, it, vi } from 'vitest';
 import {
   entryLedgerKey,
   instanceLedgerKey,
   ledgersToDays,
+  readInstanceLifetimes,
   readProgrammeLifetimes,
+  sortByDaysLeft,
 } from './entryTtl';
 
 const PROGRAMME = 'CD6X33SKLUEMANS67ID3LJL572FFGERMMJCIFRW7P7EKZQLH35XT67C6';
@@ -90,5 +93,70 @@ describe('readProgrammeLifetimes', () => {
 
     expect(result.rows[0].liveForDays).toBeNull();
     expect(result.rows[1]).toMatchObject({ liveForDays: null, note: '0 of 1 entry found' });
+  });
+});
+
+describe('every programme\'s instance lifetime', () => {
+  const programme = (n: number) => StrKey.encodeContract(Buffer.alloc(32, n));
+  const programmeOf = (key: xdr.LedgerKey) =>
+    Address.fromScAddress(key.contractData().contract()).toString();
+
+  it('reads each instance entry, at most four at a time', async () => {
+    const ids = Array.from({ length: 9 }, (_, i) => programme(i + 1));
+    let inFlight = 0;
+    let peak = 0;
+    const getLedgerEntries = vi.fn(async (key: xdr.LedgerKey) => {
+      inFlight++;
+      peak = Math.max(peak, inFlight);
+      await new Promise((resolve) => setTimeout(resolve, 1));
+      inFlight--;
+      const index = ids.indexOf(programmeOf(key));
+      return { latestLedger: 1_000, entries: [{ key, liveUntilLedgerSeq: 1_000 + 17_280 * index }] };
+    });
+
+    const rows = await readInstanceLifetimes({ getLedgerEntries } as never, ids);
+
+    expect(getLedgerEntries).toHaveBeenCalledTimes(9);
+    expect(peak).toBe(4);
+    expect(rows.map((r) => r.programmeId)).toEqual(ids);
+    expect(rows.map((r) => r.liveForDays)).toEqual([0, 1, 2, 3, 4, 5, 6, 7, 8]);
+    expect(rows.every((r) => r.error === null)).toBe(true);
+  });
+
+  it('keeps a failed read and a missing entry on their own rows', async () => {
+    const [ok, missing, broken] = [programme(1), programme(2), programme(3)];
+    const getLedgerEntries = vi.fn(async (key: xdr.LedgerKey) => {
+      const id = programmeOf(key);
+      if (id === broken) throw new Error('rpc unavailable');
+      return {
+        latestLedger: 100,
+        entries: id === ok ? [{ key, liveUntilLedgerSeq: 100 + 17_280 * 45 }] : [],
+      };
+    });
+
+    const rows = await readInstanceLifetimes({ getLedgerEntries } as never, [ok, missing, broken]);
+
+    expect(rows[0]).toEqual({ programmeId: ok, liveForDays: 45, error: null });
+    expect(rows[1]).toEqual({ programmeId: missing, liveForDays: null, error: null });
+    expect(rows[2].liveForDays).toBeNull();
+    expect((rows[2].error as Error).message).toBe('rpc unavailable');
+  });
+
+  it('reads nothing for an empty index', async () => {
+    const getLedgerEntries = vi.fn();
+    expect(await readInstanceLifetimes({ getLedgerEntries } as never, [])).toEqual([]);
+    expect(getLedgerEntries).not.toHaveBeenCalled();
+  });
+
+  it('sorts missing entries first, then fewest days, and failed reads last', () => {
+    const rows = [
+      { id: 'a', liveForDays: 80, error: null },
+      { id: 'b', liveForDays: null, error: new Error('x') },
+      { id: 'c', liveForDays: 12, error: null },
+      { id: 'd', liveForDays: null, error: null },
+      { id: 'e', liveForDays: 30, error: null },
+    ];
+
+    expect(sortByDaysLeft(rows).map((r) => r.id)).toEqual(['d', 'c', 'e', 'a', 'b']);
   });
 });

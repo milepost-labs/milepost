@@ -1,0 +1,1449 @@
+<!DOCTYPE html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>Milepost app</title><link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin><link href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,400..800&family=Instrument+Sans:wght@400..700&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet"><style>:root,[data-theme="light"]{--bg:#f5f2ea;--bg-raised:#fbf9f4;--bg-sunken:#ebe6da;--ink:#16140f;--ink-muted:#585346;--ink-faint:#8c8675;--line:#ddd6c6;--accent:#0a6b47;--accent-hover:#07573a;--accent-ink:#ffffff;--accent-soft:#d3e7d9;--signal:#f0b928;--signal-ink:#1d1606;--money-unawarded:var(--accent-soft);--money-locked:#b7b2a3;--money-released:var(--accent);--money-refundable:#c2532a;--danger:#b3261e;--danger-soft:#f6dcd6;--focus:#16140f;--shadow-1:0 1px 2px rgba(22,20,15,0.06), 0 4px 16px rgba(22,20,15,0.06);--shadow-2:0 12px 40px rgba(22,20,15,0.14);}[data-theme="dark"]{--bg:#0e1210;--bg-raised:#161b18;--bg-sunken:#090c0a;--ink:#eef0e9;--ink-muted:#a6ada4;--ink-faint:#68716a;--line:#252c28;--accent:#3fcf8e;--accent-hover:#66dca6;--accent-ink:#04120b;--accent-soft:#1b3a2c;--signal:#f3c443;--signal-ink:#1d1606;--money-unawarded:var(--accent-soft);--money-locked:#4a524c;--money-released:var(--accent);--money-refundable:#e67b4f;--danger:#f2867c;--danger-soft:#3a1a17;--focus:#f3c443;--shadow-1:0 1px 2px rgba(0,0,0,0.4), 0 6px 20px rgba(0,0,0,0.35);--shadow-2:0 16px 48px rgba(0,0,0,0.55);}:root{--space-1:4px;--space-2:8px;--space-3:12px;--space-4:16px;--space-6:24px;--space-8:32px;--space-12:48px;--space-16:64px;--space-24:96px;--space-32:128px;--radius-sq:3px;--radius-sm:8px;--radius-md:14px;--radius-lg:28px;--radius-pill:999px;--font-display:"Bricolage Grotesque", "Instrument Sans", system-ui, sans-serif;--font-sans:"Instrument Sans", system-ui, -apple-system, "Segoe UI", sans-serif;--font-mono:"IBM Plex Mono", ui-monospace, "SFMono-Regular", Menlo, monospace;}*,*::before,*::after{box-sizing:border-box}
+html,body{margin:0;background:var(--bg);color:var(--ink)}
+body{font-family:var(--font-sans);font-size:16px;line-height:1.5;-webkit-font-smoothing:antialiased;overflow-x:hidden;transition:background .3s,color .3s}
+a{color:inherit}
+fieldset{min-width:0}
+.dgrid>*,.vgrid>*,.wizard>*{min-width:0}
+svg{width:18px;height:18px;flex:none;vertical-align:middle}
+.link svg{width:16px;height:16px}
+button,input,select,textarea{font:inherit;color:inherit}
+.num,.mono{font-family:var(--font-mono);font-variant-numeric:tabular-nums}
+:focus-visible{outline:2px solid var(--focus);outline-offset:2px;border-radius:6px}
+.sr{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap}
+h1,h2,h3,h4{font-family:var(--font-display);margin:0;letter-spacing:-.02em;font-weight:650}
+p{margin:0}
+.wrap{max-width:1200px;margin:0 auto;padding:0 var(--space-8)}
+.muted{color:var(--ink-muted)}
+.eyebrow{font:500 12px/1 var(--font-mono);letter-spacing:.08em;text-transform:uppercase;color:var(--ink-muted)}
+
+/* ---------- buttons ---------- */
+.btn{display:inline-flex;align-items:center;justify-content:center;gap:8px;min-height:44px;padding:0 18px;border-radius:var(--radius-pill);border:0;font-weight:600;font-size:15px;cursor:pointer;text-decoration:none;white-space:nowrap;transition:background .2s,color .2s,transform .1s}
+.btn:active{transform:translateY(1px)}
+.btn svg{width:17px;height:17px;flex:none}
+.btn-primary{background:var(--accent);color:var(--accent-ink)}
+.btn-primary:hover{background:var(--accent-hover)}
+.btn-secondary{background:var(--bg-sunken);color:var(--ink)}
+.btn-secondary:hover{background:color-mix(in srgb,var(--bg-sunken) 80%,var(--ink))}
+.btn-ghost{background:transparent;color:var(--ink);box-shadow:inset 0 0 0 1.5px var(--line)}
+.btn-ghost:hover{background:var(--bg-sunken)}
+.btn-danger{background:transparent;color:var(--danger);box-shadow:inset 0 0 0 1.5px color-mix(in srgb,var(--danger) 40%,transparent)}
+.btn-danger:hover{background:var(--danger-soft)}
+.btn-sm{min-height:36px;padding:0 14px;font-size:14px}
+.btn[aria-disabled="true"],.btn:disabled{background:var(--bg-sunken);color:var(--ink-faint);cursor:not-allowed;box-shadow:none}
+.btn-block{width:100%}
+.icon-btn{width:44px;height:44px;border-radius:50%;border:0;background:transparent;display:grid;place-items:center;cursor:pointer;color:var(--ink);flex:none}
+.icon-btn:hover{background:var(--bg-sunken)}
+.icon-btn svg{width:20px;height:20px}
+.icon-btn.sm{width:32px;height:32px}
+.icon-btn.sm svg{width:15px;height:15px}
+.link{color:var(--accent);font-weight:600;text-decoration:none;background:none;border:0;padding:0;cursor:pointer}
+.link:hover{text-decoration:underline}
+
+/* ---------- badges / pills ---------- */
+.badge{display:inline-flex;align-items:center;gap:6px;height:24px;padding:0 10px;border-radius:var(--radius-pill);font:500 12px/1 var(--font-mono);letter-spacing:.04em;white-space:nowrap}
+.badge i{width:7px;height:7px;border-radius:50%;background:currentColor}
+.ph-open{background:var(--accent-soft);color:var(--accent)}
+[data-theme="dark"] .ph-open{color:var(--accent)}
+.ph-review{background:color-mix(in srgb,var(--signal) 28%,var(--bg));color:var(--ink)}
+.ph-review i{background:#a87a00}
+[data-theme="dark"] .ph-review i{background:var(--signal)}
+.ph-settled{background:var(--bg-sunken);color:var(--ink)}
+.ph-settled i{background:var(--ink-muted)}
+.ph-cancelled{background:var(--danger-soft);color:var(--danger)}
+.ph-paused{background:transparent;box-shadow:inset 0 0 0 1.5px var(--line);color:var(--ink-muted)}
+.mode{display:inline-flex;align-items:center;gap:6px;height:24px;padding:0 10px;border-radius:var(--radius-pill);font-size:12px;font-weight:600;background:var(--bg-sunken);white-space:nowrap}
+.mode .m{display:inline-flex;gap:2px}
+.mode .m b{width:5px;height:5px;border-radius:1px;background:var(--ink);opacity:.2}
+.mode .m b.f{background:var(--accent);opacity:1}
+.tag-sample{display:inline-flex;align-items:center;height:22px;padding:0 8px;border-radius:var(--radius-pill);font:600 11px/1 var(--font-mono);letter-spacing:.08em;text-transform:uppercase;background:var(--signal);color:var(--signal-ink);background-image:repeating-linear-gradient(-45deg,transparent 0 6px,rgba(0,0,0,.07) 6px 12px)}
+.tag-testnet{display:inline-flex;align-items:center;gap:7px;height:28px;padding:0 11px;border-radius:var(--radius-pill);background:var(--bg-sunken);font:500 12px/1 var(--font-mono);white-space:nowrap}
+.tag-testnet i{width:8px;height:8px;border-radius:50%;background:var(--signal)}
+.chip-ok{display:inline-flex;align-items:center;gap:5px;font-size:13px;color:var(--accent);font-weight:600}
+.chip-ok svg{width:14px;height:14px}
+
+/* ---------- money squares ---------- */
+.sq{width:10px;height:10px;border-radius:var(--radius-sq);background:var(--money-unawarded);display:inline-block;flex:none;transition:background .4s}
+.sq.l{background:var(--money-locked)}
+.sq.r{background:var(--money-released)}
+.sq.f{background:var(--money-refundable)}
+.sq.e{background:transparent;box-shadow:inset 0 0 0 1.5px var(--line)}
+.money{display:flex;flex-wrap:wrap;gap:3px}
+.money.lg{gap:5px}
+.money.lg .sq{width:16px;height:16px;border-radius:4px}
+.legend{display:flex;flex-wrap:wrap;gap:6px 16px;font-size:13px;color:var(--ink-muted)}
+.legend span{display:inline-flex;align-items:center;gap:6px}
+
+/* ---------- surfaces ---------- */
+.panel{background:var(--bg-raised);border-radius:var(--radius-md);padding:var(--space-6)}
+.panel.sunk{background:var(--bg-sunken)}
+.panel h3{font-size:19px;letter-spacing:-.01em}
+.panel-head{display:flex;justify-content:space-between;align-items:center;gap:12px;margin-bottom:var(--space-4);flex-wrap:wrap}
+
+/* ---------- shell ---------- */
+.banner-test{background:var(--ink);color:var(--bg);font-size:13px;text-align:center;padding:7px 16px}
+.banner-test b{color:var(--signal)}
+.banner-off{background:var(--danger-soft);color:var(--danger);font-size:14px;text-align:center;padding:8px 16px;font-weight:600}
+header.app{position:sticky;top:0;z-index:30;background:color-mix(in srgb,var(--bg) 85%,transparent);backdrop-filter:blur(14px);-webkit-backdrop-filter:blur(14px)}
+.hd{display:flex;align-items:center;gap:var(--space-4);height:64px}
+.logo{display:flex;align-items:center;gap:9px;text-decoration:none;font:700 19px/1 var(--font-display);letter-spacing:-.02em;flex:none}
+.mark{display:flex;align-items:flex-end;gap:3px;height:20px}
+.mark b{width:6px;border-radius:2px;display:block}
+.mark b:nth-child(1){height:8px;background:var(--money-locked)}
+.mark b:nth-child(2){height:14px;background:var(--accent-soft);box-shadow:inset 0 0 0 1.5px var(--accent)}
+.mark b:nth-child(3){height:20px;background:var(--accent)}
+nav.main{display:flex;gap:2px;margin-left:var(--space-6)}
+nav.main a{display:inline-flex;align-items:center;gap:8px;min-height:44px;padding:0 14px;border-radius:var(--radius-pill);text-decoration:none;font-weight:600;font-size:15px;color:var(--ink-muted)}
+nav.main a svg{width:17px;height:17px}
+nav.main a:hover{color:var(--ink);background:var(--bg-sunken)}
+nav.main a[aria-current="page"]{color:var(--ink);background:var(--bg-sunken)}
+.hd-right{margin-left:auto;display:flex;align-items:center;gap:6px}
+.acct{display:flex;align-items:center;gap:10px;min-height:44px;padding:0 6px 0 14px;border-radius:var(--radius-pill);background:var(--bg-sunken);border:0;cursor:pointer}
+.acct .av{width:32px;height:32px;border-radius:50%;display:grid;grid-template-columns:1fr 1fr;gap:2px;padding:7px;background:var(--bg)}
+.acct .av b{border-radius:2px;background:var(--accent)}
+.acct .av b:nth-child(2){background:var(--money-refundable)}
+.acct .av b:nth-child(3){background:var(--money-locked)}
+.acct .av b:nth-child(4){background:var(--accent-soft)}
+.subnav{display:flex;gap:4px;overflow-x:auto;scrollbar-width:none;padding-bottom:10px}
+.subnav a{display:inline-flex;align-items:center;min-height:36px;padding:0 12px;border-radius:var(--radius-pill);font-size:14px;font-weight:500;color:var(--ink-muted);text-decoration:none;white-space:nowrap}
+.subnav a:hover{color:var(--ink)}
+.subnav a[aria-current="page"]{color:var(--ink);background:var(--bg-raised);box-shadow:var(--shadow-1)}
+.subnav a .soon{font:500 10px/1 var(--font-mono);margin-left:6px;opacity:.6}
+.tabbar{display:none}
+main{padding:var(--space-8) 0 var(--space-24);min-height:70vh}
+.page-head{display:flex;justify-content:space-between;align-items:flex-end;gap:var(--space-6);flex-wrap:wrap;margin-bottom:var(--space-8)}
+.page-head h1{font-size:40px;line-height:1.05;letter-spacing:-.03em}
+.page-head p{color:var(--ink-muted);margin-top:8px;max-width:62ch}
+
+/* ---------- menus & sheets ---------- */
+.pop{position:absolute;right:0;top:calc(100% + 8px);width:320px;background:var(--bg-raised);border-radius:var(--radius-md);box-shadow:var(--shadow-2);padding:var(--space-4);z-index:50}
+.pop .row{display:flex;justify-content:space-between;align-items:center;gap:12px;padding:10px 0;font-size:14px}
+.pop .row+.row{box-shadow:inset 0 1px 0 var(--line)}
+.pop .menu-item{display:flex;align-items:center;gap:10px;width:100%;min-height:44px;padding:0 10px;border:0;background:none;border-radius:var(--radius-sm);cursor:pointer;font-weight:500;font-size:15px;text-align:left;text-decoration:none}
+.pop .menu-item:hover{background:var(--bg-sunken)}
+.pop .menu-item svg{width:18px;height:18px;color:var(--ink-muted)}
+.scrim{position:fixed;inset:0;background:rgba(10,12,10,.45);z-index:60;display:flex;align-items:center;justify-content:center;padding:16px;animation:fade .2s}
+@keyframes fade{from{opacity:0}}
+.sheet{width:min(520px,100%);max-height:calc(100vh - 32px);overflow:auto;background:var(--bg-raised);border-radius:var(--radius-lg);box-shadow:var(--shadow-2);padding:var(--space-8);animation:up .3s cubic-bezier(.2,.8,.2,1)}
+@keyframes up{from{transform:translateY(24px);opacity:0}}
+.sheet-head{display:flex;justify-content:space-between;align-items:flex-start;gap:12px;margin-bottom:var(--space-6)}
+.sheet-head h2{font-size:26px;line-height:1.1}
+.steps-dots{display:flex;gap:6px;margin-bottom:var(--space-4)}
+.steps-dots i{height:4px;flex:1;border-radius:4px;background:var(--line)}
+.steps-dots i.on{background:var(--accent)}
+
+/* ---------- forms ---------- */
+.field{display:flex;flex-direction:column;gap:6px;margin-bottom:var(--space-4)}
+.field label,.lbl{font-size:14px;font-weight:600}
+.field .help{font-size:13px;color:var(--ink-muted)}
+.input,select.input,textarea.input{min-height:48px;padding:0 14px;border-radius:var(--radius-sm);border:0;background:var(--bg-sunken);box-shadow:inset 0 0 0 1.5px transparent;transition:box-shadow .2s;width:100%}
+textarea.input{padding:12px 14px;min-height:88px;resize:vertical}
+.input:focus{outline:none;box-shadow:inset 0 0 0 2px var(--accent)}
+.input[aria-invalid="true"]{box-shadow:inset 0 0 0 2px var(--danger)}
+.err-text{font-size:13px;color:var(--danger);font-weight:500}
+.amount{display:flex;align-items:center;background:var(--bg-sunken);border-radius:var(--radius-md);padding:6px 16px 6px 20px;box-shadow:inset 0 0 0 1.5px transparent;transition:box-shadow .2s}
+.amount:focus-within{box-shadow:inset 0 0 0 2px var(--accent)}
+.amount input{flex:1;min-width:0;border:0;background:transparent;font:500 36px/1.2 var(--font-mono);letter-spacing:-.02em;padding:8px 0;outline:none}
+.amount .unit{font:500 16px/1 var(--font-mono);color:var(--ink-muted)}
+.presets{display:flex;flex-wrap:wrap;gap:6px;margin-top:10px}
+.presets button{min-height:36px;padding:0 14px;border-radius:var(--radius-pill);border:0;background:var(--bg-sunken);font:500 14px/1 var(--font-mono);cursor:pointer}
+.presets button:hover{background:var(--accent-soft)}
+.breakdown{margin-top:var(--space-4);font-size:14px}
+.breakdown div{display:flex;justify-content:space-between;padding:8px 0}
+.breakdown div+div{box-shadow:inset 0 1px 0 var(--line)}
+.breakdown .tot{font-weight:600}
+.check{display:flex;gap:12px;align-items:flex-start;padding:14px;border-radius:var(--radius-sm);background:var(--bg-sunken);cursor:pointer}
+.check input{width:20px;height:20px;margin:2px 0 0;accent-color:var(--accent);flex:none}
+.seg{display:inline-flex;gap:4px;padding:4px;background:var(--bg-sunken);border-radius:var(--radius-pill);max-width:100%;overflow-x:auto}
+.seg button{border:0;background:transparent;min-height:40px;padding:0 16px;border-radius:var(--radius-pill);font-weight:600;font-size:14px;color:var(--ink-muted);cursor:pointer;white-space:nowrap;display:inline-flex;align-items:center;gap:6px}
+.seg button[aria-pressed="true"],.seg button[aria-selected="true"]{background:var(--bg-raised);color:var(--ink);box-shadow:var(--shadow-1)}
+.seg .count{font:500 12px/1 var(--font-mono);opacity:.7}
+.stepper{display:inline-flex;align-items:center;background:var(--bg-sunken);border-radius:var(--radius-pill);padding:4px}
+.stepper button{width:40px;height:40px;border-radius:50%;border:0;background:var(--bg-raised);cursor:pointer;font-size:20px;line-height:1}
+.stepper output{min-width:56px;text-align:center;font:500 18px/1 var(--font-mono)}
+
+/* ---------- stats ---------- */
+.stats{display:grid;grid-template-columns:repeat(4,1fr);gap:var(--space-4);margin-bottom:var(--space-8)}
+.stat{background:var(--bg-sunken);border-radius:var(--radius-md);padding:var(--space-4) var(--space-6) var(--space-6)}
+.stat .k{font-size:13px;color:var(--ink-muted);font-weight:500}
+.stat .v{font:500 28px/1.1 var(--font-mono);letter-spacing:-.02em;margin-top:10px}
+.stat .v small{font-size:14px;color:var(--ink-muted);margin-left:4px}
+.stat .s{font-size:13px;color:var(--ink-muted);margin-top:6px}
+.stat.hl{background:var(--accent);color:var(--accent-ink)}
+.stat.hl .k,.stat.hl .s,.stat.hl .v small{color:inherit;opacity:.8}
+
+/* ---------- notices ---------- */
+.note{display:flex;gap:12px;align-items:flex-start;padding:14px 16px;border-radius:var(--radius-md);font-size:14px;line-height:1.5}
+.note svg{width:19px;height:19px;flex:none;margin-top:1px}
+.note b{font-weight:600}
+.note.info{background:var(--bg-sunken)}
+.note.info svg{color:var(--ink-muted)}
+.note.warn{background:color-mix(in srgb,var(--signal) 22%,var(--bg))}
+.note.warn svg{color:#8a6400}
+[data-theme="dark"] .note.warn svg{color:var(--signal)}
+.note.risk{background:color-mix(in srgb,var(--money-refundable) 14%,var(--bg))}
+.note.risk svg{color:var(--money-refundable)}
+.note.ok{background:var(--accent-soft)}
+.note.ok svg{color:var(--accent)}
+.errpanel{padding:var(--space-6);border-radius:var(--radius-md);background:var(--danger-soft)}
+.errpanel h4{font:600 17px/1.3 var(--font-sans);color:var(--ink);display:flex;gap:10px;align-items:center}
+.errpanel h4 svg{width:20px;height:20px;color:var(--danger)}
+.errpanel .code{margin-top:8px;font:500 13px/1.4 var(--font-mono);color:var(--danger)}
+.errpanel .btn{margin-top:var(--space-4)}
+.disabled-reason{font-size:13px;color:var(--ink-muted);display:flex;gap:6px;align-items:flex-start;margin-top:6px}
+.disabled-reason svg{width:14px;height:14px;flex:none;margin-top:3px}
+
+/* ---------- tx lifecycle ---------- */
+.tx{text-align:center;padding:var(--space-6) 0}
+.tx .ring{width:72px;height:72px;margin:0 auto var(--space-6);border-radius:50%;display:grid;place-items:center;position:relative}
+.tx .ring.pending{background:var(--bg-sunken)}
+.tx .ring.pending::after{content:"";position:absolute;inset:0;border-radius:50%;border:3px solid transparent;border-top-color:var(--accent);animation:spin 1s linear infinite}
+@keyframes spin{to{transform:rotate(360deg)}}
+.tx .ring.done{background:var(--accent);color:var(--accent-ink);animation:pop .5s cubic-bezier(.2,.9,.3,1.5)}
+.tx .ring.fail{background:var(--danger-soft);color:var(--danger)}
+.tx .ring svg{width:32px;height:32px}
+@keyframes pop{from{transform:scale(.4)}}
+.tx h3{font-size:24px}
+.tx p{color:var(--ink-muted);margin-top:8px}
+.tx-steps{display:flex;flex-direction:column;gap:8px;max-width:300px;margin:var(--space-6) auto 0;text-align:left;font-size:14px}
+.tx-steps span{display:flex;gap:10px;align-items:center;color:var(--ink-muted)}
+.tx-steps span.on{color:var(--ink);font-weight:600}
+.tx-steps span.ok{color:var(--accent)}
+.tx-steps svg{width:16px;height:16px}
+.receipt{margin-top:var(--space-6);text-align:left;background:var(--bg-sunken);border-radius:var(--radius-md);padding:var(--space-4) var(--space-6)}
+.receipt div{display:flex;justify-content:space-between;gap:12px;padding:9px 0;font-size:14px}
+.receipt div+div{box-shadow:inset 0 1px 0 var(--line)}
+.receipt dt{color:var(--ink-muted)}
+.receipt dd{margin:0;font-family:var(--font-mono);text-align:right}
+
+/* ---------- loading / empty ---------- */
+.skel{display:block;border-radius:var(--radius-sm);background:linear-gradient(90deg,var(--bg-sunken) 0%,var(--bg-raised) 50%,var(--bg-sunken) 100%);background-size:200% 100%;animation:sh 1.3s infinite linear}
+@keyframes sh{to{background-position:-200% 0}}
+.empty{text-align:center;padding:var(--space-16) var(--space-6)}
+.empty .art{display:flex;gap:5px;justify-content:center;margin-bottom:var(--space-6)}
+.empty .art i{width:18px;height:18px;border-radius:4px;box-shadow:inset 0 0 0 2px var(--line)}
+.empty .art i:nth-child(3){box-shadow:none;background:var(--accent-soft)}
+.empty h3{font-size:22px}
+.empty p{color:var(--ink-muted);margin:8px auto 0;max-width:46ch}
+.empty .btn{margin-top:var(--space-6)}
+
+/* ---------- directory ---------- */
+.toolbar{display:flex;flex-wrap:wrap;gap:var(--space-4);align-items:center;justify-content:space-between;margin-bottom:var(--space-4)}
+.search{position:relative;flex:1;min-width:240px;max-width:380px}
+.search svg{position:absolute;left:14px;top:50%;transform:translateY(-50%);width:18px;height:18px;color:var(--ink-muted)}
+.search .input{padding-left:42px;border-radius:var(--radius-pill)}
+.fresh{display:flex;flex-wrap:wrap;align-items:center;gap:6px 16px;font-size:13px;color:var(--ink-muted);margin-bottom:var(--space-6)}
+.fresh .dot{width:8px;height:8px;border-radius:50%;background:var(--accent)}
+.fresh.stale .dot{background:var(--signal)}
+.cards{display:grid;grid-template-columns:repeat(3,1fr);gap:var(--space-4)}
+.cards.two{grid-template-columns:repeat(2,1fr)}
+.stats.three{grid-template-columns:repeat(3,1fr)}
+.tb-right{display:flex;gap:10px;flex-wrap:wrap;align-items:center;min-width:0;max-width:100%}
+.pcard{display:flex;flex-direction:column;background:var(--bg-raised);border-radius:var(--radius-md);padding:var(--space-6);text-decoration:none;transition:transform .25s cubic-bezier(.2,.8,.2,1),box-shadow .25s;min-height:340px;position:relative}
+.pcard:hover{transform:translateY(-3px);box-shadow:var(--shadow-2)}
+.pcard .top{display:flex;justify-content:space-between;gap:8px;align-items:center}
+.pcard .sector{font:500 11px/1 var(--font-mono);letter-spacing:.08em;text-transform:uppercase;color:var(--ink-muted)}
+.pcard h3{font-size:21px;line-height:1.15;margin-top:var(--space-4)}
+.pcard .id{font:500 12px/1 var(--font-mono);color:var(--ink-muted);margin-top:6px}
+.pcard .status{font-size:14px;color:var(--ink-muted);margin-top:var(--space-4);line-height:1.45}
+.pcard .money{margin-top:auto;padding-top:var(--space-6)}
+.pcard .figs{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-top:var(--space-4)}
+.pcard .figs span{display:block;font-size:12px;color:var(--ink-muted)}
+.pcard .figs b{font:500 15px/1.3 var(--font-mono)}
+.pcard .foot{display:flex;justify-content:space-between;align-items:center;gap:8px;margin-top:var(--space-4);padding-top:var(--space-4);box-shadow:inset 0 1px 0 var(--line)}
+.pcard .cta{font-weight:600;font-size:14px;color:var(--accent);display:inline-flex;align-items:center;gap:6px}
+.pcard .cta svg{width:16px;height:16px;transition:transform .2s}
+.pcard:hover .cta svg{transform:translateX(3px)}
+.pcard.cancelled h3,.pcard.cancelled .figs b{color:var(--ink-muted)}
+
+/* ---------- programme detail ---------- */
+.ph-head{display:grid;grid-template-columns:1fr auto;gap:var(--space-6);align-items:start}
+.ph-head h1{font-size:44px;line-height:1.02;letter-spacing:-.03em;margin-top:var(--space-4)}
+.meta{display:flex;flex-wrap:wrap;gap:6px 18px;margin-top:var(--space-4);font-size:14px;color:var(--ink-muted);align-items:center}
+.meta .mono{color:var(--ink)}
+.copy{display:inline-flex;align-items:center;gap:4px}
+.trust{display:inline-flex;align-items:center;gap:6px;font-size:13px;font-weight:600;color:var(--accent)}
+.trust svg{width:16px;height:16px}
+.phasebar{display:grid;grid-template-columns:repeat(4,1fr);gap:4px;margin:var(--space-8) 0}
+.phasebar .ps{padding-top:14px;position:relative}
+.phasebar .ps::before{content:"";position:absolute;top:0;left:0;right:0;height:6px;border-radius:6px;background:var(--line)}
+.phasebar .ps.done::before{background:var(--accent)}
+.phasebar .ps.now::before{background:linear-gradient(90deg,var(--accent) var(--p,50%),var(--line) var(--p,50%))}
+.phasebar b{display:block;font-size:14px}
+.phasebar span{font:500 12px/1.4 var(--font-mono);color:var(--ink-muted)}
+.phasebar .ps.now b::after{content:" · now";color:var(--accent);font-weight:600}
+.banner{display:flex;gap:14px;align-items:flex-start;padding:var(--space-4) var(--space-6);border-radius:var(--radius-md);margin-bottom:var(--space-6)}
+.banner.cancel{background:var(--danger-soft)}
+.banner.pause{background:color-mix(in srgb,var(--signal) 22%,var(--bg))}
+.banner svg{width:22px;height:22px;flex:none;margin-top:2px}
+.banner.cancel svg{color:var(--danger)}
+.dgrid{display:grid;grid-template-columns:1fr 360px;gap:var(--space-6);align-items:start}
+.where{background:var(--bg-sunken);border-radius:var(--radius-lg);padding:var(--space-8)}
+.where-figs{display:grid;grid-template-columns:repeat(4,1fr);gap:var(--space-4);margin-top:var(--space-6)}
+.where-figs div{padding-left:14px;position:relative}
+.where-figs div::before{content:"";position:absolute;left:0;top:3px;width:8px;height:8px;border-radius:2px;background:var(--c)}
+.where-figs span{font-size:13px;color:var(--ink-muted);display:block}
+.where-figs b{font:500 20px/1.3 var(--font-mono);letter-spacing:-.01em}
+.tabs{display:flex;gap:4px;margin:var(--space-8) 0 var(--space-4)}
+.tabs button{border:0;background:none;min-height:44px;padding:0 16px;border-radius:var(--radius-pill);font-weight:600;font-size:15px;color:var(--ink-muted);cursor:pointer}
+.tabs button[aria-selected="true"]{background:var(--ink);color:var(--bg)}
+table.t{width:100%;border-collapse:collapse;font-size:14px}
+table.t th{text-align:left;font:500 12px/1 var(--font-mono);letter-spacing:.06em;text-transform:uppercase;color:var(--ink-muted);padding:0 12px 12px 0;white-space:nowrap}
+table.t td{padding:14px 12px 14px 0;box-shadow:inset 0 1px 0 var(--line);vertical-align:middle}
+table.t td.r,table.t th.r{text-align:right}
+.actions{display:flex;flex-direction:column}
+.action{padding:var(--space-4) 0}
+.action+.action{box-shadow:inset 0 1px 0 var(--line)}
+.action .ah{display:flex;justify-content:space-between;align-items:center;gap:12px}
+.action b{font-weight:600}
+.action .who{font-size:13px;color:var(--ink-muted);margin-top:2px}
+.timeline{list-style:none;margin:0;padding:0}
+.timeline li{display:grid;grid-template-columns:20px 1fr;gap:12px;padding-bottom:var(--space-4);position:relative;font-size:14px}
+.timeline li::before{content:"";width:10px;height:10px;border-radius:3px;background:var(--money-locked);margin:5px 0 0 5px}
+.timeline li.m::before{background:var(--accent)}
+.timeline li::after{content:"";position:absolute;left:9px;top:20px;bottom:0;width:2px;background:var(--line)}
+.timeline li:last-child::after{display:none}
+.timeline small{display:block;font:500 12px/1.4 var(--font-mono);color:var(--ink-muted)}
+.dl{display:grid;grid-template-columns:200px 1fr;gap:0;font-size:15px}
+.dl dt,.dl dd{padding:14px 0;box-shadow:inset 0 1px 0 var(--line);margin:0}
+.dl dt{color:var(--ink-muted);font-size:14px}
+
+/* ---------- recipient ---------- */
+.award{background:var(--bg-raised);border-radius:var(--radius-lg);padding:var(--space-8);margin-bottom:var(--space-4)}
+.award-head{display:flex;justify-content:space-between;gap:var(--space-4);flex-wrap:wrap;align-items:flex-start}
+.award-head h3{font-size:24px;line-height:1.15}
+.award-amt{text-align:right}
+.award-amt b{font:500 28px/1.1 var(--font-mono);letter-spacing:-.02em;display:block}
+.award-amt span{font-size:13px;color:var(--ink-muted)}
+.posts{display:grid;grid-template-columns:repeat(var(--n,3),1fr);gap:var(--space-4);margin-top:var(--space-8);position:relative}
+.posts::before{content:"";position:absolute;left:24px;right:24px;top:24px;height:3px;background:repeating-linear-gradient(90deg,var(--line) 0 14px,transparent 14px 24px)}
+.tpost{position:relative}
+.tpost .sign{width:48px;height:48px;border-radius:var(--radius-md);display:grid;place-items:center;font:600 17px/1 var(--font-mono);background:var(--bg-sunken);color:var(--ink-muted);position:relative;z-index:1}
+.tpost.rel .sign{background:var(--accent);color:var(--accent-ink)}
+.tpost.proven .sign{background:var(--bg-raised);box-shadow:inset 0 0 0 2.5px var(--accent);color:var(--accent)}
+.tpost h4{font:600 15px/1.3 var(--font-sans);margin-top:var(--space-4)}
+.tpost .amt{font:500 14px/1.4 var(--font-mono);margin-top:2px}
+.tpost p{font-size:13px;color:var(--ink-muted);margin-top:6px;line-height:1.45}
+.tpost .btn{margin-top:var(--space-4)}
+.escrow{display:grid;grid-template-columns:auto 1fr auto;gap:var(--space-6);align-items:center;margin-top:var(--space-8);padding:var(--space-6);border-radius:var(--radius-md);background:var(--accent-soft)}
+.escrow .v{font:500 30px/1 var(--font-mono);letter-spacing:-.02em}
+.policy{display:flex;gap:var(--space-6);flex-wrap:wrap;align-items:center;margin-top:var(--space-8);padding:var(--space-6);border-radius:var(--radius-md);background:var(--bg-sunken)}
+.meter{height:10px;border-radius:10px;background:var(--line);overflow:hidden;flex:1;min-width:160px}
+.meter i{display:block;height:100%;background:var(--accent);border-radius:10px}
+.apptl{display:grid;grid-template-columns:repeat(4,1fr);gap:var(--space-2);margin-top:var(--space-6)}
+.apptl div{padding-top:14px;position:relative;font-size:14px}
+.apptl div::before{content:"";position:absolute;top:0;left:0;right:0;height:5px;border-radius:5px;background:var(--line)}
+.apptl div.d::before{background:var(--accent)}
+.apptl div.n::before{background:linear-gradient(90deg,var(--accent) 40%,var(--line) 40%)}
+.apptl b{display:block;font-weight:600}
+.apptl span{font-size:13px;color:var(--ink-muted)}
+.life{display:flex;align-items:center;gap:var(--space-6);flex-wrap:wrap}
+
+/* ---------- verifier ---------- */
+.vgrid{display:grid;grid-template-columns:1fr 420px;gap:var(--space-6);align-items:start}
+.queue{display:flex;flex-direction:column;gap:6px}
+.claim{display:grid;grid-template-columns:auto 1fr auto;gap:var(--space-4);align-items:center;padding:var(--space-4) var(--space-6);border-radius:var(--radius-md);background:var(--bg-raised);border:0;text-align:left;cursor:pointer;width:100%;transition:background .2s,box-shadow .2s}
+.claim:hover{background:color-mix(in srgb,var(--bg-raised) 85%,var(--accent-soft))}
+.claim[aria-current="true"]{box-shadow:inset 0 0 0 2px var(--accent)}
+.claim .tr{width:40px;height:40px;border-radius:var(--radius-sm);display:grid;place-items:center;background:var(--bg-sunken);font:600 14px/1 var(--font-mono)}
+.claim b{font-weight:600;display:block}
+.claim span{font-size:13px;color:var(--ink-muted)}
+.claim .age{font:500 12px/1 var(--font-mono);color:var(--ink-muted);text-align:right}
+.review{position:sticky;top:140px}
+.review .subject{display:flex;justify-content:space-between;gap:12px;padding:10px 0;font-size:14px;box-shadow:inset 0 1px 0 var(--line)}
+.review .subject dt{color:var(--ink-muted)}
+.review .subject dd{margin:0;text-align:right;font-weight:500}
+.vote-row{display:grid;grid-template-columns:1fr 160px auto;gap:12px;align-items:center;padding:14px 0;box-shadow:inset 0 1px 0 var(--line)}
+.vote-row .input{min-height:44px}
+.att-status{font:600 12px/1 var(--font-mono);letter-spacing:.04em;padding:5px 8px;border-radius:var(--radius-pill)}
+.att-status.valid{background:var(--accent-soft);color:var(--accent)}
+.att-status.used{background:var(--bg-sunken);color:var(--ink-muted)}
+.att-status.revoked{background:var(--danger-soft);color:var(--danger)}
+
+/* ---------- deploy ---------- */
+.wizard{display:grid;grid-template-columns:240px 1fr 320px;gap:var(--space-8);align-items:start}
+.wsteps{list-style:none;margin:0;padding:0;position:sticky;top:140px}
+.wsteps li button{display:flex;gap:12px;align-items:center;width:100%;min-height:52px;border:0;background:none;padding:0 10px;border-radius:var(--radius-sm);cursor:pointer;text-align:left;font-weight:600;color:var(--ink-muted)}
+.wsteps li button:hover{background:var(--bg-sunken)}
+.wsteps li button .n{width:30px;height:30px;border-radius:50%;display:grid;place-items:center;background:var(--bg-sunken);font:500 13px/1 var(--font-mono);flex:none}
+.wsteps li button[aria-current="step"]{color:var(--ink)}
+.wsteps li button[aria-current="step"] .n{background:var(--ink);color:var(--bg)}
+.wsteps li button.done .n{background:var(--accent);color:var(--accent-ink)}
+.modechoice{display:flex;flex-direction:column;gap:8px}
+.mc{display:grid;grid-template-columns:auto 1fr auto;gap:14px;align-items:flex-start;padding:16px;border-radius:var(--radius-md);background:var(--bg-sunken);cursor:pointer;position:relative}
+.mc input{width:20px;height:20px;margin:2px 0 0;accent-color:var(--accent)}
+.mc:has(input:checked){background:var(--bg-raised);box-shadow:inset 0 0 0 2px var(--accent)}
+.mc b{display:block;font-weight:600}
+.mc span{font-size:13px;color:var(--ink-muted);display:block;margin-top:2px;line-height:1.45}
+.mc .str{display:flex;gap:2px;margin-top:4px}
+.mc .str i{width:14px;height:6px;border-radius:2px;background:var(--money-locked);opacity:.5}
+.mc .str i.f{background:var(--accent);opacity:1}
+.mc .best{position:absolute;top:-9px;right:14px;font:600 10px/1 var(--font-mono);letter-spacing:.06em;text-transform:uppercase;background:var(--accent);color:var(--accent-ink);padding:5px 8px;border-radius:var(--radius-pill)}
+.two{display:grid;grid-template-columns:1fr 1fr;gap:var(--space-4)}
+.addr-list{display:flex;flex-direction:column;gap:6px;margin-bottom:10px}
+.addr-list div{display:flex;align-items:center;justify-content:space-between;gap:10px;min-height:44px;padding:0 6px 0 14px;border-radius:var(--radius-sm);background:var(--bg-sunken);font-size:14px}
+.tl-visual{display:grid;grid-template-columns:repeat(4,1fr);gap:4px;margin:var(--space-4) 0 var(--space-6)}
+.tl-visual div{height:36px;border-radius:var(--radius-sm);display:flex;align-items:center;padding:0 10px;font:600 12px/1 var(--font-mono)}
+.wiz-nav{display:flex;justify-content:space-between;gap:12px;margin-top:var(--space-8);padding-top:var(--space-6);box-shadow:inset 0 1px 0 var(--line)}
+.config .row{display:flex;justify-content:space-between;gap:12px;padding:10px 0;font-size:14px}
+.config .row+.row{box-shadow:inset 0 1px 0 var(--line)}
+.config .row span:first-child{color:var(--ink-muted)}
+
+/* ---------- finalize ---------- */
+.fin-top{display:grid;grid-template-columns:1fr 1fr;gap:var(--space-6);margin-bottom:var(--space-6)}
+.budgetbar{height:16px;border-radius:6px;background:var(--money-unawarded);overflow:hidden;display:flex;margin:var(--space-4) 0 10px}
+.budgetbar i{display:block;height:100%;background:var(--money-locked)}
+.budgetbar i.ask{background:repeating-linear-gradient(-45deg,var(--money-refundable) 0 5px,transparent 5px 10px);opacity:.6}
+.frow{display:grid;grid-template-columns:1.3fr .8fr 1.6fr .8fr 1.2fr;gap:var(--space-4);align-items:center;padding:16px var(--space-6);border-radius:var(--radius-md);background:var(--bg-raised)}
+.frow+.frow{margin-top:6px}
+.frow.hd{background:transparent;padding-top:0;padding-bottom:6px;font:500 12px/1 var(--font-mono);letter-spacing:.06em;text-transform:uppercase;color:var(--ink-muted)}
+.frow .votes{display:flex;flex-wrap:wrap;gap:4px}
+.frow .votes span{font:500 12px/1 var(--font-mono);padding:6px 7px;border-radius:6px;background:var(--bg-sunken)}
+.frow .votes span.md{background:var(--accent);color:var(--accent-ink)}
+.frow .votes span.miss{background:transparent;box-shadow:inset 0 0 0 1.5px var(--line);color:var(--ink-faint)}
+.frow .act{text-align:right}
+.krow{grid-template-columns:2fr 1fr 1.6fr 1fr}
+.kl{display:none}
+td.mono{white-space:nowrap}
+.frow.done{opacity:.75}
+
+/* ---------- design review dock ---------- */
+.dock{position:fixed;left:16px;bottom:16px;z-index:40;background:var(--ink);color:var(--bg);border-radius:var(--radius-md);box-shadow:var(--shadow-2);font-size:13px;max-width:calc(100vw - 32px)}
+.dock summary{list-style:none;cursor:pointer;display:flex;align-items:center;gap:8px;min-height:44px;padding:0 14px;font-weight:600}
+.dock summary::-webkit-details-marker{display:none}
+.dock summary svg{width:16px;height:16px}
+.dock .body{padding:0 14px 14px;display:flex;flex-direction:column;gap:10px;width:260px}
+.dock .body .lab{font:500 11px/1 var(--font-mono);letter-spacing:.08em;text-transform:uppercase;opacity:.6}
+.dock .opts{display:flex;flex-wrap:wrap;gap:4px}
+.dock .opts button{border:0;background:color-mix(in srgb,var(--bg) 12%,var(--ink));color:var(--bg);min-height:32px;padding:0 10px;border-radius:var(--radius-pill);cursor:pointer;font-size:12px;font-weight:600}
+.dock .opts button[aria-pressed="true"]{background:var(--signal);color:var(--signal-ink)}
+
+.toast{position:fixed;left:50%;bottom:24px;transform:translateX(-50%);z-index:70;background:var(--ink);color:var(--bg);padding:12px 18px;border-radius:var(--radius-pill);font-size:14px;font-weight:500;box-shadow:var(--shadow-2);animation:up .3s}
+
+/* ---------- animation ---------- */
+.view{animation:viewin .45s cubic-bezier(.2,.8,.2,1)}
+@keyframes viewin{from{opacity:0;transform:translateY(10px)}}
+
+/* ---------- responsive ---------- */
+@media (max-width:1100px){
+  .cards{grid-template-columns:1fr 1fr}
+  .dgrid,.vgrid{grid-template-columns:1fr}
+  .wizard{grid-template-columns:200px 1fr}
+  .wizard .config{grid-column:1/-1}
+  .review{position:static}
+}
+@media (max-width:860px){
+  .wrap{padding:0 var(--space-4)}
+  nav.main,.hd .tag-testnet .t{display:none}
+  .tabbar{display:grid;grid-template-columns:repeat(5,1fr);position:fixed;left:0;right:0;bottom:0;z-index:35;background:color-mix(in srgb,var(--bg-raised) 92%,transparent);backdrop-filter:blur(14px);-webkit-backdrop-filter:blur(14px);box-shadow:0 -1px 0 var(--line);padding:6px 4px calc(6px + env(safe-area-inset-bottom))}
+  .tabbar a{display:flex;flex-direction:column;align-items:center;justify-content:center;gap:3px;min-height:52px;text-decoration:none;font-size:11px;font-weight:600;color:var(--ink-muted);border-radius:var(--radius-sm)}
+  .tabbar a svg{width:21px;height:21px}
+  .tabbar a[aria-current="page"]{color:var(--accent)}
+  main{padding-bottom:120px}
+  .dock{bottom:84px}
+  .stats{grid-template-columns:1fr 1fr}
+  .wizard{grid-template-columns:1fr}
+  .wsteps{position:static;display:flex;overflow-x:auto;gap:4px}
+  .wsteps li button{white-space:nowrap}
+  .fin-top{grid-template-columns:1fr}
+  .frow{grid-template-columns:1fr 1fr;gap:8px 12px}
+  .frow.hd{display:none}
+  .frow .act{grid-column:1/-1;text-align:left}
+  .krow{grid-template-columns:1fr}
+  .kl{display:inline;font-family:var(--font-sans);font-size:13px;color:var(--ink-muted)}
+  .where-figs{grid-template-columns:1fr 1fr}
+}
+@media (max-width:600px){
+  .page-head h1{font-size:30px}
+  .ph-head{grid-template-columns:1fr}
+  .ph-head h1{font-size:32px}
+  .cards,.cards.two{grid-template-columns:1fr}
+  .stats.three{grid-template-columns:1fr 1fr}
+  .stats.three .stat.hl{grid-column:1/-1}
+  .pcard{min-height:0}
+  .search{min-width:0;max-width:none;flex-basis:100%}
+  .tb-right{width:100%}
+  .tb-right .seg{width:100%}
+  .acct .addr{display:none}
+  .acct{padding:0 6px}
+  .hd{gap:4px}
+  .hd-right{gap:2px}
+  .stat{padding:var(--space-4)}
+  .stat .v{font-size:22px}
+  .phasebar{grid-template-columns:1fr 1fr;row-gap:16px}
+  .where{padding:var(--space-6) var(--space-4)}
+  .money.lg .sq{width:12px;height:12px;border-radius:3px}
+  .money.lg{gap:4px}
+  .dl{grid-template-columns:1fr}
+  .dl dt{padding-bottom:0}
+  .dl dd{box-shadow:none;padding-top:4px}
+  .award{padding:var(--space-6) var(--space-4)}
+  .posts{grid-template-columns:1fr;gap:var(--space-6)}
+  .posts::before{left:23px;right:auto;top:24px;bottom:24px;width:3px;height:auto;background:repeating-linear-gradient(180deg,var(--line) 0 10px,transparent 10px 18px)}
+  .tpost{display:grid;grid-template-columns:48px 1fr;gap:0 14px}
+  .tpost h4{margin-top:2px}
+  .tpost>*:not(.sign){grid-column:2}
+  .tpost .sign{grid-row:1/span 5}
+  .escrow{grid-template-columns:1fr}
+  .apptl{grid-template-columns:1fr 1fr;row-gap:14px}
+  .vote-row{grid-template-columns:1fr 1fr}
+  .vote-row>div:first-child{grid-column:1/-1}
+  .two{grid-template-columns:1fr}
+  .sheet{padding:var(--space-6) var(--space-4);border-radius:var(--radius-lg) var(--radius-lg) 0 0;align-self:flex-end;max-height:92vh}
+  .scrim{padding:0;align-items:flex-end}
+  .pop{position:fixed;left:8px;right:8px;top:auto;bottom:8px;width:auto}
+  table.t.stack thead{display:none}
+  table.t.stack tr{display:grid;grid-template-columns:1fr auto;gap:2px 12px;padding:12px 0;box-shadow:inset 0 1px 0 var(--line)}
+  table.t.stack td{box-shadow:none;padding:2px 0}
+  table.t.stack td.r{text-align:right}
+  .claim{grid-template-columns:auto 1fr;padding:var(--space-4)}
+  .claim .age{grid-column:2;text-align:left}
+  .award-amt{text-align:left}
+  .seg{flex-wrap:wrap;border-radius:var(--radius-md)}
+  .dock summary .dl{display:none}
+}
+@media (prefers-reduced-motion:reduce){
+  *,*::before,*::after{animation-duration:.001ms!important;animation-iteration-count:1!important;transition-duration:.001ms!important}
+}
+</style></head><body><a class="sr" href="#main">Skip to content</a><div id="app"></div><div id="sheetHost"></div><div id="toastHost"></div><p class="sr" aria-live="polite" id="announcer"></p><script>(function(){
+'use strict';
+const $ = s => document.querySelector(s);
+const reduce = matchMedia('(prefers-reduced-motion: reduce)').matches;
+const fmt = (n, d=0) => Number(n).toLocaleString('en-US',{minimumFractionDigits:d,maximumFractionDigits:d});
+const esc = s => String(s).replace(/[&<>"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+
+/* ---------------- icons (lucide paths) ---------------- */
+const I = {
+  grid:'<rect x="3" y="3" width="7" height="7" rx="1.5"/><rect x="14" y="3" width="7" height="7" rx="1.5"/><rect x="3" y="14" width="7" height="7" rx="1.5"/><rect x="14" y="14" width="7" height="7" rx="1.5"/>',
+  coins:'<circle cx="8" cy="8" r="6"/><path d="M18.1 10.4A6 6 0 1 1 10.3 18"/><path d="M7 6h1v4"/>',
+  hand:'<path d="M11 14h2a2 2 0 1 0 0-4h-3c-.6 0-1.1.2-1.4.6L3 16"/><path d="m7 20 1.6-1.4c.3-.4.8-.6 1.4-.6h4c1.1 0 2.1-.4 2.8-1.2l4.6-4.4a2 2 0 0 0-2.8-2.8L14.4 13.6"/><path d="m2 15 6 6"/>',
+  shield:'<path d="M12 3l7 4v5c0 4.5-3 7.7-7 9-4-1.3-7-4.5-7-9V7z"/><path d="m9 12 2 2 4-4"/>',
+  sliders:'<path d="M4 21v-7M4 10V3M12 21v-9M12 8V3M20 21v-5M20 12V3M1 14h6M9 8h6M17 16h6"/>',
+  arrow:'<path d="M5 12h14M13 6l6 6-6 6"/>',
+  back:'<path d="M19 12H5M11 18l-6-6 6-6"/>',
+  check:'<path d="M20 6 9 17l-5-5"/>',
+  x:'<path d="M18 6 6 18M6 6l12 12"/>',
+  copy:'<rect x="9" y="9" width="12" height="12" rx="2"/><path d="M5 15V5a2 2 0 0 1 2-2h10"/>',
+  search:'<circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/>',
+  lock:'<rect x="4" y="11" width="16" height="10" rx="2"/><path d="M8 11V7a4 4 0 0 1 8 0v4"/>',
+  info:'<circle cx="12" cy="12" r="9"/><path d="M12 11v5M12 8h.01"/>',
+  alert:'<path d="M10.3 3.9 1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0z"/><path d="M12 9v4M12 17h.01"/>',
+  clock:'<circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/>',
+  cal:'<rect x="3" y="5" width="18" height="16" rx="2"/><path d="M16 3v4M8 3v4M3 11h18"/>',
+  dl:'<path d="M12 3v12M7 10l5 5 5-5M5 21h14"/>',
+  ext:'<path d="M15 3h6v6M10 14 21 3M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/>',
+  moon:'<path d="M21 12.8A9 9 0 1 1 11.2 3a7 7 0 0 0 9.8 9.8z"/>',
+  sun:'<circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4"/>',
+  logout:'<path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4M16 17l5-5-5-5M21 12H9"/>',
+  wallet:'<path d="M20 7H5a2 2 0 0 1 0-4h13v4"/><path d="M3 5v14a2 2 0 0 0 2 2h15V7"/><circle cx="16" cy="14" r="1.2"/>',
+  user:'<circle cx="12" cy="8" r="4"/><path d="M4 21a8 8 0 0 1 16 0"/>',
+  plus:'<path d="M12 5v14M5 12h14"/>',
+  refresh:'<path d="M21 12a9 9 0 1 1-3-6.7L21 8"/><path d="M21 3v5h-5"/>',
+  pause:'<rect x="6" y="4" width="4" height="16" rx="1"/><rect x="14" y="4" width="4" height="16" rx="1"/>',
+  ban:'<circle cx="12" cy="12" r="9"/><path d="m5.7 5.7 12.6 12.6"/>',
+  eye:'<path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7S2 12 2 12z"/><circle cx="12" cy="12" r="3"/>',
+  chain:'<path d="M10 13a5 5 0 0 0 7.5.5l3-3a5 5 0 0 0-7-7l-1.7 1.7"/><path d="M14 11a5 5 0 0 0-7.5-.5l-3 3a5 5 0 0 0 7 7l1.7-1.7"/>',
+  rocket:'<path d="M4.5 16.5c-1.5 1.3-2 5-2 5s3.7-.5 5-2c.7-.8.7-2.1-.1-2.9a2.2 2.2 0 0 0-2.9-.1z"/><path d="m12 15-3-3a22 22 0 0 1 2-3.9A12.9 12.9 0 0 1 22 2c0 2.7-.8 7.5-6 11a22.4 22.4 0 0 1-4 2z"/><path d="M9 12H4s.6-3 2-4c1.6-1.1 5 0 5 0M12 15v5s3-.6 4-2c1.1-1.6 0-5 0-5"/>',
+  wifi:'<path d="M2 2l20 20M8.5 16.4a5 5 0 0 1 7 0M5 12.9a10 10 0 0 1 5.2-2.8M19 12.9a10 10 0 0 0-2-1.5M2 8.8a15 15 0 0 1 4.2-2.6M22 8.8A15 15 0 0 0 11 5M12 20h.01"/>',
+  flag:'<path d="M4 22V4a1 1 0 0 1 1-1h12l-2 4 2 4H5"/>'
+};
+const ic = (n, cls='') => `<svg class="${cls}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${I[n]}</svg>`;
+
+/* ---------------- example data ---------------- */
+const ME = 'GA7QK3LZQW5C2P4V7NHRMXTJ8D6FBYE3SUAGL5WOZK2RHCXPMVSGZ';
+const short = a => a.slice(0,4) + '…' + a.slice(-4);
+const P = [
+  {id:'lakeside', sid:'CBX7…Q2KD', name:'Lakeside Secondary Bursaries 2027', sector:'Education', phase:'open', mode:'Direct', asset:'USDC', contributed:20000, budget:19500, awarded:0, released:0, refundable:0, funders:14, applicants:23, quorum:5, tranches:3, verifier:'School registrars (3)', condition:'Enrolled for the term', payee:'The school, for tuition', creator:'GCRE…8MPA', ledger:'1,284,551', d:['12 Jan 2027','2 Feb 2027','30 Nov 2027','31 Jan 2028'], p:0.62, status:'Taking applications and contributions until 12 Jan 2027 · 23 applied so far'},
+  {id:'kilifi', sid:'CD4N…7HWA', name:'Kilifi Community Health Stipends', sector:'Health stipends', phase:'review', mode:'Allocated', asset:'USDC', contributed:50000, budget:48750, awarded:31200, released:0, refundable:0, funders:6, applicants:41, quorum:3, tranches:6, verifier:'District clinic leads (4)', condition:'Shifts worked this month', payee:'The health worker', creator:'GKIL…3NQE', ledger:'1,201,903', d:['20 Oct 2026','28 Nov 2026','31 May 2027','31 Jul 2027'], p:0.55, status:'Reviewers voting · 26 of 41 awards finalized, 9 ready to finalize'},
+  {id:'oyo', sid:'CA9P…L3MX', name:'Oyo Smallholder Seed & Fertiliser Inputs', sector:'Agricultural inputs', phase:'settled', mode:'Direct', asset:'USDC', contributed:10000, budget:9750, awarded:9600, released:6400, refundable:0, funders:9, applicants:18, quorum:3, tranches:3, verifier:'Oyo ADP extension officers (2)', condition:'Land prepared for planting', payee:'An approved seed and fertiliser supplier', creator:'GOYO…W2TA', ledger:'1,098,224', d:['1 Aug 2026','29 Aug 2026','28 Feb 2027','30 Apr 2027'], p:0.35, status:'Releasing as land is confirmed · 24 of 36 tranches released'},
+  {id:'accra', sid:'CC2T…9RFE', name:'Accra Solar Technician Training', sector:'Vocational training', phase:'settled', closed:true, mode:'Allocated', asset:'USDC', contributed:15000, budget:14625, awarded:14000, released:12650, refundable:1975, funders:11, applicants:16, quorum:3, tranches:4, verifier:'Accra Technical Training Centre', condition:'Module completed', payee:'The training centre', creator:'GACC…5LDV', ledger:'902,117', d:['3 Mar 2026','31 Mar 2026','31 Oct 2026','31 Dec 2026'], p:1, status:'Release window closed 31 Oct · 1,975 USDC refundable to funders'},
+  {id:'turkana', sid:'CE8H…2VBN', name:'Turkana Household Cash Transfers', sector:'Humanitarian cash', phase:'review', paused:true, mode:'Open', asset:'USDC', contributed:30000, budget:29250, awarded:12400, released:0, refundable:0, funders:4, applicants:112, quorum:2, tranches:2, verifier:'Field partners (6)', condition:'Household registered and reached', payee:'The household', creator:'GTUR…K8QS', ledger:'1,240,876', d:['10 Oct 2026','5 Dec 2026','31 Mar 2027','31 May 2027'], p:0.7, status:'Paused by the creator · the review deadline is still 5 Dec 2026'},
+  {id:'lagos', sid:'CF1M…X6YT', name:'Lagos Market Women Microgrants', sector:'SME microgrants', phase:'cancelled', mode:'Restricted', asset:'USDC', contributed:8000, budget:7800, awarded:0, released:0, refundable:7800, funders:7, applicants:9, quorum:3, tranches:2, verifier:'Business mentors (2)', condition:'Business-plan milestone met', payee:'The business or its suppliers', creator:'GLAG…6BRU', ledger:'1,150,040', d:['15 Sep 2026','15 Oct 2026','15 Mar 2027','15 May 2027'], p:0, status:'Cancelled by the creator on 3 Nov · all 7,800 USDC refundable in proportion'},
+  {id:'pilot', sid:'CG5Z…B4JP', name:'Milepost Pilot · Exam Fee Support', sector:'Education', phase:'open', mode:'Allocated', asset:'XLM', contributed:12800, budget:12480, awarded:0, released:0, refundable:0, funders:5, applicants:4, quorum:2, tranches:2, verifier:'Exam centre officers (2)', condition:'Registered for the exam', payee:'The exam centre', creator:'GPIL…0TQZ', ledger:'1,301,442', d:['20 Dec 2026','10 Jan 2027','30 Jun 2027','31 Aug 2027'], p:0.4, status:'Live testnet programme · taking applications until 20 Dec 2026'}
+];
+const byId = id => P.find(p => p.id === id);
+const MODES = {
+  Allocated:{s:4, line:'Held in escrow; the recipient picks a verified payee', rank:'Strongest guarantee'},
+  Direct:{s:3, line:'Straight to a verified payee chosen at award time', rank:'Strong, but paternalistic'},
+  Restricted:{s:2, line:'Into a policy wallet. The policy limits one signer, not the wallet', rank:'Weaker than it looks'},
+  Open:{s:1, line:'Straight to the recipient. Nothing checks it afterwards', rank:'Simplest, unchecked'}
+};
+const PH = {open:'Open', review:'Review', settled:'Settled', cancelled:'Cancelled'};
+
+/* ---------------- app state ---------------- */
+const S = { signedIn:true, view:'normal', offline:false, filter:'all', q:'', sort:'deadline', menu:false, tab:'awards', rtab:'awards', claim:0, wstep:0, finP:'kilifi', mode:'Allocated', quorum:3, released:{}, finalized:{}, signed:{} };
+
+/* ---------------- small components ---------------- */
+const phase = p => p.paused ? `<span class="badge ph-${p.phase}"><i></i>${PH[p.phase]}</span> <span class="badge ph-paused">${ic('pause')}Paused</span>` : `<span class="badge ph-${p.phase}"><i></i>${PH[p.phase]}</span>`;
+const modePill = m => `<span class="mode" title="${MODES[m].rank}"><span class="m" aria-hidden="true">${[0,1,2,3].map(k=>`<b class="${k<MODES[m].s?'f':''}"></b>`).join('')}</span>${m}<span class="sr">, ${MODES[m].rank}</span></span>`;
+function money(p, n=40, lg=false){
+  const u = n / p.budget;
+  let r = Math.round(p.released*u), f = Math.round(p.refundable*u), l = Math.round((p.awarded-p.released)*u);
+  if (p.closed || p.phase==='cancelled') l = 0;
+  let un = Math.max(0, n - r - f - l);
+  if (p.closed || p.phase==='cancelled') { f = n - r; un = 0; }
+  const sq = (c,k) => Array.from({length:k}, () => `<i class="sq ${c}"></i>`).join('');
+  const label = `${fmt(p.budget)} ${p.asset} budget: ${fmt(p.released)} released, ${fmt(p.closed||p.phase==='cancelled'?0:p.awarded-p.released)} awarded and locked, ${fmt(p.refundable)} refundable`;
+  return `<div class="money ${lg?'lg':''}" role="img" aria-label="${label}">${sq('r',r)}${sq('l',l)}${sq('f',f)}${sq('',un)}</div>`;
+}
+const legend = () => `<div class="legend" aria-hidden="true"><span><i class="sq"></i>Unawarded</span><span><i class="sq l"></i>Awarded, locked</span><span><i class="sq r"></i>Released</span><span><i class="sq f"></i>Refundable</span></div>`;
+const copyBtn = (v, label='Copy') => `<button class="icon-btn sm" data-copy="${esc(v)}" aria-label="${label} ${esc(v)}">${ic('copy')}</button>`;
+const sample = () => `<span class="tag-sample">Sample data</span>`;
+const reason = t => `<p class="disabled-reason">${ic('lock')}<span>${t}</span></p>`;
+function errorPanel(msg, code, retry='retry'){
+  return `<div class="errpanel" role="alert"><h4>${ic('alert')}${msg}</h4><p class="code">Nothing was transferred · program error ${code}</p><button class="btn btn-ghost btn-sm" data-act="${retry}">${ic('refresh')}Try again</button></div>`;
+}
+const empty = (h, p, btn='') => `<div class="empty"><div class="art" aria-hidden="true"><i></i><i></i><i></i></div><h3>${h}</h3><p>${p}</p>${btn}</div>`;
+function signedOut(title, what){
+  return `<div class="empty" style="padding-top:var(--space-12)"><div class="art" aria-hidden="true"><i></i><i></i><i></i></div><h3>${title}</h3><p>${what}</p><div style="display:flex;gap:10px;justify-content:center;flex-wrap:wrap;margin-top:var(--space-6)"><button class="btn btn-primary" data-act="signin">${ic('wallet')}Sign in with Freighter</button><a class="btn btn-ghost" href="#directory">Browse programmes</a></div></div>`;
+}
+function ctaFor(p){
+  if (p.phase==='open') return 'Contribute or apply';
+  if (p.phase==='review') return 'Finalize awards';
+  if (p.phase==='cancelled' || p.closed) return 'Claim refund';
+  return 'See releases';
+}
+
+/* ---------------- shell ---------------- */
+const NAV = [
+  {k:'programmes', label:'Programmes', icon:'grid', href:'#directory', sub:[['directory','Directory'],['status','Index status'],['about','About this deployment']]},
+  {k:'fund', label:'Fund', icon:'coins', href:'#fund', sub:[['fund','My funding'],['receipt','Receipt lookup'],['propose','Propose a programme']]},
+  {k:'recipient', label:'Get funded', icon:'hand', href:'#recipient', sub:[['recipient','My awards'],['policy','Spend policy']]},
+  {k:'verify', label:'Verify', icon:'shield', href:'#verify', sub:[['verify','Queue'],['attestations','Attestation lookup']]},
+  {k:'admin', label:'Admin', icon:'sliders', href:'#finalize', sub:[['finalize','Finalize awards'],['deploy','Deploy programme'],['schemas','Register schema'],['payees','Payees'],['standing','Standing'],['keepalive','Keepalive']]}
+];
+const ROUTE_SECTION = {directory:'programmes',programme:'programmes',status:'programmes',about:'programmes',fund:'fund',receipt:'fund',propose:'fund',recipient:'recipient',policy:'recipient',verify:'verify',attestations:'verify',finalize:'admin',deploy:'admin',schemas:'admin',payees:'admin',standing:'admin',keepalive:'admin'};
+
+function shell(route){
+  const sec = ROUTE_SECTION[route] || '';
+  const theme = document.documentElement.dataset.theme;
+  const nav = NAV.map(n => `<a href="${n.href}" ${n.k===sec?'aria-current="page"':''}>${ic(n.icon)}${n.label}</a>`).join('');
+  const cur = NAV.find(n => n.k===sec);
+  const sub = cur ? `<nav class="subnav wrap" aria-label="${cur.label} pages">${cur.sub.map(([r,l,soon]) => `<a href="#${r}" ${r===route||(route==='programme'&&r==='directory')?'aria-current="page"':''}>${l}${soon?'<span class="soon">next batch</span>':''}</a>`).join('')}</nav>` : '';
+  const acct = S.signedIn
+    ? `<div style="position:relative"><button class="acct" id="acctBtn" aria-haspopup="true" aria-expanded="${S.menu}"><span class="addr mono" style="font-size:14px">${short(ME)}</span><span class="av" aria-hidden="true"><b></b><b></b><b></b><b></b></span><span class="sr">Account menu</span></button>${S.menu?accountMenu():''}</div>`
+    : `<button class="btn btn-primary btn-sm" data-act="signin">${ic('wallet')}Sign in</button>`;
+  return `
+  ${S.offline?`<div class="banner-off" role="status">${'You\'re offline. Figures may be out of date and nothing can be sent until you reconnect.'}</div>`:''}
+  <header class="app">
+    <div class="wrap hd">
+      <a class="logo" href="#directory" aria-label="Milepost, programme directory"><span class="mark" aria-hidden="true"><b></b><b></b><b></b></span>Milepost</a>
+      <nav class="main" aria-label="Main">${nav}</nav>
+      <div class="hd-right">
+        <span class="tag-testnet" title="Stellar testnet. Contracts are pre-audit."><i aria-hidden="true"></i><span class="t">Testnet</span></span>
+        <button class="icon-btn" data-act="theme" aria-label="Switch to ${theme==='dark'?'light':'dark'} theme">${ic(theme==='dark'?'sun':'moon')}</button>
+        ${acct}
+      </div>
+    </div>
+    ${sub}
+  </header>
+  <main id="main" tabindex="-1"><div class="wrap view">${render(route)}</div></main>
+  <nav class="tabbar" aria-label="Main">${NAV.map(n => `<a href="${n.href}" ${n.k===sec?'aria-current="page"':''}>${ic(n.icon)}<span>${n.label}</span></a>`).join('')}</nav>
+  ${dock()}`;
+}
+function accountMenu(){
+  return `<div class="pop" role="menu" aria-label="Account">
+    <div style="display:flex;align-items:center;gap:10px;padding:4px 4px 12px">
+      <span class="acct" style="padding:0;background:none"><span class="av" aria-hidden="true" style="width:40px;height:40px;background:var(--bg-sunken)"><b></b><b></b><b></b><b></b></span></span>
+      <div style="min-width:0;flex:1"><div class="mono" style="font-size:14px">${short(ME)}</div><div class="muted" style="font-size:12px">Freighter · Stellar testnet</div></div>
+      ${copyBtn(ME,'Copy address')}
+    </div>
+    <div class="row"><span class="muted">XLM balance</span><span class="num">1,284.50</span></div>
+    <div class="row"><span class="muted">USDC balance</span><span class="num">3,200.00</span></div>
+    <div class="row"><span class="muted">Your roles</span><span style="font-size:13px;text-align:right">Funder · Recipient · Verifier in 2</span></div>
+    <div style="margin-top:8px;padding-top:8px;box-shadow:inset 0 1px 0 var(--line)">
+      <a class="menu-item" role="menuitem" href="#recipient">${ic('user')}Your standing</a>
+      <a class="menu-item" role="menuitem" href="#fund">${ic('coins')}Your contributions</a>
+      <button class="menu-item" role="menuitem" data-act="signout">${ic('logout')}Sign out</button>
+    </div>
+    <p class="muted" style="font-size:12px;margin-top:10px">You pay your own network fees in XLM.</p>
+  </div>`;
+}
+function dock(){
+  const o = (k,l) => `<button aria-pressed="${S.view===k}" data-view="${k}">${l}</button>`;
+  return `<details class="dock" ${(S.dockOpen||window.__dock)?'open':''}><summary>${ic('eye')}<span class="dl" aria-hidden="true">Design review: states</span><span class="sr">Design review: states</span></summary><div class="body">
+    <span class="lab">Data</span><div class="opts">${o('normal','Normal')}${o('loading','Loading')}${o('empty','Empty')}${o('error','Error')}${o('stale','Stale index')}</div>
+    <span class="lab">Session</span><div class="opts"><button aria-pressed="${S.signedIn}" data-act="toggleSign">${S.signedIn?'Signed in':'Signed out'}</button><button aria-pressed="${S.offline}" data-act="toggleOff">Offline banner</button><a href="#nowhere" style="color:inherit;font-size:12px;align-self:center;margin-left:4px">Not found</a></div>
+    <p style="opacity:.7;font-size:12px;line-height:1.4">Prototype with example data. In the app, stand-in data carries the yellow Sample data tag.</p>
+  </div></details>`;
+}
+
+/* ---------------- views ---------------- */
+function render(route){
+  const fn = V[route];
+  if (!fn) return V.notfound();
+  return fn();
+}
+const V = {};
+
+/* ---- directory ---- */
+V.directory = () => {
+  const counts = {all:P.length}; P.forEach(p => counts[p.phase] = (counts[p.phase]||0)+1);
+  const f = ['all','open','review','settled','cancelled'].map(k => `<button aria-pressed="${S.filter===k}" data-filter="${k}">${k==='all'?'All':PH[k]}<span class="count">${counts[k]||0}</span></button>`).join('');
+  const stale = S.view==='stale';
+  let list = P.filter(p => (S.filter==='all'||p.phase===S.filter) && (!S.q || (p.name+p.sector+p.sid).toLowerCase().includes(S.q.toLowerCase())));
+  if (S.sort==='budget') list = [...list].sort((a,b)=>b.budget-a.budget);
+  if (S.sort==='name') list = [...list].sort((a,b)=>a.name.localeCompare(b.name));
+  let body;
+  if (S.view==='loading') body = `<div class="cards" aria-busy="true">${Array.from({length:6},()=>`<div class="pcard" aria-hidden="true"><span class="skel" style="height:14px;width:40%"></span><span class="skel" style="height:24px;width:85%;margin-top:20px"></span><span class="skel" style="height:14px;width:60%;margin-top:14px"></span><span class="skel" style="height:44px;width:100%;margin-top:auto"></span></div>`).join('')}</div>`;
+  else if (S.view==='error') body = `<div class="errpanel" role="alert" style="margin-top:8px"><h4>${ic('wifi')}We couldn't load the programme list.</h4><p class="muted" style="margin-top:6px;font-size:14px">The public index didn't answer. Programme pages still work if you have a link, because they read the chain directly.</p><button class="btn btn-ghost btn-sm" data-view="normal" style="margin-top:16px">${ic('refresh')}Try again</button></div>`;
+  else if (S.view==='empty' || !list.length) body = empty(S.q?`No programmes match “${esc(S.q)}”`:'No programmes yet', S.q?'Try a programme name, a sector like “health”, or a short id.':'When someone deploys a programme it will show up here within a few hours.', S.q?'<button class="btn btn-ghost" data-act="clearq">Clear search</button>':'<a class="btn btn-primary" href="#deploy">Deploy a programme</a>');
+  else body = `<div class="cards">${list.map(card).join('')}</div>`;
+  return `
+  <div class="page-head"><div><p class="eyebrow">Programmes</p><h1 style="margin-top:10px">Where the money is going</h1><p>Every programme on Milepost, what it funds, and how much has actually been released. No wallet needed.</p></div>
+  <a class="btn btn-ghost" href="#deploy">${ic('plus')}Deploy a programme</a></div>
+  ${stale?`<div class="note warn" role="status" style="margin-bottom:16px">${ic('alert')}<span><b>This list is 14 hours old.</b> The index that builds it is behind. Figures may be out of date. Anything you act on is still checked on the chain first.</span></div>`:''}
+  <div class="toolbar">
+    <div class="search">${ic('search')}<label class="sr" for="q">Search programmes</label><input class="input" id="q" type="search" placeholder="Search by name, sector or id" value="${esc(S.q)}"></div>
+    <div class="tb-right">
+      <div class="seg" role="group" aria-label="Filter by phase">${f}</div>
+      <label class="sr" for="sort">Sort</label><select class="input" id="sort" style="width:auto;min-height:44px;border-radius:var(--radius-pill)"><option value="deadline" ${S.sort==='deadline'?'selected':''}>Next deadline</option><option value="budget" ${S.sort==='budget'?'selected':''}>Largest budget</option><option value="name" ${S.sort==='name'?'selected':''}>Name</option></select>
+    </div>
+  </div>
+  <div class="fresh ${stale?'stale':''}"><span style="display:inline-flex;align-items:center;gap:8px"><i class="dot" aria-hidden="true"></i>Index updated ${stale?'14 h':'5 h'} ago</span><span>Lists are advisory. Actions re-read the chain.</span>${legend()}</div>
+  ${body}`;
+};
+function card(p){
+  return `<a class="pcard ${p.phase}" href="#programme-${p.id}">
+    <div class="top"><span class="sector">${p.sector}</span><span>${phase(p)}</span></div>
+    <h3>${p.name}</h3><span class="id">${p.sid} · ${p.asset}</span>
+    <p class="status">${p.status}</p>
+    ${money(p,40)}
+    <div class="figs"><div><span>Budget</span><b>${fmt(p.budget)}</b></div><div><span>Awarded</span><b>${fmt(p.awarded)}</b></div><div><span>Released</span><b>${fmt(p.released)}</b></div></div>
+    <div class="foot">${modePill(p.mode)}<span class="cta">${ctaFor(p)}${ic('arrow')}</span></div>
+  </a>`;
+}
+
+/* ---- programme detail ---- */
+V.programme = () => {
+  const p = byId(S.pid) || byId('oyo');
+  if (S.view==='loading') return `<div aria-busy="true"><span class="skel" style="height:16px;width:160px"></span><span class="skel" style="height:44px;width:60%;margin-top:20px"></span><span class="skel" style="height:240px;width:100%;margin-top:32px;border-radius:var(--radius-lg)"></span></div>`;
+  if (S.view==='error') return errorPanel('We couldn’t read this programme from the chain.', 9, 'normal');
+  const phases = ['open','review','settled'];
+  const pi = p.phase==='cancelled' ? -1 : phases.indexOf(p.phase);
+  const labels = [['Open','Applications close'],['Review','Review ends'],['Settled','Release window ends'],['Sweep','Leftovers to treasury']];
+  const bar = labels.map((l,i) => {
+    let cls = ''; if (p.phase==='cancelled') cls=''; else if (i<pi || (p.closed && i===2)) cls='done'; else if (i===pi && !p.closed) cls='now'; else if (p.closed && i===3) cls='now';
+    return `<div class="ps ${cls}" style="--p:${Math.round(p.p*100)}%"><b>${l[0]}</b><span>${l[1]} ${p.d[i]}</span></div>`;
+  }).join('');
+  const locked = p.closed||p.phase==='cancelled' ? 0 : p.awarded - p.released;
+  const unaw = p.closed||p.phase==='cancelled' ? 0 : p.budget - p.awarded;
+  const tabs = ['awards','verifiers','terms'].map(t => `<button role="tab" aria-selected="${S.tab===t}" data-tab="${t}">${t[0].toUpperCase()+t.slice(1)}</button>`).join('');
+  return `
+  <a class="link" href="#directory" style="display:inline-flex;align-items:center;gap:6px;font-size:14px">${ic('back')}All programmes</a>
+  <div class="ph-head" style="margin-top:var(--space-6)">
+    <div>
+      <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center">${phase(p)}${modePill(p.mode)}<span class="trust">${ic('shield')}Registry-deployed</span></div>
+      <h1>${p.name}</h1>
+      <div class="meta"><span class="copy">Programme <span class="mono">${p.sid}</span>${copyBtn(p.sid,'Copy programme id')}</span><span>Creator <span class="mono">${p.creator}</span></span><span>Created at ledger <span class="mono">${p.ledger}</span></span><span class="chip-ok">${ic('check')}Read on the chain 12 s ago</span></div>
+    </div>
+    <div style="display:flex;gap:8px;flex-wrap:wrap"><button class="btn btn-ghost btn-sm" data-act="cal">${ic('cal')}Add deadlines to calendar</button></div>
+  </div>
+  ${p.phase==='cancelled'?`<div class="banner cancel" role="status" style="margin-top:var(--space-6)">${ic('ban')}<div><b>Cancelled by the creator on 3 Nov 2026.</b><p class="muted" style="font-size:14px;margin-top:2px">No more awards or releases. Every funder can claim back their share of the ${fmt(p.refundable)} ${p.asset} still in the programme.</p></div></div>`:''}
+  ${p.paused?`<div class="banner pause" role="status" style="margin-top:var(--space-6)">${ic('pause')}<div><b>Paused by the creator.</b><p class="muted" style="font-size:14px;margin-top:2px">Actions are stopped, but the clock isn't: the review still ends on ${p.d[1]}.</p></div></div>`:''}
+  <div class="phasebar" aria-label="Programme phases">${bar}</div>
+  <div class="stats">
+    <div class="stat"><div class="k">Contributed</div><div class="v">${fmt(p.contributed)}<small>${p.asset}</small></div><div class="s">${p.funders} funders · 2.5% fee</div></div>
+    <div class="stat"><div class="k">Applicants</div><div class="v">${p.applicants}</div><div class="s">Quorum ${p.quorum} votes each</div></div>
+    <div class="stat"><div class="k">Awarded</div><div class="v">${fmt(p.awarded)}<small>${p.asset}</small></div><div class="s">${Math.round(p.awarded/p.budget*100)}% of budget</div></div>
+    <div class="stat hl"><div class="k">Released</div><div class="v">${fmt(p.released)}<small>${p.asset}</small></div><div class="s">${p.tranches} tranches per award</div></div>
+  </div>
+  <div class="dgrid">
+    <div>
+      <section class="where" aria-labelledby="whereH">
+        <div class="panel-head" style="margin-bottom:var(--space-6)"><h2 id="whereH" style="font-size:24px">Where the money is</h2><span class="muted num" style="font-size:14px">${fmt(p.budget)} ${p.asset} budget</span></div>
+        ${money(p,120,true)}
+        <div class="where-figs">
+          <div style="--c:var(--money-unawarded)"><span>Unawarded</span><b>${fmt(unaw)}</b></div>
+          <div style="--c:var(--money-locked)"><span>Awarded, locked</span><b>${fmt(locked)}</b></div>
+          <div style="--c:var(--money-released)"><span>Released</span><b>${fmt(p.released)}</b></div>
+          <div style="--c:var(--money-refundable)"><span>Refundable</span><b>${fmt(p.refundable)}</b></div>
+        </div>
+      </section>
+      <div class="tabs" role="tablist" aria-label="Programme details">${tabs}</div>
+      <div role="tabpanel">${detailTab(p)}</div>
+    </div>
+    <aside>
+      <section class="panel" aria-labelledby="canH"><h3 id="canH">What you can do now</h3><p class="muted" style="font-size:13px;margin-top:4px">Checked against the clock and the chain.</p><div class="actions">${actions(p)}</div></section>
+      <section class="panel sunk" style="margin-top:var(--space-4)" aria-labelledby="tlH"><h3 id="tlH" style="margin-bottom:var(--space-4)">Timeline</h3>
+        <ol class="timeline">
+          ${p.released?`<li class="m"><span>Tranche released to Ibadan Agro Supplies<small>2 h ago · 400 ${p.asset}</small></span></li>`:''}
+          ${p.awarded?`<li class="m"><span>${p.phase==='review'?26:p.applicants-2} awards finalized<small>${p.d[1]}</small></span></li>`:''}
+          <li><span>Applications closed<small>${p.d[0]}</small></span></li>
+          <li class="m"><span>First contribution<small>${fmt(2500)} ${p.asset} from GFUN…4TRE</small></span></li>
+          <li><span>Deployed through the registry<small>Ledger ${p.ledger}</small></span></li>
+        </ol>
+        <a class="link" href="#payees" style="font-size:14px;display:inline-block;margin-top:4px">Manage payees →</a>
+      </section>
+    </aside>
+  </div>`;
+};
+function detailTab(p){
+  if (S.tab==='verifiers') return `<table class="t stack"><thead><tr><th>Verifier</th><th>Address</th><th class="r">Signed</th></tr></thead><tbody>
+    ${[['Ibadan North extension office','GEXT…7RQA',21],['Oyo East extension office','GEXT…2MLC',15]].slice(0, p.id==='oyo'?2:2).map(v=>`<tr><td><b>${p.id==='oyo'?v[0]:p.verifier}</b><div class="muted" style="font-size:13px">Schema condition-met/v1 · confirms “${p.condition.toLowerCase()}”</div></td><td class="mono">${v[1]} ${copyBtn(v[1])}</td><td class="r num">${v[2]}</td></tr>`).join('')}</tbody></table>
+    <p class="muted" style="font-size:13px;margin-top:12px">Verifiers unlock payments. They don't set amounts; reviewers do.</p>`;
+  if (S.tab==='terms') return `<dl class="dl">
+    <dt>Asset</dt><dd>${p.asset} <span class="muted" style="font-size:13px">(each programme pays in its own asset)</span></dd>
+    <dt>Planned payment mode</dt><dd>${modePill(p.mode)} <span class="muted" style="font-size:13px;display:block;margin-top:6px">${MODES[p.mode].line}. Chosen per award at finalize time.</span></dd>
+    <dt>Condition</dt><dd>${p.condition}, confirmed by ${p.verifier.toLowerCase()}</dd>
+    <dt>Tranches</dt><dd>${p.tranches} per award, one attestation each</dd>
+    <dt>Quorum</dt><dd>${p.quorum} reviewer votes before an award can be finalized</dd>
+    <dt>How awards are set</dt><dd>The median of the reviewers' votes. Never more than the applicant asked for, and the budget is never exceeded.</dd>
+    <dt>Refunds</dt><dd>After the release window, unpaid money goes back to funders in proportion to what each put in. Unclaimed refunds are swept to the treasury after ${p.d[3]}.</dd>
+    <dt>Protocol fee</dt><dd>2.5% of contributions, capped at 10% by the protocol</dd></dl>`;
+  const rows = [
+    ['GD3F…Q7NA',800,3,'Ibadan Agro Supplies'],['GBQ2…M4ZL',400,2,'Ibadan Agro Supplies'],['GCW8…1KHT',650,2,'Oke-Ogun Seeds Ltd'],['GAP5…9XVE',200,3,'Oke-Ogun Seeds Ltd'],['GDL7…3BRS',1200,1,'Ibadan Agro Supplies'],['GBN4…6TQA',500,0,'Oke-Ogun Seeds Ltd']];
+  if (!p.awarded) return empty('No awards yet', p.phase==='cancelled'?'This programme was cancelled before any awards were set.':'Awards appear here once reviewers have voted and someone finalizes them.');
+  return `<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;gap:12px;flex-wrap:wrap"><span class="muted" style="font-size:14px">${p.applicants-2} awards · showing 6</span><button class="btn btn-ghost btn-sm" data-act="csv">${ic('dl')}Download CSV</button></div>
+  <table class="t stack"><thead><tr><th>Recipient</th><th>Tranches</th><th class="r">Award</th><th class="r">Released</th><th>Payee</th></tr></thead><tbody>
+  ${rows.map(r=>`<tr><td class="mono">${r[0]}</td><td><span class="money" aria-label="${r[2]} of ${p.tranches} tranches released">${Array.from({length:p.tranches},(_,k)=>`<i class="sq ${k<r[2]?'r':'l'}"></i>`).join('')}</span></td><td class="r num">${fmt(r[1])}</td><td class="r num">${fmt(Math.round(r[1]*r[2]/p.tranches))}</td><td style="font-size:13px">${r[3]}</td></tr>`).join('')}
+  </tbody></table>`;
+}
+function actions(p){
+  const act = (name, who, ok, why, btn, data) => `<div class="action"><div class="ah"><div><b>${name}</b><div class="who">${who}</div></div>${ok?`<button class="btn btn-primary btn-sm" data-act="${data}" data-pid="${p.id}">${btn}</button>`:`<button class="btn btn-sm" aria-disabled="true" data-act="nope" data-why="${esc(why)}">${btn}</button>`}</div>${ok?'':reason(why)}</div>`;
+  const ph = PH[p.phase];
+  const notOpen = `Available only while the programme is Open. This programme is ${p.paused?'paused':''}${p.paused?' and in ':''}${ph}.`;
+  if (p.paused) return [
+    act('Contribute','Funders',false,notOpen,'Contribute'),
+    act('Finalize awards','Anyone',false,'The creator has paused this programme. Finalizing resumes when it is unpaused, before '+p.d[1]+'.','Finalize'),
+    act('Release a tranche','Recipients with a proof',false,'Releases start once the programme is Settled.','Release'),
+    act('Claim refund','Funders',false,'Refunds open after the release window closes on '+p.d[2]+'.','Claim')].join('');
+  return [
+    act('Contribute','Funders', p.phase==='open', notOpen, 'Contribute','contribute'),
+    act('Apply','Anyone, with the amount they need', p.phase==='open', notOpen, 'Apply','apply'),
+    act('Finalize awards','Anyone. This is open on purpose', p.phase==='review', p.phase==='open'?'Finalizing starts when review opens on '+p.d[0]+'.':`Available only during Review. This programme is ${ph}.`, 'Finalize','gofinalize'),
+    act('Release a tranche','Recipients with a valid proof', p.phase==='settled'&&!p.closed, p.closed?'The release window closed on '+p.d[2]+'.':(p.phase==='cancelled'?'Nothing can be released from a cancelled programme.':'Releases start once the programme is Settled, after '+p.d[1]+'.'), 'Release','gorecipient'),
+    act('Claim refund','Funders, in proportion', p.closed||p.phase==='cancelled', 'Refunds open after the release window closes on '+p.d[2]+'.', 'Claim','refund')
+  ].join('');
+}
+
+/* ---- fund ---- */
+V.fund = () => {
+  if (!S.signedIn) return signedOut('See and manage what you’ve funded','Sign in to see your contributions, what has been released from them, and any refund you can claim. You can browse every programme without signing in.');
+  if (S.view==='loading') return `<div class="stats" aria-busy="true">${'<div class="stat"><span class="skel" style="height:14px;width:50%"></span><span class="skel" style="height:28px;width:70%;margin-top:14px"></span></div>'.repeat(3)}</div>`;
+  if (S.view==='error') return errorPanel('We couldn’t load your contributions.', 12, 'normal');
+  if (S.view==='empty') return empty('You haven’t funded a programme yet','Pick an Open programme to contribute to. You can follow every release, and you get your share of anything unspent back.','<a class="btn btn-primary" href="#directory">Find a programme</a>');
+  const mine = [['lakeside',1000,'open'],['oyo',1500,'settled'],['accra',750,'closed'],['lagos',200,'cancelled']];
+  return `
+  <div class="page-head"><div><p class="eyebrow">Fund</p><h1 style="margin-top:10px">Your funding</h1><p>What you’ve put in, where it went, and what you can take back.</p></div><button class="btn btn-primary" data-act="contribute" data-pid="lakeside">${ic('plus')}Contribute</button></div>
+  <div class="stats three">
+    <div class="stat"><div class="k">Contributed</div><div class="v">3,450<small>USDC</small></div><div class="s">Across 4 programmes</div></div>
+    <div class="stat"><div class="k">Released to people</div><div class="v">1,632<small>USDC</small></div><div class="s">Your share of releases so far</div></div>
+    <div class="stat hl"><div class="k">Refundable now</div><div class="v">296.24<small>USDC</small></div><div class="s">From 2 programmes</div></div>
+  </div>
+  <div class="cards two">
+  ${mine.map(([id,amt,st]) => { const p = byId(id); const share = amt/p.contributed;
+    const refund = st==='closed' ? p.refundable*share : st==='cancelled' ? p.refundable*share : 0;
+    return `<div class="pcard" style="min-height:0">
+      <div class="top"><span class="sector">${p.sector}</span>${phase(p)}</div>
+      <h3><a href="#programme-${p.id}" style="text-decoration:none">${p.name}</a></h3>
+      <div class="figs" style="margin-top:var(--space-6)"><div><span>You put in</span><b>${fmt(amt)}</b></div><div><span>Your share</span><b>${(share*100).toFixed(1)}%</b></div><div><span>Released, your share</span><b>${fmt(p.released*share)}</b></div></div>
+      <div style="margin-top:var(--space-4)">${money(p,40)}</div>
+      <div class="foot">${refund?`<span><b class="num">${fmt(refund,2)} USDC</b> <span class="muted" style="font-size:13px">refundable</span></span><button class="btn btn-primary btn-sm" data-act="refund" data-amt="${refund.toFixed(2)}">Claim refund</button>`:`<span class="muted" style="font-size:13px">${st==='open'?'Refunds, if any, open after '+p.d[2]:'Releasing. Refunds open after '+p.d[2]}</span><a class="link" style="font-size:14px" href="#programme-${p.id}">Follow releases</a>`}</div>
+    </div>`; }).join('')}
+  </div>
+  <p class="muted" style="font-size:13px;margin-top:var(--space-6)">Refunds are proportional: you get back your share of whatever wasn’t paid out, never more than you put in.</p>`;
+};
+
+/* contribute flow (sheet) */
+let CF = null;
+function openContribute(pid){ CF = {pid: (byId(pid)&&byId(pid).phase==='open')?pid:'lakeside', step:'amount', amt:'250', fail:false}; drawSheet(); }
+function drawSheet(){
+  const host = $('#sheetHost');
+  if (!CF && !SI && !TX) { host.innerHTML=''; return; }
+  if (SI) return host.innerHTML = signinSheet();
+  if (TX) return host.innerHTML = txSheet();
+  const p = byId(CF.pid), a = parseFloat(String(CF.amt).replace(/,/g,'')) || 0, bal = 3200;
+  const opens = P.filter(x => x.phase==='open' && x.asset==='USDC');
+  const dots = ['amount','confirm','pending','done'].map((s,i) => `<i class="${['amount','confirm','pending','done'].indexOf(CF.step)>=i?'on':''}"></i>`).join('');
+  let body = '';
+  const over = a > bal, zero = a <= 0;
+  if (CF.step==='amount') body = `
+    <div class="field"><label for="cfP">Programme</label><select class="input" id="cfP">${opens.map(o=>`<option value="${o.id}" ${o.id===p.id?'selected':''}>${o.name}</option>`).join('')}</select><span class="help">Only Open programmes take contributions.</span></div>
+    <div class="field"><label for="cfA">Amount</label><div class="amount"><input id="cfA" inputmode="decimal" value="${esc(CF.amt)}" aria-describedby="cfHelp" ${over?'aria-invalid="true"':''}><span class="unit">USDC</span></div>
+      <div class="presets">${[50,100,250,500,1000].map(v=>`<button type="button" data-preset="${v}">${fmt(v)}</button>`).join('')}<button type="button" data-preset="${bal}">Max</button></div>
+      <span class="help" id="cfHelp">Balance <span class="num">3,200.00 USDC</span> · network fee about 0.0001 XLM, paid by you</span>${over?'<span class="err-text">That’s more than your balance.</span>':''}</div>
+    <div class="breakdown" aria-live="polite"><div><span class="muted">You send</span><span class="num">${fmt(a,2)}</span></div><div><span class="muted">Protocol fee (2.5%)</span><span class="num">− ${fmt(a*.025,2)}</span></div><div class="tot"><span>Added to the budget</span><span class="num">${fmt(a*.975,2)} USDC</span></div><div><span class="muted">Your share of contributions</span><span class="num">${((a)/(p.contributed+a)*100||0).toFixed(2)}%</span></div></div>
+    <button class="btn btn-primary btn-block" style="margin-top:var(--space-6)" data-act="cfNext" ${over||zero?'disabled':''}>Review contribution</button>`;
+  else if (CF.step==='confirm') body = `
+    <div class="note ok">${ic('check')}<span><b>Checked on the chain just now: Open.</b> Contributions close ${p.d[0]}.</span></div>
+    <div class="receipt"><div><dt>Programme</dt><dd style="font-family:var(--font-sans)">${p.name}</dd></div><div><dt>You send</dt><dd>${fmt(a,2)} USDC</dd></div><div><dt>Fee</dt><dd>${fmt(a*.025,2)} USDC</dd></div><div><dt>Added to budget</dt><dd>${fmt(a*.975,2)} USDC</dd></div></div>
+    <p class="muted" style="font-size:13px;margin-top:var(--space-4)">If some of the budget isn’t paid out by ${p.d[2]}, you can claim your proportional share back.</p>
+    <div style="display:flex;gap:10px;margin-top:var(--space-6)"><button class="btn btn-ghost" data-act="cfBack">Back</button><button class="btn btn-primary" style="flex:1" data-act="cfSend">${ic('wallet')}Confirm in Freighter</button></div>
+    <button class="link" style="font-size:13px;margin-top:14px" data-act="cfFail">Design review: show the failed state</button>`;
+  else if (CF.step==='pending') body = `<div class="tx" role="status"><div class="ring pending"></div><h3>Sending ${fmt(a,2)} USDC</h3><p>Approve the transaction in Freighter, then we wait for the network.</p><div class="tx-steps"><span class="ok">${ic('check')}Built and checked</span><span class="on">${ic('wallet')}Waiting for your signature</span><span>${ic('clock')}Confirming on Stellar testnet</span></div></div>`;
+  else if (CF.step==='error') body = `<div class="tx"><div class="ring fail">${ic('x')}</div></div>${errorPanel('This programme stopped taking contributions a moment ago. Its apply deadline passed.', 4, 'cfRetry')}`;
+  else body = `<div class="tx" role="status"><div class="ring done">${ic('check')}</div><h3>Contribution confirmed</h3><p>${fmt(a*.975,2)} USDC added to ${p.name}.</p>
+    <div class="receipt"><div><dt>Sent</dt><dd>${fmt(a,2)} USDC</dd></div><div><dt>Fee</dt><dd>${fmt(a*.025,2)} USDC</dd></div><div><dt>Ledger</dt><dd>1,312,094</dd></div><div><dt>Transaction</dt><dd><a class="link" href="#receipt">9f3a…c21e ${ic('ext','')}</a></dd></div></div>
+    <div style="display:flex;gap:10px;margin-top:var(--space-6)"><a class="btn btn-ghost" style="flex:1" href="#programme-${p.id}" data-act="close">See programme</a><button class="btn btn-primary" style="flex:1" data-act="close">Done</button></div></div>`;
+  host.innerHTML = `<div class="scrim" data-act="scrim"><div class="sheet" role="dialog" aria-modal="true" aria-labelledby="sheetH"><div class="steps-dots" aria-hidden="true">${dots}</div><div class="sheet-head"><div><p class="eyebrow">Contribute</p><h2 id="sheetH" style="margin-top:8px">${CF.step==='done'?'Receipt':CF.step==='confirm'?'Confirm':'Fund this programme'}</h2></div><button class="icon-btn" data-act="close" aria-label="Close">${ic('x')}</button></div>${body}</div></div>`;
+  const first = host.querySelector('.sheet input, .sheet select, .sheet .btn-primary'); if (first && CF.step!=='pending') first.focus({preventScroll:true});
+}
+
+/* sign-in sheet */
+let SI = null;
+function signinSheet(){
+  const body = SI==='connecting'
+    ? `<div class="tx" role="status"><div class="ring pending"></div><h3>Waiting for Freighter</h3><p>Approve the connection in the Freighter window.</p></div>`
+    : `<p class="muted">Milepost works with <b style="color:var(--ink)">Freighter</b>, a browser wallet for Stellar. Signing in lets you contribute, apply, verify and release. Browsing never needs it.</p>
+      <button class="btn btn-primary btn-block" style="margin-top:var(--space-6);min-height:52px" data-act="siGo">${ic('wallet')}Connect Freighter</button>
+      <div class="note info" style="margin-top:var(--space-4)">${ic('info')}<span>You’ll need a little XLM for network fees, a fraction of a cent per action. This is Stellar <b>testnet</b>: don’t use real funds.</span></div>
+      <p style="font-size:14px;margin-top:var(--space-4)">No Freighter yet? <a class="link" href="#directory" data-act="close">Get it at freighter.app</a> <span class="muted">(freighter.app)</span></p>`;
+  return `<div class="scrim" data-act="scrim"><div class="sheet" role="dialog" aria-modal="true" aria-labelledby="siH"><div class="sheet-head"><div><p class="eyebrow">Sign in</p><h2 id="siH" style="margin-top:8px">Connect your wallet</h2></div><button class="icon-btn" data-act="close" aria-label="Close">${ic('x')}</button></div>${body}</div></div>`;
+}
+
+/* generic tx sheet (release, refund, sign, vote, finalize, deploy) */
+let TX = null;
+function runTx(o){ TX = Object.assign({state:'pending'}, o); drawSheet(); setTimeout(() => { if (!TX) return; TX.state='done'; drawSheet(); announce(o.doneTitle); if (o.after) o.after(); }, reduce?200:1700); }
+function txSheet(){
+  const b = TX.state==='pending'
+    ? `<div class="tx" role="status"><div class="ring pending"></div><h3>${TX.title}</h3><p>Approve it in Freighter. Nothing moves until the network confirms.</p></div>`
+    : `<div class="tx" role="status"><div class="ring done">${ic('check')}</div><h3>${TX.doneTitle}</h3><p>${TX.doneText}</p><div class="receipt"><div><dt>Ledger</dt><dd>1,312,${100+Math.floor(Math.random()*800)}</dd></div><div><dt>Transaction</dt><dd><a class="link" href="#receipt">${['4b7e…09fa','c81d…77e2','a3f0…5b19'][Math.floor(Math.random()*3)]}</a></dd></div></div><button class="btn btn-primary btn-block" style="margin-top:var(--space-6)" data-act="close">Done</button></div>`;
+  return `<div class="scrim" data-act="scrim"><div class="sheet" role="dialog" aria-modal="true" aria-label="${esc(TX.title)}">${b}</div></div>`;
+}
+
+/* ---- recipient ---- */
+V.recipient = () => {
+  if (!S.signedIn) return signedOut('Track your awards and release your money','Sign in to apply, follow each tranche, release money once a verifier has confirmed, and see your standing.');
+  const tabs = [['awards','My awards'],['apply','Apply'],['applications','Applications'],['standing','Standing']].map(([k,l]) => `<button role="tab" aria-selected="${S.rtab===k}" data-rtab="${k}">${l}</button>`).join('');
+  let body = '';
+  if (S.view==='loading') body = `<span class="skel" style="height:280px;border-radius:var(--radius-lg)"></span>`;
+  else if (S.view==='error') body = errorPanel('We couldn’t load your awards.', 12, 'normal');
+  else if (S.view==='empty') body = empty('No awards yet','When a programme you applied to finalizes your award, its tranches show up here.','<button class="btn btn-primary" data-rtab="apply">Apply to a programme</button>');
+  else body = ({awards:rAwards, apply:rApply, applications:rApps, standing:rStanding})[S.rtab]();
+  return `<div class="page-head"><div><p class="eyebrow">Get funded</p><h1 style="margin-top:10px">Your awards</h1><p>Each tranche unlocks when a verifier confirms its condition. Then you release it.</p></div></div>
+  <div class="seg" role="tablist" aria-label="Recipient sections" style="margin-bottom:var(--space-6)">${tabs}</div>${body}`;
+};
+function rAwards(){
+  const rel1 = S.released.oyo2;
+  return `
+  <article class="award" aria-labelledby="a1">
+    <div class="award-head"><div><div style="display:flex;gap:8px;flex-wrap:wrap">${phase(byId('oyo'))}${modePill('Direct')}</div><h3 id="a1" style="margin-top:12px">Oyo Smallholder Seed &amp; Fertiliser Inputs</h3><p class="muted" style="font-size:14px;margin-top:4px">Paid to <b style="color:var(--ink)">Ibadan Agro Supplies</b>, chosen by the programme</p></div>
+    <div class="award-amt"><b>800 <span style="font-size:15px">USDC</span></b><span>${rel1?'533':'267'} released · ${rel1?2:1} of 3 tranches</span></div></div>
+    <div class="posts" style="--n:3">
+      <div class="tpost rel"><div class="sign">01</div><h4>Released</h4><div class="amt">266.66 USDC</div><p>Land prepared, confirmed by GEXT…7RQA on 4 Sep</p></div>
+      <div class="tpost ${rel1?'rel':'proven'}"><div class="sign">02</div><h4>${rel1?'Released':'Proven, ready to release'}</h4><div class="amt">266.67 USDC</div><p>${rel1?'Released just now to Ibadan Agro Supplies':'Second planting confirmed yesterday. You can release it now.'}</p>${rel1?'':'<button class="btn btn-primary btn-sm" data-act="release" data-k="oyo2">Release tranche</button>'}</div>
+      <div class="tpost"><div class="sign">03</div><h4>Waiting on a verifier</h4><div class="amt">266.67 USDC</div><p>An extension officer needs to confirm the land is prepared for the third season.</p></div>
+    </div>
+  </article>
+  <article class="award" aria-labelledby="a2">
+    <div class="award-head"><div><div style="display:flex;gap:8px;flex-wrap:wrap">${phase(byId('accra'))}${modePill('Allocated')}</div><h3 id="a2" style="margin-top:12px">Accra Solar Technician Training</h3><p class="muted" style="font-size:14px;margin-top:4px">Held in escrow for you. You choose a verified payee, and when.</p></div>
+    <div class="award-amt"><b>1,200 <span style="font-size:15px">USDC</span></b><span>All 4 tranches released into escrow</span></div></div>
+    <div class="escrow"><div><span class="eyebrow">In escrow</span><div class="v" style="margin-top:8px">${S.released.pay?'0.00':'450.00'}</div></div>
+      <div class="field" style="margin:0"><label for="payee">Pay a verified payee</label><select class="input" id="payee" style="background:var(--bg-raised)"><option>Accra Technical Training Centre · GTTC…4QWE</option><option>SolarSkills Ghana (tools) · GSOL…8PLA</option></select><span class="help">Only payees the creator has verified are listed.</span></div>
+      <button class="btn btn-primary" data-act="pay" ${S.released.pay?'disabled':''}>${S.released.pay?'Paid':'Pay 450 USDC'}</button></div>
+  </article>
+  <article class="award" aria-labelledby="a3">
+    <div class="award-head"><div><div style="display:flex;gap:8px;flex-wrap:wrap">${phase(byId('kilifi'))}${modePill('Restricted')}</div><h3 id="a3" style="margin-top:12px">Kilifi Community Health Stipends</h3><p class="muted" style="font-size:14px;margin-top:4px">Award set · tranches start after review ends on 28 Nov</p></div>
+    <div class="award-amt"><b>1,800 <span style="font-size:15px">USDC</span></b><span>0 of 6 tranches</span></div></div>
+    <div class="policy"><div style="flex:1;min-width:220px"><b style="display:flex;gap:8px;align-items:center">${ic('alert','')}Your wallet has no spend policy yet</b><p class="muted" style="font-size:14px;margin-top:4px">Restricted money lands in your smart wallet behind a policy. Without one, it would be unrestricted.</p></div><a class="btn btn-primary btn-sm" href="#policy">Set up spend policy</a></div>
+  </article>`;
+}
+function rApply(){
+  const opens = P.filter(p=>p.phase==='open');
+  return `<div class="dgrid"><section class="panel" aria-labelledby="apH" style="padding:var(--space-8)">
+    <h3 id="apH" style="font-size:24px">Apply for what you need</h3>
+    <p class="muted" style="margin:6px 0 var(--space-6)">Open programmes only. Reviewers can approve up to what you ask.</p>
+    <div class="field"><label for="apP">Programme</label><select class="input" id="apP">${opens.map(o=>`<option>${o.name} · ${o.asset}</option>`).join('')}</select></div>
+    <div class="field"><label for="apA">How much do you need?</label><div class="amount"><input id="apA" inputmode="decimal" value="1,800"><span class="unit">USDC</span></div><span class="help">Minimum award 100 USDC. Paid in 3 tranches of 600.</span></div>
+    <div class="note info" style="margin:var(--space-4) 0 var(--space-6)">${ic('info')}<span><b>How your award is set:</b> each reviewer approves an amount up to what you asked. Your award is the <b>middle vote</b> (the median), so one very low or very high vote can’t decide it alone. Ask for what you actually need.</span></div>
+    <button class="btn btn-primary" data-act="applyGo">Submit application</button>
+  </section>
+  <aside class="panel sunk"><h3>Your open application</h3><p class="muted" style="font-size:14px;margin-top:6px">Milepost Pilot · Exam Fee Support</p><div class="receipt" style="background:var(--bg-raised)"><div><dt>Asked for</dt><dd>650 XLM</dd></div><div><dt>Applied</dt><dd>9 Nov 2026</dd></div><div><dt>Closes</dt><dd>20 Dec 2026</dd></div></div><button class="btn btn-danger btn-sm" style="margin-top:var(--space-4)" data-act="withdraw">Withdraw application</button><p class="muted" style="font-size:13px;margin-top:8px">You can withdraw any time while the programme is Open.</p></aside></div>`;
+}
+function rApps(){
+  const A = [['Kilifi Community Health Stipends','1,800 USDC',[['Applied','12 Oct','d'],['Review','3 of 3 votes','d'],['Award set','1,800 USDC','d'],['Tranches','Start 28 Nov','n']]],
+    ['Milepost Pilot · Exam Fee Support','650 XLM',[['Applied','9 Nov','d'],['Review','Opens 20 Dec','n'],['Award','Not set yet',''],['Tranches','—','']]],
+    ['Turkana Household Cash Transfers','200 USDC',[['Applied','2 Oct','d'],['Review','2 of 5 votes','n'],['Award','Needs 3 more votes',''],['Tranches','—','']]]];
+  return A.map(a => `<article class="award"><div class="award-head"><h3 style="font-size:20px">${a[0]}</h3><span class="num">${a[1]}</span></div><div class="apptl">${a[2].map(s=>`<div class="${s[2]}"><b>${s[0]}</b><span>${s[1]}</span></div>`).join('')}</div></article>`).join('');
+}
+function rStanding(){
+  return `<div class="stats">
+    <div class="stat"><div class="k">Programmes</div><div class="v">3</div></div>
+    <div class="stat"><div class="k">Received</div><div class="v">3,800<small>USDC</small></div></div>
+    <div class="stat"><div class="k">Tranches delivered</div><div class="v">${S.released.oyo2?6:5}<small>of 13</small></div></div>
+    <div class="stat"><div class="k">Revoked proofs</div><div class="v">0</div></div></div>
+  <section class="panel" style="padding:var(--space-8)"><h3>How long your record stays alive</h3><p class="muted" style="margin-top:6px;max-width:62ch">Data on Stellar expires unless someone pays to extend it. Your standing is a permanent, non-transferable record of totals, never a list of what you did. Extending keeps it readable by the next funder.</p>
+    <div class="life" style="margin-top:var(--space-6)"><div style="flex:1;min-width:220px"><div style="display:flex;justify-content:space-between;font-size:14px;margin-bottom:8px"><span>${S.released.extend?'Extended to 1 year':'142 days left'}</span><span class="muted num">${S.released.extend?'365':'142'} / 365</span></div><div class="meter"><i style="width:${S.released.extend?100:39}%"></i></div></div><button class="btn btn-primary" data-act="extend" ${S.released.extend?'disabled':''}>${S.released.extend?'Extended':'Extend now'}</button></div>
+    <p class="muted" style="font-size:13px;margin-top:12px">Costs about 0.05 XLM in network fees. Anyone can extend it, not just you.</p></section>`;
+}
+
+/* ---- verify ---- */
+const CLAIMS = [
+  {r:'GD3F…Q7NA', p:'oyo', t:'2 of 3', c:'Land prepared for planting', note:'Plot 14, Akinyele ward, 1.2 ha', age:'2 days'},
+  {r:'GCW8…1KHT', p:'oyo', t:'3 of 3', c:'Land prepared for planting', note:'Plot 3, Iddo, 0.8 ha', age:'2 days'},
+  {r:'GAP5…9XVE', p:'oyo', t:'2 of 3', c:'Land prepared for planting', note:'Plot 22, Moniya, 2.0 ha', age:'4 days'},
+  {r:'GBK1…2WDN', p:'accra', t:'4 of 4', c:'Module completed', note:'Module 4: battery systems', age:'6 days'}
+];
+V.verify = () => {
+  if (!S.signedIn) return signedOut('Confirm conditions and unlock payments','Sign in with the address a programme trusts as its verifier to see claims waiting for you. Anyone can look up an attestation without signing in.');
+  if (S.view==='loading') return `<span class="skel" style="height:300px;border-radius:var(--radius-lg)"></span>`;
+  if (S.view==='error') return errorPanel('We couldn’t load your queue.', 12, 'normal');
+  const open = CLAIMS.map((c,i)=>({...c,i})).filter(c=>!S.signed[c.i]);
+  const sel = open.find(c=>c.i===S.claim) || open[0];
+  const queue = (S.view==='empty' || !open.length) ? empty('Nothing waiting for you','When a recipient’s tranche needs your confirmation, it appears here. You’re a verifier for 2 programmes.') :
+    `<div class="queue" role="list">${open.map(c=>`<button class="claim" role="listitem" data-claim="${c.i}" aria-current="${sel&&c.i===sel.i}"><span class="tr" aria-hidden="true">${c.t.split(' ')[0]}/${c.t.split(' ')[2]}</span><span><b>${c.c}</b><span class="mono">${c.r}</span><span> · ${byId(c.p).name}</span></span><span class="age">${c.age} ago</span></button>`).join('')}</div>`;
+  return `
+  <div class="page-head"><div><p class="eyebrow">Verify</p><h1 style="margin-top:10px">Waiting for your confirmation</h1><p>Each signature unlocks exactly one tranche for one person. Only sign what you checked yourself.</p></div></div>
+  <div class="stats"><div class="stat hl"><div class="k">Waiting</div><div class="v">${open.length}</div></div><div class="stat"><div class="k">Signed this month</div><div class="v">${12+Object.keys(S.signed).length}</div></div><div class="stat"><div class="k">Votes to cast</div><div class="v">3</div><div class="s">As a reviewer</div></div><div class="stat"><div class="k">Programmes</div><div class="v">2</div><div class="s">Verifier in 2 · reviewer in 1</div></div></div>
+  <div class="vgrid">
+    <section aria-labelledby="qH"><h2 id="qH" style="font-size:22px;margin-bottom:var(--space-4)">Claims to confirm</h2>${queue}
+      <h2 style="font-size:22px;margin:var(--space-12) 0 var(--space-4)">As a reviewer: set amounts</h2>
+      <p class="muted" style="font-size:14px;margin-bottom:8px">Turkana Household Cash Transfers · you approve up to what each household asked. This is separate from verifying.</p>
+      ${[['GHH2…8RTA',200],['GHK9…3MWE',350],['GHB4…7QPL',180]].map(v=>`<div class="vote-row"><div><span class="mono">${v[0]}</span><div class="muted" style="font-size:13px">Asked for ${v[1]} USDC · 2 of 5 votes in</div></div><div><label class="sr" for="v${v[0]}">Amount to approve</label><input class="input num" id="v${v[0]}" value="${v[1]}" inputmode="decimal"></div><button class="btn btn-secondary btn-sm" data-act="vote">Vote</button></div>`).join('')}
+      <h2 style="font-size:22px;margin:var(--space-12) 0 var(--space-4)">Attestations you’ve signed</h2>
+      <table class="t stack"><thead><tr><th>Attestation</th><th>Subject</th><th>Status</th><th class="r"></th></tr></thead><tbody>
+      ${[['AT-9F2C…41B0','GBQ2…M4ZL · tranche 2','valid'],['AT-1D7A…E9C2','GD3F…Q7NA · tranche 1','used'],['AT-55B0…7A1F','GDL7…3BRS · tranche 1','used'],['AT-C3E8…0D44','GAP5…9XVE · tranche 1','revoked']].map(a=>`<tr><td class="mono">${a[0]}</td><td style="font-size:13px">${a[1]}</td><td><span class="att-status ${a[2]}">${a[2]}</span></td><td class="r">${a[2]==='valid'?'<button class="btn btn-danger btn-sm" data-act="revoke">Revoke</button>':''}</td></tr>`).join('')}</tbody></table>
+    </section>
+    <aside class="review">${sel ? reviewPanel(sel) : ''}</aside>
+  </div>`;
+};
+function reviewPanel(c){
+  const p = byId(c.p);
+  return `<section class="panel" style="padding:var(--space-8)" aria-labelledby="rvH"><p class="eyebrow">Review claim</p><h3 id="rvH" style="font-size:24px;margin-top:10px">${c.c}</h3>
+    <dl style="margin:var(--space-4) 0 0"><div class="subject"><dt>Recipient</dt><dd class="mono">${c.r}</dd></div><div class="subject"><dt>Programme</dt><dd>${p.name}</dd></div><div class="subject"><dt>Tranche</dt><dd>${c.t}</dd></div><div class="subject"><dt>Recipient’s note</dt><dd>${c.note}</dd></div><div class="subject"><dt>Schema</dt><dd class="mono">condition-met/v1</dd></div></dl>
+    <div class="field" style="margin-top:var(--space-6)"><label for="ref">Your reference <span class="muted" style="font-weight:400">(optional)</span></label><input class="input" id="ref" placeholder="e.g. visit report VR-2291"><span class="help">Stored with the attestation. Don’t include personal details.</span></div>
+    <label class="check"><input type="checkbox" id="iChecked"><span><b>I checked this myself.</b> <span class="muted">Signing can’t be undone. It unlocks this tranche for this person.</span></span></label>
+    <button class="btn btn-primary btn-block" style="margin-top:var(--space-4)" data-act="sign" data-i="${c.i}" aria-disabled="true" id="signBtn">${ic('shield')}Sign attestation</button>
+    <p class="disabled-reason" id="signWhy">${ic('lock')}<span>Tick the box above to confirm you checked it.</span></p>
+    <button class="btn btn-ghost btn-block" style="margin-top:var(--space-4)" data-act="cant" data-i="${c.i}">Can’t confirm</button>
+    <p class="muted" style="font-size:12px;margin-top:8px;text-align:center">“Can’t confirm” sends no transaction. It just takes the claim off your list.</p></section>`;
+}
+
+/* ---- deploy ---- */
+V.deploy = () => {
+  if (!S.signedIn) return signedOut('Deploy your own programme','Anyone can deploy a programme. No permission from the registry is needed. Sign in to set it up; you’ll pay the network fees for deploying.');
+  const steps = ['Details','People','Timeline','Review & deploy'];
+  const nav = steps.map((s,i) => `<li><button data-wstep="${i}" class="${i<S.wstep?'done':''}" ${i===S.wstep?'aria-current="step"':''}><span class="n">${i<S.wstep?'✓':i+1}</span>${s}</button></li>`).join('');
+  const W = [wDetails, wPeople, wTimeline, wReview][S.wstep]();
+  return `<div class="page-head"><div><p class="eyebrow">Admin</p><h1 style="margin-top:10px">Deploy a programme</h1><p>Set the rules once. After deploying, the clock runs the phases and nobody can change the terms.</p></div></div>
+  <div class="wizard"><ol class="wsteps" aria-label="Steps">${nav}</ol>
+    <section class="panel" style="padding:var(--space-8)" aria-labelledby="wH">${W}
+      <div class="wiz-nav">${S.wstep?`<button class="btn btn-ghost" data-wstep="${S.wstep-1}">${ic('back')}Back</button>`:'<span></span>'}${S.wstep<3?`<button class="btn btn-primary" data-wstep="${S.wstep+1}">Continue${ic('arrow')}</button>`:`<button class="btn btn-primary" data-act="deployGo">${ic('rocket')}Deploy programme</button>`}</div>
+    </section>
+    <aside class="panel sunk config" aria-labelledby="cfgH"><h3 id="cfgH">Protocol config</h3><p class="muted" style="font-size:13px;margin:4px 0 12px">Set by the registry admin for everyone. Read on the chain.</p>
+      <div class="row"><span>Protocol fee</span><span class="num">2.5% <span class="muted">(cap 10%)</span></span></div>
+      <div class="row"><span>Treasury</span><span class="mono">GTRE…Y7KA</span></div>
+      <div class="row"><span>Registry admin</span><span class="mono">GADM…2PQX</span></div>
+      <div class="row"><span>Registry</span><span class="mono">CREG…8NWD</span></div>
+      <div class="row"><span>Attestations</span><span class="mono">CATT…4HMS</span></div>
+      <div class="row"><span>Standing</span><span class="mono">CSTD…1BQZ</span></div>
+      <p class="muted" style="font-size:12px;margin-top:10px">The admin sets the fee and treasury. They can’t touch your programme.</p></aside>
+  </div>`;
+};
+function wDetails(){
+  return `<h2 id="wH" style="font-size:26px">Details</h2><p class="muted" style="margin:6px 0 var(--space-6)">What the programme funds and how it pays.</p>
+  <div class="field"><label for="dn">Programme name</label><input class="input" id="dn" value="Kano Clinic Nurse Stipends 2027"></div>
+  <div class="two"><div class="field"><label for="da">Asset</label><select class="input" id="da"><option>USDC</option><option>XLM</option></select><span class="help">Every payment in this programme uses it.</span></div>
+  <div class="field"><label for="dm">Minimum award</label><div style="position:relative"><input class="input num" id="dm" value="100"></div><span class="help">In the programme’s asset.</span></div></div>
+  <div class="two"><div class="field"><span class="lbl" id="trL">Tranches per award</span><div class="stepper" role="group" aria-labelledby="trL"><button type="button" data-act="trm" aria-label="Fewer tranches">−</button><output id="trO">${S.tr||3}</output><button type="button" data-act="trp" aria-label="More tranches">+</button></div><span class="help">One verifier signature unlocks each.</span></div>
+  <div class="field"><label for="ds">What verifiers sign</label><select class="input" id="ds"><option>condition-met/v1</option><option>enrolled-term/v1</option></select><span class="help"><a class="link" href="#schemas">Register a new schema</a></span></div></div>
+  <fieldset style="border:0;padding:0;margin:var(--space-4) 0 0"><legend class="lbl" style="margin-bottom:6px">Planned payment mode</legend><p class="help muted" style="font-size:13px;margin-bottom:12px">A default. The mode is chosen per award at finalize time. Ranked by how much the contract itself guarantees.</p>
+  <div class="modechoice">${Object.entries(MODES).map(([m,v]) => `<label class="mc">${m==='Allocated'?'<span class="best">Strongest</span>':''}<input type="radio" name="mode" value="${m}" ${S.mode===m?'checked':''}><span><b>${m}</b><span>${v.line}.</span></span><span class="str" aria-label="${v.rank}">${[0,1,2,3].map(k=>`<i class="${k<v.s?'f':''}"></i>`).join('')}</span></label>`).join('')}</div></fieldset>`;
+}
+function wPeople(){
+  const list = (a) => a.map(x=>`<div><span class="mono">${x[0]}</span><span class="muted" style="font-size:13px;flex:1;margin-left:10px">${x[1]}</span><button class="icon-btn sm" aria-label="Remove ${x[0]}">${ic('x')}</button></div>`).join('');
+  return `<h2 id="wH" style="font-size:26px">People</h2><p class="muted" style="margin:6px 0 var(--space-6)">Reviewers set amounts. Verifiers unlock payments. One address can do both, but they’re separate jobs.</p>
+  <div class="field"><span class="lbl">Reviewers</span><div class="addr-list">${list([['GREV…3KQA','Dr. Hauwa Bello'],['GREV…9MZT','Kano State Primary Health Board'],['GREV…2WLP','Aminu Kano Teaching Hospital'],['GREV…7HXC','Partner NGO']])}</div><div style="display:flex;gap:8px"><label class="sr" for="addR">Add reviewer address</label><input class="input" id="addR" placeholder="G… address"><button class="btn btn-secondary" type="button">Add</button></div></div>
+  <div class="field" style="margin-top:var(--space-6)"><span class="lbl" id="qL">Quorum</span><div style="display:flex;align-items:center;gap:16px;flex-wrap:wrap"><div class="stepper" role="group" aria-labelledby="qL"><button type="button" data-act="qm" aria-label="Lower quorum">−</button><output>${S.quorum}</output><button type="button" data-act="qp" aria-label="Raise quorum">+</button></div><span class="help">Votes needed before an award can be finalized. 1 to 16, and no more than your 4 reviewers.</span></div></div>
+  <div class="field" style="margin-top:var(--space-6)"><span class="lbl">Verifiers</span><div class="addr-list">${list([['GVER…5TRA','Kano Municipal clinic lead'],['GVER…8QEN','Nassarawa clinic lead']])}</div><div style="display:flex;gap:8px"><label class="sr" for="addV">Add verifier address</label><input class="input" id="addV" placeholder="G… address"><button class="btn btn-secondary" type="button">Add</button></div><span class="help">You can add or remove verifiers later.</span></div>`;
+}
+function wTimeline(){
+  const f = (id,l,v,h) => `<div class="field"><label for="${id}">${l}</label><input class="input" type="date" id="${id}" value="${v}"><span class="help">${h}</span></div>`;
+  return `<h2 id="wH" style="font-size:26px">Timeline</h2><p class="muted" style="margin:6px 0 var(--space-4)">Phases change by the clock, not by a button. Pausing stops actions but not the clock.</p>
+  <div class="tl-visual" aria-hidden="true"><div style="background:var(--accent-soft)">Open</div><div style="background:color-mix(in srgb,var(--signal) 30%,var(--bg))">Review</div><div style="background:var(--accent);color:var(--accent-ink)">Release</div><div style="background:var(--bg-sunken)">Sweep</div></div>
+  <div class="two">${f('t1','Applications close','2027-01-31','Contributions and applications until this date.')}${f('t2','Review ends','2027-02-28','Votes and finalizing happen before this.')}${f('t3','Release window ends','2027-12-31','After this, unpaid money becomes refundable.')}${f('t4','Sweep date','2028-02-29','Unclaimed refunds go to the treasury after this grace period.')}</div>`;
+}
+function wReview(){
+  return `<h2 id="wH" style="font-size:26px">Review &amp; deploy</h2><p class="muted" style="margin:6px 0 var(--space-6)">These terms are fixed once deployed.</p>
+  <dl class="dl"><dt>Name</dt><dd>Kano Clinic Nurse Stipends 2027</dd><dt>Asset</dt><dd>USDC · minimum award 100</dd><dt>Planned mode</dt><dd>${modePill(S.mode)}</dd><dt>Tranches</dt><dd>${S.tr||3} per award · schema condition-met/v1</dd><dt>People</dt><dd>4 reviewers · quorum ${S.quorum} · 2 verifiers</dd><dt>Timeline</dt><dd class="num" style="font-size:14px">31 Jan → 28 Feb → 31 Dec 2027 → 29 Feb 2028</dd></dl>
+  <div class="note info" style="margin-top:var(--space-6)">${ic('info')}<span>Deploying costs network fees in XLM, paid by you. You’ll be the creator: you can verify payees, manage verifiers, pause, cancel or extend the release window.</span></div>`;
+}
+
+/* ---- finalize ---- */
+V.finalize = () => {
+  const reviews = P.filter(p=>p.phase==='review');
+  const p = byId(S.finP) || reviews[0];
+  const rows = [
+    ['GKF1…2QWA',1800,[1500,1800,1800],3],['GKF7…8NTE',3000,[2200,2500,3000],3],['GKF3…5LMB',900,[900,700,900],3],['GKF9…1VCX',2400,[2400,1800],3],['GKF2…6PHY',1200,[1200],3],['GKF5…4RJK',5000,[4000,4500,5000],3]];
+  const med = v => { const s=[...v].sort((a,b)=>a-b); return s.length%2?s[(s.length-1)/2]:(s[s.length/2-1]+s[s.length/2])/2; };
+  let awarded = p.awarded + Object.values(S.finalized).reduce((a,b)=>a+b,0);
+  const left = p.budget - awarded;
+  const asked = 41300;
+  if (S.view==='loading') return `<span class="skel" style="height:300px;border-radius:var(--radius-lg)"></span>`;
+  if (S.view==='error') return errorPanel('We couldn’t read the applications.', 9, 'normal');
+  return `<div class="page-head"><div><p class="eyebrow">Admin</p><h1 style="margin-top:10px">Finalize awards</h1><p><b style="color:var(--ink)">Anyone can do this</b>, with or without a role. Finalizing turns the reviewers’ votes into an award, so no applicant waits on one person pressing a button.</p></div></div>
+  <div class="fin-top">
+    <section class="panel"><div class="field" style="margin:0"><label for="finP">Programme in Review</label><select class="input" id="finP">${reviews.map(r=>`<option value="${r.id}" ${r.id===p.id?'selected':''}>${r.name}</option>`).join('')}</select></div>
+      <div class="budgetbar" role="img" aria-label="${fmt(awarded)} of ${fmt(p.budget)} awarded"><i style="width:${awarded/p.budget*100}%"></i></div>
+      <div style="display:flex;justify-content:space-between;font-size:14px;flex-wrap:wrap;gap:6px"><span><b class="num">${fmt(awarded)}</b> <span class="muted">awarded</span></span><span><b class="num">${fmt(left)}</b> <span class="muted">of ${fmt(p.budget)} ${p.asset} left</span></span></div>
+    </section>
+    <div class="note risk" role="note" style="align-self:stretch">${ic('alert')}<span><b>This programme is oversubscribed.</b> Applicants asked for ${fmt(asked)} ${p.asset} against ${fmt(p.budget)}. The budget is protected and can’t be exceeded, but <b>whoever finalizes first decides who gets funded</b>. Once the money runs out, the remaining awards can’t be finalized.</span></div>
+  </div>
+  ${p.paused?`<div class="banner pause">${ic('pause')}<div><b>Paused by the creator.</b> Finalizing is stopped until it’s unpaused. The review still ends on ${p.d[1]}.</div></div>`:''}
+  <div class="frow hd"><span>Applicant</span><span>Asked</span><span>Votes (quorum ${p.quorum})</span><span>Median</span><span class="act"></span></div>
+  ${rows.map((r,i) => { const done = S.finalized[i]!==undefined; const short_ = r[2].length < r[3]; const m = med(r[2]); const over = !short_ && m > left && !done;
+    const votes = r[2].map(v=>`<span class="${v===m&&!short_?'md':''}">${fmt(v)}</span>`).join('') + Array.from({length:Math.max(0,r[3]-r[2].length)},()=>'<span class="miss">—</span>').join('');
+    let act;
+    if (done) act = `<span class="chip-ok">${ic('check')}Finalized · ${S.finMode&&S.finMode[i]||p.mode}</span>`;
+    else if (p.paused) act = `<button class="btn btn-sm" aria-disabled="true" data-act="nope" data-why="Paused by the creator.">Finalize</button>`;
+    else if (short_) act = `<span class="muted" style="font-size:13px">Needs ${r[3]-r[2].length} more vote${r[3]-r[2].length>1?'s':''}</span>`;
+    else if (over) act = `<button class="btn btn-sm" aria-disabled="true" data-act="nope" data-why="Only ${fmt(left)} left in the budget.">Finalize</button><p class="disabled-reason" style="justify-content:flex-end">Only ${fmt(left)} left</p>`;
+    else act = `<span style="display:inline-flex;gap:6px;align-items:center;flex-wrap:wrap;justify-content:flex-end"><label class="sr" for="fm${i}">Payment mode for this award</label><select class="input" id="fm${i}" style="min-height:36px;width:auto;font-size:13px;padding:0 10px">${Object.keys(MODES).map(k=>`<option ${k===p.mode?'selected':''}>${k}</option>`).join('')}</select><button class="btn btn-primary btn-sm" data-act="fin" data-i="${i}" data-m="${m}">Finalize</button></span>`;
+    return `<div class="frow ${done?'done':''}"><span class="mono">${r[0]}</span><span class="num">${fmt(r[1])}</span><span class="votes" aria-label="Votes: ${r[2].join(', ')}">${votes}</span><span class="num"><b>${short_?'—':fmt(m)}</b></span><span class="act">${act}</span></div>`; }).join('')}
+  <p class="muted" style="font-size:13px;margin-top:var(--space-4)">The award is the median vote and never more than what was asked. The payment mode is chosen per award here; the programme’s planned default is ${p.mode}.</p>`;
+};
+
+/* ================= batch 2: remaining screens ================= */
+const head = (eyebrow, title, sub, right='') => `<div class="page-head"><div><p class="eyebrow">${eyebrow}</p><h1 style="margin-top:10px">${title}</h1>${sub?`<p>${sub}</p>`:''}</div>${right}</div>`;
+const kv = rows => `<div class="receipt" style="margin-top:0">${rows.map(r=>`<div><dt>${r[0]}</dt><dd ${r[2]?'style="font-family:var(--font-sans)"':''}>${r[1]}</dd></div>`).join('')}</div>`;
+const loadingBlock = () => `<div aria-busy="true"><span class="skel" style="height:120px;border-radius:var(--radius-md)"></span><span class="skel" style="height:260px;border-radius:var(--radius-md);margin-top:16px"></span></div>`;
+
+/* ---- index status ---- */
+V.status = () => {
+  if (S.view==='loading') return head('Programmes','Index status') + loadingBlock();
+  if (S.view==='error') return head('Programmes','Index status') + errorPanel('We couldn’t reach the index to check its health.', 0, 'normal').replace('Nothing was transferred · program error 0','Nothing was transferred · the app still reads the chain directly');
+  const stale = S.view==='stale';
+  const runs = [['16 Nov 09:02','1,312,880','214','ok'],['16 Nov 03:01','1,309,512','187','ok'],['15 Nov 21:00','1,306,140','302','ok'],['15 Nov 15:02','1,302,770','—','failed'],['15 Nov 09:00','1,299,401','251','ok']];
+  return head('Programmes','Index status','The contracts keep no lists. A public index rebuilds them from contract events every few hours. This page shows how fresh it is.') + `
+  ${stale?`<div class="note warn" role="status" style="margin-bottom:16px">${ic('alert')}<span><b>The index is 14 hours behind.</b> Above 12 hours, every list in the app shows a warning. Anything you act on is still re-read on the chain first.</span></div>`:`<div class="note ok" role="status" style="margin-bottom:16px">${ic('check')}<span><b>Healthy.</b> Last rebuilt 5 hours ago. Lists show a warning once the index is more than 12 hours old.</span></div>`}
+  <div class="stats">
+    <div class="stat ${stale?'':'hl'}"><div class="k">Last rebuilt</div><div class="v">${stale?'14 h':'5 h'}<small>ago</small></div><div class="s">${stale?'15 Nov 19:04':'16 Nov 09:02'} UTC</div></div>
+    <div class="stat"><div class="k">Next rebuild</div><div class="v">~1 h</div><div class="s">Every 6 hours</div></div>
+    <div class="stat"><div class="k">Ledgers behind</div><div class="v">${stale?'8,610':'3,420'}</div><div class="s">Chain head 1,316,300</div></div>
+    <div class="stat"><div class="k">Events indexed</div><div class="v">48,215</div><div class="s">Since the registry was deployed</div></div>
+  </div>
+  <div class="dgrid">
+    <section class="panel"><div class="panel-head"><h3>Recent rebuilds</h3><span class="muted" style="font-size:13px">Times in UTC</span></div>
+      <table class="t stack"><thead><tr><th>Started</th><th>Up to ledger</th><th class="r">New events</th><th>Result</th></tr></thead><tbody>
+      ${runs.map(r=>`<tr><td class="num">${r[0]}</td><td class="num">${r[1]}</td><td class="r num">${r[2]}</td><td>${r[3]==='ok'?`<span class="att-status valid">ok</span>`:`<span class="att-status revoked">failed</span> <span class="muted" style="font-size:12px">RPC timeout, retried at next run</span>`}</td></tr>`).join('')}</tbody></table></section>
+    <aside class="panel sunk"><h3>What this means</h3>
+      <ul style="margin:12px 0 0;padding-left:18px;font-size:14px;line-height:1.6" class="muted">
+        <li>Lists (directory, queues, awards tables) come from the index and are <b style="color:var(--ink)">advisory</b>.</li>
+        <li>Programme pages and every action read the chain directly, so they’re never stale.</li>
+        <li>Anyone can run the indexer and compare results.</li></ul>
+      <a class="link" href="#about" style="display:inline-block;margin-top:14px;font-size:14px">Contract ids and build →</a></aside>
+  </div>`;
+};
+
+/* ---- about this deployment ---- */
+V.about = () => {
+  const C = [['Registry','CREG7Q2M4XN8HKD3PLW5ZT9BYV1RJC6FAEU0SGOI2MQ8NWD'],['Programme (code hash)','a91f…7c3e'],['Attestations','CATT3LQ9WZ2KP7XV5MDN8HB4RT6YCJ1FUE0GSOI4HMS'],['Standing','CSTD8PZ1KQ6WN3XV9LMB2HT7RC5YJD4FAE0GSOU1BQZ'],['Spend policy','CPOL4KX7QW2NZ9MV3LB8HT5RD1YCJ6FAE0GSOU7TRA']];
+  return head('Programmes','About this deployment','Which network, contracts and build this app is running. Useful when reporting a problem or checking our work.') + `
+  <div class="note risk" style="margin-bottom:var(--space-6)">${ic('alert')}<span><b>Stellar testnet, pre-audit.</b> The contracts have not been audited. Don’t use real funds.</span></div>
+  <div class="dgrid">
+    <section class="panel"><h3 style="margin-bottom:var(--space-4)">Contracts</h3>
+      <table class="t stack"><thead><tr><th>Contract</th><th>Id</th><th class="r"></th></tr></thead><tbody>
+      ${C.map(c=>`<tr><td><b>${c[0]}</b></td><td class="mono">${c[1].length>20?short(c[1]):c[1]}</td><td class="r">${copyBtn(c[1],'Copy id for '+c[0])}<a class="icon-btn sm" href="#about" aria-label="View ${c[0]} on Stellar Expert" style="display:inline-grid">${ic('ext')}</a></td></tr>`).join('')}</tbody></table>
+      <p class="muted" style="font-size:13px;margin-top:12px">Each programme is its own contract, deployed from the same code hash. Programme pages show their own id.</p></section>
+    <aside>
+      <section class="panel sunk"><h3 style="margin-bottom:12px">Network &amp; build</h3>${kv([['Network','Stellar testnet',1],['Passphrase','Test SDF Network ; September 2015',1],['RPC','soroban-testnet.stellar.org',1],['App build','v0.9.2 · 3e1c0aa'],['Built','14 Nov 2026'],['Indexer','v0.4.0 · <a class="link" href="#status">status</a>']])}</section>
+      <section class="panel sunk" style="margin-top:var(--space-4)"><h3 style="margin-bottom:12px">Protocol config</h3>${kv([['Fee','2.5% (cap 10%)'],['Treasury','GTRE…Y7KA'],['Registry admin','GADM…2PQX']])}<p class="muted" style="font-size:12px;margin-top:10px">The registry admin sets only the fee and treasury. Anyone can deploy a programme without them.</p></section>
+    </aside>
+  </div>`;
+};
+
+/* ---- receipt lookup ---- */
+V.receipt = () => {
+  const st = S.rcpt || 'idle';
+  let res = '';
+  if (st==='loading') res = `<div class="panel" style="margin-top:var(--space-6)" aria-busy="true"><span class="skel" style="height:22px;width:40%"></span><span class="skel" style="height:180px;margin-top:16px"></span></div>`;
+  else if (st==='notfound') res = `<div class="errpanel" role="alert" style="margin-top:var(--space-6)"><h4>${ic('search')}We couldn’t find a Milepost transaction with that hash.</h4><p class="muted" style="font-size:14px;margin-top:6px">Check it’s a testnet transaction and the full 64-character hash. Very old transactions may no longer be held by the RPC.</p></div>`;
+  else if (st==='found') res = `<section class="panel" style="margin-top:var(--space-6);padding:var(--space-8)" aria-labelledby="rcH">
+      <div class="panel-head"><div><p class="eyebrow">Receipt · rebuilt from the chain</p><h2 id="rcH" style="font-size:26px;margin-top:8px">Contribution · 250.00 USDC</h2></div><span class="att-status valid">Success</span></div>
+      ${kv([['Programme','Lakeside Secondary Bursaries 2027',1],['From','GA7Q…VSGZ'],['Sent','250.00 USDC'],['Protocol fee','6.25 USDC'],['Added to budget','243.75 USDC'],['Ledger','1,312,094'],['Time','16 Nov 2026, 08:41 UTC'],['Transaction','9f3a8c…07d2c21e'],['Network fee','0.00012 XLM']])}
+      <div style="display:flex;gap:10px;flex-wrap:wrap;margin-top:var(--space-6)"><button class="btn btn-ghost btn-sm" data-copy="9f3a8c4e1b7d2a90c5f3e8b6d1a4c7e2f9b0a3d6c8e1f4a7b2d5c9e0f3a07d2c21e">${ic('copy')}Copy hash</button><a class="btn btn-ghost btn-sm" href="#receipt">${ic('ext')}View on Stellar Expert</a><button class="btn btn-ghost btn-sm" data-act="printish">Copy receipt as text</button></div></section>`;
+  return head('Fund','Receipt lookup','Paste a transaction hash to rebuild its receipt from the chain. No sign-in needed.') + `
+  <form class="panel" data-form="rcpt" style="display:flex;gap:10px;flex-wrap:wrap;align-items:flex-end">
+    <div class="field" style="flex:1;min-width:240px;margin:0"><label for="rh">Transaction hash</label><input class="input mono" id="rh" placeholder="64 characters, e.g. 9f3a8c…c21e" value="${st==='idle'?'':'9f3a8c4e1b7d2a90c5f3e8b6d1a4c7e2f9b0a3d6c8e1f4a7b2d5c9e0f3a07d2c21e'}" autocomplete="off" spellcheck="false"></div>
+    <button class="btn btn-primary" type="submit">${ic('search')}Find receipt</button>
+  </form>
+  <p class="muted" style="font-size:13px;margin-top:10px">Works for contributions, refunds, releases, payments from escrow and finalized awards. <button class="link" style="font-size:13px" data-act="rcptNF">Design review: show “not found”</button></p>
+  ${res}`;
+};
+
+/* ---- propose a programme ---- */
+V.propose = () => {
+  const done = S.propDone;
+  const summary = `Programme proposal: Kano Clinic Nurse Stipends
+
+What it funds: monthly stipends for community nurses
+Condition: shifts worked this month
+Verifier: the district clinic lead
+Who gets paid: the nurse
+Rough budget: 25,000 USDC · 6 tranches
+Preferred mode: Allocated
+Timeline: applications Jan 2027, payments Feb–Dec 2027
+Contact: proposer@example.org`;
+  return head('Fund','Propose a programme','Want a programme to exist but don’t want to deploy it yourself? Describe it here and send it to someone who can.') + `
+  <div class="note info" style="margin-bottom:var(--space-6)">${ic('info')}<span><b>Nothing goes on the chain.</b> This makes a summary you can email, post as a GitHub issue, or copy. No wallet needed.</span></div>
+  <div class="dgrid">
+    <section class="panel" style="padding:var(--space-8)">
+      <div class="field"><label for="pn">Programme name</label><input class="input" id="pn" value="Kano Clinic Nurse Stipends"></div>
+      <div class="two"><div class="field"><label for="ps">Sector</label><select class="input" id="ps"><option>Health worker stipends</option><option>Education</option><option>Agricultural inputs</option><option>Vocational training</option><option>Humanitarian cash</option><option>SME microgrants</option><option>Other</option></select></div>
+      <div class="field"><label for="pb">Rough budget</label><input class="input num" id="pb" value="25,000 USDC"></div></div>
+      <div class="field"><label for="pc">What has to happen before money moves?</label><input class="input" id="pc" value="Shifts worked this month"><span class="help">This becomes the condition a verifier confirms.</span></div>
+      <div class="two"><div class="field"><label for="pv">Who can confirm it?</label><input class="input" id="pv" value="The district clinic lead"></div>
+      <div class="field"><label for="pp">Who gets paid?</label><input class="input" id="pp" value="The nurse"></div></div>
+      <div class="field"><label for="pm">Preferred payment mode</label><select class="input" id="pm">${Object.keys(MODES).map(m=>`<option ${m==='Allocated'?'selected':''}>${m} (${MODES[m].rank.toLowerCase()})</option>`).join('')}</select></div>
+      <div class="field"><label for="pe">Your contact <span class="muted" style="font-weight:400">(optional)</span></label><input class="input" id="pe" value="proposer@example.org"><span class="help">Only included in the summary you send.</span></div>
+    </section>
+    <aside class="panel sunk"><h3>Your summary</h3><pre class="mono" style="white-space:pre-wrap;font-size:13px;line-height:1.6;background:var(--bg-raised);padding:14px;border-radius:var(--radius-sm);margin:12px 0 0">${esc(summary)}</pre>
+      <div style="display:flex;flex-direction:column;gap:8px;margin-top:var(--space-4)">
+        <button class="btn btn-primary" data-copy="${esc(summary)}">${ic('copy')}Copy summary</button>
+        <a class="btn btn-ghost" href="#propose" data-act="propGh">${ic('ext')}Open as GitHub issue</a>
+        <a class="btn btn-ghost" href="#propose" data-act="propMail">Email it</a></div>
+      <p class="muted" style="font-size:12px;margin-top:10px">Email opens your mail app addressed to proposals@milepost.example. If it doesn’t open, copy the summary instead.</p>
+      ${done?`<div class="note ok" style="margin-top:12px">${ic('check')}<span>${done}</span></div>`:''}</aside>
+  </div>`;
+};
+
+/* ---- spend policy ---- */
+V.policy = () => {
+  if (!S.signedIn) return head('Get funded','Spend policy') + signedOut('Check your wallet’s spend policy','Restricted awards land in your smart wallet behind a spend policy. Sign in to see whether yours has one.');
+  if (S.view==='loading') return head('Get funded','Spend policy') + loadingBlock();
+  const has = !!S.policy;
+  const warn = `<div class="note risk" style="margin-bottom:var(--space-6)">${ic('alert')}<span><b>Restricted is weaker than it looks.</b> A policy limits one signer on your smart wallet, not the whole wallet. If the wallet has another signer without the policy, the money is effectively unrestricted. Allocated mode doesn’t have this problem.</span></div>`;
+  if (!has) return head('Get funded','Spend policy','Restricted awards are paid into your smart wallet, behind a policy that limits what can be spent and where.') + warn + `
+    <div class="dgrid"><section class="panel" style="padding:var(--space-8)">
+      <div style="display:flex;gap:12px;align-items:center"><span class="badge ph-cancelled"><i></i>No policy</span><span class="mono muted" style="font-size:13px">Smart wallet CWAL…3RQE</span></div>
+      <h2 style="font-size:26px;margin-top:var(--space-4)">Set up a policy</h2><p class="muted" style="margin:6px 0 var(--space-6)">Your Kilifi award (1,800 USDC) will be paid here. Without a policy it would arrive unrestricted.</p>
+      <fieldset style="border:0;padding:0;margin:0"><legend class="lbl" style="margin-bottom:10px">Checks</legend>
+        <label class="check" style="margin-bottom:6px"><input type="checkbox" checked><span><b>Only this asset</b><br><span class="muted" style="font-size:13px">USDC only. Other assets can’t be spent through this signer.</span></span></label>
+        <label class="check" style="margin-bottom:6px"><input type="checkbox" checked><span><b>Only verified payees</b><br><span class="muted" style="font-size:13px">Payments go only to payees the programme verified.</span></span></label>
+        <label class="check"><input type="checkbox" checked><span><b>Spending cap</b><br><span class="muted" style="font-size:13px">No more than the cap below in total.</span></span></label></fieldset>
+      <div class="field" style="margin-top:var(--space-4)"><label for="cap">Cap</label><div class="amount"><input id="cap" inputmode="decimal" value="1,800"><span class="unit">USDC</span></div></div>
+      <button class="btn btn-primary" data-act="policyGo">${ic('shield')}Install policy</button></section>
+    <aside class="panel sunk"><h3>Rather not deal with this?</h3><p class="muted" style="font-size:14px;margin-top:8px">Ask the programme to use <b style="color:var(--ink)">Allocated</b> mode for future awards. The money is held in escrow by the contract itself, and you still choose the payee.</p></aside></div>`;
+  return head('Get funded','Spend policy','What your smart wallet’s policy allows.') + warn + `
+  <div class="stats three"><div class="stat hl"><div class="k">Cap remaining</div><div class="v">1,350<small>USDC</small></div><div class="s">of 1,800</div></div><div class="stat"><div class="k">Spent through policy</div><div class="v">450<small>USDC</small></div><div class="s">2 payments</div></div><div class="stat"><div class="k">Allowed payees</div><div class="v">3</div></div></div>
+  <div class="dgrid">
+    <section class="panel"><div class="panel-head"><h3>Checks</h3><span class="badge ph-open"><i></i>Policy active</span></div>
+      ${[['Only USDC','Other assets are refused'],['Only verified payees','Kilifi programme’s payee list'],['Spending cap','1,800 USDC total']].map(c=>`<div class="action"><div class="ah"><div><b>${c[0]}</b><div class="who">${c[1]}</div></div><span class="chip-ok">${ic('check')}On</span></div></div>`).join('')}
+      <div style="margin-top:var(--space-4)"><div style="display:flex;justify-content:space-between;font-size:14px;margin-bottom:8px"><span>Cap used</span><span class="num">450 / 1,800</span></div><div class="meter"><i style="width:25%"></i></div></div></section>
+    <aside class="panel sunk"><h3 style="margin-bottom:12px">Allowed payees</h3>${['Kilifi County Pharmacy · GPHA…2KQW','Mtwapa Transport Co-op · GTRN…8LXE','Kilifi Uniform Supply · GUNI…5MRA'].map(p=>`<div class="addr-list"><div style="background:var(--bg-raised)">${p}</div></div>`).join('')}<p class="muted" style="font-size:12px">The programme’s creator manages this list.</p></aside>
+  </div>`;
+};
+
+/* ---- attestation lookup ---- */
+V.attestations = () => {
+  const by = S.atBy || 'id';
+  const R = [
+    {id:'AT-9F2C…41B0', st:'valid', schema:'condition-met/v1', signer:'GEXT…7RQA', subj:'GBQ2…M4ZL', data:[['programme','CA9P…L3MX'],['tranche','2'],['reference','VR-2291'],['signed','14 Nov 2026 · ledger 1,309,880']]},
+    {id:'AT-1D7A…E9C2', st:'used', schema:'condition-met/v1', signer:'GEXT…7RQA', subj:'GD3F…Q7NA', data:[['programme','CA9P…L3MX'],['tranche','1'],['used in','tranche release · ledger 1,240,112'],['signed','4 Sep 2026']]},
+    {id:'AT-C3E8…0D44', st:'revoked', schema:'condition-met/v1', signer:'GEXT…2MLC', subj:'GAP5…9XVE', data:[['programme','CA9P…L3MX'],['tranche','1'],['revoked','6 Sep 2026 by the signer'],['signed','5 Sep 2026']]}];
+  const sel = R[S.atSel||0];
+  const stTxt = {valid:'Valid. It can unlock one tranche.',used:'Used. It already unlocked a tranche and can’t be used again in that programme.',revoked:'Revoked by the signer. It can’t unlock anything.'};
+  return head('Verify','Attestation lookup','Check any attestation: who signed it, about whom, and whether it’s still valid. No sign-in needed.') + `
+  <form class="panel" data-form="att">
+    <div class="seg" role="group" aria-label="Search by" style="margin-bottom:var(--space-4)">${[['id','Attestation id'],['recipient','Recipient'],['verifier','Verifier']].map(([k,l])=>`<button type="button" aria-pressed="${by===k}" data-atby="${k}">${l}</button>`).join('')}</div>
+    <div style="display:flex;gap:10px;flex-wrap:wrap"><label class="sr" for="atq">Search</label><input class="input mono" id="atq" style="flex:1;min-width:220px" value="${by==='id'?'AT-9F2C…41B0':by==='recipient'?'GBQ2…M4ZL':'GEXT…7RQA'}"><button class="btn btn-primary" type="submit">${ic('search')}Look up</button></div>
+  </form>
+  <div class="dgrid" style="margin-top:var(--space-6)">
+    <section><p class="muted" style="font-size:14px;margin-bottom:10px">${by==='id'?'1 result':'3 results'} · read on the chain just now</p>
+      <div class="queue">${(by==='id'?[R[0]]:R).map((a,i)=>`<button class="claim" data-atsel="${i}" aria-current="${(S.atSel||0)===i}"><span class="tr" aria-hidden="true">${ic(a.st==='revoked'?'ban':a.st==='used'?'check':'shield')}</span><span><b class="mono">${a.id}</b><span>Subject <span class="mono">${a.subj}</span> · signed by <span class="mono">${a.signer}</span></span></span><span class="att-status ${a.st}">${a.st}</span></button>`).join('')}</div></section>
+    <aside class="panel" style="padding:var(--space-8)"><p class="eyebrow">Attestation</p><h3 class="mono" style="font-size:20px;margin-top:8px;display:flex;align-items:center;gap:6px">${sel.id} ${copyBtn(sel.id)}</h3>
+      <div class="note ${sel.st==='valid'?'ok':sel.st==='used'?'info':'risk'}" style="margin:var(--space-4) 0">${ic(sel.st==='revoked'?'ban':'info')}<span><b>${sel.st[0].toUpperCase()+sel.st.slice(1)}.</b> ${stTxt[sel.st].split('. ').slice(1).join('. ')}</span></div>
+      ${kv([['Schema',sel.schema],['Signer',sel.signer],['Subject',sel.subj],...sel.data])}
+      <p class="muted" style="font-size:12px;margin-top:10px">One attestation can unlock a tranche in two programmes that trust the same verifier and schema. That’s by design.</p></aside>
+  </div>`;
+};
+
+/* ---- register schema ---- */
+V.schemas = () => {
+  if (!S.signedIn) return head('Admin','Register a schema') + signedOut('Define what verifiers sign','Sign in to register a schema. Anyone can register one; programmes choose which schema their verifiers use.');
+  const fields = S.fields || [['programme','address'],['tranche','u32'],['reference','string']];
+  return head('Admin','Register a schema','A schema is the form a verifier signs: its name, its fields, and whether it can be revoked.') + `
+  <div class="dgrid">
+    <section class="panel" style="padding:var(--space-8)">
+      <div class="field"><label for="sn">Name</label><input class="input mono" id="sn" value="shifts-worked/v1"><span class="help">Lowercase, with a version, like <span class="mono">condition-met/v1</span>. It can’t be changed later; publish v2 instead.</span></div>
+      <div class="field"><label for="sd">What does signing mean?</label><textarea class="input" id="sd">The signer confirms the health worker completed the shifts listed for this month.</textarea><span class="help">Shown to verifiers next to the “I checked this myself” box.</span></div>
+      <span class="lbl">Fields</span>
+      <div style="margin:8px 0 10px">${fields.map((f,i)=>`<div class="vote-row" style="grid-template-columns:1fr 160px auto"><div><label class="sr" for="fn${i}">Field name</label><input class="input mono" id="fn${i}" value="${f[0]}"></div><div><label class="sr" for="ft${i}">Type</label><select class="input" id="ft${i}">${['string','u32','i128','address','bool','bytes'].map(t=>`<option ${t===f[1]?'selected':''}>${t}</option>`).join('')}</select></div><button class="icon-btn" type="button" data-rmfield="${i}" aria-label="Remove field ${f[0]}">${ic('x')}</button></div>`).join('')}</div>
+      <button class="btn btn-secondary btn-sm" data-act="addField">${ic('plus')}Add field</button>
+      <label class="check" style="margin-top:var(--space-6)"><input type="checkbox" checked><span><b>Revocable</b><br><span class="muted" style="font-size:13px">The signer can revoke an attestation before it’s used. Recommended: mistakes happen.</span></span></label>
+      <button class="btn btn-primary" style="margin-top:var(--space-6)" data-act="schemaGo">Register schema</button></section>
+    <aside><section class="panel sunk"><h3 style="margin-bottom:12px">Preview</h3><pre class="mono" style="white-space:pre-wrap;font-size:13px;line-height:1.6;background:var(--bg-raised);padding:14px;border-radius:var(--radius-sm);margin:0">shifts-worked/v1  (revocable)
+${fields.map(f=>`  ${f[0]}: ${f[1]}`).join('\n')}</pre></section>
+      <section class="panel" style="margin-top:var(--space-4)"><h3 style="margin-bottom:8px">Existing schemas</h3>${[['condition-met/v1','3 fields · revocable · 412 uses'],['enrolled-term/v1','4 fields · revocable · 96 uses'],['household-reached/v1','5 fields · not revocable · 1,204 uses']].map(s=>`<div class="action"><b class="mono" style="font-size:14px">${s[0]}</b><div class="who">${s[1]}</div></div>`).join('')}</section></aside>
+  </div>`;
+};
+
+/* ---- payees ---- */
+V.payees = () => {
+  if (!S.signedIn) return head('Admin','Payees') + signedOut('Manage verified payees','Only a programme’s creator can verify or remove payees. Sign in with the creator address.');
+  const pid = S.payP || 'oyo'; const p = byId(pid);
+  const isCreator = pid==='oyo' || pid==='accra';
+  const list = (S.payees && S.payees[pid]) || (pid==='oyo'?[['Ibadan Agro Supplies','GIBA…3PLQ','4 Aug 2026'],['Oke-Ogun Seeds Ltd','GOKE…9MTA','4 Aug 2026']]:[['Accra Technical Training Centre','GTTC…4QWE','2 Mar 2026'],['SolarSkills Ghana (tools)','GSOL…8PLA','2 Mar 2026']]);
+  return head('Admin','Payees','Verified payees are who Direct awards pay and who recipients can choose in Allocated mode. Only the programme’s creator can change this list.') + `
+  <div class="panel" style="margin-bottom:var(--space-6)"><div class="field" style="margin:0;max-width:520px"><label for="payP">Programme</label><select class="input" id="payP">${P.filter(x=>x.phase!=='cancelled').map(x=>`<option value="${x.id}" ${x.id===pid?'selected':''}>${x.name}</option>`).join('')}</select></div></div>
+  ${!isCreator?`<div class="note warn" style="margin-bottom:var(--space-6)">${ic('lock')}<span><b>You’re not this programme’s creator.</b> You can see its payees, but only <span class="mono">${p.creator}</span> can add or remove them.</span></div>`:''}
+  <div class="dgrid">
+    <section class="panel"><div class="panel-head"><h3>Verified payees · ${list.length}</h3></div>
+      <table class="t stack"><thead><tr><th>Payee</th><th>Address</th><th>Verified</th><th class="r"></th></tr></thead><tbody>
+      ${list.map((x,i)=>`<tr><td><b>${x[0]}</b></td><td class="mono">${x[1]} ${copyBtn(x[1])}</td><td class="num" style="font-size:13px">${x[2]}</td><td class="r">${isCreator?`<button class="btn btn-danger btn-sm" data-rmpayee="${i}">Remove</button>`:''}</td></tr>`).join('')}</tbody></table>
+      <p class="muted" style="font-size:13px;margin-top:12px">Removing a payee doesn’t affect money already paid. Escrowed Allocated money can’t go to them afterwards.</p></section>
+    <aside class="panel sunk"><h3>Add a payee</h3>
+      <div class="field" style="margin-top:12px"><label for="pyn">Name</label><input class="input" id="pyn" placeholder="e.g. Oyo Fertiliser Depot" ${isCreator?'':'disabled'}></div>
+      <div class="field"><label for="pya">Stellar address</label><input class="input mono" id="pya" placeholder="G…" ${isCreator?'':'disabled'}><span class="help">Check it with the payee directly. Payments to a wrong address can’t be reversed.</span></div>
+      ${isCreator?`<button class="btn btn-primary btn-block" data-act="addPayee">Verify payee</button>`:`<button class="btn btn-block" aria-disabled="true" data-act="nope" data-why="Only the creator can add payees.">Verify payee</button>${reason('Only the creator can add payees.')}`}</aside>
+  </div>`;
+};
+
+/* ---- standing writers / lookup ---- */
+V.standing = () => {
+  const found = S.stFound !== false;
+  return head('Admin','Standing','Look up any recipient’s standing: a permanent, non-transferable record of totals across every programme. Counts and totals only, never a list.') + `
+  <form class="panel" data-form="st" style="display:flex;gap:10px;flex-wrap:wrap;align-items:flex-end"><div class="field" style="flex:1;min-width:240px;margin:0"><label for="stq">Recipient address</label><input class="input mono" id="stq" value="GD3F…Q7NA"></div><button class="btn btn-primary" type="submit">${ic('search')}Look up</button></form>
+  ${found?`<div class="stats" style="margin-top:var(--space-6)">
+    <div class="stat"><div class="k">Programmes</div><div class="v">3</div></div><div class="stat hl"><div class="k">Received</div><div class="v">3,800<small>USDC</small></div></div><div class="stat"><div class="k">Tranches delivered</div><div class="v">5<small>of 13</small></div></div><div class="stat"><div class="k">Revoked proofs</div><div class="v">0</div></div></div>
+  <div class="dgrid">
+    <section class="panel"><h3>Who can write to it</h3><p class="muted" style="font-size:14px;margin:6px 0 12px">Only programmes deployed through the registry can add to a recipient’s standing. Each write is a count, never details.</p>
+      <table class="t stack"><thead><tr><th>Writer</th><th>Contract</th><th class="r">Writes</th></tr></thead><tbody>
+      ${[['Oyo Smallholder Seed & Fertiliser Inputs','CA9P…L3MX',3],['Accra Solar Technician Training','CC2T…9RFE',4],['Kilifi Community Health Stipends','CD4N…7HWA',1]].map(w=>`<tr><td><b>${w[0]}</b></td><td class="mono">${w[1]}</td><td class="r num">${w[2]}</td></tr>`).join('')}</tbody></table></section>
+    <aside class="panel sunk"><h3>Record life</h3><p class="muted" style="font-size:14px;margin-top:6px">Stellar data expires unless extended. Anyone can extend it.</p><div style="display:flex;justify-content:space-between;font-size:14px;margin:14px 0 8px"><span>142 days left</span><span class="num muted">142 / 365</span></div><div class="meter"><i style="width:39%"></i></div><button class="btn btn-primary btn-block" style="margin-top:var(--space-4)" data-act="extend">Extend now</button></aside>
+  </div>`:empty('No standing for this address','This address hasn’t received anything through a registry-deployed programme yet.')}
+  <p class="muted" style="font-size:13px;margin-top:var(--space-4)"><button class="link" style="font-size:13px" data-act="stNF">Design review: show “no standing”</button></p>`;
+};
+
+/* ---- keepalive ---- */
+V.keepalive = () => {
+  const ext = S.kExt || {};
+  const rows = [['lakeside',212,214],['kilifi',27,88],['oyo',58,140],['accra',12,31],['turkana',190,301],['pilot',304,12]];
+  const low = rows.filter(r=>!ext[r[0]] && r[1]<30).length;
+  return head('Admin','Keepalive','Data on Stellar expires unless someone pays a small fee to extend it. Here you can see how long each programme’s stored data has left, and extend it. Anyone can do this.', `<button class="btn btn-primary" data-act="extAll">${ic('refresh')}Extend all under 30 days</button>`) + `
+  ${low?`<div class="note warn" role="status" style="margin-bottom:var(--space-6)">${ic('alert')}<span><b>${low} programme${low>1?'s':''} under 30 days.</b> If the data expires it can be restored, but it costs more and pauses reads until then.</span></div>`:`<div class="note ok" role="status" style="margin-bottom:var(--space-6)">${ic('check')}<span>Everything has more than 30 days left.</span></div>`}
+  <div class="frow hd krow"><span>Programme</span><span>Entries</span><span>Shortest time left</span><span class="act"></span></div>
+  ${rows.map(([id,days,n])=>{ const p=byId(id); const d = ext[id]?365:days; const w = d<30;
+    return `<div class="frow krow"><span><b>${p.name}</b><span class="muted mono" style="display:block;font-size:12px">${p.sid}</span></span><span class="num">${n}<span class="kl"> stored entries</span></span><span><span style="display:flex;justify-content:space-between;font-size:13px;margin-bottom:6px"><span class="num" style="${w?'color:var(--money-refundable);font-weight:600':''}">${d} days</span>${w?'<span class="muted">under 30</span>':''}</span><span class="meter" style="display:block"><i style="width:${Math.min(100,d/365*100)}%;${w?'background:var(--money-refundable)':''}"></i></span></span><span class="act">${ext[id]?`<span class="chip-ok">${ic('check')}Extended</span>`:`<button class="btn ${w?'btn-primary':'btn-ghost'} btn-sm" data-kext="${id}">Extend</button>`}</span></div>`; }).join('')}
+  <p class="muted" style="font-size:13px;margin-top:var(--space-4)">Extending costs network fees in XLM, roughly 0.01 XLM per 100 entries for a year.</p>`;
+};
+
+/* ---- placeholders ---- */
+const NEXT = {status:'Index status',about:'About this deployment',receipt:'Receipt lookup',propose:'Propose a programme',policy:'Spend policy',attestations:'Attestation lookup',schemas:'Register schema',payees:'Payee management',standing:'Standing writers',keepalive:'Keepalive'};
+Object.keys(NEXT).forEach(k => V[k] = V[k] || (() => `<div class="page-head"><div><p class="eyebrow">Next batch</p><h1 style="margin-top:10px">${NEXT[k]}</h1><p>This screen is designed in the next batch, using the same components as the screens here.</p></div></div>${empty('Coming in the next batch','The shell, states and components are ready for it.','<a class="btn btn-ghost" href="#directory">Back to programmes</a>')}`));
+V.notfound = () => `<div class="empty" style="padding-top:var(--space-24)"><div class="art" aria-hidden="true"><i></i><i></i><i></i></div><p class="eyebrow">404</p><h3 style="font-size:32px;margin-top:10px">There’s no milepost here</h3><p>The page you’re looking for doesn’t exist, or the link is out of date.</p><a class="btn btn-primary" href="#directory">Go to programmes</a></div>`;
+
+/* ---------------- router & events ---------------- */
+function route(){
+  let h = (location.hash||'#directory').slice(1) || 'directory';
+  if (h.startsWith('programme-')) { S.pid = h.slice(10); h = 'programme'; }
+  return h;
+}
+const root = $('#app');
+function draw(focusMain){
+  const r = route(); S.route = r;
+  root.innerHTML = shell(r);
+  document.title = (r==='programme' ? (byId(S.pid)||{name:'Programme'}).name : (NEXT[r] || {directory:'Programmes',fund:'Funding',recipient:'Get funded',verify:'Verify',deploy:'Deploy programme',finalize:'Finalize awards'}[r] || 'Not found')) + ' · Milepost';
+  drawSheet();
+  if (focusMain) { const m = $('#main'); if (m) m.focus({preventScroll:true}); scrollTo(0,0); }
+}
+let annT; function announce(t){ const a = $('#announcer'); a.textContent=''; clearTimeout(annT); annT = setTimeout(()=>a.textContent=t, 40); toast(t); }
+let toastT; function toast(t){ const h = $('#toastHost'); h.innerHTML = `<div class="toast" aria-hidden="true">${esc(t)}</div>`; clearTimeout(toastT); toastT = setTimeout(()=>h.innerHTML='', 2600); }
+addEventListener('hashchange', () => { S.menu=false; draw(true); });
+
+document.addEventListener('click', e => {
+  const t = e.target.closest('[data-act],[data-filter],[data-view],[data-tab],[data-rtab],[data-claim],[data-wstep],[data-preset],[data-copy]');
+  if (!t) { if (S.menu && !e.target.closest('.pop')) { S.menu=false; draw(); } return; }
+  if (t.dataset.copy) { try{navigator.clipboard.writeText(t.dataset.copy)}catch(_){} announce('Copied ' + t.dataset.copy); return; }
+  if (t.dataset.filter) { S.filter = t.dataset.filter; draw(); announce(`Showing ${S.filter==='all'?'all':PH[S.filter]} programmes`); return; }
+  if (t.dataset.view) { S.view = t.dataset.view; S.dockOpen = true; draw(); return; }
+  if (t.dataset.tab) { S.tab = t.dataset.tab; draw(); return; }
+  if (t.dataset.rtab) { S.rtab = t.dataset.rtab; if (S.view==='empty') S.view='normal'; draw(); return; }
+  if (t.dataset.claim) { S.claim = +t.dataset.claim; draw(); return; }
+  if (t.dataset.wstep) { S.wstep = +t.dataset.wstep; draw(); $('#wH') && $('#wH').scrollIntoView({block:'nearest'}); return; }
+  if (t.dataset.preset) { CF.amt = fmt(+t.dataset.preset); drawSheet(); return; }
+  const a = t.dataset.act;
+  switch(a){
+    case 'theme': { const h=document.documentElement; h.dataset.theme = h.dataset.theme==='dark'?'light':'dark'; draw(); break; }
+    case 'signin': SI='start'; drawSheet(); break;
+    case 'siGo': SI='connecting'; drawSheet(); setTimeout(()=>{ SI=null; S.signedIn=true; draw(); announce('Signed in as ' + short(ME)); }, reduce?100:1400); break;
+    case 'signout': S.signedIn=false; S.menu=false; draw(); announce('Signed out'); break;
+    case 'toggleSign': S.signedIn=!S.signedIn; S.dockOpen=true; draw(); break;
+    case 'toggleOff': S.offline=!S.offline; S.dockOpen=true; draw(); break;
+    case 'close': if (e.target.closest('a[href]')) { CF=null; SI=null; TX=null; drawSheet(); return; } CF=null; SI=null; TX=null; drawSheet(); break;
+    case 'scrim': if (e.target===t) { CF=null; SI=null; if (!TX||TX.state==='done') TX=null; drawSheet(); } break;
+    case 'contribute': if (!S.signedIn) { SI='start'; drawSheet(); break; } openContribute(t.dataset.pid); break;
+    case 'cfNext': CF.step='confirm'; drawSheet(); break;
+    case 'cfBack': CF.step='amount'; drawSheet(); break;
+    case 'cfSend': CF.step='pending'; drawSheet(); setTimeout(()=>{ if(!CF) return; CF.step = CF.fail?'error':'done'; drawSheet(); announce(CF.fail?'Contribution failed. Nothing was transferred.':'Contribution confirmed.'); }, reduce?200:2000); break;
+    case 'cfFail': CF.fail=true; CF.step='pending'; drawSheet(); setTimeout(()=>{ if(!CF) return; CF.step='error'; drawSheet(); announce('Contribution failed. Nothing was transferred.'); }, reduce?200:1600); break;
+    case 'cfRetry': CF.fail=false; CF.step='amount'; drawSheet(); break;
+    case 'apply': location.hash='#recipient'; S.rtab='apply'; break;
+    case 'gofinalize': S.finP = t.dataset.pid; location.hash='#finalize'; break;
+    case 'gorecipient': S.rtab='awards'; location.hash='#recipient'; break;
+    case 'refund': runTx({title:'Claiming your refund', doneTitle:'Refund claimed', doneText:`${t.dataset.amt||'Your share'} USDC sent back to your wallet, in proportion to what you put in.`}); break;
+    case 'release': runTx({title:'Releasing tranche 2', doneTitle:'Tranche released', doneText:'266.67 USDC paid to Ibadan Agro Supplies. The proof is now used.', after:()=>{S.released.oyo2=true; draw();}}); break;
+    case 'pay': runTx({title:'Paying from escrow', doneTitle:'Paid', doneText:'450 USDC sent to the verified payee you chose.', after:()=>{S.released.pay=true; draw();}}); break;
+    case 'extend': runTx({title:'Extending your record', doneTitle:'Record extended', doneText:'Your standing stays on the chain for another year.', after:()=>{S.released.extend=true; draw();}}); break;
+    case 'applyGo': runTx({title:'Submitting your application', doneTitle:'Application submitted', doneText:'Reviewers will vote after applications close.'}); break;
+    case 'withdraw': runTx({title:'Withdrawing application', doneTitle:'Application withdrawn', doneText:'You can apply again while the programme is Open.'}); break;
+    case 'vote': runTx({title:'Casting your vote', doneTitle:'Vote recorded', doneText:'3 of 5 votes are now in for this applicant.'}); break;
+    case 'revoke': runTx({title:'Revoking attestation', doneTitle:'Attestation revoked', doneText:'It can no longer unlock a tranche.'}); break;
+    case 'sign': { if (t.getAttribute('aria-disabled')==='true') { announce('Tick “I checked this myself” first.'); $('#iChecked').focus(); break; } const i=+t.dataset.i; runTx({title:'Signing attestation', doneTitle:'Attestation signed', doneText:'The recipient can now release this tranche.', after:()=>{S.signed[i]=true; draw();}}); break; }
+    case 'cant': S.signed[+t.dataset.i]=true; draw(); announce('Removed from your queue. No transaction was sent.'); break;
+    case 'fin': { const i=+t.dataset.i; const sel=$('#fm'+i); const mode=sel?sel.value:''; runTx({title:'Finalizing award', doneTitle:'Award finalized', doneText:`${fmt(+t.dataset.m)} USDC awarded, paid in ${mode} mode.`, after:()=>{S.finalized[i]=+t.dataset.m; S.finMode=S.finMode||{}; S.finMode[i]=mode; draw();}}); break; }
+    case 'deployGo': runTx({title:'Deploying your programme', doneTitle:'Programme deployed', doneText:'Kano Clinic Nurse Stipends 2027 is Open. It will appear in the directory within a few hours.'}); break;
+    case 'trm': S.tr=Math.max(1,(S.tr||3)-1); draw(); break;
+    case 'trp': S.tr=Math.min(12,(S.tr||3)+1); draw(); break;
+    case 'qm': S.quorum=Math.max(1,S.quorum-1); draw(); break;
+    case 'qp': S.quorum=Math.min(4,S.quorum+1); if (S.quorum===4) announce('Quorum can’t be more than your 4 reviewers.'); draw(); break;
+    case 'cal': announce('Calendar file with 4 deadlines ready'); break;
+    case 'csv': announce('CSV of all awards ready'); break;
+    case 'nope': announce(t.dataset.why); break;
+    case 'clearq': S.q=''; draw(); break;
+    case 'normal': case 'retry': S.view='normal'; draw(); break;
+  }
+});
+document.addEventListener('click', e => { const b = e.target.closest('#acctBtn'); if (b) { e.stopPropagation(); S.menu=!S.menu; draw(); } }, true);
+document.addEventListener('input', e => {
+  if (e.target.id==='q') { S.q = e.target.value; const pos = e.target.selectionStart; draw(); const q=$('#q'); q.focus(); q.setSelectionRange(pos,pos); }
+  if (e.target.id==='cfA') { CF.amt = e.target.value; const pos=e.target.selectionStart; drawSheet(); const i=$('#cfA'); i.focus(); i.setSelectionRange(pos,pos); }
+  if (e.target.id==='iChecked') { const b=$('#signBtn'); b.setAttribute('aria-disabled', String(!e.target.checked)); $('#signWhy').hidden = e.target.checked; }
+});
+document.addEventListener('change', e => {
+  if (e.target.id==='sort') { S.sort=e.target.value; draw(); }
+  if (e.target.id==='cfP') { CF.pid=e.target.value; drawSheet(); }
+  if (e.target.id==='finP') { S.finP=e.target.value; S.finalized={}; draw(); }
+  if (e.target.name==='mode') { S.mode=e.target.value; }
+});
+document.addEventListener('keydown', e => { if (e.key==='Escape') { if (CF||SI||(TX&&TX.state==='done')) { CF=null; SI=null; TX=null; drawSheet(); } else if (S.menu) { S.menu=false; draw(); $('#acctBtn')&&$('#acctBtn').focus(); } } });
+
+try { if (!document.documentElement.dataset.theme) document.documentElement.dataset.theme = matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light'; } catch(_) { document.documentElement.dataset.theme='light'; }
+draw();
+
+/* batch 2 events */
+document.addEventListener('click', e => {
+  const t = e.target.closest('[data-atby],[data-atsel],[data-rmfield],[data-rmpayee],[data-kext]');
+  if (t) {
+    if (t.dataset.atby) { S.atBy=t.dataset.atby; S.atSel=0; draw(); }
+    else if (t.dataset.atsel) { S.atSel=+t.dataset.atsel; draw(); }
+    else if (t.dataset.rmfield) { S.fields=(S.fields||[['programme','address'],['tranche','u32'],['reference','string']]).filter((_,i)=>i!==+t.dataset.rmfield); draw(); announce('Field removed'); }
+    else if (t.dataset.rmpayee) { const pid=S.payP||'oyo'; const cur=(S.payees&&S.payees[pid])||[...document.querySelectorAll('table.t tbody tr')].map(r=>[r.cells[0].innerText,r.cells[1].innerText.trim(),r.cells[2].innerText]); const i=+t.dataset.rmpayee; runTx({title:'Removing payee', doneTitle:'Payee removed', doneText:cur[i][0]+' can no longer be paid by this programme.', after:()=>{S.payees=S.payees||{}; S.payees[pid]=cur.filter((_,k)=>k!==i); draw();}}); }
+    else if (t.dataset.kext) { const id=t.dataset.kext; runTx({title:'Extending stored data', doneTitle:'Extended', doneText:byId(id).name+' data now lasts another year.', after:()=>{S.kExt=Object.assign({},S.kExt,{[id]:1}); draw();}}); }
+    return;
+  }
+  const a = e.target.closest('[data-act]'); if (!a) return;
+  switch (a.dataset.act) {
+    case 'rcptNF': S.rcpt='notfound'; draw(); announce('No receipt found for that hash.'); break;
+    case 'printish': announce('Receipt copied as text'); break;
+    case 'propGh': e.preventDefault(); S.propDone='Opened a pre-filled GitHub issue in a new tab.'; draw(); announce('Opened a pre-filled GitHub issue'); break;
+    case 'propMail': e.preventDefault(); S.propDone='Opened your mail app with the summary. If nothing opened, use Copy summary.'; draw(); announce('Opening your mail app'); break;
+    case 'policyGo': runTx({title:'Installing spend policy', doneTitle:'Policy installed', doneText:'Your smart wallet now only spends USDC, to verified payees, up to 1,800.', after:()=>{S.policy=true; draw();}}); break;
+    case 'addField': S.fields=(S.fields||[['programme','address'],['tranche','u32'],['reference','string']]).concat([['new_field','string']]); draw(); break;
+    case 'schemaGo': runTx({title:'Registering schema', doneTitle:'Schema registered', doneText:'shifts-worked/v1 can now be chosen when deploying a programme.'}); break;
+    case 'addPayee': { const n=($('#pyn')||{}).value, ad=($('#pya')||{}).value; if(!n||!ad){ announce('Add a name and a Stellar address first.'); (n?$('#pya'):$('#pyn')).focus(); break; } const pid=S.payP||'oyo'; const cur=(S.payees&&S.payees[pid])||[...document.querySelectorAll('table.t tbody tr')].map(r=>[r.cells[0].innerText,r.cells[1].innerText.trim(),r.cells[2].innerText]); runTx({title:'Verifying payee', doneTitle:'Payee verified', doneText:n+' can now be paid by this programme.', after:()=>{S.payees=S.payees||{}; S.payees[pid]=cur.concat([[n, ad.length>12?ad.slice(0,4)+'…'+ad.slice(-4):ad,'16 Nov 2026']]); draw();}}); break; }
+    case 'extAll': runTx({title:'Extending stored data', doneTitle:'Extended', doneText:'Every programme under 30 days now lasts another year.', after:()=>{S.kExt=Object.assign({},S.kExt,{kilifi:1,accra:1}); draw();}}); break;
+    case 'stNF': S.stFound=false; draw(); break;
+  }
+});
+document.addEventListener('submit', e => {
+  const f = e.target.closest('[data-form]'); if (!f) return; e.preventDefault();
+  if (f.dataset.form==='rcpt') { const v=($('#rh').value||'').trim(); if(!v){ announce('Paste a transaction hash first.'); $('#rh').focus(); return; } S.rcpt='loading'; draw(); setTimeout(()=>{ S.rcpt='found'; draw(); announce('Receipt found: contribution of 250 USDC.'); }, reduce?100:900); }
+  if (f.dataset.form==='att') { draw(); announce('Attestation results updated'); }
+  if (f.dataset.form==='st') { S.stFound=true; draw(); announce('Standing found: 3 programmes'); }
+});
+document.addEventListener('change', e => { if (e.target.id==='payP') { S.payP=e.target.value; draw(); } });
+
+})();
+document.addEventListener('toggle', e => { if (e.target.classList && e.target.classList.contains('dock')) window.__dock = e.target.open; }, true);
+</script></body></html>

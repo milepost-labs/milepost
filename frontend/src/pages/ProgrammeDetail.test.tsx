@@ -3,6 +3,8 @@ import { fireEvent, render, screen, within } from '@testing-library/react';
 import { MemoryRouter, Route, Routes } from 'react-router-dom';
 import { Buffer } from 'buffer';
 import { ProgrammeDetail } from './ProgrammeDetail';
+import { canonicalize, metadataHash } from '../lib/metadata';
+import { FIXTURE_PROGRAMMES } from '../fixtures/programmes';
 
 // Issue #342 — the programme detail page. One page shows a real programme's
 // on-chain reads (phase, money, config, registry), what each phase lets you do,
@@ -75,6 +77,9 @@ function makeProgramme() {
   return {
     options: { contractId: REAL_ID },
     is_paused: vi.fn(async () => ({ result: false })),
+    is_verifier: vi.fn(async () => ({ result: true })),
+    is_reviewer: vi.fn(async () => ({ result: false })),
+    is_payee: vi.fn(async () => ({ result: false })),
     get_config: vi.fn(() => unwrap(makeConfig())),
     get_phase: vi.fn(() => unwrap({ tag: 'Open' })),
     budget: vi.fn(() => unwrap(79200000000n)),
@@ -95,13 +100,10 @@ let programme = makeProgramme();
 let registry = makeRegistry();
 let indexed: { id: string; name: string | null; creator: string | null; createdLedger: number | null }[] = [];
 
-vi.mock('../context/useSoroban', () => ({
-  useSoroban: () => ({
-    programmeAt: () => programme,
-    registry,
-    rpcUrl: RPC_URL,
-  }),
-}));
+vi.mock('../context/useSoroban', () => {
+  const soroban = () => ({ programmeAt: () => programme, registry, rpcUrl: RPC_URL });
+  return { useSoroban: soroban, useOptionalSoroban: soroban };
+});
 
 vi.mock('../lib/indexer', async (importOriginal) => ({
   ...(await importOriginal<typeof import('../lib/indexer')>()),
@@ -110,10 +112,26 @@ vi.mock('../lib/indexer', async (importOriginal) => ({
 }));
 
 const tokenNameMock = vi.hoisted(() => vi.fn(async () => ({ result: 'native' })));
+const contractBalanceState = vi.hoisted(() => ({
+  data: 80000000000n as bigint | null,
+  loading: false,
+  fetching: false,
+  error: null as Error | null,
+  archived: false,
+  refetch: vi.fn(),
+}));
 
 vi.mock('../lib/token', async (importOriginal) => ({
   ...(await importOriginal<typeof import('../lib/token')>()),
   fetchTokenName: tokenNameMock,
+}));
+
+vi.mock('../hooks/useProgrammeBalance', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('../hooks/useProgrammeBalance')>()),
+  useContractTokenBalance: (_token: string | null, _contractAddress: string | null, enabled: boolean) =>
+    enabled
+      ? contractBalanceState
+      : { data: null, loading: false, fetching: false, error: null, archived: false, refetch: vi.fn() },
 }));
 
 function renderProgramme(path: string) {
@@ -131,12 +149,18 @@ function renderProgramme(path: string) {
 const moneyReady = () => screen.findByText('Budget 7,920.00 XLM');
 
 beforeEach(() => {
+  // The description store answers "none here" unless a test says otherwise.
+  vi.stubGlobal('fetch', async () => new Response('{}', { status: 404 }));
   programme = makeProgramme();
   registry = makeRegistry();
   indexed = [];
   mocks.address = VIEWER;
   mocks.announce.mockClear();
   tokenNameMock.mockClear();
+  contractBalanceState.data = 80000000000n;
+  contractBalanceState.loading = false;
+  contractBalanceState.error = null;
+  contractBalanceState.refetch.mockClear();
 });
 
 afterEach(() => {
@@ -149,23 +173,28 @@ describe('ProgrammeDetail — a deployed programme', () => {
     renderProgramme(`/programme/${REAL_ID}`);
 
     // The header: index name and ledger, the phase read live from the chain.
-    expect(await screen.findByRole('heading', { name: 'Riverside horticulture grants' })).toBeTruthy();
+    // The body renders only after the registry answers, one step later than before.
+    expect(
+      await screen.findByRole('heading', { name: 'Riverside horticulture grants' }, { timeout: 3000 }),
+    ).toBeTruthy();
     expect(screen.getByText('Phase read on-chain just now')).toBeTruthy();
     expect(screen.getByText('4,811,204')).toBeTruthy();
     expect(screen.queryByText(/Showing the seeded demo programme/)).toBeNull();
-    expect(screen.getByText('Now · Contributions and applications')).toBeTruthy();
+    expect(document.querySelector('[aria-current="step"]')?.textContent).toContain('Open · now');
 
     // Funding summary: four stats straight off the reads.
     const funding = screen.getByRole('region', { name: 'Programme funding summary' });
     expect(within(funding).getByText('Contributed')).toBeTruthy();
-    expect(await within(funding).findByText('8,000.00 XLM')).toBeTruthy();
-    expect(within(funding).getByText('Granted')).toBeTruthy();
+    expect(await within(funding).findByText('8,000')).toBeTruthy();
+    expect(within(funding).getByText('2% protocol fee')).toBeTruthy();
+    expect(within(funding).getByText('Budget')).toBeTruthy();
+    expect(within(funding).getByText('Awarded')).toBeTruthy();
     expect(within(funding).getByText('Released')).toBeTruthy();
 
     // Money panel reconciles contributed less fee.
     await moneyReady();
     expect(screen.getByText('Where the money is')).toBeTruthy();
-    expect(screen.getByText('Not yet awarded')).toBeTruthy();
+    expect(screen.getByText('Unawarded')).toBeTruthy();
     expect(screen.getByText('Protocol fee')).toBeTruthy();
 
     // Registry verdict from `registry.is_programme`.
@@ -173,7 +202,7 @@ describe('ProgrammeDetail — a deployed programme', () => {
     expect(screen.getAllByText('Registry-deployed')).toHaveLength(2);
 
     // Rules: asset read through the token contract, rest straight from config.
-    expect(await screen.findByText('XLM')).toBeTruthy();
+    expect(await within(screen.getByRole('list', { name: 'Programme rules' })).findByText('XLM')).toBeTruthy();
     expect(tokenNameMock).toHaveBeenCalledWith(TOKEN, RPC_URL);
     expect(screen.getByText('Asset contract')).toBeTruthy();
     expect(screen.getByText('3 reviewer votes')).toBeTruthy();
@@ -182,14 +211,37 @@ describe('ProgrammeDetail — a deployed programme', () => {
     expect(screen.getByText('cd'.repeat(32))).toBeTruthy();
 
     // Timeline and the tabbed detail panels are present.
-    expect(screen.getByText('Timeline and phase')).toBeTruthy();
+    expect(screen.getByRole('heading', { name: 'Timeline' })).toBeTruthy();
     expect(screen.getByText(/Next deadline:/)).toBeTruthy();
     expect(screen.getByRole('list', { name: 'Programme timeline' })).toBeTruthy();
+    expect(
+      screen.getByRole('button', { name: 'Add the 4 remaining deadlines to your calendar' }),
+    ).toBeTruthy();
     expect(screen.getByRole('tablist', { name: 'Programme details' })).toBeTruthy();
     expect(screen.getByRole('tab', { selected: true })).toBeTruthy();
-    expect(screen.getByLabelText('Metadata document URL')).toBeTruthy();
+    // The committed description is looked up in the store; with none there, a URL can be pasted.
+    expect(await screen.findByLabelText('Document address')).toBeTruthy();
     // Renders the whole page with every read; slow on a loaded CI runner.
   }, 20_000);
+
+  it('offers no calendar for a sample programme, whose dates are made up', async () => {
+    renderProgramme(`/programme/${FIXTURE_PROGRAMMES[0].id}`);
+
+    expect(await screen.findByRole('list', { name: 'Programme timeline' })).toBeTruthy();
+    expect(screen.queryByRole('button', { name: /to your calendar/ })).toBeNull();
+  });
+
+  it('fills a sample programme from the sample data without asking the chain', async () => {
+    const sample = FIXTURE_PROGRAMMES[0];
+    renderProgramme(`/programme/${sample.id}`);
+
+    expect(await screen.findByRole('heading', { name: sample.name ?? '' })).toBeTruthy();
+    expect(screen.queryByText('No Milepost programme at this address')).toBeNull();
+    // No registry check and no programme read: a sample has no contract.
+    expect(registry.is_programme).not.toHaveBeenCalled();
+    expect(programme.get_config).not.toHaveBeenCalled();
+    expect(programme.get_phase).not.toHaveBeenCalled();
+  });
 
   it('says when it is showing the seeded demo programme', async () => {
     renderProgramme('/programme');
@@ -205,7 +257,8 @@ describe('ProgrammeDetail — a deployed programme', () => {
 
     // Stated in the registry notice and again where write actions are refused.
     expect((await screen.findAllByText(/This address was not deployed by the Milepost registry/)).length).toBeGreaterThan(0);
-    expect(screen.getByText(/That is not a verdict on the creator/)).toBeTruthy();
+    // The rules panel lands after the gate lets the page through.
+    expect(await screen.findByText(/That is not a verdict on the creator/)).toBeTruthy();
     expect(screen.getAllByText('Not registry-deployed')).toHaveLength(2);
   });
 
@@ -247,7 +300,7 @@ describe('ProgrammeDetail — what each phase allows', () => {
         'Needs the required reviewer votes on the application. In an oversubscribed round, whoever finalizes first decides the order.',
       ),
     ).toBeTruthy();
-    expect(screen.getByText('Now · Reviewers vote; anyone can finalize')).toBeTruthy();
+    expect(document.querySelector('[aria-current="step"]')?.textContent).toContain('Review · now');
     expect(
       screen.getAllByText('Available only while the programme is Open. This programme is Review.'),
     ).toHaveLength(2);
@@ -282,6 +335,7 @@ describe('ProgrammeDetail — what each phase allows', () => {
 
     expect(await screen.findByText('All configured deadlines have passed.')).toBeTruthy();
     expect(screen.getAllByText('Passed')).toHaveLength(4);
+    expect(screen.queryByRole('button', { name: /to your calendar/ })).toBeNull();
     expect(screen.queryByText('Refunds open after the release window closes.')).toBeNull();
 
     const refund = await screen.findByRole('link', { name: 'Refund' });
@@ -301,7 +355,7 @@ describe('ProgrammeDetail — what each phase allows', () => {
       screen.getByText('7,920.00 XLM is refundable, in proportion to what each funder put in.'),
     ).toBeTruthy();
     // Cancelled is not one of the stepper's steps, so nothing is marked current.
-    expect(screen.queryByText(/^Now · /)).toBeNull();
+    expect(document.querySelector('[aria-current="step"]')).toBeNull();
     expect(screen.getByText('Available only during Review. This programme is Cancelled.')).toBeTruthy();
   });
 
@@ -325,8 +379,9 @@ describe('ProgrammeDetail — what each phase allows', () => {
     renderProgramme(`/programme/${REAL_ID}`);
 
     expect(await screen.findByText('Could not read the phase on-chain')).toBeTruthy();
-    expect(screen.getAllByText('Reading the phase on-chain…')).toHaveLength(5);
-    expect(screen.queryByText(/^Now · /)).toBeNull();
+    // Five phase-gated actions plus the protocol fee sweep.
+    expect(screen.getAllByText('Reading the phase on-chain…')).toHaveLength(6);
+    expect(document.querySelector('[aria-current="step"]')).toBeNull();
   });
 });
 
@@ -336,7 +391,10 @@ describe('ProgrammeDetail — when a read fails', () => {
     renderProgramme(`/programme/${REAL_ID}`);
 
     expect((await screen.findAllByText('Could not reach the network.')).length).toBeGreaterThan(0);
-    const retries = screen.getAllByRole('button', { name: 'Try again' });
+    // Click the retry on a failed read's error panel, not the activity panel's.
+    const retries = screen
+      .getAllByRole('button', { name: 'Try again' })
+      .filter((button) => button.closest('.state-error'));
     fireEvent.click(retries[retries.length - 1]);
 
     expect(await screen.findByText('Budget 7,920.00 XLM')).toBeTruthy();
@@ -344,74 +402,213 @@ describe('ProgrammeDetail — when a read fails', () => {
   });
 });
 
-describe('ProgrammeDetail — the metadata document', () => {
-  it('only displays a document that hashes to the on-chain commitment', async () => {
-    const doc = {
-      schema_version: '1.0.0',
-      name: 'Riverside horticulture grants',
-      description: 'Support for smallholder horticulture in the riverside districts.',
-      vertical: 'agriculture',
-      contact: { name: 'Amina Okafor', email: 'amina@example.org' },
-    };
-    // Sorted, compact JSON — the canonical form both the app and the docs use.
-    const canonical =
-      '{"contact":{"email":"amina@example.org","name":"Amina Okafor"},"description":"Support for smallholder horticulture in the riverside districts.","name":"Riverside horticulture grants","schema_version":"1.0.0","vertical":"agriculture"}';
-    const digest = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(canonical));
-    const hash = Array.from(new Uint8Array(digest))
-      .map((byte) => byte.toString(16).padStart(2, '0'))
-      .join('');
-    programme.get_config.mockImplementation(() =>
-      unwrap(makeConfig({ metadata_hash: Buffer.from(hash, 'hex') })),
-    );
+describe('ProgrammeDetail — an address that is not a programme', () => {
+  const NOT_A_PROGRAMME = `CA${'N'.repeat(54)}`;
 
-    const fetchMock = vi.fn();
-    vi.stubGlobal('fetch', fetchMock);
+  /** Every read the page makes on the programme beyond the one that tells it what this is. */
+  const otherReads = () => [
+    programme.get_phase,
+    programme.budget,
+    programme.fee,
+    programme.total_contributed,
+    programme.total_granted,
+    programme.total_released,
+    programme.total_refunded,
+    programme.total_swept,
+    programme.is_paused,
+  ];
 
+  it('shows one notice with the address and a way back, and sends no other reads', async () => {
+    registry.is_programme.mockResolvedValue({ result: false });
+    programme.get_config.mockRejectedValue(new Error('contract not found'));
+    renderProgramme(`/programme/${NOT_A_PROGRAMME}`);
+
+    expect(await screen.findByText('No Milepost programme at this address')).toBeTruthy();
+    expect(screen.getByRole('link', { name: 'Browse programmes' }).getAttribute('href')).toBe('/directory');
+    expect(screen.getAllByText(new RegExp(NOT_A_PROGRAMME.slice(0, 6))).length).toBeGreaterThan(0);
+
+    // One notice, not a wall of per-panel failures.
+    expect(screen.queryByText('Programme rules')).toBeNull();
+    expect(screen.queryByText('Timeline')).toBeNull();
+    expect(screen.queryByText(/Something went wrong/)).toBeNull();
+    expect(screen.queryAllByRole('alert')).toHaveLength(0);
+
+    // Only the two questions that decide it were asked, once each.
+    expect(registry.is_programme).toHaveBeenCalledTimes(1);
+    expect(programme.get_config).toHaveBeenCalledTimes(1);
+    for (const read of otherReads()) expect(read).not.toHaveBeenCalled();
+  });
+
+  it('waits for the registry before reading anything else', async () => {
+    let answer!: (value: { result: boolean }) => void;
+    registry.is_programme.mockImplementation(() => new Promise((resolve) => { answer = resolve; }));
     renderProgramme(`/programme/${REAL_ID}`);
-    const urlField = await screen.findByLabelText('Metadata document URL');
-    const verify = () => screen.getByRole('button', { name: 'Fetch & verify' }) as HTMLButtonElement;
-    expect(verify().disabled).toBe(true);
 
-    // 1. The document the programme committed to is fetched and displayed.
-    fetchMock.mockResolvedValueOnce({ ok: true, text: async () => JSON.stringify(doc) });
-    fireEvent.change(urlField, { target: { value: 'https://example.org/grants.json' } });
-    fireEvent.click(verify());
-    expect(await screen.findByText('Verified against on-chain commitment.')).toBeTruthy();
-    expect(fetchMock).toHaveBeenCalledWith('https://example.org/grants.json');
-    expect(screen.getByText(/Amina Okafor/)).toBeTruthy();
+    expect(await screen.findByText('Checking this address')).toBeTruthy();
+    expect(programme.get_config).not.toHaveBeenCalled();
+    for (const read of otherReads()) expect(read).not.toHaveBeenCalled();
+
+    answer({ result: true });
+    await moneyReady();
+  });
+
+  it('leaves a real programme unchanged: no notice, and the registry is asked once', async () => {
+    renderProgramme(`/programme/${REAL_ID}`);
+    await moneyReady();
+
+    expect(screen.queryByText('No Milepost programme at this address')).toBeNull();
+    expect(registry.is_programme).toHaveBeenCalledTimes(1);
+    expect(screen.getByText('Programme rules')).toBeTruthy();
+  });
+
+  it('keeps the full page for a programme deployed outside the registry', async () => {
+    registry.is_programme.mockResolvedValue({ result: false });
+    renderProgramme(`/programme/${REAL_ID}`);
+    await moneyReady();
+
+    expect(screen.queryByText('No Milepost programme at this address')).toBeNull();
+    expect(screen.getAllByText('Not registry-deployed').length).toBeGreaterThan(0);
+  });
+
+  it('does not call a real programme a non-programme because the network failed', async () => {
+    registry.is_programme.mockResolvedValue({ result: false });
+    programme.get_config.mockRejectedValue(new Error('Failed to fetch'));
+    renderProgramme(`/programme/${REAL_ID}`);
+
+    // The page renders, and each panel that failed says so for itself.
+    expect((await screen.findAllByText('Could not reach the network.')).length).toBeGreaterThan(0);
+    expect(screen.queryByText('No Milepost programme at this address')).toBeNull();
+    expect(programme.get_phase).toHaveBeenCalled();
+  });
+
+  it('does not call a real programme a non-programme because the registry read failed', async () => {
+    registry.is_programme.mockRejectedValue(new Error('Failed to fetch'));
+    renderProgramme(`/programme/${REAL_ID}`);
+    await moneyReady();
+
+    expect(screen.queryByText('No Milepost programme at this address')).toBeNull();
+  });
+});
+
+describe('ProgrammeDetail — the description', () => {
+  const doc = {
+    schema_version: '1.1.0',
+    name: 'Riverside horticulture grants',
+    description: 'Support for smallholder horticulture in the riverside districts.',
+    vertical: 'agriculture',
+    contact: { name: 'Amina Okafor', email: 'amina@example.org' },
+    labels: [{ address: `GVER${'A'.repeat(52)}`, role: 'verifier', label: 'Riverside extension office' }],
+  };
+
+  /** Serve `stored` from the store for any hash, and `byUrl` for pasted addresses. */
+  function stubFetch(stored: string | null, byUrl: Record<string, () => Response> = {}) {
+    const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
+      const url = String(input);
+      if (url.startsWith('/api/metadata')) {
+        return stored === null ? new Response('{}', { status: 404 }) : new Response(stored, { status: 200 });
+      }
+      const handler = byUrl[url];
+      if (!handler) throw new TypeError('Failed to fetch');
+      return handler();
+    });
+    vi.stubGlobal('fetch', fetchMock);
+    return fetchMock;
+  }
+
+  async function commitTo(document: unknown) {
+    const hash = await metadataHash(document);
+    programme.get_config.mockImplementation(() => unwrap(makeConfig({ metadata_hash: Buffer.from(hash, 'hex') })));
+    return hash;
+  }
+
+  it('shows the committed description from the store, once it hashes to the commitment', async () => {
+    const hash = await commitTo(doc);
+    const fetchMock = stubFetch(canonicalize(doc));
+    renderProgramme(`/programme/${REAL_ID}`);
+
+    expect(await screen.findByText(doc.description)).toBeTruthy();
+    expect(screen.getByText(/Written by the creator, checked against the hash on the chain/)).toBeTruthy();
+    expect(fetchMock).toHaveBeenCalledWith(`/api/metadata?hash=${hash}`);
+    expect(screen.getByText('amina@example.org')).toBeTruthy();
+    expect(screen.getByText(/1 reviewer and verifier name/)).toBeTruthy();
+
+    // The creator's name for a verifier sits beside its address, and its role is read now.
+    fireEvent.click(screen.getByRole('tab', { name: 'Verifiers' }));
+    expect(await screen.findByText('Riverside extension office')).toBeTruthy();
+    expect(await screen.findByText('Holds the role now')).toBeTruthy();
+  });
+
+  it('refuses a stored document that does not match, and shows nothing from it', async () => {
+    await commitTo(doc);
+    stubFetch(canonicalize({ ...doc, description: 'Someone else’s words.' }));
+    renderProgramme(`/programme/${REAL_ID}`);
+
+    expect(await screen.findByText(/Refused: the document doesn’t match/)).toBeTruthy();
+    expect(screen.queryByText('Someone else’s words.')).toBeNull();
+    expect(screen.queryByText(/Written by the creator/)).toBeNull();
+  });
+
+  it('falls back to a pasted address when the store has no document, held to the same check', async () => {
+    await commitTo(doc);
+    stubFetch(null, {
+      'https://example.org/grants.json': () => new Response(JSON.stringify(doc)),
+      'https://example.org/changed.json': () => new Response(JSON.stringify({ ...doc, description: 'Changed.' })),
+      'https://example.org/broken.json': () => new Response('not json'),
+      'https://example.org/down.json': () => new Response('', { status: 500 }),
+    });
+    renderProgramme(`/programme/${REAL_ID}`);
+
+    expect(await screen.findByText(/has no document for this hash/)).toBeTruthy();
+    const field = screen.getByLabelText('Document address');
+    const go = (url: string) => {
+      fireEvent.change(field, { target: { value: url } });
+      fireEvent.click(screen.getByRole('button', { name: 'Fetch and check' }));
+    };
+
+    go('https://example.org/grants.json');
+    expect(await screen.findByText(/This document hashes to the programme’s commitment/)).toBeTruthy();
     expect(screen.getByText('amina@example.org')).toBeTruthy();
 
-    // 2. A document that does not hash to the commitment is refused, with both
-    // hashes shown so the mismatch can be checked.
-    fetchMock.mockResolvedValueOnce({
-      ok: true,
-      text: async () => JSON.stringify({ ...doc, description: 'Changed.' }),
-    });
-    fireEvent.change(urlField, { target: { value: 'https://example.org/changed.json' } });
-    fireEvent.click(verify());
-    expect(await screen.findByText('Hash mismatch — document refused.')).toBeTruthy();
-    expect(screen.getByText('Fetched document hash')).toBeTruthy();
-    expect(screen.getByText('On-chain commitment')).toBeTruthy();
+    go('https://example.org/changed.json');
+    expect(await screen.findByText(/Refused: the document doesn’t match/)).toBeTruthy();
 
-    // 3. Broken JSON and a missing required field each say exactly what is wrong.
-    fetchMock.mockResolvedValueOnce({ ok: true, text: async () => 'not json' });
-    fireEvent.change(urlField, { target: { value: 'https://example.org/broken.json' } });
-    fireEvent.click(verify());
-    expect(await screen.findByText('Document is malformed.')).toBeTruthy();
-    expect(screen.getByText(/The document is not valid JSON\./)).toBeTruthy();
+    go('https://example.org/broken.json');
+    expect(await screen.findByText('The document is not valid JSON.', { exact: false })).toBeTruthy();
 
-    fetchMock.mockResolvedValueOnce({ ok: true, text: async () => JSON.stringify({ schema_version: '1.0.0' }) });
-    fireEvent.change(urlField, { target: { value: 'https://example.org/partial.json' } });
-    fireEvent.click(verify());
-    expect(await screen.findByText(/Required field "name" is missing or empty\./)).toBeTruthy();
+    go('https://example.org/down.json');
+    expect(await screen.findByText(/The server answered 500/)).toBeTruthy();
+    expect(screen.getByText(/The programme works without it/)).toBeTruthy();
+  });
 
-    // 4. An unreachable document leaves the commitment visible and says the
-    // programme still works.
-    fetchMock.mockResolvedValueOnce({ ok: false, status: 500, statusText: 'Server Error' });
-    fireEvent.change(urlField, { target: { value: 'https://example.org/down.json' } });
-    fireEvent.click(verify());
-    expect(await screen.findByText('Metadata unavailable.')).toBeTruthy();
-    expect(screen.getByText(/Server returned 500 Server Error\./)).toBeTruthy();
-    expect(screen.getByText(/only the human-readable description is missing/)).toBeTruthy();
+  it('says plainly when no description was committed', async () => {
+    programme.get_config.mockImplementation(() => unwrap(makeConfig({ metadata_hash: Buffer.alloc(32) })));
+    renderProgramme(`/programme/${REAL_ID}`);
+    expect(await screen.findByText(/No description was committed/)).toBeTruthy();
+  });
+});
+
+describe('ProgrammeDetail — contract held balance', () => {
+  it('shows the live contract balance beside what the counters expect, with no warning when they match', async () => {
+    contractBalanceState.data = 80000000000n;
+    renderProgramme(`/programme/${REAL_ID}`);
+    await moneyReady();
+
+    const rules = screen.getByRole('list', { name: 'Programme rules' });
+    expect(within(rules).getByText('Held by the contract')).toBeTruthy();
+    expect(within(rules).getByText('8,000.00 XLM')).toBeTruthy();
+    expect(within(rules).getByText('Counters expect 8,000.00 XLM.')).toBeTruthy();
+    expect(screen.queryByText(/Contract balance mismatch/)).toBeNull();
+  });
+
+  it('shows a risk warning naming both figures when the held balance differs beyond dust', async () => {
+    contractBalanceState.data = 75000000000n;
+    renderProgramme(`/programme/${REAL_ID}`);
+    await moneyReady();
+
+    const mismatch = await screen.findByText(/Contract balance mismatch/);
+    const alert = mismatch.closest('[role="alert"]');
+    expect(alert).toBeTruthy();
+    expect(alert?.textContent).toContain('7,500.00 XLM');
+    expect(alert?.textContent).toContain('8,000.00 XLM');
   });
 });

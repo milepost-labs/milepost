@@ -1,23 +1,23 @@
 /**
- * Quiet, warning-toned strip above the page content. Not a modal or a toast —
- * it should read like ambient status, not an interruption, and it must not
- * cause layout shift when it appears since it slots above content that is
- * already there.
+ * A strip above the page content. Not a modal or a toast — it should read
+ * like ambient status, not an interruption, and it must not cause layout shift
+ * when it appears since it slots above content that is already there.
  */
 .offline-banner {
   display: flex;
   align-items: center;
+  justify-content: center;
   gap: var(--space-2);
   padding: var(--space-2) var(--page-gutter);
   min-height: var(--space-6);
-  background: var(--warning-soft);
+  background: var(--danger-soft);
+  color: var(--danger);
   font-size: var(--text-sm);
-  border-bottom: 1px solid color-mix(in srgb, var(--warning) 35%, transparent);
+  font-weight: var(--weight-semibold);
 }
 
 .offline-banner svg {
   flex-shrink: 0;
-  color: var(--warning);
 }
 
 @media (max-width: 360px) {

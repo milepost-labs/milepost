@@ -1,12 +1,17 @@
 import { useMemo, useState, type ChangeEvent, type FormEvent } from 'react';
 import { Buffer } from 'buffer';
+import { Ban, Check, Search, ShieldCheck } from 'lucide-react';
 import type { Client as ProgrammeClient } from '@milepost/program';
-import type { Attestation } from '@milepost/attest';
-import { Badge, Field } from '../components/ui';
+import type { Attestation, Schema } from '@milepost/attest';
+import { Badge, Button, CopyButton, Field, Notice, PageHead, Receipt, SampleTag, Segmented } from '../components/ui';
+import { samplesEnabled } from '../lib/samples';
+import type { ReceiptRow } from '../components/ui';
 import { useContractRead, useContractResult } from '../hooks';
+import { useKeyedRead } from '../hooks/useKeyedRead';
+import { usePageTitle } from '../hooks/usePageTitle';
 import { useSoroban } from '../context/useSoroban';
 import { explain } from '../lib/errors';
-import { formatDateTime, looksLikeAddress } from '../lib/format';
+import { formatDateTime, looksLikeAddress, truncateAddress } from '../lib/format';
 import { rpcServer } from '../lib/txLookup';
 import { describeWindow } from '../lib/contractEvents';
 import {
@@ -26,17 +31,53 @@ import {
 import './AttestationLookup.css';
 
 type LookupMode = 'id' | 'claim';
+type Status = 'valid' | 'revoked' | 'expired' | 'unknown';
 
-interface ResultRow {
-  key: string;
-  value: string;
+/** One attestation found: on the chain (by id or by address) or a tagged sample. */
+interface Found {
+  uid: string;
+  status: Status;
+  attestation: Attestation | null;
+  sample?: AttestationFixture;
+  /** For an address search: how the address relates to it, and the event's ledger. */
+  role?: AttestationMatch['role'];
+  eventLedger?: number;
+}
+
+const ROLE_LABEL: Record<AttestationMatch['role'], string> = {
+  subject: 'About this address',
+  attester: 'Signed by this address',
+  both: 'Signed by and about this address',
+};
+
+const STATUS_LABEL: Record<Status, string> = {
+  valid: 'Valid',
+  revoked: 'Revoked',
+  expired: 'Expired',
+  unknown: 'Unreadable',
+};
+
+const STATUS_NOTE: Record<Status, { tone: 'ok' | 'risk' | 'warn'; text: string }> = {
+  valid: { tone: 'ok', text: 'It can unlock one tranche in a programme that trusts this signer and schema.' },
+  revoked: { tone: 'risk', text: 'The signer withdrew it. It can’t unlock anything now; a tranche it already released stays released.' },
+  expired: { tone: 'warn', text: 'Its expiry has passed, so it can’t unlock anything.' },
+  unknown: {
+    tone: 'warn',
+    text: 'The event shows it was made, but its entry couldn’t be read now. Archived entries need a keepalive before they can be read.',
+  },
+};
+
+function short(hex: string) {
+  return hex.length > 20 ? `${hex.slice(0, 10)}…${hex.slice(-6)}` : hex;
+}
+
+function StatusPill({ status }: { status: Status }) {
+  return <span className={`att-pill att-pill--${status}`}>{STATUS_LABEL[status]}</span>;
 }
 
 /**
  * Whether a proof has been spent is a per-programme fact, so it is only shown
- * once a programme is selected. Rendering it as its own component keeps the
- * read scoped to one attestation and lets each result carry its own status
- * (issue #408).
+ * once a programme is chosen.
  */
 function SpentStatus({ programme, uid }: { programme: ProgrammeClient | null; uid: string }) {
   const read = useContractRead<boolean>(
@@ -44,7 +85,6 @@ function SpentStatus({ programme, uid }: { programme: ProgrammeClient | null; ui
     [programme, uid],
     { enabled: programme !== null, contract: 'program' },
   );
-
   if (!programme) return <Badge tone="neutral">Select a programme to check usage</Badge>;
   if (read.loading) return <Badge tone="neutral">Checking this programme…</Badge>;
   if (read.error) return <Badge tone="warning">Could not check this programme</Badge>;
@@ -55,135 +95,116 @@ function SpentStatus({ programme, uid }: { programme: ProgrammeClient | null; ui
   );
 }
 
-function rowsFor(attestation: AttestationFixture): ResultRow[] {
-  const base: ResultRow[] = [
-    { key: 'Schema', value: attestation.schema },
-    { key: 'Attester', value: attestation.attester },
-    { key: 'Subject', value: attestation.subject },
-    { key: 'Signed at ledger', value: attestation.ledger.toLocaleString() },
-  ];
-  return base.concat(
-    Object.entries(attestation.data).map(([key, value]) => ({ key, value: String(value) })),
-  );
-}
-
-const ROLE_LABEL: Record<AttestationMatch['role'], string> = {
-  subject: 'About this address',
-  attester: 'Signed by this address',
-  both: 'Signed by and about this address',
-};
-
-/**
- * One attestation found by address. Revoked and expired come from the fresh
- * `attest.get` read; "used" is per programme, so a valid one defers to
- * `SpentStatus` for the selected programme.
- */
-function MatchCard({
-  match,
+/** The selected attestation: its status, what it says, and its use in the chosen programme. */
+function Detail({
+  found,
   programme,
   programmeId,
-  nowSeconds,
-  onOpen,
 }: {
-  match: AttestationMatch;
+  found: Found;
   programme: ProgrammeClient | null;
   programmeId: string | null;
-  nowSeconds: number;
-  onOpen: (uid: string) => void;
 }) {
-  const { attestation } = match;
-  const status = attestation ? attestationStatus(attestation, nowSeconds) : null;
+  const { attest } = useSoroban();
+  const a = found.attestation;
+  const schemaHex = a ? Buffer.from(a.schema).toString('hex') : null;
+  const schemaRead = useKeyedRead<Schema>(schemaHex, (uid) =>
+    attest.get_schema({ uid: Buffer.from(uid, 'hex') }).then((r) => r.result.unwrap()),
+  );
+  const note = STATUS_NOTE[found.status];
+
+  const rows: ReceiptRow[] = a
+    ? [
+        {
+          label: 'Schema',
+          value: (
+            <span className="att-detail__schema">
+              {schemaRead.status === 'ok' && <span>{schemaRead.data.definition}</span>}
+              <span className="numeric" title={schemaHex ?? ''}>
+                {short(schemaHex ?? '')}
+              </span>
+            </span>
+          ),
+          text: true,
+        },
+        { label: 'Signed by', value: <span title={a.attester}>{truncateAddress(a.attester, 6, 6)}</span> },
+        { label: 'About', value: <span title={a.subject}>{truncateAddress(a.subject, 6, 6)}</span> },
+        { label: 'Payload hash', value: short(Buffer.from(a.data_hash).toString('hex')) },
+        { label: 'Signed', value: formatDateTime(a.created_at), text: true },
+        ...(a.expires_at !== undefined && a.expires_at !== null
+          ? [{ label: 'Expires', value: formatDateTime(a.expires_at), text: true }]
+          : []),
+        ...(a.revoked_at !== undefined && a.revoked_at !== null
+          ? [{ label: 'Revoked', value: formatDateTime(a.revoked_at), text: true }]
+          : []),
+      ]
+    : found.sample
+      ? [
+          { label: 'Schema', value: found.sample.schema },
+          { label: 'Signed by', value: found.sample.attester },
+          { label: 'About', value: found.sample.subject },
+          { label: 'Signed at ledger', value: found.sample.ledger.toLocaleString('en-GB') },
+          ...Object.entries(found.sample.data).map(([k, v]) => ({ label: k, value: String(v) })),
+        ]
+      : [];
+  if (found.eventLedger !== undefined) rows.push({ label: 'Event ledger', value: found.eventLedger.toLocaleString('en-GB') });
 
   return (
-    <article className="attest-result-card">
-      <div className="attest-result-card__head">
-        <span className="attest-result-card__uid">{match.uid}</span>
-        {status === null && <Badge tone="warning">Could not read on-chain</Badge>}
-        {status === 'revoked' && <Badge tone="danger">Revoked</Badge>}
-        {status === 'expired' && <Badge tone="warning">Expired</Badge>}
-        {status === 'valid' && (
-          <>
-            <Badge tone="success">Valid</Badge>
-            <SpentStatus programme={programme} uid={match.uid} />
-          </>
-        )}
+    <section className="att-detail" aria-labelledby="att-detail-title">
+      <p className="att-detail__eyebrow">
+        Attestation {found.sample && <SampleTag />}
+      </p>
+      <h2 id="att-detail-title" className="att-detail__uid numeric">
+        <span title={found.uid}>{short(found.uid)}</span>
+        <CopyButton value={found.uid} label="Copy attestation id" />
+      </h2>
+      {found.role && <p className="att-detail__role">{ROLE_LABEL[found.role]}</p>}
+      <Notice tone={note.tone}>
+        <span>
+          <strong>{STATUS_LABEL[found.status]}.</strong> {note.text}
+        </span>
+      </Notice>
+      <div className="att-detail__usage">
+        <span>Used here?</span>
+        {/* Still checked when revoked: a proof revoked after it released must not hide that money moved. */}
+        <SpentStatus programme={programme} uid={found.uid} />
       </div>
-      <span className="attest-result-card__programme">{ROLE_LABEL[match.role]}</span>
-      {status === 'valid' && programmeId && (
-        <span className="attest-result-card__programme">
+      {programmeId && (
+        <p className="att-detail__fine">
           Usage checked against <span className="numeric">{programmeId}</span>
-        </span>
+        </p>
       )}
-      {attestation ? (
-        <>
-          <div className="attest-result-row">
-            <span className="attest-result-row__key">Schema</span>
-            <span className="attest-result-row__value numeric">
-              {Buffer.from(attestation.schema).toString('hex')}
-            </span>
-          </div>
-          <div className="attest-result-row">
-            <span className="attest-result-row__key">Attester</span>
-            <span className="attest-result-row__value numeric">{attestation.attester}</span>
-          </div>
-          <div className="attest-result-row">
-            <span className="attest-result-row__key">Subject</span>
-            <span className="attest-result-row__value numeric">{attestation.subject}</span>
-          </div>
-          <div className="attest-result-row">
-            <span className="attest-result-row__key">Signed</span>
-            <span className="attest-result-row__value">{formatDateTime(attestation.created_at)}</span>
-          </div>
-          {attestation.expires_at !== undefined && attestation.expires_at !== null && (
-            <div className="attest-result-row">
-              <span className="attest-result-row__key">Expires</span>
-              <span className="attest-result-row__value">{formatDateTime(attestation.expires_at)}</span>
-            </div>
-          )}
-        </>
-      ) : (
-        <span className="attest-not-found__detail">
-          The event shows this attestation was made, but its entry could not be read now.
-          Archived entries need a keepalive before they can be read.
-        </span>
-      )}
-      <div className="attest-result-row">
-        <span className="attest-result-row__key">Event ledger</span>
-        <span className="attest-result-row__value">{match.ledger.toLocaleString()}</span>
-      </div>
-      <button type="button" className="attest-lookup__sample" onClick={() => onOpen(match.uid)}>
-        Look up this id
-      </button>
-    </article>
+      <Receipt rows={rows} />
+      <p className="att-detail__fine">
+        One attestation can unlock a tranche in two programmes that trust the same verifier and schema. That’s by design.
+      </p>
+    </section>
   );
 }
 
 const EMPTY_CLAIM_FORM = { uid: '', subject: '', schema: '', attester: '' };
 
 /**
- * Attestation lookup.
+ * `/attestations`: look up any attestation with no sign-in.
  *
- * Two modes. "Look up by id" answers what an attestation says — reading on-chain
- * via `attest.get` for real 32-byte UIDs. A G… or C… address is searched in the
- * attest contract's recent `Attested` events as subject or attester, and each
- * hit is re-read so its status is current (issue #536). Sample ids stay behind
- * the sample label.
- * "Check a claim" answers the narrower question: does this subject hold a valid
- * claim under this schema from this attester.
+ * "Look up" takes a 64-character id (read with `attest.get`) or a G…/C…
+ * address, which is searched in the attest contract's recent `Attested`
+ * events as subject or signer, each hit re-read so its status is current.
+ * Whether a proof was used is a per-programme fact, read from a programme
+ * the reader names. Sample ids stay behind the sample tag.
+ *
+ * "Check a claim" answers the narrower question: does this subject hold a
+ * valid claim under this schema from this signer.
  */
 export const AttestationLookup = () => {
+  usePageTitle('Attestation lookup');
   const { programmeAt, attest, rpcUrl } = useSoroban();
   const [mode, setMode] = useState<LookupMode>('id');
 
-  // Whether a proof was used is answered by one programme, not by the
-  // attestation itself. Nothing is guessed until a programme is selected.
   const [programmeInput, setProgrammeInput] = useState('');
   const [programmeId, setProgrammeId] = useState<string | null>(null);
   const [programmeError, setProgrammeError] = useState<string | null>(null);
-  const programme = useMemo(
-    () => (programmeId ? programmeAt(programmeId) : null),
-    [programmeAt, programmeId],
-  );
+  const programme = useMemo(() => (programmeId ? programmeAt(programmeId) : null), [programmeAt, programmeId]);
 
   const selectProgramme = (event: FormEvent) => {
     event.preventDefault();
@@ -203,94 +224,92 @@ export const AttestationLookup = () => {
 
   const [query, setQuery] = useState('');
   const [searched, setSearched] = useState('');
+  const [selected, setSelected] = useState<string | null>(null);
 
   const handleSubmit = (event: FormEvent) => {
     event.preventDefault();
     setSearched(query);
+    setSelected(null);
   };
 
   const pick = (uid: string) => {
     setMode('id');
     setQuery(uid);
     setSearched(uid);
+    setSelected(null);
   };
 
   const trimmed = searched.trim();
   const cleanHex = trimmed.toLowerCase();
-  const isHex64 = /^[0-9a-fA-F]{64}$/.test(cleanHex);
+  const isHex64 = /^[0-9a-f]{64}$/.test(cleanHex);
   const isAddress = isSearchableAddress(trimmed);
   const searchedYet = trimmed.length > 0;
+  const [nowSeconds] = useState(() => Math.floor(Date.now() / 1000));
 
-  const chainRead = useContractResult<Attestation>(
-    () => attest.get({ uid: Buffer.from(cleanHex, 'hex') }),
-    [attest, cleanHex],
-    { enabled: isHex64 },
-  );
-
-  const chainAttestation = isHex64 ? chainRead.data : null;
+  const chainRead = useContractResult<Attestation>(() => attest.get({ uid: Buffer.from(cleanHex, 'hex') }), [attest, cleanHex], {
+    enabled: isHex64,
+  });
   const chainLoading = isHex64 && chainRead.loading;
   const chainNotFound = isHex64 && !chainRead.loading && Boolean(chainRead.error);
 
-  // A real address is searched on-chain only, so sample attestations never
-  // mix into what the chain says about it.
   const addressRead = useContractRead<AttestationSearch>(
     async () => ({ result: await searchAttestations(rpcServer(rpcUrl), attest, trimmed) }),
     [attest, rpcUrl, trimmed],
     { enabled: isAddress, contract: 'attest' },
   );
-  // A new search keeps the previous result in `data` until it lands, so only
-  // a result for the address on screen counts.
-  const addressSearch =
-    isAddress && addressRead.data?.address === trimmed ? addressRead.data : null;
-  const addressError = isAddress && !addressSearch && addressRead.error
-    ? explain(addressRead.error, 'attest').message
-    : null;
+  // A new search keeps the previous result until it lands, so only one for the address on screen counts.
+  const addressSearch = isAddress && addressRead.data?.address === trimmed ? addressRead.data : null;
+  const addressError = isAddress && !addressSearch && addressRead.error ? explain(addressRead.error, 'attest').message : null;
   const addressLoading = isAddress && !addressSearch && !addressError;
-  // Read once when the page opens; React render must stay pure, so expiry is
-  // judged against that moment rather than a clock read on every render.
-  const [nowSeconds] = useState(() => Math.floor(Date.now() / 1000));
 
-  const hits = searchedYet && !isHex64 && !isAddress
-    ? FIXTURE_ATTESTATIONS.filter(
-        (a) =>
-          a.uid.toLowerCase() === cleanHex ||
-          a.subject.toLowerCase() === cleanHex ||
-          a.attester.toLowerCase() === cleanHex,
-      )
-    : [];
+  const samples =
+    samplesEnabled() && searchedYet && !isHex64 && !isAddress
+      ? FIXTURE_ATTESTATIONS.filter(
+          (a) =>
+            a.uid.toLowerCase() === cleanHex || a.subject.toLowerCase() === cleanHex || a.attester.toLowerCase() === cleanHex,
+        )
+      : [];
 
+  const results: Found[] = isHex64
+    ? chainRead.data && !chainRead.error
+      ? [
+          {
+            uid: cleanHex,
+            attestation: chainRead.data,
+            status: attestationStatus(chainRead.data, nowSeconds),
+          },
+        ]
+      : []
+    : addressSearch
+      ? addressSearch.matches.map((m) => ({
+          uid: m.uid,
+          attestation: m.attestation,
+          status: m.attestation ? attestationStatus(m.attestation, nowSeconds) : 'unknown',
+          role: m.role,
+          eventLedger: m.ledger,
+        }))
+      : samples.map((s) => ({ uid: s.uid, attestation: null, sample: s, status: s.revoked ? 'revoked' : 'valid' }));
+  const current = results.find((r) => r.uid === selected) ?? results[0] ?? null;
+
+  // --- Check a claim ---------------------------------------------------------
   const [claimForm, setClaimForm] = useState(EMPTY_CLAIM_FORM);
   const [claimErrors, setClaimErrors] = useState<VerifyClaimFieldErrors>({});
   const [claimResult, setClaimResult] = useState<VerifyClaimResult | null>(null);
   const [claimChecking, setClaimChecking] = useState(false);
   const [claimError, setClaimError] = useState<string | null>(null);
-
   const updateClaimField = (field: keyof typeof EMPTY_CLAIM_FORM) => (event: ChangeEvent<HTMLInputElement>) => {
     setClaimForm((prev) => ({ ...prev, [field]: event.target.value }));
   };
-
   const handleClaimSubmit = async (event: FormEvent) => {
     event.preventDefault();
     const errors = validateVerifyClaimInput(claimForm);
     setClaimErrors(errors);
-    if (Object.keys(errors).length > 0) {
-      setClaimResult(null);
-      setClaimError(null);
-      return;
-    }
-
     setClaimResult(null);
     setClaimError(null);
+    if (Object.keys(errors).length > 0) return;
     setClaimChecking(true);
-
     try {
-      // uid and schema are valid 64-char hex (validated above), so this is a
-      // real on-chain call. The fixture path (`verifyClaim`) is kept as a
-      // fallback for callers that pass human-readable sample ids, but
-      // `validateVerifyClaimInput` now requires hex, so sample forms that
-      // predate hex uids will show a validation error before reaching here.
-      const result = await verifyClaimOnChain(attest, claimForm);
-      setClaimResult(result);
+      setClaimResult(await verifyClaimOnChain(attest, claimForm));
     } catch (caught) {
       setClaimError(explain(caught, 'attest').message);
     } finally {
@@ -300,180 +319,125 @@ export const AttestationLookup = () => {
 
   return (
     <div className="attest-lookup">
-      <header className="attest-lookup__header">
-        <h1>Look up an attestation</h1>
-        <p className="typo-text text-muted">
-          An attestation is a signed statement that a condition was met. Check what was
-          signed, about whom, and whether it has already released a tranche (one instalment
-          of an award). No sign-in needed.
-        </p>
-      </header>
+      <PageHead eyebrow="Verify" title="Attestation lookup">
+        <p>Check any attestation: who signed it, about whom, and whether it’s still valid. No sign-in needed.</p>
+      </PageHead>
 
-      <form onSubmit={selectProgramme} className="attest-lookup__programme">
-        <Field
-          label="Programme (to check whether a proof was used)"
-          placeholder="C…"
-          value={programmeInput}
-          onChange={(event) => {
-            setProgrammeInput(event.target.value);
-            setProgrammeError(null);
-          }}
-          error={programmeError}
-          hint="Usage is per programme. Without one selected, the used state is not guessed."
-          spellCheck={false}
-        />
-        <button type="submit" className="attest-lookup__submit">
-          Use programme
-        </button>
-        {programmeId && (
-          <button
-            type="button"
-            className="attest-lookup__programme-clear"
-            onClick={() => {
-              setProgrammeId(null);
-              setProgrammeInput('');
-            }}
-          >
-            Clear
-          </button>
-        )}
-      </form>
-
-      <div className="attest-lookup__tabs" role="tablist" aria-label="Lookup mode">
-        <button
-          type="button"
-          role="tab"
-          aria-selected={mode === 'id'}
-          className={`attest-lookup__tab${mode === 'id' ? ' attest-lookup__tab--active' : ''}`}
-          onClick={() => setMode('id')}
-        >
-          Look up by id
-        </button>
-        <button
-          type="button"
-          role="tab"
-          aria-selected={mode === 'claim'}
-          className={`attest-lookup__tab${mode === 'claim' ? ' attest-lookup__tab--active' : ''}`}
-          onClick={() => setMode('claim')}
-        >
-          Check a claim
-        </button>
-      </div>
+      <Segmented
+        label="Lookup mode"
+        value={mode}
+        onChange={setMode}
+        options={[
+          { value: 'id', label: 'Find an attestation' },
+          { value: 'claim', label: 'Check a claim' },
+        ]}
+      />
 
       {mode === 'id' && (
         <>
-          <form role="search" onSubmit={handleSubmit} className="attest-lookup__form">
-            <Field
-              label="Attestation id or address"
-              placeholder="Attestation id, recipient or verifier"
-              value={query}
-              onChange={(event) => setQuery(event.target.value)}
-            />
-            <button type="submit" className="attest-lookup__submit">
-              Look up
-            </button>
-          </form>
-
-          <div className="attest-lookup__samples">
-            <span>Sample ids:</span>
-            {FIXTURE_ATTESTATIONS.map((a) => (
-              <button
-                key={a.uid}
-                type="button"
-                className="attest-lookup__sample"
-                onClick={() => pick(a.uid)}
-              >
-                {a.uid}
-              </button>
-            ))}
+          <div className="attest-lookup__panel">
+            <form role="search" onSubmit={handleSubmit} className="attest-lookup__row">
+              <Field
+                label="Attestation id or address"
+                hint="A 64-character id, or the address of a recipient or verifier."
+                placeholder="Attestation id, recipient or verifier"
+                value={query}
+                onChange={(event) => setQuery(event.target.value)}
+                autoComplete="off"
+                spellCheck={false}
+              />
+              <Button type="submit" icon={<Search size={18} aria-hidden="true" />}>
+                Look up
+              </Button>
+            </form>
+            <form onSubmit={selectProgramme} className="attest-lookup__row">
+              <Field
+                label="Programme (to check whether a proof was used)"
+                placeholder="C…"
+                value={programmeInput}
+                onChange={(event) => {
+                  setProgrammeInput(event.target.value);
+                  setProgrammeError(null);
+                }}
+                error={programmeError}
+                hint="Use is per programme, so it isn’t guessed until you name one."
+                autoComplete="off"
+                spellCheck={false}
+              />
+              <Button type="submit" variant="secondary">
+                Use programme
+              </Button>
+              {programmeId && (
+                <Button
+                  variant="ghost"
+                  onClick={() => {
+                    setProgrammeId(null);
+                    setProgrammeInput('');
+                  }}
+                >
+                  Clear
+                </Button>
+              )}
+            </form>
+            {samplesEnabled() && (
+              <div className="attest-lookup__samples">
+                <SampleTag />
+                <span>Sample ids:</span>
+                {FIXTURE_ATTESTATIONS.map((a) => (
+                  <button key={a.uid} type="button" className="attest-lookup__sample numeric" onClick={() => pick(a.uid)}>
+                    {a.uid}
+                  </button>
+                ))}
+              </div>
+            )}
           </div>
 
-          <div aria-live="polite" className="attest-lookup__results">
-            {chainLoading && (
-              <div className="attest-lookup__status" role="status">
-                <span>Reading attestation from chain…</span>
-              </div>
-            )}
+          <div aria-live="polite" className="attest-lookup__status">
+            {chainLoading && <p role="status">Reading the attestation from the chain…</p>}
+            {addressLoading && <p role="status">Searching recent attestations for this address…</p>}
+          </div>
 
-            {chainAttestation && (
-              <article key={cleanHex} className="attest-result-card">
-                <div className="attest-result-card__head">
-                  <span className="attest-result-card__uid">
-                    {chainAttestation.uid ? Buffer.from(chainAttestation.uid).toString('hex') : cleanHex}
-                  </span>
-                  <Badge tone={chainAttestation.revoked_at ? 'danger' : 'success'}>
-                    {chainAttestation.revoked_at ? 'Revoked' : 'Valid on-chain'}
-                  </Badge>
-                </div>
-                <div className="attest-result-row">
-                  <span className="attest-result-row__key">Schema</span>
-                  <span className="attest-result-row__value numeric">
-                    {Buffer.from(chainAttestation.schema).toString('hex')}
-                  </span>
-                </div>
-                <div className="attest-result-row">
-                  <span className="attest-result-row__key">Attester</span>
-                  <span className="attest-result-row__value numeric">{chainAttestation.attester}</span>
-                </div>
-                <div className="attest-result-row">
-                  <span className="attest-result-row__key">Subject</span>
-                  <span className="attest-result-row__value numeric">{chainAttestation.subject}</span>
-                </div>
-                <div className="attest-result-row">
-                  <span className="attest-result-row__key">Payload hash</span>
-                  <span className="attest-result-row__value numeric">
-                    {Buffer.from(chainAttestation.data_hash).toString('hex')}
-                  </span>
-                </div>
-                <div className="attest-result-row">
-                  <span className="attest-result-row__key">Signed at ledger</span>
-                  <span className="attest-result-row__value">
-                    {String(chainAttestation.created_at)}
-                  </span>
-                </div>
-              </article>
-            )}
+          {(chainNotFound || (searchedYet && !isHex64 && !isAddress && samples.length === 0)) && (
+            <Notice tone="warn" role="alert">
+              <span>
+                <strong>Nothing found for “{trimmed}”</strong>. Check the id. Attestations are read on the chain; archived
+                ones need a keepalive before they can be read.
+              </span>
+            </Notice>
+          )}
 
-            {isHex64 && chainNotFound && (
-              <div className="attest-not-found" role="alert">
-                <span className="attest-not-found__title">Nothing found for &ldquo;{searched.trim()}&rdquo;</span>
-                <span className="attest-not-found__detail">
-                  Check the id. Attestations are read on-chain; archived ones need a keepalive
-                  before they can be read.
-                </span>
-              </div>
-            )}
+          {addressError && (
+            <Notice tone="risk" role="alert">
+              <span>
+                <strong>Could not search attestations</strong>. {addressError}
+              </span>
+              <Button size="sm" variant="secondary" onClick={addressRead.refetch}>
+                Try again
+              </Button>
+            </Notice>
+          )}
 
-            {addressLoading && (
-              <div className="attest-lookup__status" role="status">
-                <span>Searching recent attestations for this address…</span>
-              </div>
-            )}
+          {addressSearch && (
+            <p className="attest-lookup__window" role="note">
+              {addressSearch.matches.length === 0
+                ? 'No attestations name this address as recipient or verifier'
+                : `${addressSearch.matches.length} attestation${addressSearch.matches.length === 1 ? '' : 's'} name this address`}{' '}
+              in ledgers{' '}
+              <span className="numeric">
+                {addressSearch.window.fromLedger.toLocaleString()}–{addressSearch.window.toLedger.toLocaleString()}
+              </span>{' '}
+              ({describeWindow(addressSearch.window)}, the network’s event history). Older attestations are not listed
+              here; look them up by id.
+              {addressSearch.truncated && ' This contract was busy, so only the oldest part of that window was searched.'}
+            </p>
+          )}
 
-            {addressError && (
-              <div className="attest-not-found" role="alert">
-                <span className="attest-not-found__title">Could not search attestations</span>
-                <span className="attest-not-found__detail">{addressError}</span>
-                <button type="button" className="attest-lookup__sample" onClick={addressRead.refetch}>
-                  Try again
-                </button>
-              </div>
-            )}
-
-            {addressSearch && (
-              <div className="attest-lookup__limitation" role="note">
-                <p>
-                  {addressSearch.matches.length === 0
-                    ? 'No attestations name this address as recipient or verifier'
-                    : `${addressSearch.matches.length} attestation${addressSearch.matches.length === 1 ? '' : 's'} name this address`}{' '}
-                  in ledgers{' '}
-                  <span className="numeric">
-                    {addressSearch.window.fromLedger.toLocaleString()}–
-                    {addressSearch.window.toLedger.toLocaleString()}
-                  </span>{' '}
-                  ({describeWindow(addressSearch.window)}, the network&rsquo;s event history).
-                  Older attestations are not listed here; look them up by id.
-                  {addressSearch.truncated && ' This contract was busy, so only the oldest part of that window was searched.'}
+          {results.length > 0 && current && (
+            <div className="attest-lookup__results">
+              <section aria-label="Results">
+                <p className="attest-lookup__count">
+                  {results.length} result{results.length === 1 ? '' : 's'}
+                  {!current.sample && ' · read on the chain just now'}
                 </p>
               </div>
             )}
@@ -521,93 +485,81 @@ export const AttestationLookup = () => {
                       <span className="attest-result-row__value">{row.value}</span>
                     </div>
                   ))}
-                </article>
-              );
-            })}
-
-            {hits.length > 0 && (
-              <span className="attest-lookup__sample-note">
-                <Badge tone="neutral">Sample data</Badge> Sample attestations for the design phase.
-              </span>
-            )}
-          </div>
+                </ul>
+              </section>
+              <Detail key={current.uid} found={current} programme={programme} programmeId={programmeId} />
+            </div>
+          )}
         </>
       )}
 
       {mode === 'claim' && (
-        <>
-          <p className="typo-text text-muted attest-lookup__claim-intro">
-            Looking up by id shows what an attestation says. This answers a narrower question:
-            does <em>this</em> subject hold a valid claim under <em>this</em> schema (the checklist it was signed against) from{' '}
-            <em>this</em> attester? An attestation can be perfectly valid and still be the wrong
-            one — signed by someone else, or about someone else — so gating anything of value on
-            it should use this check, not just whether it exists.
-          </p>
-          <p className="typo-text text-muted attest-lookup__claim-intro">
-            All four fields are read on-chain: uid and schema are 64-character hex strings
-            (the on-chain ids); subject and attester are Stellar addresses.
-          </p>
-
-          <form onSubmit={(e) => void handleClaimSubmit(e)} className="attest-lookup__claim-form" noValidate>
-            <Field
-              label="Attestation uid (hex)"
-              placeholder="64-character hex uid"
-              value={claimForm.uid}
-              onChange={updateClaimField('uid')}
-              error={claimErrors.uid}
-            />
-            <Field
-              label="Subject address"
-              placeholder="G…"
-              value={claimForm.subject}
-              onChange={updateClaimField('subject')}
-              error={claimErrors.subject}
-            />
-            <Field
-              label="Schema uid (hex)"
-              placeholder="64-character hex schema uid"
-              value={claimForm.schema}
-              onChange={updateClaimField('schema')}
-              error={claimErrors.schema}
-            />
-            <Field
-              label="Attester address"
-              placeholder="G…"
-              value={claimForm.attester}
-              onChange={updateClaimField('attester')}
-              error={claimErrors.attester}
-            />
-            <button type="submit" className="attest-lookup__submit" disabled={claimChecking}>
-              {claimChecking ? 'Checking…' : 'Check claim'}
-            </button>
-          </form>
-
-          <div aria-live="polite" className="attest-lookup__results">
-            {claimChecking && (
-              <div className="attest-claim-result attest-claim-result--checking">
-                <span className="attest-claim-result__text">Checking on-chain…</span>
+        <div className="attest-lookup__claim">
+          <div className="attest-lookup__panel">
+            <p className="attest-lookup__intro">
+              Finding an attestation shows what it says. This answers a narrower question: does <em>this</em> recipient
+              hold a valid claim under <em>this</em> schema from <em>this</em> signer? An attestation can be valid and still
+              be the wrong one, so anything of value should be gated on this check, not on existence.
+            </p>
+            <form onSubmit={(e) => void handleClaimSubmit(e)} className="attest-lookup__claim-form" noValidate>
+              <Field
+                label="Attestation uid (hex)"
+                placeholder="64 hex characters"
+                value={claimForm.uid}
+                onChange={updateClaimField('uid')}
+                error={claimErrors.uid}
+                spellCheck={false}
+              />
+              <Field
+                label="Schema uid (hex)"
+                placeholder="64 hex characters"
+                value={claimForm.schema}
+                onChange={updateClaimField('schema')}
+                error={claimErrors.schema}
+                spellCheck={false}
+              />
+              <Field
+                label="Subject address"
+                placeholder="G…"
+                value={claimForm.subject}
+                onChange={updateClaimField('subject')}
+                error={claimErrors.subject}
+                spellCheck={false}
+              />
+              <Field
+                label="Attester address"
+                placeholder="G…"
+                value={claimForm.attester}
+                onChange={updateClaimField('attester')}
+                error={claimErrors.attester}
+                spellCheck={false}
+              />
+              <div>
+                <Button type="submit" loading={claimChecking} loadingLabel="Checking…">
+                  Check claim
+                </Button>
               </div>
-            )}
+            </form>
+          </div>
+
+          <div aria-live="polite">
             {claimError && !claimChecking && (
-              <div className="attest-claim-result attest-claim-result--no" role="alert">
-                <Badge tone="danger">Error</Badge>
-                <span className="attest-claim-result__text">{claimError}</span>
-              </div>
+              <Notice tone="risk" role="alert">
+                <span>{claimError}</span>
+              </Notice>
             )}
             {claimResult && !claimChecking && (
-              <div className={`attest-claim-result attest-claim-result--${claimResult.valid ? 'yes' : 'no'}`}>
-                <Badge tone={claimResult.valid ? 'success' : 'danger'}>
-                  {claimResult.valid ? 'Yes' : 'No'}
-                </Badge>
-                <span className="attest-claim-result__text">
+              <Notice tone={claimResult.valid ? 'ok' : 'risk'}>
+                <span>
+                  <strong>{claimResult.valid ? 'Yes.' : 'No.'}</strong>{' '}
                   {claimResult.valid
                     ? 'This subject holds a valid claim under this schema from this attester.'
                     : claimResult.reason}
                 </span>
-              </div>
+              </Notice>
             )}
           </div>
-        </>
+        </div>
       )}
     </div>
   );

@@ -1,8 +1,11 @@
 import { useState, type FC } from 'react';
 import { FIXTURE_VERIFIERS, type VerifierFixture } from '../../fixtures/programmeFixtures';
+import { samplesEnabled } from '../../lib/samples';
 import { useOptionalSoroban } from '../../context/useSoroban';
 import { useContractRead } from '../../hooks/useContractRead';
-import { Button, Field } from '../ui';
+import { Badge, Button, Field, SampleTag } from '../ui';
+import { truncateAddress } from '../../lib/format';
+import type { AddressLabel } from '../../lib/metadata';
 import './VerifiersTab.css';
 
 export interface VerifiersTabProps {
@@ -10,21 +13,74 @@ export interface VerifiersTabProps {
   /** Real program contract address; omitted for sample programmes. */
   programmeId?: string;
   isSample?: boolean;
+  /** The creator's names for addresses, from the programme's verified description. */
+  labels?: AddressLabel[];
+  /** Change it to re-read every role, e.g. after the creator adds or removes a verifier. */
+  version?: number;
 }
 
+const ROLE_NAME: Record<AddressLabel['role'], string> = { reviewer: 'Reviewer', verifier: 'Verifier', payee: 'Payee' };
+
+/**
+ * One named address. The name is the creator's claim; whether the address
+ * still holds the role is read from the programme now.
+ */
+const NamedRow: FC<{ entry: AddressLabel; programmeId: string; version: number }> = ({
+  entry,
+  programmeId,
+  version,
+}) => {
+  const soroban = useOptionalSoroban();
+  const programme = soroban ? soroban.programmeAt(programmeId) : null;
+  const read = useContractRead<boolean>(
+    () =>
+      entry.role === 'verifier'
+        ? programme!.is_verifier({ addr: entry.address })
+        : entry.role === 'reviewer'
+          ? programme!.is_reviewer({ addr: entry.address })
+          : programme!.is_payee({ payee: entry.address }),
+    [programme, entry.address, entry.role, version],
+    { enabled: programme !== null },
+  );
+  return (
+    <li className="verifiers-tab__card">
+      <div className="verifiers-tab__card-info">
+        <span className="verifiers-tab__label">{entry.label}</span>
+        <span className="verifiers-tab__address numeric" title={entry.address}>
+          {truncateAddress(entry.address, 8, 6)}
+        </span>
+      </div>
+      <span className="verifiers-tab__role">
+        {ROLE_NAME[entry.role]}
+        {read.loading ? (
+          <Badge>Checking…</Badge>
+        ) : read.error ? (
+          <Badge tone="warning">Couldn’t check</Badge>
+        ) : read.data ? (
+          <Badge tone="success">Holds the role now</Badge>
+        ) : (
+          <Badge tone="danger">No longer holds it</Badge>
+        )}
+      </span>
+    </li>
+  );
+};
+
 export const VerifiersTab: FC<VerifiersTabProps> = ({
-  verifiers = FIXTURE_VERIFIERS,
+  verifiers = samplesEnabled() ? FIXTURE_VERIFIERS : [],
   programmeId,
   isSample = false,
+  labels,
+  version = 0,
 }) => {
   const soroban = useOptionalSoroban();
   const [addrInput, setAddrInput] = useState('');
   const [checkAddr, setCheckAddr] = useState('');
   const programme = programmeId && soroban ? soroban.programmeAt(programmeId) : null;
   const enabled = checkAddr !== '' && programme !== null;
-  const reviewer = useContractRead(() => programme!.is_reviewer({ addr: checkAddr }), [programme, checkAddr], { enabled });
-  const verifier = useContractRead(() => programme!.is_verifier({ addr: checkAddr }), [programme, checkAddr], { enabled });
-  const payee = useContractRead(() => programme!.is_payee({ payee: checkAddr }), [programme, checkAddr], { enabled });
+  const reviewer = useContractRead(() => programme!.is_reviewer({ addr: checkAddr }), [programme, checkAddr, version], { enabled });
+  const verifier = useContractRead(() => programme!.is_verifier({ addr: checkAddr }), [programme, checkAddr, version], { enabled });
+  const payee = useContractRead(() => programme!.is_payee({ payee: checkAddr }), [programme, checkAddr, version], { enabled });
 
   return (
     <div
@@ -60,9 +116,26 @@ export const VerifiersTab: FC<VerifiersTabProps> = ({
         </div>
       )}
 
+      {!isSample && programmeId && labels && labels.length > 0 && (
+        <section className="verifiers-tab__named" aria-labelledby="verifiers-named">
+          <h3 id="verifiers-named" className="verifiers-tab__named-title">
+            Named by the creator
+          </h3>
+          <p className="verifiers-tab__explanation">
+            The names come from the programme’s description, which the creator wrote and committed by hash. They are the
+            creator’s claim; each address’s role is read from the programme now.
+          </p>
+          <ul className="verifiers-tab__list">
+            {labels.map((entry) => (
+              <NamedRow key={`${entry.role}:${entry.address}`} entry={entry} programmeId={programmeId} version={version} />
+            ))}
+          </ul>
+        </section>
+      )}
+
       {isSample && (
         <div className="verifiers-tab__note-card" role="note">
-          <div className="verifiers-tab__badge">Sample data</div>
+          <SampleTag />
           <p className="verifiers-tab__explanation">
             <strong>Verifier roster future source:</strong> The roster is not published by the indexer yet.
             These are example verifiers, not a real programme's roster.
@@ -75,17 +148,17 @@ export const VerifiersTab: FC<VerifiersTabProps> = ({
       )}
 
       {isSample && (
-        <div className="verifiers-tab__list">
+        <ul className="verifiers-tab__list">
           {verifiers.map((vr) => (
-            <div key={vr.address} className="verifiers-tab__card">
+            <li key={vr.address} className="verifiers-tab__card">
               <div className="verifiers-tab__card-info">
                 <span className="verifiers-tab__label">{vr.label}</span>
                 <span className="verifiers-tab__address numeric">{vr.address}</span>
               </div>
               <span className="verifiers-tab__schema">Schema · {vr.schema}</span>
-            </div>
+            </li>
           ))}
-        </div>
+        </ul>
       )}
     </div>
   );

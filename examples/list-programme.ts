@@ -18,14 +18,14 @@ async function main() {
 
   // Read the registry config
   const configResult = await client.get_config();
-  const config = configResult.result;
+  const config = configResult.result.unwrap();
 
   console.log("Registry Config:");
   console.log(`  Admin: ${config.admin}`);
   console.log(`  Treasury: ${config.treasury}`);
   console.log(`  Fee (bps): ${config.fee_bps}`);
-  console.log(`  Attest contract: ${config.attest_address}`);
-  console.log(`  Record contract: ${config.record_address}`);
+  console.log(`  Attest contract: ${config.attest}`);
+  console.log(`  Record contract: ${config.record}`);
 }
 
 main().catch(console.error);

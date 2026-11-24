@@ -35,7 +35,12 @@ const IGNORED = [
  * module the check can no longer protect. "I will wire it up later" is not a
  * reason; that is the exact situation this test exists to catch.
  */
-const ALLOWED_UNREACHABLE: string[] = [];
+const ALLOWED_UNREACHABLE: string[] = [
+  // The metadata store's request handling: imported by the Vercel function in
+  // api/metadata.ts and the dev server in vite.config.ts, which run outside the
+  // app, never by the app itself, which only talks to the store over HTTP.
+  'lib/metadataStore.ts',
+];
 
 function sourceFiles(dir: string): string[] {
   return readdirSync(dir).flatMap((name) => {

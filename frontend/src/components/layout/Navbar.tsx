@@ -1,148 +1,169 @@
 import { useState } from 'react';
-import { ChevronDown, Menu as MenuIcon } from 'lucide-react';
+import { ArrowRight, Coins, HandCoins, LayoutGrid, ShieldCheck, SlidersHorizontal, Wallet } from 'lucide-react';
+import type { LucideIcon } from 'lucide-react';
 import { Link, useLocation } from 'react-router-dom';
 import { useWallet } from '../../context/useWallet';
-import { APP_ROUTES, HOME_ANCHORS, NAV_SECTIONS, getSectionForPath } from '../../routes';
+import { NETWORK } from '../../config/network';
+import {
+  HOME_ANCHORS,
+  NAV_SECTIONS,
+  SECTION_PAGES,
+  getSectionForPath,
+  getSectionPageForPath,
+  type NavSectionKey,
+} from '../../routes';
 import { AccountMenu } from './AccountMenu';
 import { LogoMark } from './LogoMark';
 import { SignInSheet } from './SignInSheet';
 import { ThemeToggle } from './ThemeToggle';
-import { useDetailsMenu } from './useDetailsMenu';
 import './Navbar.css';
 
-/**
- * "On this page" + "App" links in one keyboard-operable disclosure.
- *
- * Built on native `<details>`/`<summary>` rather than a custom listbox: it is
- * focusable and toggles with Enter/Space for free, with no roving-tabindex
- * logic to get wrong. The only behaviour added on top is closing on Escape,
- * an outside click, or picking a link — a plain `<details>` leaves all three
- * open, which reads as broken for a nav menu.
- */
-const HeaderMenu = () => {
-  const location = useLocation();
-  const isHome = location.pathname === '/';
-  const { ref: detailsRef, close: closeMenu } = useDetailsMenu();
-
-  return (
-    <details className="nav-menu" ref={detailsRef}>
-      <summary className="nav-menu__trigger">
-        <MenuIcon size={16} aria-hidden="true" />
-        Menu
-        <ChevronDown size={14} className="nav-menu__chevron" aria-hidden="true" />
-      </summary>
-      <div className="nav-menu__panel">
-        {isHome && HOME_ANCHORS.length > 0 && (
-          <div className="nav-menu__group">
-            <span className="nav-menu__group-label">On this page</span>
-            {HOME_ANCHORS.map((anchor) => (
-              <a key={anchor.id} href={`#${anchor.id}`} className="nav-menu__item" onClick={closeMenu}>
-                {anchor.label}
-              </a>
-            ))}
-          </div>
-        )}
-        <div className="nav-menu__group">
-          <span className="nav-menu__group-label">App</span>
-          {APP_ROUTES.map((route) => (
-            <Link key={route.path} to={route.path} className="nav-menu__item" onClick={closeMenu}>
-              <span>{route.label}</span>
-              <span className="nav-menu__item-path numeric">{route.path}</span>
-            </Link>
-          ))}
-        </div>
-      </div>
-    </details>
-  );
+const SECTION_ICONS: Record<NavSectionKey, LucideIcon> = {
+  programmes: LayoutGrid,
+  fund: Coins,
+  'get-funded': HandCoins,
+  verify: ShieldCheck,
+  admin: SlidersHorizontal,
 };
 
+/**
+ * The five sections, as links. Rendered twice: in the header on a wide screen
+ * and as a fixed bar along the bottom edge on a phone, where a thumb reaches.
+ * CSS shows one at a time, so only one is ever in the accessibility tree.
+ */
+const SectionLinks = ({ current, className }: { current: NavSectionKey | null; className: string }) => (
+  <nav className={className} aria-label="Primary">
+    {NAV_SECTIONS.map((section) => {
+      const Icon = SECTION_ICONS[section.key];
+      const isCurrent = current === section.key;
+      return (
+        <Link
+          key={section.key}
+          to={section.path}
+          className={`${className}__link`}
+          aria-current={isCurrent ? 'page' : undefined}
+        >
+          <Icon aria-hidden="true" />
+          <span>{section.label}</span>
+        </Link>
+      );
+    })}
+  </nav>
+);
+
+/**
+ * The header. The landing page gets its own in-page links and one way in
+ * ("Launch app"); every other page gets the five sections, the pages inside
+ * the current one, and the account.
+ */
 export const Navbar = () => {
   const [signInOpen, setSignInOpen] = useState(false);
   const location = useLocation();
   const isHome = location.pathname === '/';
   const currentSection = getSectionForPath(location.pathname);
-  const {
-    address,
-    status,
-    network,
-    networkError,
-    expectedNetwork,
-    recheckNetwork,
-  } = useWallet();
+  const currentPage = getSectionPageForPath(location.pathname);
+  const { address, status, network, networkError, expectedNetwork, recheckNetwork } = useWallet();
   const wrongNetwork = status === 'wrong-network';
+  // The road-paint yellow dot is reserved for testnet. Mainnet reads as muted
+  // ink instead, and a wrong network still turns the whole tag red.
+  const isMainnet = NETWORK.name === 'mainnet';
+  const showDot = !isMainnet || wrongNetwork;
 
   return (
-    <header className="navbar">
-      <div className="navbar-container">
-        <div className="navbar-brand">
-          <Link to="/" className="brand-logo">
+    <>
+      <header className="app-header">
+        <div className="app-header__row container">
+          <Link to="/" className="brand">
             <LogoMark />
             Milepost
           </Link>
+
+          {isHome ? (
+            <nav className="main-nav" aria-label="Page sections">
+              {HOME_ANCHORS.map((anchor) => (
+                <a key={anchor.id} href={`#${anchor.id}`} className="main-nav__link">
+                  {anchor.label}
+                </a>
+              ))}
+            </nav>
+          ) : (
+            <SectionLinks current={currentSection} className="main-nav" />
+          )}
+
+          <div className="app-header__actions">
+            <span
+              className={`testnet-tag${isMainnet ? ' testnet-tag--mainnet' : ''}${wrongNetwork ? ' testnet-tag--wrong' : ''}`}
+              title={
+                wrongNetwork
+                  ? (networkError ?? undefined)
+                  : `Contracts are deployed on ${expectedNetwork}. They have not been audited.`
+              }
+            >
+              {showDot && <span className="testnet-tag__dot" aria-hidden="true" />}
+              <span className="testnet-tag__text">
+                {wrongNetwork
+                  ? `Freighter: ${network ?? 'unknown network'}`
+                  : isMainnet
+                    ? expectedNetwork
+                    : isHome
+                      ? `${expectedNetwork} · pre-audit`
+                      : expectedNetwork}
+              </span>
+            </span>
+            <ThemeToggle />
+            {isHome ? (
+              <Link to="/directory" className="btn-primary app-header__cta">
+                Launch app
+                <ArrowRight aria-hidden="true" />
+              </Link>
+            ) : address ? (
+              <AccountMenu address={address} />
+            ) : (
+              <button type="button" onClick={() => setSignInOpen(true)} className="btn-primary app-header__cta">
+                <Wallet aria-hidden="true" />
+                Sign in
+              </button>
+            )}
+          </div>
         </div>
 
-        <HeaderMenu />
-
-        {isHome ? (
-          <div className="navbar-links">
-            <Link to="/directory" className="nav-launch-btn">
-              Launch app
-            </Link>
-          </div>
-        ) : (
-          <nav className="navbar-links" aria-label="Primary">
-            {NAV_SECTIONS.map((sec) => {
-              const isCurrent = currentSection === sec.key;
-              return (
-                <Link
-                  key={sec.key}
-                  to={sec.path}
-                  className={`nav-pill${isCurrent ? ' nav-pill--active' : ''}`}
-                  aria-current={isCurrent ? 'page' : undefined}
-                >
-                  {sec.label}
-                </Link>
-              );
-            })}
+        {!isHome && currentSection && (
+          <nav
+            className="subnav container"
+            aria-label={`${NAV_SECTIONS.find((section) => section.key === currentSection)?.label} pages`}
+          >
+            {SECTION_PAGES[currentSection].map((page) => (
+              <Link
+                key={page.path}
+                to={page.path}
+                className="subnav__link"
+                aria-current={currentPage?.path === page.path ? 'page' : undefined}
+              >
+                {page.label}
+              </Link>
+            ))}
           </nav>
         )}
 
-        <div className="navbar-actions">
-          <span
-            className={`network-indicator${wrongNetwork ? ' network-indicator--wrong' : ''}`}
-            title={wrongNetwork ? (networkError ?? undefined) : `Contracts are deployed on ${expectedNetwork}`}
-          >
-            <span
-              className="network-indicator__dot"
-              aria-hidden="true"
-            />
-            {wrongNetwork ? `Freighter: ${network ?? 'unknown network'}` : expectedNetwork}
-          </span>
-          <ThemeToggle />
-          {address ? (
-            <AccountMenu address={address} />
-          ) : (
-            <button type="button" onClick={() => setSignInOpen(true)} className="btn-primary connect-wallet-btn">
-              Sign in
+        {wrongNetwork && (
+          <div className="network-banner" role="alert">
+            <p className="network-banner__message">
+              {networkError ??
+                `Your wallet is on ${network ?? 'an unknown network'}, but these contracts are deployed on ${expectedNetwork}.`}
+            </p>
+            <p className="network-banner__note">
+              Browsing still works — only signing is paused. Switch network in Freighter, then check again.
+            </p>
+            <button type="button" className="network-banner__retry" onClick={recheckNetwork}>
+              Check again
             </button>
-          )}
-        </div>
-      </div>
-      {wrongNetwork && (
-        <div className="network-banner" role="alert">
-          <p className="network-banner__message">
-            {networkError ??
-              `Your wallet is on ${network ?? 'an unknown network'}, but these contracts are deployed on ${expectedNetwork}.`}
-          </p>
-          <p className="network-banner__note">
-            Browsing still works — only signing is paused. Switch network in Freighter, then check again.
-          </p>
-          <button type="button" className="network-banner__retry" onClick={recheckNetwork}>
-            Check again
-          </button>
-        </div>
-      )}
+          </div>
+        )}
+      </header>
+
+      {!isHome && <SectionLinks current={currentSection} className="tabbar" />}
+
       <SignInSheet open={signInOpen} onClose={() => setSignInOpen(false)} />
-    </header>
+    </>
   );
 };

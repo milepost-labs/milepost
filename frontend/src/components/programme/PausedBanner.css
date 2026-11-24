@@ -1,22 +1,13 @@
 .paused-banner {
-  border-left: 4px solid var(--warning-strong);
-  background-color: var(--warning-soft);
-  margin-bottom: var(--space-5);
-}
-
-.paused-banner__row {
-  display: flex;
-  align-items: flex-start;
-  gap: var(--space-3);
-}
-
-.paused-banner__row > svg {
-  color: var(--warning-strong);
-  flex-shrink: 0;
-  margin-top: var(--space-1);
+  padding: var(--space-4) var(--space-5);
 }
 
 .paused-banner__title {
-  margin: 0 0 var(--space-1);
-  color: var(--warning-strong);
+  margin: 0;
+  font-size: var(--text-md);
+  font-weight: var(--weight-semibold);
+}
+
+.paused-banner p {
+  margin: var(--space-1) 0 0;
 }

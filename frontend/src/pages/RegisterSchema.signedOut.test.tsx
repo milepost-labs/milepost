@@ -21,15 +21,12 @@ function renderPage() {
 }
 
 describe('RegisterSchema signed out', () => {
-  it('shows the sign-in requirement as a neutral notice, not an alert', () => {
+  it('asks to sign in to register, and still offers lookup', () => {
     renderPage();
-
-    const notice = screen.getByText(/the connected address becomes the schema owner/);
-    expect(notice.getAttribute('role')).toBeNull();
+    expect(screen.getByText('Define what verifiers sign')).toBeTruthy();
+    expect(screen.getByText(/the connected address becomes the schema owner/)).toBeTruthy();
     expect(screen.queryByRole('alert')).toBeNull();
-
-    const register = screen.getByRole('button', { name: /Register schema/ }) as HTMLButtonElement;
-    expect(register.disabled).toBe(true);
-    expect(register.getAttribute('aria-describedby')).toBe(notice.id);
+    expect(screen.queryByRole('button', { name: /Register schema/ })).toBeNull();
+    expect(screen.getByLabelText('Schema UID')).toBeTruthy();
   });
 });

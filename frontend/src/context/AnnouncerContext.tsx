@@ -6,8 +6,8 @@ import { AnnouncerContext, announcementAria, type Announcement, type Announcemen
  * One shared live region for every async result, mounted once by `Layout` —
  * not reinvented per page, which is how per-page regions drift apart.
  *
- * Design reference: frontend/docs/design/README.md — "a line at the bottom
- * of the screen" that every write's pending/success/error passes through.
+ * Design reference: frontend/docs/design/HANDOFF.md — "one
+ * screen-reader live region that announces every async result".
  */
 
 export function AnnouncerProvider({ children }: { children: ReactNode }) {

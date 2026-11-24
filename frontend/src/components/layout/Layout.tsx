@@ -2,6 +2,7 @@ import React, { useEffect, useRef } from 'react';
 import { Navbar } from './Navbar';
 import { Outlet, useLocation } from 'react-router-dom';
 import { AnnouncerProvider } from '../../context/AnnouncerContext';
+import { RestoreConsentHost } from '../state/RestoreConsent';
 import { useAnnouncer } from '../../context/useAnnouncer';
 import { OfflineBanner } from './OfflineBanner';
 import './Layout.css';
@@ -54,6 +55,9 @@ const NavigationFocusManager: React.FC = () => {
 };
 
 export const Layout: React.FC = () => {
+  // The landing page runs edge to edge: its bands are full-bleed and each
+  // section sets its own measure. Every other page sits in the shared column.
+  const isHome = useLocation().pathname === '/';
   return (
     <AnnouncerProvider>
       <NavigationFocusManager />
@@ -63,10 +67,15 @@ export const Layout: React.FC = () => {
         </a>
         <Navbar />
         <OfflineBanner />
-        <main id="main-content" className="page-wrapper container animate-fade-up" tabIndex={-1}>
+        <main
+          id="main-content"
+          className={isHome ? 'page-wrapper page-wrapper--bleed' : 'page-wrapper container animate-fade-up'}
+          tabIndex={-1}
+        >
           <Outlet />
         </main>
       </div>
+      <RestoreConsentHost />
     </AnnouncerProvider>
   );
 };

@@ -1,0 +1,86 @@
+/* Milepost design tokens — generated from tokens.json.
+   Fonts (add to index.html <head>):
+   <link href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,400..800&family=Instrument+Sans:wght@400..700&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+   Theme: set data-theme="light" or "dark" on <html>. */
+
+:root, [data-theme="light"] {
+  --bg: #f5f2ea;  /* Page ground. Warm paper in light, deep road-asphalt green-black in dar */
+  --bg-raised: #fbf9f4;  /* One step up from bg: sticky header, popovers, the selected mode. Separ */
+  --bg-sunken: #ebe6da;  /* One step down from bg: code lines, inputs, the road track, alternating */
+  --ink: #16140f;  /* Primary text and headlines on bg, bg-raised, bg-sunken. */
+  --ink-muted: #585346;  /* Secondary text, captions, table labels. Passes 4.5:1 on all three grou */
+  --ink-faint: #8c8675;  /* Non-text only: hairline numerals at display size, road dashes, disable */
+  --line: #ddd6c6;  /* The rare hairline: table rows and the road edge. Prefer a background s */
+  --accent: #0a6b47;  /* Milepost green, taken from highway mile-marker signs. Primary buttons, */
+  --accent-hover: #07573a;  /* Hover and pressed state of accent surfaces. */
+  --accent-ink: #ffffff;  /* Text and icons on accent (buttons, milepost signs). */
+  --accent-soft: #d3e7d9;  /* Tinted accent ground: selected pills, the unawarded money colour, high */
+  --signal: #f0b928;  /* Road-paint yellow. Used sparingly: the testnet dot, the Sample data ta */
+  --signal-ink: #1d1606;  /* Text on signal. */
+  --money-unawarded: var(--accent-soft);  /* Money square: in the budget, not yet awarded to anyone. */
+  --money-locked: #b7b2a3;  /* Money square: awarded but locked, waiting for a verifier's attestation */
+  --money-released: var(--accent);  /* Money square: released to the payee after a valid proof. */
+  --money-refundable: #c2532a;  /* Money square: unpaid after the release window, going back to funders i */
+  --danger: #b3261e;  /* Error text and icons. Always paired with a human sentence and 'Nothing */
+  --danger-soft: #f6dcd6;  /* Ground behind an error panel. */
+  --focus: #16140f;  /* Focus ring, 2px with 2px offset, on every interactive element. */
+  --shadow-1: 0 1px 2px rgba(22,20,15,0.06), 0 4px 16px rgba(22,20,15,0.06);  /* Sticky header and floating controls only. */
+  --shadow-2: 0 12px 40px rgba(22,20,15,0.14);  /* Menus, sign-in sheet, popovers. */
+}
+
+[data-theme="dark"] {
+  --bg: #0e1210;
+  --bg-raised: #161b18;
+  --bg-sunken: #090c0a;
+  --ink: #eef0e9;
+  --ink-muted: #a6ada4;
+  --ink-faint: #68716a;
+  --line: #252c28;
+  --accent: #3fcf8e;
+  --accent-hover: #66dca6;
+  --accent-ink: #04120b;
+  --accent-soft: #1b3a2c;
+  --signal: #f3c443;
+  --signal-ink: #1d1606;
+  --money-unawarded: var(--accent-soft);
+  --money-locked: #4a524c;
+  --money-released: var(--accent);
+  --money-refundable: #e67b4f;
+  --danger: #f2867c;
+  --danger-soft: #3a1a17;
+  --focus: #f3c443;
+  --shadow-1: 0 1px 2px rgba(0,0,0,0.4), 0 6px 20px rgba(0,0,0,0.35);
+  --shadow-2: 0 16px 48px rgba(0,0,0,0.55);
+}
+
+:root {
+  --space-1: 4px;
+  --space-2: 8px;
+  --space-3: 12px;
+  --space-4: 16px;
+  --space-6: 24px;
+  --space-8: 32px;
+  --space-12: 48px;
+  --space-16: 64px;
+  --space-24: 96px;
+  --space-32: 128px;
+  --radius-sq: 3px;
+  --radius-sm: 8px;
+  --radius-md: 14px;
+  --radius-lg: 28px;
+  --radius-pill: 999px;
+  --font-display: "Bricolage Grotesque", "Instrument Sans", system-ui, sans-serif;
+  --font-sans: "Instrument Sans", system-ui, -apple-system, "Segoe UI", sans-serif;
+  --font-mono: "IBM Plex Mono", ui-monospace, "SFMono-Regular", Menlo, monospace;
+}
+
+.text-display-xl { font-family: var(--font-display); font-size: 88px; line-height: 0.95; font-weight: 700; letter-spacing: -0.03em; }
+.text-display-l { font-family: var(--font-display); font-size: 56px; line-height: 1; font-weight: 650; letter-spacing: -0.025em; }
+.text-display-m { font-family: var(--font-display); font-size: 36px; line-height: 1.05; font-weight: 600; letter-spacing: -0.02em; }
+.text-title { font-family: var(--font-sans); font-size: 22px; line-height: 28px; font-weight: 600; }
+.text-body-l { font-family: var(--font-sans); font-size: 19px; line-height: 29px; font-weight: 400; }
+.text-body { font-family: var(--font-sans); font-size: 16px; line-height: 25px; font-weight: 400; }
+.text-small { font-family: var(--font-sans); font-size: 14px; line-height: 20px; font-weight: 500; }
+.text-figure-l { font-family: var(--font-mono); font-size: 32px; line-height: 36px; font-weight: 500; letter-spacing: -0.02em; font-variant-numeric: tabular-nums; }
+.text-figure { font-family: var(--font-mono); font-size: 15px; line-height: 22px; font-weight: 500; font-variant-numeric: tabular-nums; }
+.text-label { font-family: var(--font-mono); font-size: 12px; line-height: 16px; font-weight: 500; letter-spacing: 0.08em; font-variant-numeric: tabular-nums; }

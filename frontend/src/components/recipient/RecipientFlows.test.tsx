@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { render, screen, fireEvent, waitFor } from '@testing-library/react';
+import { render, screen, fireEvent, waitFor, within } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
 import { Buffer } from 'buffer';
 import { AwardCard } from './AwardCard';
@@ -7,12 +7,28 @@ import { ApplyForm } from './ApplyForm';
 import { ApplicationTimelineList } from './ApplicationTimelineList';
 import type { RecipientAwardFixture, RecipientApplicationFixture } from '../../fixtures/recipientFixtures';
 import { explainCode } from '../../lib/errors';
+import {
+  expectFocusInSheet,
+  expectFocusReturnedTo,
+  expectSheetAccessible,
+  focusAndClick,
+  SHEET_TEST_TIMEOUT,
+} from '../../test/sheetAccessibility';
 
 // Mock useAnnouncer so we can assert on announcements
 const mockAnnounce = vi.fn();
 vi.mock('../../context/useAnnouncer', () => ({
   useAnnouncer: () => mockAnnounce,
 }));
+
+// The asset read has its own tests (hooks/useProgrammeAsset.test.tsx). Here a
+// sample programme is in its stand-in asset and a deployed one pays in XLM.
+vi.mock('../../hooks/useProgrammeAsset', async () => {
+  const { isSampleProgrammeId } = await import('../../lib/programmeView');
+  return {
+    useProgrammeAsset: (id: string | null | undefined) => (!id ? null : isSampleProgrammeId(id) ? 'USDC' : 'XLM'),
+  };
+});
 
 // useOpenProgrammes (used by ApplyForm) fetches the programme index.
 // Return an empty list so only the sample fixtures show up.
@@ -57,9 +73,10 @@ function makeProgramme(opts: {
   isPayee?: (addr: string) => boolean;
   finalized?: boolean;
   withdrawn?: boolean;
-  applyResult?: 'ok' | 'alreadyApplied' | 'wrongPhase';
+  applyResult?: 'ok' | 'alreadyApplied' | 'wrongPhase' | 'declined';
   releaseResult?: 'ok' | 'alreadyUsed' | 'invalidAttestation' | 'policyNotInstalled';
   withdrawError?: string;
+  minimumAward?: bigint;
 } = {}) {
   const allocation = opts.allocation ?? 10_000_000_000n;
   // Withdrawing flips the stored flag, as the contract does, so a re-read sees it.
@@ -68,6 +85,7 @@ function makeProgramme(opts: {
   const applySignAndSend = vi.fn(async () => {
     if (opts.applyResult === 'alreadyApplied') throw new Error('Error(Contract, #9)');
     if (opts.applyResult === 'wrongPhase') throw new Error('Error(Contract, #2)');
+    if (opts.applyResult === 'declined') throw new Error('User declined the signature');
     return {
       result: { unwrap: () => undefined },
       sendTransactionResponse: { hash: 'TESTHASH1234567890ABCDEF' },
@@ -120,14 +138,19 @@ function makeProgramme(opts: {
     get_award: vi.fn(async () => ({
       result: { unwrap: () => freshAward },
     })),
+    get_config: vi.fn(async () => ({
+      result: { unwrap: () => ({ minimum_award: opts.minimumAward ?? 0n }) },
+    })),
   };
 }
 
 let programme = makeProgramme();
 
-vi.mock('../../context/useSoroban', () => ({
-  useSoroban: () => ({ programmeAt: () => programme }),
-}));
+vi.mock('../../context/useSoroban', () => {
+  // Built once: reads key on the clients, and the real context is memoized.
+  const soroban = { programmeAt: () => programme };
+  return { useSoroban: () => soroban, useOptionalSoroban: () => soroban };
+});
 
 describe('Recipient Issues Suite (#272, #273, #274, #275)', () => {
   beforeEach(() => {
@@ -170,12 +193,15 @@ describe('Recipient Issues Suite (#272, #273, #274, #275)', () => {
         </MemoryRouter>
       );
 
-      expect(screen.getByText('Tranche 1')).toBeDefined();
-      expect(screen.getByText('Released')).toBeDefined();
-      expect(screen.getByText('Tranche 2')).toBeDefined();
-      expect(screen.getByText('Proof received')).toBeDefined();
-      expect(screen.getByText('Tranche 3')).toBeDefined();
-      expect(screen.getByText('Locked')).toBeDefined();
+      // Each sign is a heading: its number for screen readers, then its state.
+      const tranches = screen.getAllByRole('heading', { level: 4 }).map((h) => h.textContent);
+      expect(tranches).toEqual([
+        'Tranche 1: Released',
+        'Tranche 2: Proof received, ready to release',
+        'Tranche 3: Locked',
+      ]);
+      // Only the proven tranche offers the release.
+      expect(screen.getAllByRole('button', { name: /release tranche/i })).toHaveLength(1);
     });
 
     it('distinguishes waiting-on-verifier from locked when proof is not ready', () => {
@@ -185,9 +211,11 @@ describe('Recipient Issues Suite (#272, #273, #274, #275)', () => {
           <AwardCard award={waitingAward} />
         </MemoryRouter>
       );
-      expect(screen.getByText('Waiting on verifier')).toBeDefined();
+      expect(screen.getByRole('heading', { name: /Tranche 2:\s*Waiting on a verifier/ })).toBeDefined();
       expect(screen.getByText(/Waiting on your verifier/i)).toBeDefined();
-      expect(screen.getByText('Locked')).toBeDefined();
+      expect(screen.getByRole('heading', { name: /Tranche 3:\s*Locked/ })).toBeDefined();
+      // A sample has no proof to release with, so nothing is offered.
+      expect(screen.queryByRole('button', { name: /release tranche/i })).toBeNull();
     });
 
     it('sample: announces successful tranche release', async () => {
@@ -198,8 +226,15 @@ describe('Recipient Issues Suite (#272, #273, #274, #275)', () => {
       );
 
       fireEvent.click(screen.getByRole('button', { name: /release tranche/i }));
-      expect(await screen.findByText(/Tranche 2 released/i)).toBeDefined();
+      const sheet = screen.getByRole('dialog', { name: 'Release tranche 2' });
+      fireEvent.click(within(sheet).getByRole('button', { name: /sign and release/i }));
+      expect(await within(sheet).findByText('Tranche 2 released')).toBeDefined();
+      expect(within(sheet).getByText('Sample receipt')).toBeDefined();
       expect(mockAnnounce).toHaveBeenCalledWith('Tranche 2 released.');
+
+      // The receipt still names tranche 2 after the award has moved on.
+      fireEvent.click(within(sheet).getByRole('button', { name: 'Done' }));
+      expect(screen.getByRole('heading', { name: /Tranche 2:\s*Released/ })).toBeDefined();
     });
 
     it('real: sends program.release with attestation Buffer and attester address', async () => {
@@ -215,7 +250,7 @@ describe('Recipient Issues Suite (#272, #273, #274, #275)', () => {
       fireEvent.click(screen.getByRole('button', { name: /release tranche/i }));
 
       // Fill in attestation UID and attester.
-      fireEvent.change(screen.getByLabelText(/attestation uid/i), {
+      fireEvent.change(screen.getByLabelText(/attestation id/i), {
         target: { value: ATTEST_HEX },
       });
       fireEvent.change(screen.getByLabelText(/attester address/i), {
@@ -227,7 +262,7 @@ describe('Recipient Issues Suite (#272, #273, #274, #275)', () => {
 
       fireEvent.click(screen.getByRole('button', { name: /sign and release/i }));
 
-      expect(await screen.findByText(/Tranche 2 released/i)).toBeDefined();
+      expect(await screen.findByText('Tranche 2 released')).toBeDefined();
       expect(programme.release).toHaveBeenCalledWith({
         recipient: RECIPIENT,
         attestation: expect.any(Buffer),
@@ -236,6 +271,58 @@ describe('Recipient Issues Suite (#272, #273, #274, #275)', () => {
       const { attestation } = (programme.release.mock.calls[0] as unknown[])[0] as { attestation: Buffer };
       expect(attestation).toHaveLength(32);
       expect(mockAnnounce).toHaveBeenCalledWith('Tranche 2 released.');
+    });
+
+    it('real, waiting on a verifier: offers a request link that names this claim', () => {
+      render(
+        <MemoryRouter>
+          <AwardCard award={{ ...realAward, attestationReady: false }} sampleDelayMs={0} />
+        </MemoryRouter>
+      );
+
+      fireEvent.click(screen.getByRole('button', { name: 'Ask your verifier' }));
+      const sheet = screen.getByRole('dialog');
+      const link = within(sheet).getByLabelText('Request link') as HTMLInputElement;
+      const url = new URL(link.value);
+      expect(url.pathname).toBe('/verifiers');
+      expect(url.searchParams.get('programme')).toBe(REAL_PROGRAMME);
+      expect(url.searchParams.get('recipient')).toBe(RECIPIENT);
+      expect(url.searchParams.get('tranche')).toBe('2');
+
+      fireEvent.change(within(sheet).getByLabelText(/A note for your verifier/), {
+        target: { value: 'Plot 14, Akinyele' },
+      });
+      expect(new URL((within(sheet).getByLabelText('Request link') as HTMLInputElement).value).searchParams.get('note')).toBe(
+        'Plot 14, Akinyele',
+      );
+      expect(within(sheet).getByRole('button', { name: 'Copy request link' })).toBeDefined();
+    });
+
+    it('real: a verifier’s reply link fills in the release', async () => {
+      programme = makeProgramme({ releaseResult: 'ok' });
+      render(
+        <MemoryRouter>
+          <AwardCard
+            award={{ ...realAward, attestationReady: false }}
+            reply={{ programmeId: REAL_PROGRAMME, attestation: ATTEST_HEX, attester: ATTESTER }}
+            sampleDelayMs={0}
+          />
+        </MemoryRouter>
+      );
+
+      expect(screen.getByText(/Your verifier signed and sent a reply link/)).toBeDefined();
+      expect(screen.queryByRole('button', { name: 'Ask your verifier' })).toBeNull();
+      fireEvent.click(screen.getByRole('button', { name: /release tranche/i }));
+      expect((screen.getByLabelText(/attestation id/i) as HTMLInputElement).value).toBe(ATTEST_HEX);
+      expect((screen.getByLabelText(/attester address/i) as HTMLInputElement).value).toBe(ATTESTER);
+
+      fireEvent.click(screen.getByRole('button', { name: /sign and release/i }));
+      expect(await screen.findByText('Tranche 2 released')).toBeDefined();
+      expect(programme.release).toHaveBeenCalledWith({
+        recipient: RECIPIENT,
+        attestation: Buffer.from(ATTEST_HEX, 'hex'),
+        attester: ATTESTER,
+      });
     });
 
     it('real error 22 (AttestationAlreadyUsed): shows the specific explanation', async () => {
@@ -248,7 +335,7 @@ describe('Recipient Issues Suite (#272, #273, #274, #275)', () => {
       );
 
       fireEvent.click(screen.getByRole('button', { name: /release tranche/i }));
-      fireEvent.change(screen.getByLabelText(/attestation uid/i), {
+      fireEvent.change(screen.getByLabelText(/attestation id/i), {
         target: { value: ATTEST_HEX },
       });
       fireEvent.change(screen.getByLabelText(/attester address/i), {
@@ -271,7 +358,7 @@ describe('Recipient Issues Suite (#272, #273, #274, #275)', () => {
       );
 
       fireEvent.click(screen.getByRole('button', { name: /release tranche/i }));
-      fireEvent.change(screen.getByLabelText(/attestation uid/i), {
+      fireEvent.change(screen.getByLabelText(/attestation id/i), {
         target: { value: ATTEST_HEX },
       });
       fireEvent.change(screen.getByLabelText(/attester address/i), {
@@ -297,7 +384,7 @@ describe('Recipient Issues Suite (#272, #273, #274, #275)', () => {
       );
 
       fireEvent.click(screen.getByRole('button', { name: /release tranche/i }));
-      fireEvent.change(screen.getByLabelText(/attestation uid/i), {
+      fireEvent.change(screen.getByLabelText(/attestation id/i), {
         target: { value: ATTEST_HEX },
       });
       fireEvent.change(screen.getByLabelText(/attester address/i), {
@@ -353,7 +440,7 @@ describe('Recipient Issues Suite (#272, #273, #274, #275)', () => {
         </MemoryRouter>
       );
 
-      expect(await screen.findByText('Sample data')).toBeDefined();
+      expect((await screen.findAllByText('Sample data')).length).toBeGreaterThan(0);
       expect(screen.getByText(/Held for you in escrow/i)).toBeDefined();
       expect(screen.getByLabelText('Payee address')).toBeDefined();
     });
@@ -381,7 +468,7 @@ describe('Recipient Issues Suite (#272, #273, #274, #275)', () => {
       fireEvent.click(screen.getByRole('button', { name: 'Send to payee' }));
 
       expect(await screen.findByText('Sent to payee')).toBeDefined();
-      expect(screen.getByText(/100\.00 USDC to GBBBBB/)).toBeDefined();
+      expect(screen.getByText(/100\.00 XLM to GBBBBB/)).toBeDefined();
       await waitFor(() => expect(programme.allocation_of).toHaveBeenCalledTimes(2));
       expect(programme.spend).toHaveBeenCalledWith({
         recipient: RECIPIENT,
@@ -427,7 +514,7 @@ describe('Recipient Issues Suite (#272, #273, #274, #275)', () => {
       fireEvent.change(screen.getByLabelText('Amount'), { target: { value: '2,000' } });
       fireEvent.blur(screen.getByLabelText('Amount'));
 
-      expect(await screen.findByText(/More than your balance of 1,000\.00 USDC/)).toBeDefined();
+      expect(await screen.findByText(/More than your balance of 1,000\.00 XLM/)).toBeDefined();
       expect((screen.getByRole('button', { name: 'Send to payee' }) as HTMLButtonElement).disabled).toBe(true);
       expect(programme.spend).not.toHaveBeenCalled();
     });
@@ -537,29 +624,25 @@ describe('Recipient Issues Suite (#272, #273, #274, #275)', () => {
         </MemoryRouter>
       );
 
-      // Should show the title
-      expect(screen.getByText('Apply for an award')).toBeDefined();
+      expect(screen.getByRole('heading', { name: 'Apply for what you need' })).toBeDefined();
 
-      // Wait for the programme list to load (async phase reads complete)
-      // Only Open programmes should be listed in the radio group
-      expect(await screen.findByText(/Community resilience grants 2026/i)).toBeDefined();
-      expect(screen.getByText(/Smallholder inputs, long rains/i)).toBeDefined();
+      // Only Open programmes are offered; samples are marked as such.
+      expect(await screen.findByRole('option', { name: 'Community resilience grants 2026 (sample)' })).toBeDefined();
+      expect(screen.getByRole('option', { name: 'Smallholder inputs, long rains (sample)' })).toBeDefined();
       // SME supplier microgrants Q2 is in Settled phase, and Vocational bursaries is in Review, so neither should be listed
       expect(screen.queryByText(/Workforce skills grants, cohort 3/i)).toBeNull();
     });
 
-    it('explains the median rule before submitting', () => {
+    it('explains the award rule before submitting', async () => {
       render(
         <MemoryRouter>
           <ApplyForm />
         </MemoryRouter>
       );
 
-      expect(
-        screen.getByText(
-          /Reviewers can approve up to this amount, not more\. Your award is the middle of their votes\./i
-        )
-      ).toBeDefined();
+      expect(await screen.findByText(/Reviewers can approve up to this amount, not more\./i)).toBeDefined();
+      expect(screen.getByText(/How your award is set:/)).toBeDefined();
+      expect(screen.getByText('middle vote')).toBeDefined();
     });
 
     it('validates amount input and enables submit when valid', async () => {
@@ -581,6 +664,7 @@ describe('Recipient Issues Suite (#272, #273, #274, #275)', () => {
 
       // Invalid amount (zero).
       fireEvent.change(amountInput, { target: { value: '0' } });
+      fireEvent.blur(amountInput);
       expect(screen.getByText('Amount must be greater than zero')).toBeDefined();
       expect(submitBtn.disabled).toBe(true);
 
@@ -595,11 +679,11 @@ describe('Recipient Issues Suite (#272, #273, #274, #275)', () => {
       fireEvent.click(submitBtn);
 
       // Receipt appears once the stand-in resolves.
-      expect(await screen.findByText(/✓ Application submitted/i)).toBeDefined();
+      expect(await screen.findByText('Application submitted')).toBeDefined();
       expect(mockAnnounce).toHaveBeenCalledWith('Application submitted.');
     });
 
-    it('sample submission: uses the stand-in path and shows "Sample ·" in the receipt', async () => {
+    it('sample submission: uses the stand-in path and tags the receipt as a sample', async () => {
       render(
         <MemoryRouter>
           <ApplyForm sampleDelayMs={0} />
@@ -607,7 +691,7 @@ describe('Recipient Issues Suite (#272, #273, #274, #275)', () => {
       );
 
       // Wait for the sample programme list.
-      await screen.findByText(/Community resilience grants 2026/i);
+      await screen.findByRole('option', { name: /Community resilience grants 2026/ });
 
       fireEvent.change(screen.getByPlaceholderText('0'), { target: { value: '500' } });
       fireEvent.change(screen.getByRole('textbox', { name: /application notes/i }), {
@@ -616,14 +700,18 @@ describe('Recipient Issues Suite (#272, #273, #274, #275)', () => {
 
       fireEvent.click(screen.getByRole('button', { name: /submit application/i }));
 
-      // Receipt shows "Sample ·" prefix.
-      expect(await screen.findByText(/Sample · ✓ Application submitted/i)).toBeDefined();
+      // The receipt is tagged as a sample.
+      expect(await screen.findByText('Application submitted')).toBeDefined();
+      expect(screen.getByText('Sample receipt')).toBeDefined();
+      expect(screen.getByText('500 USDC')).toBeDefined();
 
       // programme.apply was never called — the sample path goes through sampleSendable.
       expect(programme.apply).not.toHaveBeenCalled();
 
       // The receipt shows a metadata hash (hex chars).
-      expect(screen.getByText(/Application hash/i)).toBeDefined();
+      expect(screen.getByText('Application hash')).toBeDefined();
+      // A sample hash is a fixture, so it must not point at the explorer.
+      expect(screen.queryByRole('link', { name: /view on explorer/i })).toBeNull();
     });
 
     it('real submission: calls programme.apply with stroops and a 32-byte hash, shows receipt', async () => {
@@ -643,11 +731,9 @@ describe('Recipient Issues Suite (#272, #273, #274, #275)', () => {
         </MemoryRouter>
       );
 
-      // Wait for the real programme to appear.
-      expect(await screen.findByText('Live Grant Round')).toBeDefined();
-
-      // Select it.
-      fireEvent.click(screen.getByRole('radio', { name: 'Live Grant Round' }));
+      // Wait for the real programme to appear, listed first and unmarked.
+      expect(await screen.findByRole('option', { name: 'Live Grant Round' })).toBeDefined();
+      fireEvent.change(screen.getByLabelText('Programme'), { target: { value: REAL_PROGRAMME } });
 
       fireEvent.change(screen.getByPlaceholderText('0'), { target: { value: '1000' } });
       fireEvent.change(screen.getByRole('textbox', { name: /application notes/i }), {
@@ -656,7 +742,9 @@ describe('Recipient Issues Suite (#272, #273, #274, #275)', () => {
 
       fireEvent.click(screen.getByRole('button', { name: /submit application/i }));
 
-      expect(await screen.findByText(/✓ Application submitted/i)).toBeDefined();
+      expect(await screen.findByText('Application submitted')).toBeDefined();
+      // A deployed programme pays in XLM, so that is what was asked for.
+      expect(screen.getByText('1,000 XLM')).toBeDefined();
 
       // programme.apply was called with the wallet address, the correct stroops,
       // and a 32-byte Buffer.
@@ -670,8 +758,15 @@ describe('Recipient Issues Suite (#272, #273, #274, #275)', () => {
       expect(callArgs.metadata_hash).toHaveLength(32);
 
       // Receipt shows the tx hash and the metadata hash.
-      expect(screen.getByText(/Application hash/i)).toBeDefined();
+      expect(screen.getByText('Application hash')).toBeDefined();
       expect(screen.getByText(/TESTHASH/i)).toBeDefined();
+
+      const explorer = screen.getByRole('link', { name: /view on explorer.*new tab/i });
+      expect(explorer.getAttribute('href')).toBe(
+        'https://stellar.expert/explorer/testnet/tx/TESTHASH1234567890ABCDEF'
+      );
+      expect(explorer.getAttribute('target')).toBe('_blank');
+      expect(explorer.getAttribute('rel')).toContain('noopener');
     });
 
     it('AlreadyApplied (error 9): shows the human explanation, not a generic error', async () => {
@@ -688,8 +783,8 @@ describe('Recipient Issues Suite (#272, #273, #274, #275)', () => {
         </MemoryRouter>
       );
 
-      await screen.findByText('Live Grant Round');
-      fireEvent.click(screen.getByRole('radio', { name: 'Live Grant Round' }));
+      await screen.findByRole('option', { name: 'Live Grant Round' });
+      fireEvent.change(screen.getByLabelText('Programme'), { target: { value: REAL_PROGRAMME } });
       fireEvent.change(screen.getByPlaceholderText('0'), { target: { value: '500' } });
       fireEvent.change(screen.getByRole('textbox', { name: /application notes/i }), {
         target: { value: 'Second attempt notes.' },
@@ -705,7 +800,124 @@ describe('Recipient Issues Suite (#272, #273, #274, #275)', () => {
       expect(screen.queryByText(/something went wrong that we do not have/i)).toBeNull();
 
       // The form stays on screen so the recipient can see the error — no receipt shown.
-      expect(screen.queryByText(/✓ Application submitted/i)).toBeNull();
+      expect(screen.queryByText('Application submitted')).toBeNull();
+    });
+
+    it('shows a warning when the requested amount is below the minimum award', async () => {
+      // 50 XLM minimum = 500_000_000 stroops
+      programme = makeProgramme({ minimumAward: 500_000_000n, phase: 'Open' });
+
+      const { fetchProgrammes } = await import('../../lib/indexer');
+      (fetchProgrammes as ReturnType<typeof vi.fn>).mockResolvedValueOnce([
+        { id: REAL_PROGRAMME, name: 'Live Grant Round', creator: null, createdLedger: null },
+      ]);
+
+      render(
+        <MemoryRouter>
+          <ApplyForm sampleDelayMs={0} />
+        </MemoryRouter>
+      );
+
+      // Select the real programme so the config read fires.
+      await screen.findByRole('option', { name: 'Live Grant Round' });
+      fireEvent.change(screen.getByLabelText('Programme'), { target: { value: REAL_PROGRAMME } });
+
+      // Enter an amount below the minimum (10 XLM < 50 XLM).
+      fireEvent.change(screen.getByPlaceholderText('0'), { target: { value: '10' } });
+
+      // Warning should appear.
+      expect(await screen.findByText(/below the programme.*minimum award/i)).toBeDefined();
+      expect(screen.getByText(/cannot be finalised/i)).toBeDefined();
+
+      // Submit button is not additionally disabled by the minimum check — it
+      // remains in whatever state the other validation gives it. Fill notes to
+      // confirm that a valid-otherwise form with a below-minimum amount is still submittable.
+      fireEvent.change(screen.getByRole('textbox', { name: /application notes/i }), {
+        target: { value: 'Need funds for exam fees.' },
+      });
+      const submitBtn = screen.getByRole('button', { name: /submit application/i });
+      expect(submitBtn.hasAttribute('disabled')).toBe(false);
+    });
+
+    it('does not show the warning when the amount equals the minimum', async () => {
+      programme = makeProgramme({ minimumAward: 500_000_000n, phase: 'Open' });
+
+      const { fetchProgrammes } = await import('../../lib/indexer');
+      (fetchProgrammes as ReturnType<typeof vi.fn>).mockResolvedValueOnce([
+        { id: REAL_PROGRAMME, name: 'Live Grant Round', creator: null, createdLedger: null },
+      ]);
+
+      render(
+        <MemoryRouter>
+          <ApplyForm sampleDelayMs={0} />
+        </MemoryRouter>
+      );
+
+      await screen.findByRole('option', { name: 'Live Grant Round' });
+      fireEvent.change(screen.getByLabelText('Programme'), { target: { value: REAL_PROGRAMME } });
+
+      // Enter exactly the minimum (50 XLM).
+      fireEvent.change(screen.getByPlaceholderText('0'), { target: { value: '50' } });
+
+      await waitFor(() => {
+        expect(screen.queryByText(/below the programme.*minimum award/i)).toBeNull();
+      });
+    });
+
+    it('does not show the warning when the amount is above the minimum', async () => {
+      programme = makeProgramme({ minimumAward: 500_000_000n, phase: 'Open' });
+
+      const { fetchProgrammes } = await import('../../lib/indexer');
+      (fetchProgrammes as ReturnType<typeof vi.fn>).mockResolvedValueOnce([
+        { id: REAL_PROGRAMME, name: 'Live Grant Round', creator: null, createdLedger: null },
+      ]);
+
+      render(
+        <MemoryRouter>
+          <ApplyForm sampleDelayMs={0} />
+        </MemoryRouter>
+      );
+
+      await screen.findByRole('option', { name: 'Live Grant Round' });
+      fireEvent.change(screen.getByLabelText('Programme'), { target: { value: REAL_PROGRAMME } });
+
+      // Enter more than the minimum (100 XLM > 50 XLM).
+      fireEvent.change(screen.getByPlaceholderText('0'), { target: { value: '100' } });
+
+      await waitFor(() => {
+        expect(screen.queryByText(/below the programme.*minimum award/i)).toBeNull();
+      });
+    });
+
+    it('says so when the signature is declined, instead of silently resetting', async () => {
+      const { fetchProgrammes } = await import('../../lib/indexer');
+      (fetchProgrammes as ReturnType<typeof vi.fn>).mockResolvedValueOnce([
+        { id: REAL_PROGRAMME, name: 'Live Grant Round', creator: null, createdLedger: null },
+      ]);
+
+      programme = makeProgramme({ applyResult: 'declined', phase: 'Open' });
+
+      render(
+        <MemoryRouter>
+          <ApplyForm sampleDelayMs={0} />
+        </MemoryRouter>
+      );
+
+      await screen.findByRole('option', { name: 'Live Grant Round' });
+      fireEvent.change(screen.getByLabelText('Programme'), { target: { value: REAL_PROGRAMME } });
+      fireEvent.change(screen.getByPlaceholderText('0'), { target: { value: '500' } });
+      fireEvent.change(screen.getByRole('textbox', { name: /application notes/i }), {
+        target: { value: 'Second attempt notes.' },
+      });
+
+      fireEvent.click(screen.getByRole('button', { name: /submit application/i }));
+
+      expect(
+        await screen.findByText('You declined the signature. Nothing was submitted.'),
+      ).toBeDefined();
+      // No receipt, and the form is still there to try again.
+      expect(screen.queryByText('Application submitted')).toBeNull();
+      expect(screen.getByRole('button', { name: /submit application/i })).toBeDefined();
     });
   });
 
@@ -739,7 +951,7 @@ describe('Recipient Issues Suite (#272, #273, #274, #275)', () => {
       expect(screen.getByText('Tranches')).toBeDefined();
     });
 
-    it('emphasizes current Review stage with Now and explains median rule on Award set', () => {
+    it('emphasizes current Review stage with Now and explains the award rule on Award set', () => {
       const mockApplications: RecipientApplicationFixture[] = [
         {
           programmeId: 'PROG-TIMELINE-2',
@@ -761,13 +973,13 @@ describe('Recipient Issues Suite (#272, #273, #274, #275)', () => {
       // Emphasized tag "Now" for Review phase
       expect(screen.getByText('· Now')).toBeDefined();
 
-      // Median rule explanation
+      // Award rule explanation
       expect(
-        screen.getByText(/The award will be the median, not the lowest or the average\./i)
+        screen.getByText(/The award will be the middle vote, never an average/i)
       ).toBeDefined();
     });
 
-    it('says a finalised application carries the median award', () => {
+    it('says a finalised application carries the award the contract settled on', () => {
       const mockApplications: RecipientApplicationFixture[] = [
         {
           programmeId: 'PROG-TIMELINE-3',
@@ -776,7 +988,7 @@ describe('Recipient Issues Suite (#272, #273, #274, #275)', () => {
           requested: '12000000000',
           submittedAt: 1774000000,
           votes: ['9000000000', '12000000000'],
-          quorum: 3,
+          quorum: 2,
           finalized: true,
         },
       ];
@@ -789,10 +1001,10 @@ describe('Recipient Issues Suite (#272, #273, #274, #275)', () => {
 
       expect(
         screen.getByText(
-          'Finalised — your award is 1,050.00 USDC, the median of 2 reviewer votes.'
+          'Finalised — your award is 900.00 XLM, the middle vote of 2 reviewer votes.'
         )
       ).toBeDefined();
-      expect(screen.getByText('Median of the votes: 1,050.00 USDC')).toBeDefined();
+      expect(screen.getByText('Middle vote: 900.00 XLM')).toBeDefined();
     });
 
     it('says a withdrawn application will not be reviewed or finalised', () => {
@@ -992,4 +1204,80 @@ describe('Recipient Issues Suite (#272, #273, #274, #275)', () => {
       expect(screen.getByText('No award will be set.')).toBeDefined();
     });
   });
+});
+
+describe('AwardCard release sheet — accessibility in every step (#696)', () => {
+  const ATTEST_HEX = 'a'.repeat(64);
+  const ATTESTER = 'G' + 'B'.repeat(55);
+  const award: RecipientAwardFixture = {
+    programmeId: REAL_PROGRAMME,
+    programmeName: 'Secondary School Bursaries 2026',
+    recipient: RECIPIENT,
+    granted: '30000000000',
+    released: '10000000000',
+    tranches: 3,
+    tranchesReleased: 1,
+    payee: null,
+    mode: 'Restricted',
+    updatedLedger: 4851002,
+    attestationReady: true,
+    condition: 'Milestone 2 completed and verified',
+  };
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    walletMocks.address = RECIPIENT;
+  });
+
+  // The release sheet has no separate confirm step: the form says where the
+  // money goes ("Where this goes") beside the sign button.
+  function openAndFill() {
+    render(
+      <MemoryRouter>
+        <AwardCard award={award} sampleDelayMs={0} />
+      </MemoryRouter>,
+    );
+    const opener = screen.getByRole('button', { name: /release tranche/i });
+    focusAndClick(opener, fireEvent.click);
+    expectFocusInSheet('form');
+    fireEvent.change(screen.getByLabelText(/attestation id/i), { target: { value: ATTEST_HEX } });
+    fireEvent.change(screen.getByLabelText(/attester address/i), { target: { value: ATTESTER } });
+    return opener;
+  }
+
+  it('form, pending and done', async () => {
+    let settle: (value: unknown) => void = () => {};
+    programme = makeProgramme();
+    programme.release = vi.fn(async () => ({
+      signAndSend: vi.fn(
+        () =>
+          new Promise<unknown>((resolve) => {
+            settle = resolve;
+          }),
+      ),
+    })) as unknown as typeof programme.release;
+    openAndFill();
+    await expectSheetAccessible('form');
+
+    fireEvent.click(screen.getByRole('button', { name: /sign and release/i }));
+    await screen.findByText('Releasing tranche 2');
+    await expectSheetAccessible('pending');
+
+    settle({ result: { unwrap: () => 10_000_000_000n }, sendTransactionResponse: { hash: 'RELEASEHASH1234567890' } });
+    expect(await screen.findByText('Tranche 2 released')).toBeTruthy();
+    await expectSheetAccessible('done');
+  }, SHEET_TEST_TIMEOUT);
+
+  it('failed, and Escape returns focus to the opener', async () => {
+    programme = makeProgramme({ releaseResult: 'invalidAttestation' });
+    const opener = openAndFill();
+    fireEvent.click(screen.getByRole('button', { name: /sign and release/i }));
+    expect(await screen.findByText('Tranche not released')).toBeTruthy();
+    expectFocusInSheet('failed');
+    await expectSheetAccessible('failed');
+
+    fireEvent.keyDown(document, { key: 'Escape' });
+    expect(screen.queryByRole('dialog')).toBeNull();
+    expectFocusReturnedTo(opener);
+  }, SHEET_TEST_TIMEOUT);
 });

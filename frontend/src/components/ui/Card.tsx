@@ -48,3 +48,30 @@ export function Stat({
     </div>
   );
 }
+
+export interface StatTileProps {
+  label: string;
+  value: ReactNode;
+  /** The asset or unit, set smaller beside the figure. */
+  unit?: ReactNode;
+  hint?: ReactNode;
+  /** One tile per row of stats may carry the accent: the figure that matters most. */
+  highlight?: boolean;
+}
+
+/**
+ * A figure on its own tile: a label, a large mono number, a line of context.
+ * Used in rows of three or four at the top of a page.
+ */
+export function StatTile({ label, value, unit, hint, highlight = false }: StatTileProps) {
+  return (
+    <div className={`ui-stat-tile${highlight ? ' ui-stat-tile--highlight' : ''}`}>
+      <span className="ui-stat-tile__label">{label}</span>
+      <span className="ui-stat-tile__value numeric">
+        {value}
+        {unit && <small>{unit}</small>}
+      </span>
+      {hint && <span className="ui-stat-tile__hint">{hint}</span>}
+    </div>
+  );
+}

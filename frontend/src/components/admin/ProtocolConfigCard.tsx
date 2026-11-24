@@ -26,7 +26,7 @@ const MAX_FEE_BPS = 1_000;
  * plus edit forms); they are now one, so there is one place that shows a
  * setting and one place that changes it.
  */
-export function ProtocolConfigCard() {
+export function ProtocolConfigCard({ readOnly = false }: { readOnly?: boolean } = {}) {
   const { registry } = useSoroban();
   const wallet = useWallet();
   const configRead = useContractResult<Config>(() => registry.get_config(), [registry], {
@@ -44,7 +44,7 @@ export function ProtocolConfigCard() {
   }
 
   const { fee_bps: feeBps, treasury, attest, record, policy, admin } = live;
-  const isAdmin = Boolean(wallet.address && wallet.address.toLowerCase() === admin.toLowerCase());
+  const isAdmin = !readOnly && Boolean(wallet.address && wallet.address.toLowerCase() === admin.toLowerCase());
 
   const rows: { k: string; v: ReactNode }[] = [
     { k: 'Protocol fee', v: <span className="numeric">{feeBps / 100}%</span> },
@@ -59,7 +59,7 @@ export function ProtocolConfigCard() {
     <section className="protocol-config" aria-labelledby="protocol-config">
       <div className="protocol-config__head">
         <h2 id="protocol-config">Protocol config</h2>
-        <Badge tone={isAdmin ? 'accent' : 'neutral'}>{isAdmin ? 'Registry admin' : 'Read-only'}</Badge>
+        {!readOnly && <Badge tone={isAdmin ? 'accent' : 'neutral'}>{isAdmin ? 'Registry admin' : 'Read-only'}</Badge>}
       </div>
       <dl className="protocol-config__rows">
         {rows.map((row) => (
@@ -70,15 +70,13 @@ export function ProtocolConfigCard() {
         ))}
       </dl>
       <p className="protocol-config__foot">
-        Read from the registry. Treasury and fee come from configuration rather than the
-        caller, so a creator cannot pay a fee to themselves.
+        Read from the registry. The admin sets the fee and treasury, and a change applies only to
+        programmes deployed after it. They can’t touch yours.
       </p>
 
-      {!isAdmin && wallet.address && (
+      {!readOnly && !isAdmin && wallet.address && (
         <p className="protocol-config__note" role="note">
-          You are viewing in read-only mode. Connected wallet (
-          <AddressChip address={wallet.address} copyLabel="Copy your address" />) is not the
-          registry admin ({<AddressChip address={admin} copyLabel="Copy registry admin address" />}).
+          You are viewing in read-only mode: only the registry admin can change these.
         </p>
       )}
 

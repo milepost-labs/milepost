@@ -1,39 +1,68 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { fireEvent, render, screen, waitFor, within } from '@testing-library/react';
+import { configure, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
 import { Buffer } from 'buffer';
 import { DEMO_PROGRAMME_ID } from '../context/sorobanStore';
 import { VerifierDashboard } from './VerifierDashboard';
+import {
+  expectFocusInSheet,
+  expectFocusReturnedTo,
+  expectSheetAccessible,
+  focusAndClick,
+  SHEET_TEST_TIMEOUT,
+} from '../test/sheetAccessibility';
 
-// Issue #339 — the reviewer voting section. Voting sets award amounts, so the
-// rules the UI enforces before anything is signed (a reviewer only, inside the
-// request's cap, amendable until finalisation) get their own coverage here.
-// The contract clients are faked through `useSoroban`; nothing touches the
-// network.
+// `/verifiers`: claims reach the review panel from a recipient's request link
+// or the verifier's own lookup, and either way every fact is read from the
+// chain before signing. Reviewer voting sits on the same page. The contract
+// clients are faked through `useSoroban`; nothing touches the network.
+
+// The review panel chains several reads (registry, config, schema, award)
+// before it settles; under a full parallel run that can pass the 1s default.
+configure({ asyncUtilTimeout: 3000 });
 
 const ADDRESS = `GRVW${'A'.repeat(52)}`;
-const APPLICANT = 'GB6PCCOLV2NF4DP4LEU7JSWAVPKXMUKCWZGL3M3VRY6FNPW3EY4R2AAW';
-const VERIFY_PROGRAMME_ID = 'CBJWECZ3EUVNAE73YIMT2KWWNRHRF7NNWVKOLQRVOHSKYRYE32XBRPW7';
-const REVIEW_PROGRAMME_ID = 'CCOIACASOVO3ZQLXWWJFGZAU3Y545AGPXLBP4NYHYD77RDCBPXRVZ37C';
+const RECIPIENT = `GREC${'B'.repeat(52)}`;
+const APPLICANT = 'GAH3D4RM45ETE4W7VDRCWZBPRPT63CJXAGXFYVBC2FGANBZTS4OTKXCA';
+const PROGRAMME = `CPRG${'C'.repeat(52)}`;
+const OTHER_PROGRAMME = `COTH${'D'.repeat(52)}`;
+const ATTEST_ID = `CATT${'E'.repeat(52)}`;
+const SCHEMA = Buffer.alloc(32, 0x5c);
+const SIGNED_UID = Buffer.alloc(32, 0xab);
 
 const mocks = vi.hoisted(() => ({
   address: null as string | null,
   announce: vi.fn(),
-  connect: vi.fn(),
+  isProgramme: vi.fn(async () => ({ result: true })),
 }));
 
 vi.mock('../context/useWallet', () => ({
   useWallet: () => ({
     address: mocks.address,
     status: mocks.address ? 'connected' : 'disconnected',
-    connect: mocks.connect,
+    connect: vi.fn(),
     signTransaction: vi.fn(),
   }),
 }));
 
 vi.mock('../context/useAnnouncer', () => ({ useAnnouncer: () => mocks.announce }));
 
-function unwrap<T>(value: T) {
+vi.mock('../hooks/useProgrammeParam', () => ({
+  useProgrammeParam: () => ({
+    raw: null,
+    programmeId: null,
+    status: 'absent',
+    active: false,
+    blocksProgramme: false,
+    loading: false,
+    error: null,
+    message: null,
+    clear: vi.fn(),
+    refetch: vi.fn(),
+  }),
+}));
+
+function ok<T>(value: T) {
   return Promise.resolve({ result: { unwrap: () => value } });
 }
 
@@ -41,48 +70,84 @@ function sendable<T>(value: T) {
   return { signAndSend: vi.fn(async () => ({ result: { unwrap: () => value } })) };
 }
 
-function makeApplication(overrides: {
-  finalized?: boolean;
-  withdrawn?: boolean;
-  required?: bigint;
-} = {}) {
+function makeApplication(overrides: { finalized?: boolean } = {}) {
   return {
     applicant: APPLICANT,
     finalized: overrides.finalized ?? false,
     metadata_hash: Buffer.alloc(32),
-    requested: overrides.required ?? 5000000000n,
+    requested: 5_000_000_000n,
     submitted_at: 0,
     votes: [] as bigint[],
-    withdrawn: overrides.withdrawn ?? false,
+    withdrawn: false,
   };
 }
 
-function makeProgramme() {
+function makeProgramme(id: string) {
   return {
-    options: { contractId: DEMO_PROGRAMME_ID },
+    options: { contractId: id },
     is_reviewer: vi.fn(async () => ({ result: true })),
     is_verifier: vi.fn(async () => ({ result: true })),
-    get_phase: vi.fn(() => unwrap({ tag: 'Review' })),
-    get_application: vi.fn(() => unwrap(makeApplication())),
+    is_paused: vi.fn(async () => ({ result: false })),
+    is_spent: vi.fn(async () => ({ result: false })),
+    get_phase: vi.fn(() => ok({ tag: 'Review' })),
+    get_config: vi.fn(() =>
+      ok({ attest: ATTEST_ID, schema: SCHEMA, release_deadline: 4_102_444_800n, tranches: 3 }),
+    ),
+    get_award: vi.fn(() =>
+      ok({
+        recipient: RECIPIENT,
+        granted: 3_000_000_000n,
+        released: 1_000_000_000n,
+        tranches: 3,
+        tranches_released: 1,
+        payee: RECIPIENT,
+        mode: { tag: 'Allocated' },
+      }),
+    ),
+    get_application: vi.fn(() => ok(makeApplication())),
     review: vi.fn(() => sendable(undefined)),
   };
 }
 
 function makeAttest() {
-  return { attest: vi.fn(() => sendable(Buffer.alloc(32, 0xab))) };
+  return {
+    options: { contractId: ATTEST_ID },
+    attest: vi.fn(() => sendable(SIGNED_UID)),
+    get_schema: vi.fn(() =>
+      ok({ definition: 'Land prepared for planting', authority: ADDRESS, restricted: false, revocable: true }),
+    ),
+    get: vi.fn(() => ok({ revoked_at: undefined })),
+    revoke: vi.fn(() => sendable(undefined)),
+  };
 }
 
-let programme = makeProgramme();
+let clients = new Map<string, ReturnType<typeof makeProgramme>>();
 let attest = makeAttest();
 let indexed: { id: string; name: string | null; creator: string | null; createdLedger: number | null }[] = [];
-let programmeAtImpl: (id: string) => unknown = () => programme;
 
-vi.mock('../context/useSoroban', () => ({
-  useSoroban: () => ({
-    attest,
-    demoProgramme: programme,
-    programmeAt: (id: string) => programmeAtImpl(id),
-  }),
+function client(id: string) {
+  if (!clients.has(id)) clients.set(id, makeProgramme(id));
+  return clients.get(id)!;
+}
+
+vi.mock('../context/useSoroban', () => {
+  // Built once: reads key on the clients, and the real context is memoized.
+  const soroban = {
+    // A getter: tests swap `attest` out, and the factory runs before it is set.
+    get attest() {
+      return attest;
+    },
+    registry: { is_programme: mocks.isProgramme },
+    programmeAt: (id: string) => client(id),
+    rpcUrl: 'https://rpc.test',
+  };
+  return { useSoroban: () => soroban, useOptionalSoroban: () => soroban };
+});
+
+// Programmes name their real asset from the token contract; these hold native XLM.
+vi.mock('../lib/token', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('../lib/token')>()),
+  fetchTokenName: vi.fn(async () => ({ result: 'native' })),
 }));
 
 vi.mock('../lib/indexer', async (importOriginal) => ({
@@ -90,329 +155,430 @@ vi.mock('../lib/indexer', async (importOriginal) => ({
   fetchProgrammes: vi.fn(async () => indexed),
 }));
 
-function renderDashboard() {
+const requestUrl = (extra = '') =>
+  `/verifiers?programme=${PROGRAMME}&recipient=${RECIPIENT}&tranche=2&note=Plot%2014${extra}`;
+
+function renderPage(url = '/verifiers') {
   return render(
-    <MemoryRouter>
+    <MemoryRouter initialEntries={[url]}>
       <VerifierDashboard />
     </MemoryRouter>,
   );
 }
 
-/** Pick the fixture applicant, then wait for its application to load. */
-async function selectApplicant() {
-  fireEvent.click(await screen.findByRole('button', { name: /Sunrise cooperative/ }));
-  await screen.findByText('Requested');
-}
-
-function typeAmount(value: string) {
-  fireEvent.change(screen.getByLabelText('Approved amount'), { target: { value } });
-}
-
-function submitVote() {
-  fireEvent.click(screen.getByRole('button', { name: 'Submit review vote' }));
+function signButton() {
+  return screen.getByRole('button', { name: 'Sign attestation' }) as HTMLButtonElement;
 }
 
 beforeEach(() => {
-  programme = makeProgramme();
+  clients = new Map();
   attest = makeAttest();
   indexed = [];
-  programmeAtImpl = () => programme;
   mocks.address = ADDRESS;
   mocks.announce.mockClear();
-  mocks.connect.mockClear();
+  mocks.isProgramme.mockReset().mockResolvedValue({ result: true });
+  window.localStorage.clear();
+});
+
+describe('VerifierDashboard — a request link', () => {
+  it('opens the claim with every fact read from the chain, and signs under the programme’s schema', async () => {
+    renderPage(requestUrl());
+
+    expect(await screen.findByRole('heading', { name: 'Land prepared for planting' })).toBeTruthy();
+    expect(screen.getByText('Plot 14')).toBeTruthy();
+    expect(screen.getByText('From their link, not the chain')).toBeTruthy();
+    // tranches_released is 1, so the next tranche is 2 of 3: the link agrees.
+    expect(screen.getByText('2 of 3')).toBeTruthy();
+    expect(screen.getByText('100 XLM')).toBeTruthy();
+    expect(client(PROGRAMME).get_award).toHaveBeenCalledWith({ recipient: RECIPIENT });
+
+    await screen.findByText('Tick the box above to confirm you checked it yourself.');
+    expect(signButton().disabled).toBe(true);
+
+    fireEvent.click(screen.getByLabelText(/I checked this myself/));
+    await waitFor(() => expect(signButton().disabled).toBe(false));
+    fireEvent.click(signButton());
+
+    expect(await screen.findByRole('heading', { name: 'Attestation signed', level: 3 })).toBeTruthy();
+    expect(attest.attest).toHaveBeenCalledWith({
+      attester: ADDRESS,
+      schema_uid: SCHEMA,
+      subject: RECIPIENT,
+      data_hash: Buffer.alloc(32),
+      expires_at: undefined,
+    });
+    expect(screen.getByRole('button', { name: 'Copy reply link' })).toBeTruthy();
+    expect(mocks.announce).toHaveBeenCalledWith(expect.stringMatching(/^Attestation signed\./));
+  });
+
+  it('hashes the reference rather than putting it on the chain', async () => {
+    renderPage(requestUrl());
+    await screen.findByRole('heading', { name: 'Land prepared for planting' });
+
+    fireEvent.change(screen.getByLabelText('Your reference (optional)'), { target: { value: 'VR-2291' } });
+    fireEvent.click(screen.getByLabelText(/I checked this myself/));
+    await waitFor(() => expect(signButton().disabled).toBe(false));
+    fireEvent.click(signButton());
+
+    await waitFor(() => expect(attest.attest).toHaveBeenCalled());
+    const { data_hash } = (attest.attest.mock.calls[0] as unknown as [{ data_hash: Buffer }])[0];
+    const expected = Buffer.from(
+      new Uint8Array(await crypto.subtle.digest('SHA-256', new TextEncoder().encode('VR-2291'))),
+    );
+    expect(data_hash.equals(expected)).toBe(true);
+  });
+
+  it('says when the link’s tranche is not the next one', async () => {
+    renderPage(`/verifiers?programme=${PROGRAMME}&recipient=${RECIPIENT}&tranche=3`);
+    expect(await screen.findByText(/The link asked about tranche 3/)).toBeTruthy();
+  });
+
+  it('refuses to sign for a programme the registry did not deploy', async () => {
+    mocks.isProgramme.mockResolvedValue({ result: false });
+    renderPage(requestUrl());
+    fireEvent.click(await screen.findByLabelText(/I checked this myself/));
+
+    expect(await screen.findByText(/registry did not deploy this programme/)).toBeTruthy();
+    expect(signButton().disabled).toBe(true);
+  });
+
+  it('refuses to sign when this address is not one of the programme’s verifiers', async () => {
+    client(PROGRAMME).is_verifier.mockResolvedValue({ result: false });
+    renderPage(requestUrl());
+    expect(await screen.findByText(/not one of the programme’s verifiers/)).toBeTruthy();
+    expect(signButton().disabled).toBe(true);
+  });
+
+  it('says there is nothing to unlock when the recipient has no award', async () => {
+    client(PROGRAMME).get_award.mockRejectedValue(new Error('HostError: Error(Contract, #19)'));
+    renderPage(requestUrl());
+    expect(await screen.findByText(/has no award in this programme/)).toBeTruthy();
+    expect(screen.queryByText(/HostError/)).toBeNull();
+  });
+
+  it('explains a failed signature and keeps the request', async () => {
+    attest.attest.mockRejectedValue(new Error('HostError: Error(Contract, #1)'));
+    renderPage(requestUrl());
+    await screen.findByRole('heading', { name: 'Land prepared for planting' });
+    fireEvent.click(screen.getByLabelText(/I checked this myself/));
+    await waitFor(() => expect(signButton().disabled).toBe(false));
+    fireEvent.click(signButton());
+
+    expect(await screen.findByText('Attestation not signed')).toBeTruthy();
+    expect(screen.getByText('No such schema.')).toBeTruthy();
+    expect(screen.queryByText(/HostError/)).toBeNull();
+    expect(mocks.announce).toHaveBeenCalledWith('Attestation not signed. No such schema.', 'alert');
+    fireEvent.click(screen.getAllByRole('button', { name: 'Close' }).at(-1)!);
+    expect(within(screen.getByRole('list', { name: 'Requests' })).getAllByRole('listitem')).toHaveLength(1);
+  });
+
+  it('drops the request once the signed sheet closes, and lists the attestation', async () => {
+    renderPage(requestUrl());
+    await screen.findByRole('heading', { name: 'Land prepared for planting' });
+    fireEvent.click(screen.getByLabelText(/I checked this myself/));
+    await waitFor(() => expect(signButton().disabled).toBe(false));
+    fireEvent.click(signButton());
+    await screen.findByRole('heading', { name: 'Attestation signed', level: 3 });
+
+    fireEvent.click(screen.getByRole('button', { name: 'Done' }));
+
+    expect(await screen.findByText('No requests yet')).toBeTruthy();
+    const uid = SIGNED_UID.toString('hex');
+    const table = screen.getByRole('table');
+    expect(await within(table).findByRole('cell', { name: `${uid.slice(0, 8)}…${uid.slice(-6)}` })).toBeTruthy();
+    expect(within(table).getByRole('button', { name: /Copy reply link for/ })).toBeTruthy();
+    const row = within(table).getByRole('cell', { name: `${uid.slice(0, 8)}…${uid.slice(-6)}` }).closest('tr')!;
+    expect(await within(row).findByText('Not used yet')).toBeTruthy();
+    expect(client(PROGRAMME).is_spent).toHaveBeenCalledWith({ attestation: SIGNED_UID });
+  });
+
+  it('sends nothing when the verifier can’t confirm', async () => {
+    renderPage(requestUrl());
+    await screen.findByRole('heading', { name: 'Land prepared for planting' });
+
+    fireEvent.click(screen.getByRole('button', { name: 'Can’t confirm' }));
+
+    expect(await screen.findByText('No requests yet')).toBeTruthy();
+    expect(attest.attest).not.toHaveBeenCalled();
+  });
+
+  it('asks a signed-out visitor to sign in, and says a request is waiting', () => {
+    mocks.address = null;
+    renderPage(requestUrl());
+    expect(screen.getByText('Confirm conditions and unlock payments')).toBeTruthy();
+    expect(screen.getByText(/A recipient sent you a claim to confirm/)).toBeTruthy();
+    expect(screen.queryByRole('button', { name: 'Sign attestation' })).toBeNull();
+  });
+});
+
+describe('VerifierDashboard — looking up a recipient', () => {
+  it('opens a claim from a programme the verifier picked and a pasted recipient', async () => {
+    indexed = [{ id: PROGRAMME, name: 'Oyo Smallholder Inputs', creator: null, createdLedger: 1 }];
+    renderPage();
+
+    expect(await screen.findByText('No requests yet')).toBeTruthy();
+    fireEvent.click(within(screen.getByRole('group', { name: 'Where claims come from' })).getByRole('button', { name: 'Look up a recipient' }));
+
+    const programmeSelect = (await screen.findAllByLabelText('Programme', { selector: 'select' }))[0] as HTMLSelectElement;
+    await waitFor(() => expect(within(programmeSelect).getByText('Oyo Smallholder Inputs')).toBeTruthy());
+    fireEvent.change(screen.getByLabelText('Recipient address'), { target: { value: RECIPIENT } });
+    fireEvent.click(screen.getByRole('button', { name: 'Open claim' }));
+
+    expect(await screen.findByRole('heading', { name: 'Land prepared for planting' })).toBeTruthy();
+    expect(client(PROGRAMME).get_award).toHaveBeenCalledWith({ recipient: RECIPIENT });
+    expect(screen.getByRole('button', { name: 'Clear' })).toBeTruthy();
+  });
+
+  it('refuses a malformed recipient without reading anything', async () => {
+    renderPage();
+    fireEvent.click(within(await screen.findByRole('group', { name: 'Where claims come from' })).getByRole('button', { name: 'Look up a recipient' }));
+    fireEvent.change(screen.getByLabelText('Programme address'), { target: { value: PROGRAMME } });
+    fireEvent.change(screen.getByLabelText('Recipient address'), { target: { value: 'nope' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Open claim' }));
+
+    expect(await screen.findByText(/Enter the recipient’s Stellar address/)).toBeTruthy();
+    expect(client(PROGRAMME).get_award).not.toHaveBeenCalled();
+  });
 });
 
 describe('VerifierDashboard — reviewer voting', () => {
-  it('submits a vote with the reviewer’s amount for the chosen applicant', async () => {
-    renderDashboard();
-    await selectApplicant();
+  async function voteRow() {
+    const rows = await screen.findByRole('list', { name: 'Applicants' });
+    const row = (await within(rows).findByText('Sunrise cooperative')).closest('li')!;
+    await within(row).findByText(/Asked for 500 XLM/);
+    return row;
+  }
 
-    expect(screen.getByText('Reviewer wallet')).toBeTruthy();
-    expect(screen.getByText('500.00 XLM')).toBeTruthy();
+  function vote(row: HTMLElement, amount: string) {
+    fireEvent.change(within(row).getByLabelText(/Amount to approve/), { target: { value: amount } });
+    fireEvent.click(within(row).getByRole('button', { name: 'Vote' }));
+  }
 
-    typeAmount('250');
-    submitVote();
+  it('submits a vote with the reviewer’s amount', async () => {
+    renderPage();
+    const row = await voteRow();
+    await screen.findByText('Reviewer wallet');
+    await waitFor(() => expect((within(row).getByRole('button', { name: 'Vote' }) as HTMLButtonElement).disabled).toBe(false));
 
-    await waitFor(() => {
-      expect(programme.review).toHaveBeenCalledTimes(1);
-    });
-    expect(programme.review).toHaveBeenCalledWith({
-      reviewer: ADDRESS,
-      applicant: APPLICANT,
-      approved: 2500000000n,
-    });
-    expect(mocks.announce).toHaveBeenCalledWith('Review vote submitted for GB6PCC…2AAW.');
+    vote(row, '250');
+
+    await waitFor(() =>
+      expect(client(DEMO_PROGRAMME_ID).review).toHaveBeenCalledWith({
+        reviewer: ADDRESS,
+        applicant: APPLICANT,
+        approved: 2_500_000_000n,
+      }),
+    );
     expect(await screen.findByText('Review vote submitted')).toBeTruthy();
-  });
-
-  it('amends a vote by submitting a new amount before finalisation', async () => {
-    renderDashboard();
-    await selectApplicant();
-
-    typeAmount('120');
-    submitVote();
-    await waitFor(() => {
-      expect(programme.review).toHaveBeenCalledTimes(1);
-    });
-
-    // The contract keeps one vote per reviewer; the UI lets it be replaced.
-    typeAmount('180');
-    submitVote();
-    await waitFor(() => {
-      expect(programme.review).toHaveBeenCalledTimes(2);
-    });
-    expect(programme.review).toHaveBeenLastCalledWith({
-      reviewer: ADDRESS,
-      applicant: APPLICANT,
-      approved: 1800000000n,
-    });
+    expect(mocks.announce).toHaveBeenCalledWith('Review vote submitted for GAH3D4…KXCA.');
   });
 
   it('refuses an amount over the request inline, without signing anything', async () => {
-    renderDashboard();
-    await selectApplicant();
+    renderPage();
+    const row = await voteRow();
+    await waitFor(() => expect((within(row).getByRole('button', { name: 'Vote' }) as HTMLButtonElement).disabled).toBe(false));
+    vote(row, '600');
 
-    typeAmount('600');
-    submitVote();
-
-    const alert = await screen.findByRole('alert');
-    expect(within(alert).getByText('The approved amount cannot exceed what the applicant requested.')).toBeTruthy();
-    expect(programme.review).not.toHaveBeenCalled();
+    expect(await within(row).findByText('The approved amount cannot exceed what the applicant requested.')).toBeTruthy();
+    expect(client(DEMO_PROGRAMME_ID).review).not.toHaveBeenCalled();
   });
 
-  it('tells a non-reviewer they cannot vote and disables submitting', async () => {
-    programme.is_reviewer.mockResolvedValue({ result: false });
-    renderDashboard();
-    await selectApplicant();
+  it('tells a non-reviewer why they cannot vote', async () => {
+    client(DEMO_PROGRAMME_ID).is_reviewer.mockResolvedValue({ result: false });
+    renderPage();
+    const row = await voteRow();
 
-    expect(await screen.findByText('Not a reviewer')).toBeTruthy();
-    const submit = screen.getByRole('button', { name: 'Submit review vote' }) as HTMLButtonElement;
-    expect(submit.disabled).toBe(true);
-
-    fireEvent.click(submit);
-    expect(programme.review).not.toHaveBeenCalled();
+    expect(await screen.findByText('The connected wallet is not a registered reviewer for this programme.')).toBeTruthy();
+    expect(screen.getByText('Not a reviewer')).toBeTruthy();
+    expect((within(row).getByRole('button', { name: 'Vote' }) as HTMLButtonElement).disabled).toBe(true);
   });
 
   it('explains a wrong-phase refusal rather than showing the raw error', async () => {
-    programme.review.mockRejectedValue(new Error('HostError: Error(Contract, #2)'));
-    renderDashboard();
-    await selectApplicant();
+    client(DEMO_PROGRAMME_ID).review.mockRejectedValue(new Error('HostError: Error(Contract, #2)'));
+    renderPage();
+    const row = await voteRow();
+    await waitFor(() => expect((within(row).getByRole('button', { name: 'Vote' }) as HTMLButtonElement).disabled).toBe(false));
+    vote(row, '250');
 
-    typeAmount('250');
-    submitVote();
-
-    // The raw failure is translated for the person: what happened, what to do,
-    // and the contract's own code, never the HostError text.
-    //
-    // Known defect, reported rather than fixed here: this page re-runs
-    // `explain()` over the `Explained` value `useTransaction` already produced,
-    // so the inline panel above the outcome degrades to the generic "Something
-    // went wrong" copy. The correct explanation below still renders (from the
-    // transaction outcome), and that is what the user is asserted to see.
     expect(await screen.findByText('The window for this action is not open.')).toBeTruthy();
-    expect(screen.getByText('Check the programme timeline for when it opens or closed.')).toBeTruthy();
     expect(screen.getByText('Nothing was transferred · program error 2')).toBeTruthy();
     expect(screen.queryByText(/HostError/)).toBeNull();
     expect(mocks.announce).toHaveBeenCalledWith('The window for this action is not open.', 'alert');
   });
 
-  it('does not allow voting once the application has left review', async () => {
-    programme.get_application.mockImplementation(() => unwrap(makeApplication({ finalized: true })));
-    renderDashboard();
-    await selectApplicant();
+  it('does not allow voting once the application is finalized', async () => {
+    client(DEMO_PROGRAMME_ID).get_application.mockImplementation(() => ok(makeApplication({ finalized: true })));
+    renderPage();
+    const rows = await screen.findByRole('list', { name: 'Applicants' });
+    const row = (await within(rows).findByText('Sunrise cooperative')).closest('li')!;
 
-    expect(await screen.findByText('Finalized')).toBeTruthy();
-    const submit = screen.getByRole('button', { name: 'Submit review vote' }) as HTMLButtonElement;
-    expect(submit.disabled).toBe(true);
-    expect((screen.getByLabelText('Approved amount') as HTMLInputElement).disabled).toBe(true);
+    expect(await within(row).findByText('Finalized')).toBeTruthy();
+    expect((within(row).getByRole('button', { name: 'Vote' }) as HTMLButtonElement).disabled).toBe(true);
+    expect((within(row).getByLabelText(/Amount to approve/) as HTMLInputElement).disabled).toBe(true);
   });
 
-  it('refuses a malformed applicant and remembers a valid one manually entered', async () => {
+  it('refuses a malformed applicant and adds a valid one', async () => {
     const manual = `GB${'B'.repeat(54)}`;
-    renderDashboard();
-    // Select a fixture applicant first: the review form (and its inline error)
-    // appears once an applicant is loaded, which is where the refusal shows.
-    await selectApplicant();
+    renderPage();
+    await voteRow();
 
     fireEvent.change(screen.getByLabelText('Applicant address'), { target: { value: 'not-an-address' } });
-    fireEvent.click(screen.getByRole('button', { name: 'Load applicant' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Add applicant' }));
     expect(await screen.findByText('Enter a valid applicant address.')).toBeTruthy();
-    expect(screen.getByText('GB6PCC…2AAW')).toBeTruthy();
 
     fireEvent.change(screen.getByLabelText('Applicant address'), { target: { value: manual } });
-    fireEvent.click(screen.getByRole('button', { name: 'Load applicant' }));
-
-    const known = screen.getByRole('list', { name: 'Known applicants' });
-    expect(await within(known).findByText('Manual applicant')).toBeTruthy();
-    expect(screen.getByText(manual)).toBeTruthy();
+    fireEvent.click(screen.getByRole('button', { name: 'Add applicant' }));
+    const rows = screen.getByRole('list', { name: 'Applicants' });
+    expect(await within(rows).findByText('Added by you')).toBeTruthy();
+    expect(client(DEMO_PROGRAMME_ID).get_application).toHaveBeenCalledWith({ applicant: manual });
   });
 
   it('shows a failed application read through explain()', async () => {
-    programme.get_application.mockRejectedValue(new Error('Failed to fetch'));
-    renderDashboard();
-
-    fireEvent.click(await screen.findByRole('button', { name: /Sunrise cooperative/ }));
-
-    expect(await screen.findByText('Could not reach the network.')).toBeTruthy();
-    expect(screen.getByText('Check your connection and try again.')).toBeTruthy();
+    client(DEMO_PROGRAMME_ID).get_application.mockRejectedValue(new Error('Failed to fetch'));
+    renderPage();
+    expect(await screen.findAllByText('Could not reach the network.')).not.toHaveLength(0);
     expect(screen.queryByText(/Failed to fetch/)).toBeNull();
   });
 
-  it('lists the programmes where the connected wallet actually holds a role', async () => {
-    indexed = [
-      { id: VERIFY_PROGRAMME_ID, name: 'Community resilience grants 2026', creator: null, createdLedger: 4811204 },
-      { id: REVIEW_PROGRAMME_ID, name: 'Workforce skills grants, cohort 3', creator: null, createdLedger: 4702316 },
-    ];
-    programmeAtImpl = (id) => ({
-      options: { contractId: id },
-      is_verifier: vi.fn(async () => ({ result: id === VERIFY_PROGRAMME_ID })),
-      is_reviewer: vi.fn(async () => ({ result: id === REVIEW_PROGRAMME_ID })),
-      get_phase: vi.fn(() => unwrap({ tag: id === REVIEW_PROGRAMME_ID ? 'Review' : 'Open' })),
-      get_application: vi.fn(() => unwrap(makeApplication())),
-      review: vi.fn(() => sendable(undefined)),
+  it('switches to another programme and sends the vote there', async () => {
+    renderPage();
+    await voteRow();
+    fireEvent.change(screen.getAllByLabelText('Programme', { selector: 'select' })[0], {
+      target: { value: '__other' },
     });
+    fireEvent.change(screen.getByLabelText('Programme address'), { target: { value: OTHER_PROGRAMME } });
+    fireEvent.click(screen.getByRole('button', { name: 'Use programme' }));
 
-    renderDashboard();
+    await waitFor(() => expect(client(OTHER_PROGRAMME).is_reviewer).toHaveBeenCalled());
+    fireEvent.change(screen.getByLabelText('Applicant address'), { target: { value: APPLICANT } });
+    fireEvent.click(screen.getByRole('button', { name: 'Add applicant' }));
+    const rows = await screen.findByRole('list', { name: 'Applicants' });
+    const row = (await within(rows).findByText('Added by you')).closest('li')!;
+    await within(row).findByText(/Asked for 500 XLM/);
+    await waitFor(() => expect((within(row).getByRole('button', { name: 'Vote' }) as HTMLButtonElement).disabled).toBe(false));
+    vote(row, '10');
 
-    expect(await screen.findByText('Community resilience grants 2026 — Open')).toBeTruthy();
-    expect(await screen.findByText('Workforce skills grants, cohort 3 — Review')).toBeTruthy();
-    expect(screen.getByRole('button', { name: 'Review here' })).toBeTruthy();
+    await waitFor(() =>
+      expect(client(OTHER_PROGRAMME).review).toHaveBeenCalledWith({
+        reviewer: ADDRESS,
+        applicant: APPLICANT,
+        approved: 100_000_000n,
+      }),
+    );
+  });
+
+  it('counts the programmes where the wallet actually holds a role', async () => {
+    indexed = [
+      { id: PROGRAMME, name: 'Community resilience grants 2026', creator: null, createdLedger: 1 },
+      { id: OTHER_PROGRAMME, name: 'Workforce skills grants, cohort 3', creator: null, createdLedger: 2 },
+    ];
+    client(PROGRAMME).is_reviewer.mockResolvedValue({ result: false });
+    client(PROGRAMME).get_phase.mockImplementation(() => ok({ tag: 'Open' }));
+    client(OTHER_PROGRAMME).is_verifier.mockResolvedValue({ result: false });
+    renderPage();
+
+    const summary = screen.getByRole('list', { name: 'Verification summary' });
+    await waitFor(() => expect(within(summary).getByText('1 in Review now')).toBeTruthy());
+    expect(await screen.findByRole('option', { name: 'Workforce skills grants, cohort 3 · Review' })).toBeTruthy();
   });
 });
 
-describe('VerifierDashboard — the queue and signing', () => {
-  it('gates signing behind the explicit confirmation checkbox', async () => {
-    renderDashboard();
+// #696. The vote and attest sheets open on signing: their form and confirm
+// are on the page (the amount field; the facts and the "I checked this myself"
+// box), so the sheet itself has pending, done and failed steps.
+describe('VerifierDashboard — sheets, accessible in every step (#696)', () => {
+  function held<T>() {
+    let settle: (value: T) => void = () => {};
+    let fail: (error: Error) => void = () => {};
+    const sendable = {
+      signAndSend: vi.fn(
+        () =>
+          new Promise<{ result: { unwrap: () => T } }>((resolve, reject) => {
+            settle = (value) => resolve({ result: { unwrap: () => value } });
+            fail = reject;
+          }),
+      ),
+    };
+    return { sendable, settle: (value: T) => settle(value), fail: (error: Error) => fail(error) };
+  }
 
-    const [claim] = await screen.findAllByRole('article');
-    fireEvent.click(within(claim).getByRole('button', { name: 'Review claim' }));
+  async function openAttest() {
+    renderPage(requestUrl());
+    await screen.findByRole('heading', { name: 'Land prepared for planting' });
+    fireEvent.click(screen.getByLabelText(/I checked this myself/));
+    await waitFor(() => expect(signButton().disabled).toBe(false));
+    const opener = signButton();
+    focusAndClick(opener, fireEvent.click);
+    await screen.findAllByText(/^Signing for tranche 2/);
+    return opener;
+  }
 
-    // Opening the card shows exactly what is being signed: the schema, the
-    // recipient and the ledger the claim was requested at.
-    expect(within(claim).getByText('condition-met/v1')).toBeTruthy();
-    expect(within(claim).getByText('GBQX4M7KDA9X2P5R8T1W3Y6ZQ4N7B2V5C8X1M7KDA9X2P')).toBeTruthy();
-    expect(within(claim).getByText('4,852,210')).toBeTruthy();
+  it('attest: pending and done', async () => {
+    const write = held<Buffer>();
+    attest.attest.mockReturnValue(write.sendable);
+    await openAttest();
+    expectFocusInSheet('pending');
+    await expectSheetAccessible('pending');
 
-    const confirm = () =>
-      within(claim).getByRole('button', { name: 'Confirm and sign' }) as HTMLButtonElement;
-    expect(confirm().disabled).toBe(true);
+    write.settle(SIGNED_UID);
+    expect(await screen.findByRole('heading', { name: 'Attestation signed', level: 3 })).toBeTruthy();
+    await expectSheetAccessible('done');
+  }, SHEET_TEST_TIMEOUT);
 
-    const gate = within(claim).getByRole('checkbox', { name: /I checked this myself/ });
-    fireEvent.click(gate);
-    expect(confirm().disabled).toBe(false);
+  it('attest: failed, and Escape returns focus to the sign button', async () => {
+    const write = held<Buffer>();
+    attest.attest.mockReturnValue(write.sendable);
+    const opener = await openAttest();
+    write.fail(new Error('HostError: Error(Contract, #1)'));
+    expect(await screen.findByText('Attestation not signed')).toBeTruthy();
+    expectFocusInSheet('failed');
+    await expectSheetAccessible('failed');
 
-    fireEvent.click(gate);
-    expect(confirm().disabled).toBe(true);
+    fireEvent.keyDown(document, { key: 'Escape' });
+    expect(screen.queryByRole('dialog')).toBeNull();
+    expectFocusReturnedTo(opener);
+  }, SHEET_TEST_TIMEOUT);
 
-    // Cancel collapses the card and forgets the tick; reopening starts clean.
-    fireEvent.click(within(claim).getByRole('button', { name: 'Cancel' }));
-    expect(within(claim).queryByRole('checkbox')).toBeNull();
-    fireEvent.click(within(claim).getByRole('button', { name: 'Review claim' }));
-    expect(confirm().disabled).toBe(true);
+  async function openVote(write: ReturnType<typeof held<undefined>>) {
+    client(DEMO_PROGRAMME_ID).review.mockReturnValue(write.sendable);
+    renderPage();
+    const rows = await screen.findByRole('list', { name: 'Applicants' });
+    const row = (await within(rows).findByText('Sunrise cooperative')).closest('li')!;
+    await within(row).findByText(/Asked for 500 XLM/);
+    await screen.findByText('Reviewer wallet');
+    const opener = within(row).getByRole('button', { name: 'Vote' }) as HTMLButtonElement;
+    await waitFor(() => expect(opener.disabled).toBe(false));
+    fireEvent.change(within(row).getByLabelText(/Amount to approve/), { target: { value: '250' } });
+    focusAndClick(opener, fireEvent.click);
+    await screen.findByRole('dialog', { name: 'Cast your vote' });
+    return opener;
+  }
 
-    expect(attest.attest).not.toHaveBeenCalled();
-  });
+  it('vote: pending and done, with focus back on Vote', async () => {
+    const write = held<undefined>();
+    const opener = await openVote(write);
+    expectFocusInSheet('pending');
+    await expectSheetAccessible('pending');
 
-  it('signs an attestation and moves the claim out of the queue', async () => {
-    renderDashboard();
+    write.settle(undefined);
+    expect(await screen.findByText('Review vote submitted')).toBeTruthy();
+    await expectSheetAccessible('done');
 
-    const [claim] = await screen.findAllByRole('article');
-    fireEvent.click(within(claim).getByRole('button', { name: 'Review claim' }));
-    fireEvent.change(within(claim).getByLabelText('Reference (optional)'), {
-      target: { value: 'register page 12' },
-    });
-    fireEvent.click(within(claim).getByRole('checkbox'));
-    fireEvent.click(within(claim).getByRole('button', { name: 'Confirm and sign' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Done' }));
+    expect(screen.queryByRole('dialog')).toBeNull();
+    expectFocusReturnedTo(opener);
+  }, SHEET_TEST_TIMEOUT);
 
-    await waitFor(() => expect(attest.attest).toHaveBeenCalledTimes(1));
-    expect(attest.attest).toHaveBeenCalledWith({
-      attester: ADDRESS,
-      schema_uid: Buffer.alloc(32),
-      subject: 'GBQX4M7KDA9X2P5R8T1W3Y6ZQ4N7B2V5C8X1M7KDA9X2P',
-      data_hash: Buffer.alloc(32),
-      expires_at: undefined,
-    });
-    expect(mocks.announce).toHaveBeenCalledWith('Signing attestation.');
-    expect(mocks.announce).toHaveBeenCalledWith(
-      'Attestation signed. GBQX4M7KDA9X2P5R8T1W3Y6ZQ4N7B2V5C8X1M7KDA9X2P can now release tranche 2.',
-    );
+  it('vote: failed', async () => {
+    const write = held<undefined>();
+    const opener = await openVote(write);
+    write.fail(new Error('HostError: Error(Contract, #2)'));
+    expect(await screen.findByText('Vote not recorded')).toBeTruthy();
+    expectFocusInSheet('failed');
+    await expectSheetAccessible('failed');
 
-    // The claim leaves the queue, the attestation joins the signed list, and
-    // the summary counts both changes.
-    await waitFor(() => expect(screen.getAllByRole('article')).toHaveLength(2));
-    await waitFor(() => expect(screen.getAllByText('Not used yet')).toHaveLength(2));
-
-    const summary = screen.getByRole('list', { name: 'Verification summary' });
-    const stats = within(summary).getAllByRole('listitem').map((li) => li.textContent);
-    expect(stats).toContain('Waiting for you2');
-    expect(stats).toContain('Signed3');
-  });
-
-  it('keeps a failed claim in the queue, still open, and explains the refusal', async () => {
-    attest.attest.mockRejectedValue(new Error('HostError: Error(Contract, #8)'));
-    renderDashboard();
-
-    const [claim] = await screen.findAllByRole('article');
-    fireEvent.click(within(claim).getByRole('button', { name: 'Review claim' }));
-    fireEvent.click(within(claim).getByRole('checkbox'));
-    fireEvent.click(within(claim).getByRole('button', { name: 'Confirm and sign' }));
-
-    const alert = await screen.findByRole('alert');
-    // Known defect, reported rather than fixed here: like the review panel
-    // above, this screen re-runs `explain()` over the `Explained` value
-    // `useTransaction` already produced, so the specific "schema is
-    // restricted" explanation degrades to the generic one. What matters — and
-    // what is asserted — is that the refusal is explained, the raw HostError
-    // never reaches the user, and the money did not move.
-    expect(
-      within(alert).getByText('Something went wrong that we do not have a specific explanation for.'),
-    ).toBeTruthy();
-    expect(within(alert).getByText('The details are in the browser console.')).toBeTruthy();
-    expect(screen.queryByText(/Error\(Contract/)).toBeNull();
-    // The spoken failure is generic-but-honest; the reason is dropped because
-    // the handler reads `signTx.error` after `await`, when it is still stale.
-    expect(mocks.announce).toHaveBeenCalledWith('Attestation not signed.', 'alert');
-
-    expect(screen.getAllByRole('article')).toHaveLength(3);
-    expect(within(claim).getByRole('checkbox')).toBeTruthy();
-  });
-
-  it('sends nothing when the verifier cannot confirm', async () => {
-    renderDashboard();
-
-    const [claim] = await screen.findAllByRole('article');
-    fireEvent.click(within(claim).getByRole('button', { name: /Can.t confirm/ }));
-
-    await waitFor(() => expect(screen.getAllByRole('article')).toHaveLength(2));
-    expect(attest.attest).not.toHaveBeenCalled();
-    expect(mocks.announce).toHaveBeenCalledWith(
-      'Marked as not confirmed. Nothing was sent; the tranche stays locked.',
-    );
-  });
-
-  it('empties the queue and says so when every claim has been answered', async () => {
-    renderDashboard();
-
-    while (screen.queryAllByRole('article').length > 0) {
-      const card = screen.getAllByRole('article')[0];
-      fireEvent.click(within(card).getByRole('button', { name: /Can.t confirm/ }));
-    }
-
-    expect(screen.getByText('All done.')).toBeTruthy();
-    const summary = screen.getByRole('list', { name: 'Verification summary' });
-    expect(within(summary).getByText('0')).toBeTruthy();
-  });
-
-  it('asks a signed-out visitor to sign in, with nothing to sign yet', async () => {
-    mocks.address = null;
-    renderDashboard();
-
-    expect(screen.getByRole('heading', { name: 'Sign in with your verifier account' })).toBeTruthy();
-    expect(screen.queryByRole('list', { name: 'Verification summary' })).toBeNull();
-    expect(screen.queryAllByRole('article')).toHaveLength(0);
-
-    fireEvent.click(screen.getByRole('button', { name: 'Sign in' }));
-    await waitFor(() => expect(mocks.connect).toHaveBeenCalledTimes(1));
-    expect(attest.attest).not.toHaveBeenCalled();
-  });
+    fireEvent.keyDown(document, { key: 'Escape' });
+    expect(screen.queryByRole('dialog')).toBeNull();
+    expectFocusReturnedTo(opener);
+  }, SHEET_TEST_TIMEOUT);
 });

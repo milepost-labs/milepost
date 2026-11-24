@@ -41,6 +41,14 @@ export type ContractName = 'program' | 'attest' | 'record' | 'registry' | 'polic
 
 type Table = Record<number, Omit<Explained, 'code' | 'contract'>>;
 
+/**
+ * Wording for particular codes when one call means something different by them
+ * than the shared table does. Reuse of an error for a second purpose is common
+ * in the contracts (`RefundsNotOpen` is also "too late to extend"), and a
+ * shared table can only carry one meaning. Pass a module-level constant.
+ */
+export type CodeOverrides = Table;
+
 const PROGRAM: Table = {
   1: { kind: 'denied', message: 'This account is not allowed to do that here.' },
   2: { kind: 'blocked', message: 'The window for this action is not open.', action: 'Check the programme timeline for when it opens or closed.' },
@@ -58,7 +66,11 @@ const PROGRAM: Table = {
   14: { kind: 'blocked', message: 'The programme does not have enough budget left for this award.', action: 'Awards are settled in the order they are finalised.' },
   15: { kind: 'fault', message: 'That amount is too large to process.' },
   16: { kind: 'blocked', message: 'This programme has been cancelled.' },
-  17: { kind: 'denied', message: 'A programme that holds funds or has made awards cannot be cancelled.' },
+  17: {
+    kind: 'denied',
+    message: 'Money has already been paid out to a recipient, so this programme can no longer be cancelled.',
+    action: 'Cancelling is only possible before the first tranche is released.',
+  },
   18: { kind: 'invalid', message: 'A programme needs at least one verifier, or no tranche could ever be released.' },
   19: { kind: 'none', message: 'No award for this account yet.' },
   20: { kind: 'none', message: 'Every tranche of this award has already been released.' },
@@ -79,7 +91,7 @@ const PROGRAM: Table = {
   35: { kind: 'blocked', message: 'Allocations can no longer be directed — the sweep window has opened.' },
   36: { kind: 'invalid', message: 'The payee batch size is too large.' },
   37: { kind: 'conflict', message: 'This application has been withdrawn.', action: 'Withdrawn applications cannot be reviewed, finalized, or re-applied.' },
-  38: { kind: 'blocked', message: 'The median award is below this programme\u2019s minimum and cannot be finalised.', action: 'The application is unchanged and can still be finalised later if the minimum is met.' },
+  38: { kind: 'blocked', message: 'The award is below this programme\u2019s minimum and cannot be finalised.', action: 'The application is unchanged and can still be finalised later if the minimum is met.' },
   39: { kind: 'blocked', message: 'This programme is paused.', action: 'The creator has temporarily halted contributions, applications, reviews, awards and releases. Refunds and sweeps still work \u2014 wait for the creator to unpause before retrying.' },
   40: { kind: 'invalid', message: 'The schema authority is not one of this programme\u2019s verifiers.', action: 'No tranche could ever be released. Add the schema\u2019s authority as a verifier, or choose a schema it controls.' },
   41: { kind: 'invalid', message: 'This programme refers to a schema that does not exist.', action: 'Check the schema id. It must already be registered in the attestation registry.' },
@@ -127,6 +139,20 @@ const POLICY: Table = {
   9: { kind: 'invalid', message: 'The spending cap and period must both be greater than zero.' },
   10: { kind: 'conflict', message: 'That payee is already allowed.' },
   11: { kind: 'none', message: 'That payee was not on the allowlist.' },
+};
+
+/**
+ * `release_batch` wording, passed as `overrides` on that write. The program
+ * contract reuses one `BatchTooLarge` (36) for payee batches and for
+ * `release_batch`, and the payee wording would be wrong for a recipient
+ * releasing tranches.
+ */
+export const RELEASE_BATCH_ERRORS: CodeOverrides = {
+  36: {
+    kind: 'invalid',
+    message: 'That is too many proofs for one release batch.',
+    action: 'A batch takes at most 50 proofs, and no more than the tranches left on the award. Remove some and try again.',
+  },
 };
 
 const TABLES: Record<ContractName, Table> = {
@@ -179,9 +205,13 @@ export function explainCode(contract: ContractName, code: number): Explained {
  *
  * Handles the two non-contract cases that users actually hit: a rejected
  * signature, which is a choice rather than a failure, and an unreachable
- * network.
+ * network. `overrides` re-words specific codes for one call only.
  */
-export function explain(error: unknown, contract: ContractName = 'program'): Explained {
+export function explain(
+  error: unknown,
+  contract: ContractName = 'program',
+  overrides?: CodeOverrides,
+): Explained {
   const text = (() => {
     if (typeof error === 'string') return error;
     if (error instanceof Error) return error.message;
@@ -200,6 +230,13 @@ export function explain(error: unknown, contract: ContractName = 'program'): Exp
   if (/user (declined|rejected)|denied by the user|UserDeclined/i.test(text)) {
     return { kind: 'none', message: 'You declined the signature.', action: 'Nothing was submitted.' };
   }
+  if (/RestoreDeclined/.test(text)) {
+    return {
+      kind: 'none',
+      message: 'You chose not to restore the archived data, so nothing was sent.',
+      action: 'Restore it when you are ready, or extend it from the Keepalive screen.',
+    };
+  }
   if (/expired ?state|restore.*preamble/i.test(text)) {
     return {
       kind: 'blocked',
@@ -216,7 +253,9 @@ export function explain(error: unknown, contract: ContractName = 'program'): Exp
   }
 
   const code = extractCode(error);
-  return code === null ? { ...UNKNOWN } : explainCode(contract, code);
+  if (code === null) return { ...UNKNOWN };
+  const override = overrides?.[code];
+  return override ? { ...override, code, contract } : explainCode(contract, code);
 }
 
 /** Whether this should be shown as a failure at all. */

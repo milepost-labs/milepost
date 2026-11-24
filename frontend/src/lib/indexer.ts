@@ -13,10 +13,10 @@
  * blocking a screen for — fall back to whatever the page can do without it.
  */
 
-const DEFAULT_BASE = 'https://milepost-labs.github.io/milepost-indexer/v1';
+import { NETWORK } from '../config/network';
 
-/** Trailing slashes are dropped so a configured URL with one still builds valid paths. */
-export const INDEXER_BASE_URL = (import.meta.env.VITE_INDEXER_URL || DEFAULT_BASE).replace(/\/+$/, '');
+/** From the network setting, which drops trailing slashes so paths build validly. */
+export const INDEXER_BASE_URL = NETWORK.indexerUrl;
 
 export interface IndexerMeta {
   network: string;
@@ -65,6 +65,33 @@ async function readJson<T>(path: string): Promise<T> {
 
 export function fetchMeta(): Promise<IndexerMeta> {
   return readJson<IndexerMeta>('meta.json');
+}
+
+export interface IndexDeployment {
+  network: string;
+  registry: string;
+}
+
+export interface IndexMismatch {
+  /** What this build is configured to read. */
+  expected: IndexDeployment;
+  /** What the index says it was built for. */
+  found: IndexDeployment;
+}
+
+/**
+ * Whether an index belongs to this build's deployment. A different network or
+ * registry means every programme in it is foreign, so none of its lists may be
+ * used: entries would fail their on-chain check one after another.
+ */
+export function indexMismatch(
+  meta: Pick<IndexerMeta, 'network' | 'registry'>,
+): IndexMismatch | null {
+  const expected = { network: NETWORK.name, registry: NETWORK.contracts.registry };
+  const found = { network: meta.network, registry: meta.registry };
+  return expected.network === found.network && expected.registry === found.registry
+    ? null
+    : { expected, found };
 }
 
 export function fetchProgrammes(): Promise<IndexedProgramme[]> {

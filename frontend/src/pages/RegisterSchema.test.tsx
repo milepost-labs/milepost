@@ -194,13 +194,14 @@ describe('RegisterSchema', () => {
     fireEvent.change(screen.getByLabelText('Schema name'), {
       target: { value: 'shifts-confirmed/v1' },
     });
-    fireEvent.change(screen.getByLabelText('Fields'), {
+    fireEvent.change(screen.getByLabelText('What does signing mean?'), {
       target: { value: 'programme: address, tranche: u32' },
     });
 
     fireEvent.click(screen.getByRole('button', { name: 'Register schema' }));
+    fireEvent.click(await screen.findByRole('button', { name: 'Sign and send' }));
 
-    await waitFor(() => expect(screen.getByText('Schema registered')).toBeTruthy());
+    await waitFor(() => expect(screen.getAllByText('Schema registered').length).toBeGreaterThan(0));
     expect(screen.getByText(validHex)).toBeTruthy();
   });
 
@@ -213,7 +214,7 @@ describe('RegisterSchema', () => {
     fireEvent.change(screen.getByLabelText('Schema name'), {
       target: { value: 'shifts-confirmed/v1' },
     });
-    fireEvent.change(screen.getByLabelText('Fields'), {
+    fireEvent.change(screen.getByLabelText('What does signing mean?'), {
       target: { value: 'programme: address, tranche: u32' },
     });
     fireEvent.change(screen.getByLabelText('Supersedes (optional)'), {

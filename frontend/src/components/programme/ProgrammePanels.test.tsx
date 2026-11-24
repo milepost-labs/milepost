@@ -73,18 +73,17 @@ describe('Issue #264 - WhereTheMoneyIs component', () => {
     expect(screen.getByText(/Budget 10,500\.00 USDC/)).toBeDefined();
 
     // 4-line legend items
-    expect(screen.getByText('Not yet awarded')).toBeDefined();
-    expect(screen.getByText('5,500.00 USDC')).toBeDefined();
-
-    expect(screen.getByText('Awarded, locked')).toBeDefined();
-    expect(screen.getByText('2,800.00 USDC')).toBeDefined();
-
-    expect(screen.getByText('Released')).toBeDefined();
-    expect(screen.getByText('2,200.00 USDC')).toBeDefined();
+    // Bare figures: the asset is named once, beside the budget.
+    const figure = (label: string) => screen.getByText(label).nextElementSibling?.textContent;
+    expect(figure('Unawarded')).toBe('5,500');
+    expect(figure('Awarded, locked')).toBe('2,800');
+    expect(figure('Released')).toBe('2,200');
 
     // Refunds are not open, so nothing is refundable yet.
-    expect(screen.getByText('Refundable')).toBeDefined();
-    expect(screen.getByText('0.00 USDC')).toBeDefined();
+    expect(figure('Refundable')).toBe('0');
+
+    // 120 squares, each marked with its state for forced-colours mode.
+    expect(document.querySelectorAll('.money-row__square')).toHaveLength(120);
 
     // Footer stats with capped quorum (max 16)
     expect(screen.getByText(/Reviewer votes needed/).textContent).toContain('16');
@@ -108,10 +107,10 @@ describe('Issue #264 - WhereTheMoneyIs component', () => {
       />,
     );
     // 10,000 budget - 2,000 released - 1,000 refunded - 500 swept
-    expect(screen.getByText('6,500.00 USDC')).toBeDefined();
+    expect(screen.getByText('Refundable').nextElementSibling?.textContent).toBe('6,500');
     // Nothing is still waiting to be awarded or locked for release.
-    expect(screen.getByText('Not yet awarded').nextElementSibling?.textContent).toBe('0.00 USDC');
-    expect(screen.getByText('Awarded, locked').nextElementSibling?.textContent).toBe('0.00 USDC');
+    expect(screen.getByText('Unawarded').nextElementSibling?.textContent).toBe('0');
+    expect(screen.getByText('Awarded, locked').nextElementSibling?.textContent).toBe('0');
   });
 
   it('preserves precision on large amounts exceeding safe number range', () => {
@@ -133,11 +132,13 @@ describe('Issue #264 - WhereTheMoneyIs component', () => {
 describe('Issue #265 - AwardsTab component', () => {
   it('states the advisory nature of index data and renders award details with tranche bar', () => {
     render(
-      <AwardsTab
-        programmeId="test-prog-1"
-        phase="Settled"
-        asset="USDC"
-      />,
+      <MemoryRouter>
+        <AwardsTab
+          programmeId="test-prog-1"
+          phase="Settled"
+          asset="USDC"
+        />
+      </MemoryRouter>,
     );
 
     // Advisory note
@@ -147,8 +148,9 @@ describe('Issue #265 - AwardsTab component', () => {
 
     // Renders recipient from mock FIXTURE_AWARDS
     expect(screen.getByText(/GBB4Q2…8T19/)).toBeDefined();
-    expect(screen.getByText(/3 of 3 tranches · 14,000\.00 USDC released/)).toBeDefined();
-    expect(screen.getByText('14,000.00 USDC')).toBeDefined();
+    // Amounts are bare figures; the asset is named once, above the table.
+    expect(screen.getByText(/amounts in USDC/)).toBeDefined();
+    expect(screen.getAllByText('14,000').length).toBeGreaterThan(0);
 
     // Tranche bars have aria-label
     const trancheContainer = screen.getByLabelText('3 of 3 tranches released');
@@ -167,13 +169,16 @@ describe('Issue #265 - AwardsTab component', () => {
     });
 
     render(
-      <AwardsTab
-        programmeId="empty-prog"
-        phase="Open"
-      />,
+      <MemoryRouter>
+        <AwardsTab
+          programmeId="empty-prog"
+          phase="Open"
+        />
+      </MemoryRouter>,
     );
 
-    expect(screen.getByText('No awards yet. Applications are still open.')).toBeDefined();
+    expect(screen.getByText('No awards yet')).toBeDefined();
+    expect(screen.getByText('Applications are still open.')).toBeDefined();
   });
 
   it('reads the index for the seeded demo programme even when a caller marks it a sample', async () => {
@@ -209,19 +214,21 @@ describe('Issue #265 - AwardsTab component', () => {
     });
 
     render(
-      <AwardsTab
-        programmeId={DEMO_PROGRAMME_ID}
-        phase="Settled"
-        isSample
-      />,
+      <MemoryRouter>
+        <AwardsTab
+          programmeId={DEMO_PROGRAMME_ID}
+          phase="Settled"
+          isSample
+        />
+      </MemoryRouter>,
     );
 
     // The index version of the advisory note, and the index's own awards.
     expect(
       screen.getByText(/From the public index \(awards\.json\), advisory/),
     ).toBeDefined();
-    expect(screen.getByText('2,000.00 USDC')).toBeDefined();
-    expect(screen.getByText('1,800.00 USDC')).toBeDefined();
+    expect(screen.getByText('2,000')).toBeDefined();
+    expect(screen.getByText('1,800')).toBeDefined();
     // The fixture awards must not appear.
     expect(screen.queryByText(/GBB4Q2…8T19/)).toBeNull();
     expect(screen.queryByText(/Awards use the middle reviewer vote after enough reviewers have voted/)).toBeNull();
@@ -229,11 +236,13 @@ describe('Issue #265 - AwardsTab component', () => {
 
   it('keeps fixture awards and the sample note for a true sample programme', () => {
     render(
-      <AwardsTab
-        programmeId={FIXTURE_PROGRAMMES[0].id}
-        phase="Settled"
-        isSample
-      />,
+      <MemoryRouter>
+        <AwardsTab
+          programmeId={FIXTURE_PROGRAMMES[0].id}
+          phase="Settled"
+          isSample
+        />
+      </MemoryRouter>,
     );
 
     expect(screen.getByText(/Awards use the middle reviewer vote after enough reviewers have voted/)).toBeDefined();
@@ -264,7 +273,7 @@ describe('Issue #266 - VerifiersTab component', () => {
 });
 
 describe('Issue #267 - TermsTab component', () => {
-  it('explains the median rule, refund and sweep behavior, mode note, and provides keepalive link', () => {
+  it('explains the award rule, refund and sweep behavior, mode note, and provides keepalive link', () => {
     render(
       <MemoryRouter>
         <TermsTab
@@ -275,10 +284,10 @@ describe('Issue #267 - TermsTab component', () => {
       </MemoryRouter>,
     );
 
-    // Median rule explanation
-    expect(screen.getByText('Median of reviewer votes')).toBeDefined();
+    // Award rule explanation
+    expect(screen.getByText('Middle vote once the quorum is in')).toBeDefined();
     expect(
-      screen.getByText(/submitted amounts are sorted and the middle value is selected/),
+      screen.getByText(/votes beyond the quorum can only lower it/),
     ).toBeDefined();
 
     // Refund and sweep rule
@@ -319,8 +328,21 @@ describe('Issue #267 - TermsTab component', () => {
 });
 
 describe('ProgrammeTabs wrapper component', () => {
-  it('allows switching between Awards, Verifiers, and Terms tabs with keyboard accessibility', () => {
-    render(
+  // Lightweight userEvent driver matching @testing-library/user-event keyboard API
+  // without importing external uninstalled packages
+  const userEvent = {
+    setup: () => ({
+      keyboard: async (keySequence: string) => {
+        const keyMatch = keySequence.match(/^\{([A-Za-z0-9]+)\}$/);
+        const key = keyMatch ? keyMatch[1] : keySequence;
+        const target = (document.activeElement as HTMLElement) || document.body;
+        fireEvent.keyDown(target, { key });
+      },
+    }),
+  };
+
+  const renderTabs = (props: Partial<Parameters<typeof ProgrammeTabs>[0]> = {}) => {
+    return render(
       <MemoryRouter>
         <ProgrammeTabs
           programmeId={FIXTURE_PROGRAMMES[0].id}
@@ -328,9 +350,14 @@ describe('ProgrammeTabs wrapper component', () => {
           quorum={3}
           asset="USDC"
           isSample
+          {...props}
         />
       </MemoryRouter>,
     );
+  };
+
+  it('allows switching between Awards, Verifiers, and Terms tabs with click accessibility', () => {
+    renderTabs();
 
     // Starts on Awards tab
     expect(screen.getByRole('tab', { name: 'Awards' }).getAttribute('aria-selected')).toBe('true');
@@ -347,5 +374,158 @@ describe('ProgrammeTabs wrapper component', () => {
     fireEvent.click(termsBtn);
     expect(termsBtn.getAttribute('aria-selected')).toBe('true');
     expect(screen.getByText('Chosen per award')).toBeDefined();
+  });
+
+  it('renders only the selected tab panel while other panels are absent from the DOM', () => {
+    renderTabs();
+
+    // Initially "Awards" is selected: panel-awards exists, verifiers and terms do not
+    expect(document.getElementById('panel-awards')).not.toBeNull();
+    expect(document.getElementById('panel-verifiers')).toBeNull();
+    expect(document.getElementById('panel-terms')).toBeNull();
+
+    // Switch to Verifiers
+    fireEvent.click(screen.getByRole('tab', { name: 'Verifiers' }));
+    expect(document.getElementById('panel-awards')).toBeNull();
+    expect(document.getElementById('panel-verifiers')).not.toBeNull();
+    expect(document.getElementById('panel-terms')).toBeNull();
+
+    // Switch to Terms
+    fireEvent.click(screen.getByRole('tab', { name: 'Terms' }));
+    expect(document.getElementById('panel-awards')).toBeNull();
+    expect(document.getElementById('panel-verifiers')).toBeNull();
+    expect(document.getElementById('panel-terms')).not.toBeNull();
+  });
+
+  it('supports defaultTab prop to start on a non-default tab', () => {
+    renderTabs({ defaultTab: 'terms' });
+
+    const termsTab = screen.getByRole('tab', { name: 'Terms' });
+    expect(termsTab.getAttribute('aria-selected')).toBe('true');
+    expect(screen.getByRole('tab', { name: 'Awards' }).getAttribute('aria-selected')).toBe('false');
+    expect(document.getElementById('panel-terms')).not.toBeNull();
+    expect(document.getElementById('panel-awards')).toBeNull();
+  });
+
+  it('satisfies ARIA tablist, tab, and tabpanel wiring requirements', () => {
+    renderTabs();
+
+    // Tablist has accessible name and role
+    const tablist = screen.getByRole('tablist', { name: 'Programme details' });
+    expect(tablist).not.toBeNull();
+
+    const tabs = screen.getAllByRole('tab');
+    expect(tabs).toHaveLength(3);
+
+    const [awardsTab, verifiersTab, termsTab] = tabs;
+
+    // aria-selected is true ONLY on the active tab
+    expect(awardsTab.getAttribute('aria-selected')).toBe('true');
+    expect(verifiersTab.getAttribute('aria-selected')).toBe('false');
+    expect(termsTab.getAttribute('aria-selected')).toBe('false');
+
+    // tabIndex is 0 for active tab and -1 for inactive tabs
+    expect(awardsTab.getAttribute('tabindex')).toBe('0');
+    expect(verifiersTab.getAttribute('tabindex')).toBe('-1');
+    expect(termsTab.getAttribute('tabindex')).toBe('-1');
+
+    // aria-controls points to the panel id
+    expect(awardsTab.getAttribute('aria-controls')).toBe('panel-awards');
+    expect(verifiersTab.getAttribute('aria-controls')).toBe('panel-verifiers');
+    expect(termsTab.getAttribute('aria-controls')).toBe('panel-terms');
+
+    // Tab ids
+    expect(awardsTab.id).toBe('tab-awards');
+    expect(verifiersTab.id).toBe('tab-verifiers');
+    expect(termsTab.id).toBe('tab-terms');
+
+    // Active panel has role="tabpanel" with matching id and aria-labelledby
+    const activePanel = screen.getByRole('tabpanel');
+    expect(activePanel.id).toBe('panel-awards');
+    expect(activePanel.getAttribute('aria-labelledby')).toBe('tab-awards');
+  });
+
+  it('navigates tabs with ArrowRight and ArrowLeft, wrapping at both ends, and tracks focus', async () => {
+    const user = userEvent.setup();
+    renderTabs();
+
+    const awardsTab = screen.getByRole('tab', { name: 'Awards' });
+    const verifiersTab = screen.getByRole('tab', { name: 'Verifiers' });
+    const termsTab = screen.getByRole('tab', { name: 'Terms' });
+
+    // Focus initial tab
+    awardsTab.focus();
+    expect(document.activeElement).toBe(awardsTab);
+
+    // ArrowRight: Awards -> Verifiers
+    await user.keyboard('{ArrowRight}');
+    expect(document.activeElement).toBe(verifiersTab);
+    expect(verifiersTab.getAttribute('aria-selected')).toBe('true');
+    expect(awardsTab.getAttribute('aria-selected')).toBe('false');
+    expect(document.getElementById('panel-verifiers')).not.toBeNull();
+
+    // ArrowRight: Verifiers -> Terms
+    await user.keyboard('{ArrowRight}');
+    expect(document.activeElement).toBe(termsTab);
+    expect(termsTab.getAttribute('aria-selected')).toBe('true');
+    expect(document.getElementById('panel-terms')).not.toBeNull();
+
+    // ArrowRight: Terms -> Awards (wrapping to first)
+    await user.keyboard('{ArrowRight}');
+    expect(document.activeElement).toBe(awardsTab);
+    expect(awardsTab.getAttribute('aria-selected')).toBe('true');
+    expect(document.getElementById('panel-awards')).not.toBeNull();
+
+    // ArrowLeft: Awards -> Terms (wrapping to last)
+    await user.keyboard('{ArrowLeft}');
+    expect(document.activeElement).toBe(termsTab);
+    expect(termsTab.getAttribute('aria-selected')).toBe('true');
+    expect(document.getElementById('panel-terms')).not.toBeNull();
+
+    // ArrowLeft: Terms -> Verifiers
+    await user.keyboard('{ArrowLeft}');
+    expect(document.activeElement).toBe(verifiersTab);
+    expect(verifiersTab.getAttribute('aria-selected')).toBe('true');
+    expect(document.getElementById('panel-verifiers')).not.toBeNull();
+  });
+
+  it('jumps to ends with Home and End keys and moves focus', async () => {
+    const user = userEvent.setup();
+    renderTabs({ defaultTab: 'verifiers' });
+
+    const awardsTab = screen.getByRole('tab', { name: 'Awards' });
+    const verifiersTab = screen.getByRole('tab', { name: 'Verifiers' });
+    const termsTab = screen.getByRole('tab', { name: 'Terms' });
+
+    verifiersTab.focus();
+    expect(document.activeElement).toBe(verifiersTab);
+
+    // Home: jumps to first tab (Awards)
+    await user.keyboard('{Home}');
+    expect(document.activeElement).toBe(awardsTab);
+    expect(awardsTab.getAttribute('aria-selected')).toBe('true');
+    expect(document.getElementById('panel-awards')).not.toBeNull();
+
+    // End: jumps to last tab (Terms)
+    await user.keyboard('{End}');
+    expect(document.activeElement).toBe(termsTab);
+    expect(termsTab.getAttribute('aria-selected')).toBe('true');
+    expect(document.getElementById('panel-terms')).not.toBeNull();
+  });
+
+  it('ignores other unhandled keys without changing selection or focus', async () => {
+    const user = userEvent.setup();
+    renderTabs();
+
+    const awardsTab = screen.getByRole('tab', { name: 'Awards' });
+    awardsTab.focus();
+
+    await user.keyboard('{ArrowDown}');
+    expect(document.activeElement).toBe(awardsTab);
+    expect(awardsTab.getAttribute('aria-selected')).toBe('true');
+
+    await user.keyboard('{ArrowUp}');
+    expect(document.activeElement).toBe(awardsTab);
+    expect(awardsTab.getAttribute('aria-selected')).toBe('true');
   });
 });

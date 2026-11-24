@@ -1,7 +1,10 @@
 #![cfg(test)]
 
 use super::*;
-use soroban_sdk::{testutils::Address as _, Env, String};
+use soroban_sdk::{
+    testutils::{Address as _, Ledger},
+    Env, String,
+};
 
 struct Fixture {
     env: Env,
@@ -109,4 +112,60 @@ fn revoked_attestation_is_rejected() {
     attest_client.revoke(&f.authority, &uid);
 
     assert!(!gated(&f, &uid, &schema, &f.authority));
+}
+
+#[test]
+fn expired_attestation_is_rejected() {
+    let f = setup();
+    let schema = register_schema(&f);
+    let expires_at = 100;
+    let attest_client = milepost_attest::AttestClient::new(&f.env, &f.attest_id);
+    let uid = attest_client.attest(
+        &f.authority,
+        &schema,
+        &f.subject,
+        &hash(&f.env, 42),
+        &Some(expires_at),
+    );
+    let client = GatedActionClient::new(&f.env, &f.gated_id);
+
+    f.env.ledger().set_timestamp(expires_at - 1);
+    assert_eq!(
+        client.try_gated_action(&f.attest_id, &uid, &f.subject, &schema, &f.authority),
+        Ok(Ok(()))
+    );
+
+    for timestamp in [expires_at, expires_at + 1] {
+        f.env.ledger().set_timestamp(timestamp);
+        assert_eq!(
+            client.try_gated_action(&f.attest_id, &uid, &f.subject, &schema, &f.authority),
+            Err(Ok(Error::AttestationInvalid)),
+            "attestation must be rejected at timestamp {timestamp}"
+        );
+    }
+}
+
+#[test]
+fn wrong_schema_is_rejected() {
+    let f = setup();
+    let schema = register_schema(&f);
+    let uid = make_attestation(&f, &schema);
+    let attest_client = milepost_attest::AttestClient::new(&f.env, &f.attest_id);
+    let other_schema = attest_client.register_schema(
+        &f.authority,
+        &String::from_str(&f.env, "other-milestone:v1"),
+        &true,
+        &false,
+        &None,
+    );
+    let client = GatedActionClient::new(&f.env, &f.gated_id);
+
+    assert_eq!(
+        client.try_gated_action(&f.attest_id, &uid, &f.subject, &schema, &f.authority),
+        Ok(Ok(()))
+    );
+    assert_eq!(
+        client.try_gated_action(&f.attest_id, &uid, &f.subject, &other_schema, &f.authority),
+        Err(Ok(Error::AttestationInvalid))
+    );
 }

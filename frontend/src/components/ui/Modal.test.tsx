@@ -67,12 +67,13 @@ describe('Modal (issue #252)', () => {
 
   it('closes on backdrop click but not while a transaction is busy', () => {
     const onClose = vi.fn();
-    const { container, rerender } = render(
+    const { rerender } = render(
       <Modal open onClose={onClose} title="Confirm">
         <p>Body</p>
       </Modal>,
     );
-    const backdrop = () => container.querySelector('.ui-modal__backdrop') as HTMLElement;
+    // The sheet renders at the end of the document, not inside the component.
+    const backdrop = () => document.body.querySelector('.ui-modal__backdrop') as HTMLElement;
 
     fireEvent.click(backdrop());
     expect(onClose).toHaveBeenCalledTimes(1);
@@ -84,5 +85,51 @@ describe('Modal (issue #252)', () => {
     );
     fireEvent.click(backdrop());
     expect(onClose).toHaveBeenCalledTimes(1);
+  });
+
+  it('keeps focus on the dialog and ignores Escape when there is no focusable child', () => {
+    const onClose = vi.fn();
+    render(
+      <Modal open busy onClose={onClose} title="Sending">
+        <p>Waiting for confirmation.</p>
+      </Modal>,
+    );
+
+    const dialog = screen.getByRole('dialog', { name: 'Sending' });
+    expect(screen.getByRole('button', { name: 'Close' }).hasAttribute('disabled')).toBe(true);
+    expect(document.activeElement).toBe(dialog);
+
+    fireEvent.keyDown(document, { key: 'Tab' });
+    expect(document.activeElement).toBe(dialog);
+
+    fireEvent.keyDown(document, { key: 'Tab', shiftKey: true });
+    expect(document.activeElement).toBe(dialog);
+
+    fireEvent.keyDown(document, { key: 'Escape' });
+    expect(onClose).not.toHaveBeenCalled();
+  });
+
+  it('pulls focus back into the sheet on Tab or Shift+Tab if focus moved outside', () => {
+    render(
+      <>
+        <button type="button">Outside</button>
+        <Modal open onClose={() => {}} title="Confirm">
+          <button type="button">Last action</button>
+        </Modal>
+      </>,
+    );
+
+    const outside = screen.getByRole('button', { name: 'Outside' });
+    const close = screen.getByRole('button', { name: 'Close' });
+    const last = screen.getByRole('button', { name: 'Last action' });
+
+    outside.focus();
+    expect(document.activeElement).toBe(outside);
+    fireEvent.keyDown(document, { key: 'Tab' });
+    expect(document.activeElement).toBe(close);
+
+    outside.focus();
+    fireEvent.keyDown(document, { key: 'Tab', shiftKey: true });
+    expect(document.activeElement).toBe(last);
   });
 });

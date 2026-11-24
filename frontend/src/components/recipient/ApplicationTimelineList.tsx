@@ -2,7 +2,10 @@ import { Link } from 'react-router-dom';
 import type { RecipientApplicationFixture } from '../../fixtures/recipientFixtures';
 import { applicationStatus, applicationSteps } from '../../lib/applicationView';
 import { useRecipientApplications } from '../../hooks';
-import { ErrorState, Loading } from '../state/AsyncStates';
+import { Empty, ErrorState, Loading } from '../state/AsyncStates';
+import { formatIn } from '../../lib/funding';
+import { useProgrammeAsset } from '../../hooks/useProgrammeAsset';
+import { PhaseBadge, SampleTag } from '../ui';
 import { ApplicationWithdraw } from './ApplicationWithdraw';
 import './ApplicationTimelineList.css';
 
@@ -14,19 +17,6 @@ interface ApplicationTimelineListProps {
    */
   applications?: RecipientApplicationFixture[];
   onWithdrawn?: (programmeId: string) => void;
-}
-
-function phaseBadgeClass(phase: RecipientApplicationFixture['phase']): string {
-  switch (phase) {
-    case 'Open':
-      return 'timeline-card__phase-badge--open';
-    case 'Review':
-      return 'timeline-card__phase-badge--review';
-    case 'Cancelled':
-      return 'timeline-card__phase-badge--cancelled';
-    case 'Settled':
-      return 'timeline-card__phase-badge--settled';
-  }
 }
 
 /**
@@ -51,82 +41,78 @@ export function ApplicationTimelineList({ applications }: ApplicationTimelineLis
       return <ErrorState error={read.error} contract="program" onRetry={read.refetch} />;
     }
     return (
-      <div className="timeline-empty">
-        <p className="timeline-empty__title">No applications submitted yet.</p>
-        <p className="timeline-empty__desc">
-          Apply to an open programme and its progress will show here, read from the chain.
-        </p>
-      </div>
+      <Empty
+        title="No applications submitted yet."
+        description="Apply to an open programme and its progress will show here, read from the chain."
+        action={
+          <Link to="/recipients?apply=1" className="ui-button ui-button--primary ui-button--md">
+            Apply to a programme
+          </Link>
+        }
+      />
     );
   }
 
   return (
-    <div className="timeline-grid">
-      {entries.map((application) => {
-        const steps = applicationSteps(application);
-
-        return (
-          <article
-            key={application.programmeId}
-            className="timeline-card"
-            aria-labelledby={`timeline-app-${application.programmeId}`}
-          >
-            <div className="timeline-card__header">
-              <Link
-                id={`timeline-app-${application.programmeId}`}
-                to={`/programme/${encodeURIComponent(application.programmeId)}`}
-                className="timeline-card__title"
-              >
-                {application.programmeName}
-              </Link>
-              <div className="timeline-card__badges">
-                {application.sample && (
-                  <span className="timeline-card__sample">Sample data</span>
-                )}
-                <span
-                  className={`timeline-card__phase-badge ${phaseBadgeClass(application.phase)}`}
-                >
-                  {application.phase}
-                </span>
-              </div>
-            </div>
-
-            <p className="timeline-card__status">{applicationStatus(application)}</p>
-
-            <ol className="timeline-card__steps" aria-label="Application progress">
-              {steps.map((step) => {
-                const markerClass =
-                  step.status === 'done'
-                    ? 'timeline-step__marker--done'
-                    : step.status === 'current'
-                    ? 'timeline-step__marker--current'
-                    : 'timeline-step__marker--pending';
-
-                const isEmphasized = step.status === 'current';
-
-                return (
-                  <li key={step.title} className="timeline-step">
-                    <span className={`timeline-step__marker ${markerClass}`} aria-hidden="true" />
-                    <div className="timeline-step__content">
-                      <div
-                        className={`timeline-step__title-row${
-                          isEmphasized ? ' timeline-step__title-row--emphasized' : ''
-                        }`}
-                      >
-                        <span>{step.title}</span>
-                        <span className="timeline-step__status-tag">· {step.tag}</span>
-                      </div>
-                      <span className="timeline-step__desc">{step.desc}</span>
-                    </div>
-                  </li>
-                );
-              })}
-            </ol>
-
-            <ApplicationWithdraw application={application} />
-          </article>
-        );
-      })}
+    <div className="applications">
+      {entries.map((application) => (
+        <ApplicationEntry key={application.programmeId} application={application} />
+      ))}
     </div>
+  );
+}
+
+/** One application. Its own component so each reads its own programme's asset. */
+function ApplicationEntry({ application }: { application: RecipientApplicationFixture }) {
+  // The programme's own asset; null (no unit shown) until it is read.
+  const asset = useProgrammeAsset(application.programmeId);
+  const steps = applicationSteps(application, asset);
+
+  return (
+    <article
+      className="application"
+      aria-labelledby={`timeline-app-${application.programmeId}`}
+    >
+      <div className="application__head">
+        <div className="application__title-group">
+          <div className="application__badges">
+            <PhaseBadge phase={application.phase} />
+            {application.sample && <SampleTag />}
+          </div>
+          <h3 className="application__name">
+            <Link
+              id={`timeline-app-${application.programmeId}`}
+              to={`/programme/${encodeURIComponent(application.programmeId)}`}
+            >
+              {application.programmeName}
+            </Link>
+          </h3>
+        </div>
+        <span className="application__asked numeric">
+          {formatIn(BigInt(application.requested), asset)}
+          <small>asked for</small>
+        </span>
+      </div>
+
+      <p className="application__status">{applicationStatus(application, asset)}</p>
+
+      <ol className="application__steps" aria-label="Application progress">
+        {steps.map((step) => (
+          <li
+            key={step.title}
+            className={`application__step application__step--${step.status}`}
+            aria-current={step.status === 'current' ? 'step' : undefined}
+          >
+            <b>
+              <span>{step.title}</span>
+              <span className="application__tag">· {step.tag}</span>
+            </b>
+            <span className="application__desc">{step.desc}</span>
+          </li>
+        ))}
+      </ol>
+
+      <ApplicationWithdraw application={application} />
+    </article>
   );
 }

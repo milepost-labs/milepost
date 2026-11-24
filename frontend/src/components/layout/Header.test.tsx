@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { act, fireEvent, render, screen } from '@testing-library/react';
+import { act, fireEvent, render, screen, within } from '@testing-library/react';
 import { MemoryRouter, Route, Routes } from 'react-router-dom';
 import { ThemeProvider } from '../../context/ThemeContext';
 import { THEME_STORAGE_KEY } from '../../context/themeStore';
@@ -147,60 +147,84 @@ describe('transaction announcements', () => {
   });
 });
 
-describe('navbar section navigation', () => {
-  it('renders "Launch app" on the landing page instead of section pills', () => {
-    render(
-      <MemoryRouter initialEntries={['/']}>
-        <ThemeProvider>
-          <WalletContext.Provider value={wallet()}>
-            <Navbar />
-          </WalletContext.Provider>
-        </ThemeProvider>
-      </MemoryRouter>,
-    );
+function renderNavbar(path: string, state: Partial<WalletState> = {}) {
+  return render(
+    <MemoryRouter initialEntries={[path]}>
+      <ThemeProvider>
+        <WalletContext.Provider value={wallet(state)}>
+          <Navbar />
+        </WalletContext.Provider>
+      </ThemeProvider>
+    </MemoryRouter>,
+  );
+}
 
-    expect(screen.getByRole('link', { name: 'Launch app' })).toBeTruthy();
+describe('navbar section navigation', () => {
+  it('gives the landing page its own links and one way in, not the app sections', () => {
+    renderNavbar('/');
+
+    expect(screen.getByRole('link', { name: 'Launch app' }).getAttribute('href')).toBe('/directory');
+    expect(screen.getByRole('link', { name: 'How it works' }).getAttribute('href')).toBe('#how');
     expect(screen.queryByRole('link', { name: 'Programmes' })).toBeNull();
+    // Browsing needs no wallet, so the landing page does not ask for one.
+    expect(screen.queryByRole('button', { name: 'Sign in' })).toBeNull();
+    expect(screen.getByText('Testnet · pre-audit')).toBeTruthy();
   });
 
-  it('renders five section pills with the active one highlighted', () => {
-    const { unmount } = render(
-      <MemoryRouter initialEntries={['/directory']}>
-        <ThemeProvider>
-          <WalletContext.Provider value={wallet()}>
-            <Navbar />
-          </WalletContext.Provider>
-        </ThemeProvider>
-      </MemoryRouter>,
-    );
+  it('renders the five sections with the current one marked', () => {
+    const { unmount } = renderNavbar('/directory');
+    const primary = within(screen.getAllByRole('navigation', { name: 'Primary' })[0]);
 
-    const programmesLink = screen.getByRole('link', { name: 'Programmes' });
-    expect(programmesLink.getAttribute('aria-current')).toBe('page');
-    expect(programmesLink.className).toContain('nav-pill--active');
-
-    const fundLink = screen.getByRole('link', { name: 'Fund' });
-    expect(fundLink.getAttribute('aria-current')).toBeNull();
-    expect(fundLink.className).not.toContain('nav-pill--active');
-
-    expect(screen.getByRole('link', { name: 'Get funded' })).toBeTruthy();
-    expect(screen.getByRole('link', { name: 'Verify' })).toBeTruthy();
-    expect(screen.getByRole('link', { name: 'Admin' })).toBeTruthy();
+    expect(primary.getByRole('link', { name: 'Programmes' }).getAttribute('aria-current')).toBe('page');
+    expect(primary.getByRole('link', { name: 'Fund' }).getAttribute('aria-current')).toBeNull();
+    expect(primary.getByRole('link', { name: 'Get funded' })).toBeTruthy();
+    expect(primary.getByRole('link', { name: 'Verify' })).toBeTruthy();
+    expect(primary.getByRole('link', { name: 'Admin' })).toBeTruthy();
 
     unmount();
 
-    // Route under Get funded (/recipients/standing)
-    render(
-      <MemoryRouter initialEntries={['/recipients/standing']}>
-        <ThemeProvider>
-          <WalletContext.Provider value={wallet()}>
-            <Navbar />
-          </WalletContext.Provider>
-        </ThemeProvider>
-      </MemoryRouter>,
-    );
+    // A route nested under Get funded.
+    renderNavbar('/recipients/standing');
+    const nested = within(screen.getAllByRole('navigation', { name: 'Primary' })[0]);
+    expect(nested.getByRole('link', { name: 'Get funded' }).getAttribute('aria-current')).toBe('page');
+  });
 
-    const getFundedLink = screen.getByRole('link', { name: 'Get funded' });
-    expect(getFundedLink.getAttribute('aria-current')).toBe('page');
-    expect(getFundedLink.className).toContain('nav-pill--active');
+  it('repeats the sections as a bottom bar for phones', () => {
+    renderNavbar('/funders');
+    const bars = screen.getAllByRole('navigation', { name: 'Primary' });
+    expect(bars.length).toBe(2);
+    expect(bars[1].className).toBe('tabbar');
+    expect(within(bars[1]).getByRole('link', { name: 'Fund' }).getAttribute('aria-current')).toBe('page');
+  });
+
+  it('lists the pages inside the current section and marks the current one', () => {
+    const { unmount } = renderNavbar('/admin/payees');
+    const sub = within(screen.getByRole('navigation', { name: 'Admin pages' }));
+    expect(sub.getAllByRole('link').map((link) => link.textContent)).toEqual([
+      'Finalize awards',
+      'Deploy programme',
+      'Register schema',
+      'Payees',
+      'Standing',
+      'Keepalive',
+    ]);
+    expect(sub.getByRole('link', { name: 'Payees' }).getAttribute('aria-current')).toBe('page');
+    expect(sub.getByRole('link', { name: 'Deploy programme' }).getAttribute('aria-current')).toBeNull();
+    unmount();
+
+    // A programme's own page sits under Directory.
+    renderNavbar('/programme/CD6X33SKLUEMANS67ID3LJL572FFGERMMJCIFRW7P7EKZQLH35XT67C6');
+    const programmes = within(screen.getByRole('navigation', { name: 'Programmes pages' }));
+    expect(programmes.getByRole('link', { name: 'Directory' }).getAttribute('aria-current')).toBe('page');
+  });
+
+  it('offers sign-in when signed out and the account when signed in', () => {
+    const { unmount } = renderNavbar('/directory');
+    expect(screen.getByRole('button', { name: 'Sign in' })).toBeTruthy();
+    unmount();
+
+    renderNavbar('/directory', { status: 'connected', address: ADDRESS });
+    expect(screen.queryByRole('button', { name: 'Sign in' })).toBeNull();
+    expect(screen.getAllByText('GAH3D4…KXCA').length).toBeGreaterThan(0);
   });
 });

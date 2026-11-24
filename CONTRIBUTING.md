@@ -86,6 +86,22 @@ tests decode events through the bindings' own specs, so they fail on it.
 
 CI does the same on every PR, in the `bindings` job.
 
+The same job also installs the packages the way an integrator would. If you
+change anything in `packages/*/package.json` (`exports`, `typings`, `type`,
+`files`), run this after building the packages:
+
+```bash
+./scripts/check-bindings-consumable.sh
+```
+
+It packs all five packages, installs the tarballs into an empty project,
+imports each one under Node ESM and typechecks a file that constructs every
+`Client` with `tsc --noEmit` (`module: nodenext`). A broken `exports` map or a
+missing type file fails it, even though `npm pack --dry-run` would not notice.
+It needs network access to the npm registry. Build the packages first with
+`npm ci && npm run build` in each `packages/<name>`, or by running
+`./scripts/frontend-with-local-bindings.sh`, which builds them on the way.
+
 The same job fails if a component shows a `FIXTURE_*` stand-in without its
 "Sample data" tag. See [Sample data](frontend/CONTRIBUTING.md#sample-data) in
 the frontend guide for the rule, the allowlist and how to run the check
@@ -131,6 +147,41 @@ every pull request to `dev` and on pushes to `dev` and `main`. To silence a
 rule, add an entry to `ACCESSIBILITY_EXCEPTIONS` in
 `frontend/src/test/accessibility.test.tsx` with a `reason`; the suite fails on
 an entry with no reason. Fixing the page is always preferred.
+
+### Browser checks
+
+The `browser` job in [`.github/workflows/ci.yml`](.github/workflows/ci.yml) opens
+the built app in Chromium, served with the headers [`frontend/vercel.json`](frontend/vercel.json)
+sends in production, and checks two things on every pull request:
+
+- **Smoke:** every page loads with no uncaught error, no console error and no
+  Content-Security-Policy violation. A page that loads a host the policy does
+  not allow fails the job and names the page.
+- **Reflow:** no page scrolls sideways at 320 CSS px, which is 400% zoom on a
+  1280 px screen (WCAG 1.4.10). The check runs signed in and signed out. A wide
+  table may scroll inside its own container; the page itself may not.
+
+Run it locally from `frontend/`:
+
+```bash
+cd frontend
+npm ci                                        # first time, or after a dependency change
+npx playwright install chromium --with-deps   # first time
+npm run build:browser                         # two builds: signed in, and signed out
+npm run test:browser
+```
+
+The signed-in build uses fixture mode, so the wallet is connected and the index
+is answered from `frontend/tests/fixtures/`. The signed-out build has no
+fixtures and is for layout only. A failure names the page and the element. The
+HTML report is in `frontend/playwright-report/`.
+
+Each allowed console error needs an entry in `ALLOWED_CONSOLE_ERRORS` in
+[`frontend/tests/browser/support.ts`](frontend/tests/browser/support.ts), with a
+reason in the comment above it.
+A request whose 404 is an expected answer (the description store, which is a
+serverless function absent from a static build) goes in `ALLOWED_404_URLS` in the
+same file, matched on its URL, also with a reason.
 
 ### Local Development Modes
 - **Fixture Mode:** Run `VITE_FIXTURES=1 npm --prefix frontend run dev` to run and inspect UI screens locally without requiring an active wallet connection or testnet funds.
@@ -197,6 +248,18 @@ pull request. On a mismatch it:
 To fix a failing screenshot job: run `./scripts/update-snapshots.sh` locally,
 verify the diff is intentional, and push the updated PNGs.
 
+### Typechecking the examples
+
+The scripts in `examples/` show integrators how to use the published `@milepost/*` packages. CI typechecks them against the locally built bindings in the `bindings` job on every pull request, so a binding change that would break them fails the build rather than surprising an integrator.
+
+To run the same check locally after changing a contract or regenerating bindings:
+
+```bash
+./scripts/typecheck-examples.sh
+```
+
+It builds any binding package that has no `dist/` yet, installs the TypeScript version pinned in `examples/package-lock.json`, overlays the local bindings and typechecks every script.
+
 ---
 
 ## 4. Running Contract Checks
@@ -229,6 +292,23 @@ wrong contract. See the [testing guide](docs/testing-guide.md) for the ordering
 rule, bindings regeneration, and the generated-file and fixture traps that have
 cost review rounds.
 
+### Coverage
+
+CI enforces a minimum line-coverage threshold on every pull request. It uses
+[`cargo-llvm-cov`](https://github.com/taiki-e/cargo-llvm-cov), installed as a
+prebuilt binary.
+
+To run the same check locally:
+
+```bash
+cargo install cargo-llvm-cov --locked   # once, or use a prebuilt binary
+cargo llvm-cov --all-features --summary-only --fail-under-lines 90
+```
+
+Omit `--fail-under-lines` to see the report without enforcing the threshold.
+The threshold and the exact command CI runs are in
+[`.github/workflows/ci.yml`](.github/workflows/ci.yml).
+
 ### Mutation testing
 
 The programme contract is mutation-tested with
@@ -253,6 +333,30 @@ The script prints any surviving mutants grouped by function. Each one needs a
 test that fails on it, or, if it genuinely cannot change behaviour, an entry in
 `.cargo/mutants.toml` saying why. The [testing guide](docs/testing-guide.md#mutation-testing)
 covers reading the report, the full run, and how to tell the two apart.
+
+---
+
+### Licences, duplicate crates and sources
+
+The `check` job runs `cargo deny check licenses bans sources` against
+[`deny.toml`](deny.toml):
+
+- **Licences:** each crate's licence must be on the allow-list. An expression
+  such as `MIT OR Apache-2.0` passes when any alternative is allowed.
+- **Duplicates:** two versions of one crate are reported as warnings, not
+  failures.
+- **Sources:** crates come from crates.io, and from the one git repository the
+  lockfile pins (`stellar/passkey-kit`). Any other source fails the check.
+
+To run it locally, install cargo-deny once and run it from the repository root:
+
+```bash
+cargo install cargo-deny --locked   # once
+cargo deny check licenses bans sources
+```
+
+A new licence or a new git source is a decision for the pull request that needs
+it. Add the entry to `deny.toml` in that PR, and say why in the description.
 
 ---
 
@@ -297,6 +401,15 @@ workflow uses `pull_request_target`, or if a file contains hidden Unicode. If
 your dependency is legitimately blocked, say why in the PR. A maintainer
 records the exception, with its reason, in `.github/malware-check-allowlist.json`.
 
+**Workflow permissions.** `ci.yml`, `mutants.yml` and `smoke-test.yml` start with
+`permissions: contents: read`, so a job cannot write to the repository, comment
+on a pull request or change a release unless it grants that to itself. Only
+`release.yml` asks for more, to publish. A new job that needs a write must add
+the grant to that job, and say why in the pull request. These checks cannot run
+locally, so push the change to your fork and read the Actions run: a step that
+needs a write it does not have fails with a 403 or "Resource not accessible by
+integration".
+
 ---
 
 ## 7. Error Code Stability Policy
@@ -309,6 +422,19 @@ If you are modifying the Soroban smart contracts, error codes are part of the co
 3. **Always assign new variants the next available integer.** Do not insert variants mid-sequence; append them at the end of the enum.
 
 Why this matters: Stellar contract error codes propagate as `u32` values in the transaction result. If we reused a previously published discriminant, an indexer or bot that matches on that numeric value could silently misinterpret a new error as an old, unrelated one.
+
+### Every error variant needs a test
+
+CI fails if a `#[contracterror]` variant is never asserted by its own contract's tests (`contracts/<name>/src/*test*.rs`). A test counts if it names the variant as `Enum::Variant` (e.g. `Error::FeeTooHigh`) or matches its code as `Error(Contract, #N)`. Mentions in comments do not count, and when two enums in one contract share a code, only the name does. Placeholders for removed variants (underscored names, rule 2 above) are skipped.
+
+Run it locally from the repository root (no build needed):
+
+```bash
+./scripts/check-untested-errors.py              # the check CI runs
+python3 scripts/check-untested-errors.test.py   # its own tests
+```
+
+If you add a variant, add a test that returns it. If a variant genuinely cannot be reached, list it in `scripts/untested-errors-allowlist.txt` as `<contract> <Enum>::<Variant>  <reason>`. An entry without a reason fails, and so does an entry for a variant that is now tested or no longer exists, so when you write the missing test, delete its line in the same PR.
 
 ---
 

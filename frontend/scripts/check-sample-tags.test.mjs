@@ -71,6 +71,12 @@ test('accepts the tag from a string literal but not from a comment', () => {
   assert.equal(inspectSource('/* Sample data */ const label = 1;').tagged, false);
 });
 
+test('accepts the SampleTag component as the tag', () => {
+  assert.equal(inspectSource('const a = <SampleTag />;').tagged, true);
+  assert.equal(inspectSource('const a = <SampleTag>Stand-in figures</SampleTag>;').tagged, true);
+  assert.equal(inspectSource('const a = <OtherTag />;').tagged, false);
+});
+
 test('checks components only, not tests or the fixture modules', () => {
   assert.equal(isCheckedComponent('src/pages/Keepalive.tsx'), true);
   assert.equal(isCheckedComponent('src/pages/Keepalive.test.tsx'), false);

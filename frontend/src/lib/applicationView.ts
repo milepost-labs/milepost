@@ -14,6 +14,7 @@
 
 import { formatAmount } from './amount';
 import { formatDate } from './format';
+import { awardFromVotes } from './awardRule';
 import type { RecipientApplicationFixture } from '../fixtures/recipientFixtures';
 
 /** The protocol refuses a quorum above this, so a bad read cannot print "2 of 40". */
@@ -30,20 +31,6 @@ export function voteAmounts(application: RecipientApplicationFixture): bigint[] 
   return application.votes.map((vote) => BigInt(vote));
 }
 
-/**
- * The amount an application settles on.
- *
- * The contract keeps votes ascending so the median is a lookup; an even count
- * averages the middle pair. Null when nobody has voted — which is not zero.
- */
-export function medianVote(votes: bigint[]): bigint | null {
-  if (votes.length === 0) return null;
-  const sorted = [...votes].sort((left, right) => (left < right ? -1 : left > right ? 1 : 0));
-  const middle = Math.floor(sorted.length / 2);
-  if (sorted.length % 2 === 1) return sorted[middle];
-  return (sorted[middle - 1] + sorted[middle]) / 2n;
-}
-
 /** "2 of 5 reviewer votes in", with the quorum capped at the protocol maximum. */
 export function votesInLabel(application: RecipientApplicationFixture): string {
   return `${application.votes.length} of ${effectiveQuorum(application.quorum)} reviewer votes in`;
@@ -57,7 +44,7 @@ export function votesInLabel(application: RecipientApplicationFixture): string {
  */
 export function applicationStatus(
   application: RecipientApplicationFixture,
-  asset = 'USDC',
+  asset: string | null = 'USDC',
 ): string {
   const quorum = effectiveQuorum(application.quorum);
   const votes = application.votes.length;
@@ -67,10 +54,10 @@ export function applicationStatus(
   }
 
   if (application.finalized) {
-    const award = medianVote(voteAmounts(application));
+    const award = awardFromVotes(voteAmounts(application), quorum);
     return award === null
       ? 'Finalised — an award has been set for this application.'
-      : `Finalised — your award is ${formatAmount(award, { asset })}, the median of ${votes} reviewer ${
+      : `Finalised — your award is ${formatAmount(award, { asset })}, the middle vote of ${votes} reviewer ${
           votes === 1 ? 'vote' : 'votes'
         }.`;
   }
@@ -99,11 +86,11 @@ export interface ApplicationStep {
 /** The four stages of an application, with the current one marked. */
 export function applicationSteps(
   application: RecipientApplicationFixture,
-  asset = 'USDC',
+  asset: string | null = 'USDC',
 ): ApplicationStep[] {
   const quorum = effectiveQuorum(application.quorum);
   const quorumLabel = `${votesInLabel(application)}.`;
-  const median = medianVote(voteAmounts(application));
+  const award = awardFromVotes(voteAmounts(application), quorum);
 
   return [
     {
@@ -113,7 +100,7 @@ export function applicationSteps(
       desc: `Asked for ${formatAmount(BigInt(application.requested), { asset })} · submitted ${formatDate(application.submittedAt)}`,
     },
     reviewStep(application, quorumLabel),
-    awardStep(application, quorum, median, asset),
+    awardStep(application, quorum, award, asset),
     {
       title: 'Tranches',
       status: 'pending',
@@ -166,8 +153,8 @@ function reviewStep(application: RecipientApplicationFixture, quorumLabel: strin
 function awardStep(
   application: RecipientApplicationFixture,
   quorum: number,
-  median: bigint | null,
-  asset: string,
+  award: bigint | null,
+  asset: string | null,
 ): ApplicationStep {
   if (application.withdrawn) {
     return {
@@ -182,13 +169,13 @@ function awardStep(
       title: 'Award set',
       status: 'done',
       tag: 'Done',
-      desc: median === null ? 'Award set.' : `Median of the votes: ${formatAmount(median, { asset })}`,
+      desc: award === null ? 'Award set.' : `Middle vote: ${formatAmount(award, { asset })}`,
     };
   }
   return {
     title: 'Award set',
     status: 'pending',
     tag: 'Next',
-    desc: `Needs ${quorum} votes. The award will be the median, not the lowest or the average.`,
+    desc: `Needs ${quorum} votes. The award will be the middle vote, never an average, and votes beyond ${quorum} can only lower it.`,
   };
 }

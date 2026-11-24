@@ -25,8 +25,8 @@
   flex-direction: column;
   gap: var(--space-3);
   padding: var(--space-5);
-  border-radius: var(--radius-card);
-  background: var(--surface);
+  border-radius: var(--radius-md);
+  background: var(--bg-raised);
 }
 
 .skeleton-card__meta {
@@ -65,74 +65,103 @@
   50% { opacity: 1; }
 }
 
+/* A status ring: turning while a write is in flight, filled when it lands. */
+.state-ring {
+  position: relative;
+  display: grid;
+  place-items: center;
+  width: 72px;
+  height: 72px;
+  flex: none;
+  border-radius: 50%;
+}
+.state-ring svg { width: 32px; height: 32px; }
+.state-ring--pending { background: var(--bg-sunken); }
+.state-ring--pending::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  border-radius: 50%;
+  border: 3px solid transparent;
+  border-top-color: var(--accent);
+  animation: state-spin 1s linear infinite;
+}
+.state-ring--done { background: var(--accent); color: var(--accent-ink); }
+.state-ring--fail { background: var(--danger-soft); color: var(--danger); }
+@keyframes state-spin { to { transform: rotate(360deg); } }
+
 .state-pending {
   display: flex;
   flex-direction: column;
-  gap: var(--space-3);
-  align-items: flex-start;
-  padding: var(--space-3) 0;
+  gap: var(--space-2);
+  align-items: center;
+  padding: var(--space-5) 0;
+  text-align: center;
 }
+.state-pending .state-ring { margin-bottom: var(--space-4); }
 
 .state-pending__title {
-  font-size: var(--text-lg);
-  font-weight: var(--weight-bold);
-  color: var(--text-main);
+  font-family: var(--font-display);
+  font-size: var(--text-xl);
+  font-weight: var(--weight-display);
+  letter-spacing: var(--tracking-title);
+  color: var(--ink);
   margin: 0;
 }
 
 .state-pending__note {
-  font-size: var(--text-sm);
+  font-size: var(--text-md);
   line-height: var(--leading-body);
-  color: var(--text-muted);
+  color: var(--ink-muted);
   margin: 0;
 }
 
 @media (prefers-reduced-motion: reduce) {
   .pending-pulse__square,
+  .state-ring--pending::after,
   .skeleton {
     animation: none;
   }
 }
 
-.state-empty,
-.state-error {
-  padding: var(--space-6) var(--space-5);
-  border-radius: var(--radius-md);
-  border: 1px dashed var(--border);
+/* Empty: centred, no box. Three squares stand where the content will be. */
+.state-empty {
+  padding: var(--space-8) var(--space-5);
   text-align: center;
 }
 
-.state-empty__title {
-  font-weight: var(--weight-semibold);
-  color: var(--text-main);
+.state-empty__art {
+  display: flex;
+  justify-content: center;
+  gap: var(--space-1);
+  margin-bottom: var(--space-5);
 }
-
-.state-empty__description,
-.state-error__action {
-  margin-top: var(--space-2);
-  font-size: var(--text-sm);
-  color: var(--text-muted);
+.state-empty__art i {
+  width: 18px;
+  height: 18px;
+  border-radius: var(--radius-sq);
+  box-shadow: inset 0 0 0 2px var(--line);
 }
-
-.state-error {
-  border-style: solid;
-  border-color: color-mix(in srgb, var(--danger) 35%, transparent);
-  background: color-mix(in srgb, var(--danger) 6%, transparent);
-  text-align: left;
-}
-
-/* Blocked and conflict are not faults — the request was reasonable, the moment
-   or the state was not. Colouring them like errors overstates the problem. */
-.state-error--blocked,
-.state-error--conflict {
-  border-color: color-mix(in srgb, var(--warning) 35%, transparent);
-  background: color-mix(in srgb, var(--warning) 8%, transparent);
-}
+.state-empty__art i:nth-child(3) { box-shadow: none; background: var(--accent-soft); }
 
 .state-empty__icon {
   display: inline-flex;
-  margin-bottom: var(--space-3);
-  color: var(--text-muted);
+  margin-bottom: var(--space-4);
+  color: var(--ink-muted);
+}
+
+.state-empty__title {
+  font-family: var(--font-display);
+  font-size: var(--text-empty-title);
+  font-weight: var(--weight-display);
+  letter-spacing: var(--tracking-title);
+  color: var(--ink);
+}
+
+.state-empty__description {
+  max-width: 46ch;
+  margin: var(--space-2) auto 0;
+  color: var(--ink-muted);
 }
 
 .state-empty__actions {
@@ -140,27 +169,43 @@
   flex-wrap: wrap;
   justify-content: center;
   gap: var(--space-2);
-  margin-top: var(--space-4);
+  margin-top: var(--space-5);
 }
 
-.state-empty__clear {
+.state-empty__clear,
+.state-error__retry {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
   min-height: 44px;
   padding: 0 var(--space-4);
-  border: 1px solid var(--border);
-  border-radius: var(--radius-full);
-  background: var(--surface);
-  color: var(--text-main);
+  border: 0;
+  border-radius: var(--radius-pill);
+  background: transparent;
+  box-shadow: inset 0 0 0 1.5px var(--line);
+  color: var(--ink);
   font: inherit;
+  font-size: var(--text-sm);
+  font-weight: var(--weight-semibold);
   cursor: pointer;
 }
-.state-empty__clear:hover { background: var(--surface-hover); }
-.state-empty__clear:focus-visible,
-.state-error__retry:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.state-empty__clear:hover { background: var(--bg-sunken); }
+.state-error__retry svg { width: 16px; height: 16px; }
 
-.state-error__technical {
-  margin-top: var(--space-2);
-  font-size: var(--text-xs);
-  color: var(--text-muted);
+/* Error: a soft danger ground. The human sentence leads; the technical line
+   is small and mono; the retry is an outline, never the loudest thing. */
+.state-error {
+  padding: var(--space-5);
+  border-radius: var(--radius-md);
+  background: var(--danger-soft);
+  text-align: left;
+}
+
+/* Blocked and conflict are not faults — the request was reasonable, the moment
+   or the state was not. Colouring them like errors overstates the problem. */
+.state-error--blocked,
+.state-error--conflict {
+  background: var(--warning-soft);
 }
 
 .state-error__head {
@@ -172,39 +217,125 @@
 }
 
 .state-error__message {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--space-3);
+  font-size: var(--text-body-lg);
+  font-weight: var(--weight-semibold);
+  line-height: var(--leading-snug);
+  color: var(--ink);
+}
+.state-error__message svg { width: 20px; height: 20px; flex: none; color: var(--danger); }
+.state-error--blocked .state-error__message svg,
+.state-error--conflict .state-error__message svg { color: var(--warning-strong); }
+
+.state-error__action {
+  margin-top: var(--space-2);
+  font-size: var(--text-sm);
+  color: var(--ink-muted);
+}
+
+.state-error__technical {
+  margin-top: var(--space-2);
+  font-size: var(--text-caption);
   font-weight: var(--weight-medium);
-  color: var(--text-main);
+  color: var(--danger);
 }
+.state-error--blocked .state-error__technical,
+.state-error--conflict .state-error__technical { color: var(--warning-strong); }
 
-.state-error__retry {
+.state-error__actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
   margin-top: var(--space-4);
-  min-height: 44px;
-  padding: var(--space-2) var(--space-4);
-  border: 1px solid var(--border);
-  border-radius: var(--radius-sm);
-  background: var(--surface);
-  color: var(--text-main);
-  cursor: pointer;
-  font: inherit;
 }
-.state-error__retry:hover {
-  background: var(--surface-hover);
-}
+.state-error__retry:hover { background: var(--bg-raised); }
 
+/* Success, inline: the confirming notice. */
 .state-success {
   display: flex;
   align-items: flex-start;
   gap: var(--space-4);
   padding: var(--space-4) var(--space-5);
   border-radius: var(--radius-md);
-  border: 1px solid color-mix(in srgb, var(--success) 35%, transparent);
-  background: color-mix(in srgb, var(--success) 8%, transparent);
+  background: var(--accent-soft);
 }
 .state-success__text { flex: 1; }
-.state-success__title { font-weight: var(--weight-medium); color: var(--text-main); }
-.state-success__description { margin-top: var(--space-1); font-size: var(--text-sm); color: var(--text-muted); }
+.state-success__title { font-weight: var(--weight-semibold); color: var(--ink); }
+.state-success__description { margin-top: var(--space-1); font-size: var(--text-sm); color: var(--ink-muted); }
 .state-success__dismiss {
   border: 0; background: transparent; cursor: pointer;
-  color: var(--text-muted); font-size: var(--text-lg); line-height: 1;
+  border-radius: 50%;
+  color: var(--ink); font-size: var(--text-lg); line-height: 1;
   min-width: 44px; min-height: 44px;
+}
+
+/* A write's outcome, in a sheet: ring, title, one sentence, then the detail. */
+.state-tx {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--space-2);
+  padding: var(--space-4) 0 var(--space-2);
+  text-align: center;
+}
+.state-tx .state-ring { margin-bottom: var(--space-4); }
+.state-ring--done { animation: state-pop 0.5s cubic-bezier(0.2, 0.9, 0.3, 1.5); }
+@keyframes state-pop { from { transform: scale(0.6); } }
+.state-tx__title {
+  margin: 0;
+  font-family: var(--font-display);
+  font-size: var(--text-xl);
+  font-weight: var(--weight-display);
+  letter-spacing: var(--tracking-title);
+}
+.state-tx__note {
+  margin: 0;
+  max-width: 40ch;
+  font-size: var(--text-md);
+  line-height: var(--leading-body);
+  color: var(--ink-muted);
+}
+.state-tx__note p { margin: 0; }
+.state-tx__steps {
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  width: 100%;
+  max-width: 18.75rem;
+  margin: var(--space-5) auto 0;
+  padding: 0;
+  text-align: left;
+  font-size: var(--text-sm);
+}
+.state-tx__step { display: flex; align-items: center; gap: var(--space-3); color: var(--ink-muted); }
+.state-tx__step svg { width: 16px; height: 16px; flex: none; }
+.state-tx__step--done { color: var(--accent); }
+.state-tx__step--current { color: var(--ink); font-weight: var(--weight-semibold); }
+.state-tx__receipt { width: 100%; margin-top: var(--space-5); text-align: left; }
+.state-tx__actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-3);
+  width: 100%;
+  margin-top: var(--space-5);
+}
+.state-tx__actions > * { flex: 1 1 10rem; }
+.state-tx--failed .state-error { width: 100%; margin-top: var(--space-3); text-align: left; }
+@media (prefers-reduced-motion: reduce) {
+  .state-ring--done { animation: none; }
+}
+
+.state-tx__fee {
+  margin: var(--space-2) 0 0;
+  font-size: var(--text-sm);
+  font-weight: var(--weight-medium);
+  color: var(--ink);
+}
+.state-tx__warn {
+  width: 100%;
+  margin-top: var(--space-3);
+  text-align: left;
 }

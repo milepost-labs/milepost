@@ -1,8 +1,9 @@
 /* Withdraw application section. Every value comes from a design token. */
 
 .app-withdraw {
-  border-top: 1px solid var(--surface-raised);
+  margin-top: var(--space-5);
   padding-top: var(--space-4);
+  box-shadow: inset 0 1px 0 var(--line);
   display: flex;
   flex-direction: column;
   gap: var(--space-3);
@@ -19,7 +20,7 @@
   margin: 0;
   font-size: var(--text-sm);
   line-height: var(--leading-body);
-  color: var(--text-muted);
+  color: var(--ink-muted);
 }
 
 /* The trigger sits left-aligned at its natural width; the 44px tap target is
@@ -32,7 +33,7 @@
   margin: 0 0 var(--space-4);
   font-size: var(--text-md);
   line-height: var(--leading-body);
-  color: var(--text);
+  color: var(--ink);
 }
 
 .app-withdraw__modal-actions {

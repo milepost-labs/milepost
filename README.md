@@ -109,7 +109,7 @@ stateDiagram-v2
 flowchart TD
     Contribute[Donor contributes] --> Apply[Recipient applies]
     Apply --> Review[Reviewers vote]
-    Review --> Finalize[Finalize: median award, budget check]
+    Review --> Finalize[Finalize: middle-vote award, budget check]
     Finalize --> Release[Release: attestation verified]
     Release --> Spend[Spend: mode-dependent routing]
     Finalize -->|unawarded budget| Refund[Refund: proportional to contributions]
@@ -122,9 +122,12 @@ flowchart TD
 2. **Apply.** An applicant states the amount they actually need. Not a fixed
    slot — one may need 200 for exam fees while another needs 5,000 for tuition.
 3. **Review.** Each reviewer approves an amount *up to* what was asked.
-4. **Finalize.** The award settles at the **median** of the votes. The minimum
+4. **Finalize.** The award settles at the **middle vote**. The minimum
    would let one cautious reviewer dictate the outcome; the mean would let one
-   outlier drag it. Awards are checked against remaining budget, first finalised
+   outlier drag it. Votes are kept sorted and the award is the middle of the
+   lowest `quorum` of them (the lower middle for an even quorum), so it is the
+   median when exactly `quorum` reviewers vote, and extra votes can only
+   lower it. Awards are checked against remaining budget, first finalised
    first served.
 5. **Release.** A tranche unlocks only when `attest` confirms the claim is
    valid, is about this recipient, is under this programme's schema, and was

@@ -1,25 +1,58 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
+import type { ResolvedMetadata } from '../lib/metadata';
+import { fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
 import { Buffer } from 'buffer';
 import { FinalizeAwards } from './FinalizeAwards';
 
-// Issue #340/#341 — finalizing awards. The screen has two halves: a board of
-// review applications where anyone can settle the ones with quorum (and where
-// oversubscription is a real ordering hazard), and a single-applicant flow
-// that performs the real `finalize` call with a mode and, for Direct, a
-// verified payee. The contract clients are faked through `useSoroban`;
-// nothing touches the network.
+// `/finalize`: anyone can turn reviewers' votes into an award. The rows are
+// the programme's indexed awards plus applicants added on the page, each read
+// on the chain; each award is finalized in a sheet that asks for the mode and
+// the payee that mode needs, following the contract's rules per mode.
 
-const ADDRESS = `GFIN${'A'.repeat(52)}`;
-const APPLICANT = `GA${'B'.repeat(50)}234B`;
-const PAYEE = `GP${'C'.repeat(50)}345C`;
-const SETTLED_PROGRAMME_ID = 'CBAVXWACVVQIBYAZ2YCSIPWXA24E3NZ3CIRAWJ2UHEQUQP67POYS6GFM';
+// Hoisted: the vi.hoisted/vi.mock factories below read these before module code runs.
+const { ADDRESS, AWARDED, APPLICANT, PAYEE, WALLET, REAL_ID, POLICY_ID } = vi.hoisted(() => ({
+  ADDRESS: `GFIN${'A'.repeat(52)}`,
+  AWARDED: `GAWD${'B'.repeat(52)}`,
+  APPLICANT: `GAPP${'C'.repeat(52)}`,
+  PAYEE: `GPAY${'D'.repeat(52)}`,
+  WALLET: `CWAL${'E'.repeat(52)}`,
+  REAL_ID: `CREA${'F'.repeat(52)}`,
+  POLICY_ID: `CPOL${'G'.repeat(52)}`,
+}));
 
 const mocks = vi.hoisted(() => ({
   address: null as string | null,
   announce: vi.fn(),
+  isInstalled: vi.fn(),
+  metadata: {
+    status: 'ok' as const,
+    doc: {
+      schema_version: '1.1.0',
+      name: 'Programme',
+      description: 'Desc',
+      vertical: 'health',
+      contact: { name: 'Trust', email: 'test@example.com' },
+      labels: [
+        { address: PAYEE, role: 'payee', label: 'St Jude Hospital' },
+        { address: WALLET, role: 'reviewer', label: 'Reviewer Wallet' },
+      ],
+    },
+  } as ResolvedMetadata | null,
 }));
+
+vi.mock('../hooks/useProgrammeMetadata', () => ({
+  useProgrammeMetadata: () => mocks.metadata,
+}));
+
+// The asset read has its own tests (hooks/useProgrammeAsset.test.tsx). Here a
+// sample programme is in its stand-in asset and a deployed one pays in XLM.
+vi.mock('../hooks/useProgrammeAsset', async () => {
+  const { isSampleProgrammeId } = await import('../lib/programmeView');
+  return {
+    useProgrammeAsset: (id: string | null | undefined) => (!id ? null : isSampleProgrammeId(id) ? 'USDC' : 'XLM'),
+  };
+});
 
 vi.mock('../context/useWallet', () => ({
   useWallet: () => ({
@@ -32,67 +65,73 @@ vi.mock('../context/useWallet', () => ({
 
 vi.mock('../context/useAnnouncer', () => ({ useAnnouncer: () => mocks.announce }));
 
-function unwrap<T>(value: T) {
+vi.mock('../hooks/useProgrammeParam', () => ({
+  useProgrammeParam: () => ({
+    raw: null,
+    programmeId: null,
+    status: 'absent',
+    active: false,
+    blocksProgramme: false,
+    loading: false,
+    error: null,
+    message: null,
+    clear: vi.fn(),
+    refetch: vi.fn(),
+  }),
+}));
+
+vi.mock('../lib/indexer', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('../lib/indexer')>()),
+  fetchProgrammes: vi.fn(async () => [{ id: REAL_ID, name: 'Community health worker stipend 2026', creator: null, createdLedger: 1 }]),
+  fetchAwards: vi.fn(async () => [
+    { recipient: AWARDED, granted: '3000000000', released: '0', tranches: 3, tranchesReleased: 0, payee: AWARDED, mode: 'Allocated', updatedLedger: 1 },
+  ]),
+}));
+
+function ok<T>(value: T) {
   return Promise.resolve({ result: { unwrap: () => value } });
 }
 
-function sendable<T>(value: T) {
-  return { signAndSend: vi.fn(async () => ({ result: value })) };
-}
-
-function makeConfig(overrides: { minimum_award?: bigint } = {}) {
+function application(applicant: string, overrides: { finalized?: boolean; votes?: bigint[] } = {}) {
   return {
-    creator: 'GCREATOR',
-    treasury: 'GTREASURY',
-    token: 'CTOKEN',
-    quorum: 3,
-    tranches: 3,
-    fee_bps: 200,
-    minimum_award: overrides.minimum_award ?? 0n,
-    metadata_hash: Buffer.alloc(32, 1),
-    schema: Buffer.alloc(32, 2),
-  };
-}
-
-function makeApplication(overrides: { finalized?: boolean; votes?: bigint[] } = {}) {
-  return {
-    applicant: APPLICANT,
+    applicant,
     finalized: overrides.finalized ?? false,
     metadata_hash: Buffer.alloc(32),
-    requested: 5000000000n,
+    requested: 5_000_000_000n,
     submitted_at: 0,
-    votes: overrides.votes ?? [1000000000n, 1500000000n, 1500000000n],
+    votes: overrides.votes ?? [1_000_000_000n, 1_500_000_000n, 1_500_000_000n],
     withdrawn: false,
-  };
-}
-
-function makeAward() {
-  return {
-    recipient: APPLICANT,
-    granted: 1500000000n,
-    mode: { tag: 'Direct', values: undefined },
-    payee: PAYEE,
-    tranches: 3,
-    released: 0n,
   };
 }
 
 function makeProgramme() {
   return {
-    options: { contractId: 'CD6X33SKLUEMANS67ID3LJL572FFGERMMJCIFRW7P7EKZQLH35XT67C6' },
-    total_contributed: vi.fn(async () => ({ result: 10000000000n })),
-    total_granted: vi.fn(async () => ({ result: 0n })),
-    total_released: vi.fn(async () => ({ result: 0n })),
-    total_refunded: vi.fn(async () => ({ result: 0n })),
-    total_swept: vi.fn(async () => ({ result: 0n })),
+    options: { contractId: REAL_ID },
     is_paused: vi.fn(async () => ({ result: false })),
-    budget: vi.fn(() => unwrap(10000000000n)),
-    get_config: vi.fn(() => unwrap(makeConfig())),
-    get_phase: vi.fn(() => unwrap({ tag: 'Review' })),
-    get_application: vi.fn(() => unwrap(makeApplication())),
-    get_award: vi.fn(() => unwrap(makeAward())),
+    total_granted: vi.fn(async () => ({ result: 3_000_000_000n })),
+    budget: vi.fn(() => ok(10_000_000_000n)),
+    get_config: vi.fn(() =>
+      ok({
+        quorum: 3,
+        minimum_award: 0n,
+        policy: POLICY_ID,
+        apply_deadline: 1_900_000_000n,
+        metadata_hash: new Uint8Array(32).fill(1),
+      }),
+    ),
+    get_phase: vi.fn(() => ok({ tag: 'Review' })),
+    get_application: vi.fn(({ applicant }: { applicant: string }) =>
+      ok(application(applicant, { finalized: applicant === AWARDED })),
+    ),
+    get_award: vi.fn(({ recipient }: { recipient: string }) =>
+      ok({ recipient, granted: 3_000_000_000n, mode: { tag: 'Allocated' }, payee: recipient, tranches: 3 }),
+    ),
     is_payee: vi.fn(async () => ({ result: true })),
-    finalize: vi.fn(() => sendable({ unwrap: () => makeAward() })),
+    finalize: vi.fn(() => ({
+      signAndSend: vi.fn(async () => ({
+        result: { unwrap: () => ({ recipient: APPLICANT, granted: 1_500_000_000n, mode: { tag: 'Allocated' }, payee: APPLICANT, tranches: 3 }) },
+      })),
+    })),
   };
 }
 
@@ -102,307 +141,252 @@ vi.mock('../context/useSoroban', () => ({
   useSoroban: () => ({
     programmeAt: () => programme,
     registry: { is_programme: vi.fn(async () => ({ result: true })) },
+    policy: { options: { contractId: POLICY_ID }, is_installed: mocks.isInstalled },
   }),
 }));
 
-/** The seeded testnet programme: real, so the single-application flow reads it. */
-const REAL_PROGRAMME_ID = 'CD6X33SKLUEMANS67ID3LJL572FFGERMMJCIFRW7P7EKZQLH35XT67C6';
-
-function renderPage(path = '/finalize') {
+function renderPage() {
   return render(
-    <MemoryRouter initialEntries={[path]}>
+    <MemoryRouter initialEntries={['/finalize']}>
       <FinalizeAwards />
     </MemoryRouter>,
   );
 }
 
-function submitApplicant(address: string) {
+async function addApplicant(address = APPLICANT) {
+  await screen.findByText('Finalized · Allocated');
   fireEvent.change(screen.getByLabelText('Applicant address'), { target: { value: address } });
-  fireEvent.click(screen.getByRole('button', { name: 'Load application' }));
+  fireEvent.click(screen.getByRole('button', { name: 'Add applicant' }));
+  const row = (await screen.findByText('Added here')).closest('tr')!;
+  await within(row).findByText('150', { selector: 'b' });
+  return row;
 }
 
-/** Load the default application and wait for its card to settle. */
-/**
- * Wait for the linked programme to be confirmed and its config read, so an
- * applicant is loaded against the real programme rather than the default
- * sample the page shows while the link is being checked.
- */
-async function waitForRealProgramme() {
-  await waitFor(() => expect(programme.get_config).toHaveBeenCalled());
-  await screen.findByText('3 votes');
-}
-
-async function loadApplication() {
-  await waitForRealProgramme();
-  submitApplicant(APPLICANT);
-  await screen.findByText('Enough votes in');
+async function openSheet() {
+  renderPage();
+  const row = await addApplicant();
+  const button = within(row).getByRole('button', { name: 'Finalize' }) as HTMLButtonElement;
+  await waitFor(() => expect(button.disabled).toBe(false));
+  fireEvent.click(button);
+  return screen.findByRole('dialog');
 }
 
 beforeEach(() => {
   programme = makeProgramme();
   mocks.address = ADDRESS;
   mocks.announce.mockClear();
+  mocks.isInstalled.mockReset().mockResolvedValue({ result: true });
 });
 
-describe('FinalizeAwards — the finalize board', () => {
-  it('lays out every application with its median and gates the ones short of quorum', async () => {
+describe('FinalizeAwards — the board', () => {
+  it('says anyone can finalize, reads the budget, and lists the indexed awards', async () => {
     renderPage();
-
-    const rows = await screen.findAllByRole('listitem');
-    expect(rows).toHaveLength(5);
-    const [rowA, rowB, rowC, rowD, rowE] = rows;
-
-    // Each row shows who asked, what was asked, how many votes are in, and
-    // the award the contract would settle on (the median vote).
-    expect(within(rowA).getByText('GAPLA…234A')).toBeTruthy();
-    expect(within(rowA).getByText('Asked 1,200.00 XLM')).toBeTruthy();
-    expect(within(rowA).getByText('5 of 5 votes')).toBeTruthy();
-    expect(within(rowA).getByText('1,100.00 XLM')).toBeTruthy();
-    expect(within(rowB).getByText('1,800.00 XLM')).toBeTruthy();
-    expect(within(rowC).getByText('1,500.00 XLM')).toBeTruthy();
-    expect(within(rowD).getByText('3 of 5 votes')).toBeTruthy();
-    expect(within(rowD).getByText('—')).toBeTruthy();
-    expect(within(rowE).getByText('600.00 XLM')).toBeTruthy();
-
-    // Short of quorum: no median, no finalisation, a reason saying what is
-    // missing.
-    expect(within(rowD).getByText('Needs 2 more votes before anyone can finalize.')).toBeTruthy();
-    expect((within(rowD).getByRole('button') as HTMLButtonElement).disabled).toBe(true);
-
-    // Ready: says the amount it will settle on, and the button is live.
-    expect(within(rowA).getByText('Award will be 1,100.00 XLM, the median of reviewer votes.')).toBeTruthy();
-    expect((within(rowA).getByRole('button') as HTMLButtonElement).disabled).toBe(false);
+    expect(screen.getByText('Anyone can do this')).toBeTruthy();
+    expect(await screen.findByText('Finalized · Allocated')).toBeTruthy();
+    const figures = document.querySelector('.finalize__figures') as HTMLElement;
+    await waitFor(() => expect(within(figures).getByText('300')).toBeTruthy());
+    expect(within(figures).getByText('700')).toBeTruthy();
+    expect(screen.getByText(/Order matters when money is short/)).toBeTruthy();
   });
 
-  it('warns that the ready applications exceed the money left, before anyone acts', async () => {
+  it('marks the vote the contract will use, and gates a row short of quorum', async () => {
+    programme.get_application.mockImplementation(({ applicant }) =>
+      ok(application(applicant, { finalized: applicant === AWARDED, votes: applicant === APPLICANT ? [1_000_000_000n, 1_500_000_000n] : undefined })),
+    );
     renderPage();
-
-    // Fixture chain: budget 7,920 XLM, 3,150 already awarded → 4,770 left,
-    // against 5,000 XLM of ready medians.
-    const warning = await screen.findByText(/Whoever finalizes first is funded first/);
-    expect(warning.textContent).toContain('5,000.00 XLM');
-    expect(warning.textContent).toContain('4,770.00 XLM');
+    await screen.findByText('Finalized · Allocated');
+    fireEvent.change(screen.getByLabelText('Applicant address'), { target: { value: APPLICANT } });
+    fireEvent.click(screen.getByRole('button', { name: 'Add applicant' }));
+    const row = (await screen.findByText('Added here')).closest('tr')!;
+    expect(await within(row).findByText('Needs 1 more vote')).toBeTruthy();
+    expect(within(row).queryByRole('button', { name: 'Finalize' })).toBeNull();
   });
 
-  it('finalizes a ready row, fixes the award and says what it was', async () => {
+  it('says why a ready award can’t be finalized: over budget, below minimum, signed out', async () => {
+    programme.budget.mockImplementation(() => ok(4_000_000_000n));
     renderPage();
-
-    const [rowA] = await screen.findAllByRole('listitem');
-    const button = () => within(rowA).getByRole('button') as HTMLButtonElement;
-    expect(button().disabled).toBe(false);
-
-    fireEvent.click(button());
-    expect(button().disabled).toBe(true);
-
-    // The row settles after a short (simulated) delay.
-    await act(async () => {
-      await new Promise((resolve) => setTimeout(resolve, 1400));
-    });
-
-    expect(button().textContent).toContain('Finalized');
-    expect(button().disabled).toBe(true);
-    expect(within(rowA).getByText('Finalized. The award is fixed.')).toBeTruthy();
-    expect(mocks.announce).toHaveBeenCalledWith('Award finalized at 1,100.00 XLM.');
+    const row = await addApplicant();
+    expect(await within(row).findByText('Only 100 XLM left')).toBeTruthy();
+    expect((within(row).getByRole('button', { name: 'Finalize' }) as HTMLButtonElement).disabled).toBe(true);
   });
 
-  it('refuses to finalize outside Review and says why', async () => {
-    renderPage();
-
-    fireEvent.change(await screen.findByLabelText('Programme'), {
-      target: { value: SETTLED_PROGRAMME_ID },
-    });
-
-    expect(
-      await screen.findByText('Finalizing is available only during Review. This programme is Settled.'),
-    ).toBeTruthy();
-    expect(screen.queryByRole('listitem')).toBeNull();
-  });
-
-  it('marks what cannot be finalised while signed out', async () => {
+  it('asks a signed-out visitor to sign in, and says anyone can', async () => {
     mocks.address = null;
     renderPage();
+    const row = await addApplicant();
+    expect(within(row).getByText('Sign in to finalize. Anyone can.')).toBeTruthy();
+  });
 
-    // Four ready rows say how to unlock them; the quorum-short row keeps its
-    // own reason.
-    expect(await screen.findAllByText('Sign in to finalize. Anyone can.')).toHaveLength(4);
-    expect(screen.getByText('Needs 2 more votes before anyone can finalize.')).toBeTruthy();
+  it('says when finalizing opens for a programme still taking applications', async () => {
+    programme.get_phase.mockImplementation(() => ok({ tag: 'Open' }));
+    renderPage();
+    const row = await addApplicant();
+    expect(await within(row).findByText(/Finalizing opens when review starts, on/)).toBeTruthy();
   });
 });
 
-describe('FinalizeAwards — the single-application flow', () => {
-  it('starts empty, needs an applicant, and summarises the programme', async () => {
-    renderPage(`/finalize?programme=${REAL_PROGRAMME_ID}`);
+describe('FinalizeAwards — the sheet', () => {
+  it('finalizes as Allocated by default, with no payee of its own', async () => {
+    const sheet = await openSheet();
+    expect((within(sheet).getByRole('radio', { name: /Allocated/ }) as HTMLInputElement).checked).toBe(true);
+    fireEvent.click(within(sheet).getByRole('button', { name: 'Finalize award' }));
 
-    expect(screen.getByRole('heading', { name: 'Finalize awards' })).toBeTruthy();
-    expect(screen.getByText('No application loaded yet')).toBeTruthy();
-    expect(screen.getByText('Paste an applicant address above and press Load.')).toBeTruthy();
-
-    // Stats: remaining budget read, phase, quorum and minimum from config.
-    expect(await screen.findByText('1,000.00 XLM')).toBeTruthy();
-    expect(screen.getByText('3 votes')).toBeTruthy();
-    expect(screen.getByText('None')).toBeTruthy();
-
-    const load = screen.getByRole('button', { name: 'Load application' }) as HTMLButtonElement;
-    expect(load.disabled).toBe(true);
-
-    fireEvent.change(screen.getByLabelText('Applicant address'), { target: { value: APPLICANT } });
-    expect(load.disabled).toBe(false);
-  });
-
-  it('computes the middle vote and finalizes to a verified payee in Direct mode', async () => {
-    renderPage(`/finalize?programme=${REAL_PROGRAMME_ID}`);
-    await loadApplication();
-
-    expect(screen.getByText('500.00 XLM')).toBeTruthy();
-    expect(screen.getByText('3 / 3 needed')).toBeTruthy();
-    // The application card and the budget note both state the middle vote.
-    expect(screen.getAllByText('150.00 XLM')).toHaveLength(2);
-
-    // Direct requires a payee this programme has verified before anything can
-    // be signed; the button says so while it waits.
-    fireEvent.click(screen.getByRole('button', { name: /^Direct/ }));
-    expect(screen.getByRole('heading', { name: 'Verified payee' })).toBeTruthy();
-    const finalizeButton = () =>
-      screen.getByRole('button', { name: 'Finalize award' }) as HTMLButtonElement;
-    expect(finalizeButton().disabled).toBe(true);
-    expect(screen.getByText('Select and verify a payee first.')).toBeTruthy();
-
-    fireEvent.change(screen.getByLabelText('Verified payee address'), { target: { value: PAYEE } });
-    fireEvent.click(screen.getByRole('button', { name: 'Verify payee' }));
-
-    expect(await screen.findByText('GPCCC…345C is a verified payee for this programme.')).toBeTruthy();
-    expect(programme.is_payee).toHaveBeenCalledWith({ payee: PAYEE });
-    expect(finalizeButton().disabled).toBe(false);
-
-    fireEvent.click(finalizeButton());
-
-    // The mode and payee chosen on screen are exactly what is signed.
-    expect(await screen.findByText('Award finalised')).toBeTruthy();
+    expect(await within(sheet).findByText('The award is fixed. Each tranche now waits for a verifier.')).toBeTruthy();
     expect(programme.finalize).toHaveBeenCalledWith({
       applicant: APPLICANT,
-      payee: PAYEE,
-      mode: { tag: 'Direct', values: undefined },
+      payee: APPLICANT,
+      mode: { tag: 'Allocated', values: undefined },
     });
-    // The announcement follows the success render, so it may land a tick later.
-    await waitFor(() => expect(mocks.announce).toHaveBeenCalledWith('Award finalized at 150.00 XLM.'));
+    expect(mocks.announce).toHaveBeenCalledWith('Award finalized at 150 XLM.');
   });
 
-  it('refuses a payee this programme has not verified', async () => {
-    renderPage(`/finalize?programme=${REAL_PROGRAMME_ID}`);
-    await loadApplication();
-    fireEvent.click(screen.getByRole('button', { name: /^Direct/ }));
-
+  it('needs a payee this programme verified for Direct', async () => {
     programme.is_payee.mockResolvedValue({ result: false });
-    fireEvent.change(screen.getByLabelText('Verified payee address'), { target: { value: PAYEE } });
-    fireEvent.click(screen.getByRole('button', { name: 'Verify payee' }));
+    const sheet = await openSheet();
+    fireEvent.click(within(sheet).getByRole('radio', { name: /Direct/ }));
+    fireEvent.change(within(sheet).getByLabelText('Verified payee'), { target: { value: PAYEE } });
 
-    expect(await screen.findByText(/This address is not a verified payee\./)).toBeTruthy();
-    expect(
-      (screen.getByRole('button', { name: 'Finalize award' }) as HTMLButtonElement).disabled,
-    ).toBe(true);
+    expect(await within(sheet).findByText('Not a verified payee for this programme.')).toBeTruthy();
+    expect((within(sheet).getByRole('button', { name: 'Finalize award' }) as HTMLButtonElement).disabled).toBe(true);
+    expect(programme.is_payee).toHaveBeenCalledWith({ payee: PAYEE });
+
+    programme.is_payee.mockResolvedValue({ result: true });
+    fireEvent.change(within(sheet).getByLabelText('Verified payee'), { target: { value: `GPAZ${'D'.repeat(52)}` } });
+    await waitFor(() =>
+      expect((within(sheet).getByRole('button', { name: 'Finalize award' }) as HTMLButtonElement).disabled).toBe(false),
+    );
+    fireEvent.click(within(sheet).getByRole('button', { name: 'Finalize award' }));
+    await waitFor(() =>
+      expect(programme.finalize).toHaveBeenCalledWith(
+        expect.objectContaining({ payee: `GPAZ${'D'.repeat(52)}`, mode: { tag: 'Direct', values: undefined } }),
+      ),
+    );
+  });
+
+  it('pays a Restricted award into the recipient’s smart wallet, and warns when it has no policy', async () => {
+    mocks.isInstalled.mockResolvedValue({ result: false });
+    const sheet = await openSheet();
+    fireEvent.click(within(sheet).getByRole('radio', { name: /Restricted/ }));
+    expect((within(sheet).getByRole('button', { name: 'Finalize award' }) as HTMLButtonElement).disabled).toBe(true);
+
+    fireEvent.change(within(sheet).getByLabelText('Recipient’s smart wallet'), { target: { value: WALLET } });
+    expect(await within(sheet).findByText(/No spend policy is installed on this wallet/)).toBeTruthy();
+    expect(mocks.isInstalled).toHaveBeenCalledWith({ wallet: WALLET });
+
+    fireEvent.click(within(sheet).getByRole('button', { name: 'Finalize award' }));
+    await waitFor(() =>
+      expect(programme.finalize).toHaveBeenCalledWith({
+        applicant: APPLICANT,
+        payee: WALLET,
+        mode: { tag: 'Restricted', values: undefined },
+      }),
+    );
+  });
+
+  it('names the recipient as the payee of an Open award', async () => {
+    const sheet = await openSheet();
+    fireEvent.click(within(sheet).getByRole('radio', { name: /Open/ }));
+    fireEvent.click(within(sheet).getByRole('button', { name: 'Finalize award' }));
+    await waitFor(() =>
+      expect(programme.finalize).toHaveBeenCalledWith(
+        expect.objectContaining({ payee: APPLICANT, mode: { tag: 'Open', values: undefined } }),
+      ),
+    );
+  });
+
+  it('explains a refusal in the contract’s own words', async () => {
+    programme.finalize.mockImplementation(() => {
+      throw new Error('HostError: Error(Contract, #14)');
+    });
+    const sheet = await openSheet();
+    fireEvent.click(within(sheet).getByRole('button', { name: 'Finalize award' }));
+
+    expect(await within(sheet).findByText('Award not finalized')).toBeTruthy();
+    expect(within(sheet).getByText('The programme does not have enough budget left for this award.')).toBeTruthy();
+    expect(within(sheet).queryByText(/HostError/)).toBeNull();
+  });
+});
+
+describe('FinalizeAwards — a sample programme', () => {
+  it('shows tagged sample applications, warns it is oversubscribed, and stands in for finalizing', async () => {
+    renderPage();
+    await screen.findByText('Finalized · Allocated');
+    fireEvent.change(screen.getByLabelText('Programme'), {
+      target: { value: 'CCOIACASOVO3ZQLXWWJFGZAU3Y545AGPXLBP4NYHYD77RDCBPXRVZ37C' },
+    });
+
+    expect(await screen.findByText(/This programme is oversubscribed/)).toBeTruthy();
+    expect(screen.getAllByText('Sample data').length).toBeGreaterThan(1);
+    expect(screen.getByText('Needs 2 more votes')).toBeTruthy();
+    expect(programme.get_application).not.toHaveBeenCalledWith(expect.objectContaining({ applicant: expect.stringMatching(/^GAPL/) }));
+
+    fireEvent.click(screen.getAllByRole('button', { name: 'Finalize' })[0]);
+    const sheet = await screen.findByRole('dialog');
+    fireEvent.click(within(sheet).getByRole('button', { name: 'Finalize award' }));
+    await waitFor(() => expect(within(sheet).getByText(/The award is fixed/)).toBeTruthy(), { timeout: 3000 });
     expect(programme.finalize).not.toHaveBeenCalled();
   });
 
-  it('treats every other mode as paying the applicant directly', async () => {
-    renderPage(`/finalize?programme=${REAL_PROGRAMME_ID}`);
-    await loadApplication();
+  describe('creator payee names in FinalizeSheet (Issue #632)', () => {
+    it('shows creator payee name beside address and verified badge when is_payee is true', async () => {
+      programme.is_payee.mockResolvedValue({ result: true });
+      const sheet = await openSheet();
 
-    for (const tag of ['Allocated', 'Restricted', 'Open']) {
-      fireEvent.click(screen.getByRole('button', { name: new RegExp(`^${tag}`) }));
-      expect(
-        await screen.findByText(
-          `With ${tag}, the award is paid to the recipient themselves, so the payee is the applicant.`,
-        ),
-      ).toBeTruthy();
-      expect(screen.getByRole('heading', { name: 'Payee' })).toBeTruthy();
-      expect(
-        (screen.getByRole('button', { name: 'Finalize award' }) as HTMLButtonElement).disabled,
-      ).toBe(false);
-    }
-  });
+      fireEvent.click(within(sheet).getByRole('radio', { name: /Direct/ }));
+      fireEvent.change(within(sheet).getByLabelText('Verified payee'), { target: { value: PAYEE } });
 
-  it('blocks finalising when the middle vote is below the programme minimum', async () => {
-    programme.get_config.mockImplementation(() => unwrap(makeConfig({ minimum_award: 2000000000n })));
-    renderPage(`/finalize?programme=${REAL_PROGRAMME_ID}`);
-    await loadApplication();
+      await waitFor(() => {
+        expect(within(sheet).getByText('St Jude Hospital')).toBeDefined();
+        expect(within(sheet).getByText('Verified payee')).toBeDefined();
+      });
+    });
 
-    const alert = await screen.findByRole('alert');
-    expect(
-      within(alert).getByText('Award is below the programme minimum and cannot be finalised.'),
-    ).toBeTruthy();
-    expect(within(alert).getByText('50.00 XLM')).toBeTruthy();
-    // The stat card, the breakdown line and the alert inside it each state
-    // the configured minimum.
-    expect(screen.getAllByText('200.00 XLM')).toHaveLength(3);
-    expect(
-      (screen.getByRole('button', { name: 'Finalize award' }) as HTMLButtonElement).disabled,
-    ).toBe(true);
-  });
+    it('says "Not a verified payee" in words when named payee is not verified on chain', async () => {
+      programme.is_payee.mockResolvedValue({ result: false });
+      const sheet = await openSheet();
 
-  it('blocks finalising when the budget cannot cover the award', async () => {
-    programme.budget.mockImplementation(() => unwrap(1000000000n));
-    renderPage(`/finalize?programme=${REAL_PROGRAMME_ID}`);
-    await loadApplication();
+      fireEvent.click(within(sheet).getByRole('radio', { name: /Direct/ }));
+      fireEvent.change(within(sheet).getByLabelText('Verified payee'), { target: { value: PAYEE } });
 
-    expect(await screen.findByText(/This award exceeds the remaining budget\./)).toBeTruthy();
-    expect(screen.getByText('-50.00 XLM')).toBeTruthy();
-    expect(
-      (screen.getByRole('button', { name: 'Finalize award' }) as HTMLButtonElement).disabled,
-    ).toBe(true);
-  });
+      await waitFor(() => {
+        expect(within(sheet).getByText('St Jude Hospital')).toBeDefined();
+        expect(within(sheet).getAllByText('Not a verified payee').length).toBeGreaterThan(0);
+      });
+    });
 
-  it('says when an application is still short of votes', async () => {
-    programme.get_application.mockImplementation(() =>
-      unwrap(makeApplication({ votes: [1000000000n, 1500000000n] })),
-    );
-    renderPage(`/finalize?programme=${REAL_PROGRAMME_ID}`);
-    await waitForRealProgramme();
-    submitApplicant(APPLICANT);
+    it('shows no creator name for an unnamed address', async () => {
+      const UNNAMED_PAYEE = `GPAY${'Z'.repeat(52)}`;
+      const sheet = await openSheet();
 
-    expect(await screen.findByText('Awaiting votes')).toBeTruthy();
-    expect(screen.getByText('2 / 3 needed')).toBeTruthy();
-    expect(screen.getByText(/Not enough reviewers have voted yet/)).toBeTruthy();
-    expect(screen.queryByRole('button', { name: 'Finalize award' })).toBeNull();
-    expect(screen.queryByText('Choose how the award is paid')).toBeNull();
-  });
+      fireEvent.click(within(sheet).getByRole('radio', { name: /Direct/ }));
+      fireEvent.change(within(sheet).getByLabelText('Verified payee'), { target: { value: UNNAMED_PAYEE } });
 
-  it('shows an already-settled application with the award it produced', async () => {
-    programme.get_application.mockImplementation(() => unwrap(makeApplication({ finalized: true })));
-    renderPage(`/finalize?programme=${REAL_PROGRAMME_ID}`);
-    submitApplicant(APPLICANT);
+      await waitFor(() => {
+        expect(within(sheet).queryByText('St Jude Hospital')).toBeNull();
+      });
+    });
 
-    expect(
-      await screen.findByText(
-        'This application has already been settled. Load another applicant to finalise more awards.',
-      ),
-    ).toBeTruthy();
-    expect(await screen.findByText('Already finalised into an award')).toBeTruthy();
-    expect(programme.get_award).toHaveBeenCalledWith({ recipient: APPLICANT });
-    expect(screen.getByText('Granted')).toBeTruthy();
-    expect(screen.getAllByText('150.00 XLM')).toHaveLength(2);
-    expect(screen.queryByRole('button', { name: 'Finalize award' })).toBeNull();
-  });
+    it('ignores labels for the same address with a different role', async () => {
+      const sheet = await openSheet();
 
-  it('asks a signed-out visitor to connect before finalising', async () => {
-    mocks.address = null;
-    renderPage(`/finalize?programme=${REAL_PROGRAMME_ID}`);
-    await loadApplication();
+      fireEvent.click(within(sheet).getByRole('radio', { name: /Direct/ }));
+      fireEvent.change(within(sheet).getByLabelText('Verified payee'), { target: { value: WALLET } });
 
-    expect(screen.getByText('Connect a wallet above to sign the finalise transaction.')).toBeTruthy();
-    expect(
-      (screen.getByRole('button', { name: 'Finalize award' }) as HTMLButtonElement).disabled,
-    ).toBe(true);
-  });
+      await waitFor(() => {
+        expect(within(sheet).queryByText('Reviewer Wallet')).toBeNull();
+      });
+    });
 
-  it('shows a contract refusal from finalize with its own message', async () => {
-    programme.finalize.mockRejectedValue(new Error('HostError: Error(Contract, #13)'));
-    renderPage(`/finalize?programme=${REAL_PROGRAMME_ID}`);
-    await loadApplication();
-    fireEvent.click(screen.getByRole('button', { name: /^Allocated/ }));
+    it('does not display creator payee name when metadata is unavailable', async () => {
+      mocks.metadata = { status: 'unavailable', reason: 'failed' };
+      const sheet = await openSheet();
 
-    fireEvent.click(screen.getByRole('button', { name: 'Finalize award' }));
+      fireEvent.click(within(sheet).getByRole('radio', { name: /Direct/ }));
+      fireEvent.change(within(sheet).getByLabelText('Verified payee'), { target: { value: PAYEE } });
 
-    expect(await screen.findByText('This application has already been settled into an award.')).toBeTruthy();
-    expect(screen.queryByText(/HostError/)).toBeNull();
+      await waitFor(() => {
+        expect(within(sheet).queryByText('St Jude Hospital')).toBeNull();
+      });
+    });
   });
 });

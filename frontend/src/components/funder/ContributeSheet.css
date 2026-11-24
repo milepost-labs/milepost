@@ -1,0 +1,82 @@
+/* The contribute sheet's body. The sheet itself is the shared `Modal`. */
+.contribute {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+}
+
+/* What the amount turns into, line by line; the hairline is allowed here, it
+   is a list. */
+.contribute__breakdown {
+  margin: 0;
+  font-size: var(--text-sm);
+}
+
+.contribute__breakdown > div {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: var(--space-4);
+  padding: var(--space-2) 0;
+}
+
+.contribute__breakdown > div + div {
+  box-shadow: inset 0 1px 0 var(--line);
+}
+
+.contribute__breakdown dt {
+  color: var(--ink-muted);
+}
+
+.contribute__breakdown dd {
+  margin: 0;
+  text-align: right;
+  white-space: nowrap;
+}
+
+.contribute__total dt,
+.contribute__total dd {
+  color: var(--ink);
+  font-weight: var(--weight-semibold);
+}
+
+.contribute__aside {
+  margin: 0;
+  font-size: var(--text-caption);
+  line-height: var(--leading-body);
+  color: var(--ink-muted);
+}
+
+.contribute__actions {
+  display: flex;
+  gap: var(--space-3);
+  margin-top: var(--space-2);
+}
+
+.contribute__grow {
+  flex: 1;
+}
+
+.contribute__sample {
+  margin-top: var(--space-2);
+}
+
+/* A shortened hash, its copy button and its explorer link, on one line. */
+.contribute__hash {
+  display: inline-flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: var(--space-1);
+}
+
+.contribute__hash .copy-button {
+  width: 32px;
+  height: 32px;
+}
+
+/* The amount step of a sheet that takes one figure before the write. */
+.contribute__amount-step {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+}

@@ -5,6 +5,7 @@ import { FIXTURE_CHAIN_DEFAULT, FIXTURE_PROGRAMMES } from '../fixtures/programme
 import { FIXTURE_USER_ROLES } from '../fixtures/userRoles';
 import { isProgrammeContractId } from './registryVerification';
 import {
+  availableAssets,
   directoryHref,
   directorySearch,
   filterProgrammes,
@@ -353,5 +354,36 @@ describe('directory links', () => {
   it('links to the plain directory when no filters were carried', () => {
     expect(directorySearch('')).toBe('');
     expect(directoryHref('')).toBe('/directory');
+  });
+
+  it('carries the asset filter in directory links', () => {
+    expect(directorySearch('?q=health&phase=Open&asset=USDC')).toBe('q=health&phase=Open&asset=USDC');
+  });
+});
+
+describe('asset filtering', () => {
+  const items = [
+    directoryProgramme({ id: 'P1', name: 'Clinic grants', phase: 'Open', contributed: '100', createdLedger: 1 }),
+    directoryProgramme({ id: 'P2', name: 'School meals', phase: 'Open', contributed: '200', createdLedger: 2 }),
+    directoryProgramme({ id: 'P3', name: 'Clinic solar', phase: 'Settled', contributed: '300', createdLedger: 3 }),
+  ];
+  const assetsById = { P1: 'USDC', P2: 'XLM', P3: 'USDC' };
+
+  it('lists unique sorted assets seen in the directory', () => {
+    expect(availableAssets(items, assetsById)).toEqual(['USDC', 'XLM']);
+  });
+
+  it('combines asset filter with search and phase', () => {
+    expect(filterProgrammes(items, '', 'All', false, 'USDC', assetsById).map((p) => p.id)).toEqual(['P1', 'P3']);
+    expect(filterProgrammes(items, 'clinic', 'Open', false, 'USDC', assetsById).map((p) => p.id)).toEqual(['P1']);
+    expect(filterProgrammes(items, '', 'Open', false, 'XLM', assetsById).map((p) => p.id)).toEqual(['P2']);
+  });
+
+  it('updates phase counts for the selected asset', () => {
+    const counts = phaseCounts(items, '', 'USDC', assetsById);
+    expect(counts.All).toBe(2);
+    expect(counts.Open).toBe(1);
+    expect(counts.Settled).toBe(1);
+    expect(counts.Review).toBe(0);
   });
 });

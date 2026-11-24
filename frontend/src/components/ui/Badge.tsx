@@ -1,4 +1,5 @@
 import type { ReactNode } from 'react';
+import { modeInfo } from '../../lib/modes';
 import './ui.css';
 
 export type BadgeTone = 'neutral' | 'accent' | 'success' | 'warning' | 'danger';
@@ -26,12 +27,35 @@ export function PhaseBadge({ phase }: { phase: string }) {
 }
 
 /**
- * An award's payout mode — `Direct`, `Allocated`, `Restricted` or `Open`
+ * An award's payment mode — `Direct`, `Allocated`, `Restricted` or `Open`
  * (four, not three: `Open` here means no escrow or payee restriction, a
- * different thing from the `Open` programme phase). Flat and descriptive
- * rather than status-coloured, matching the design reference: mode is
- * metadata, not something to react to.
+ * different thing from the `Open` programme phase). Flat rather than
+ * status-coloured: mode is metadata, not something to react to. The meter
+ * shows how much the contract itself guarantees, so the four never read as
+ * equals; its meaning is spelled out for screen readers.
  */
 export function ModePill({ mode }: { mode: string }) {
-  return <span className="ui-mode-pill">{mode} mode</span>;
+  const info = modeInfo(mode);
+  return (
+    <span className="ui-mode-pill" title={info?.rank}>
+      {info && (
+        <span className="ui-mode-pill__meter" aria-hidden="true">
+          {[1, 2, 3, 4].map((step) => (
+            <i key={step} className={step <= info.strength ? 'is-filled' : undefined} />
+          ))}
+        </span>
+      )}
+      {mode}
+      <span className="visually-hidden"> mode{info ? `, ${info.rank.toLowerCase()}` : ''}</span>
+    </span>
+  );
+}
+
+/**
+ * Marks anything on screen that is stand-in data rather than a real read.
+ * Road-paint yellow with hazard hatching: the one thing on a page that should
+ * never be mistaken for the truth.
+ */
+export function SampleTag({ children = 'Sample data' }: { children?: ReactNode }) {
+  return <span className="ui-sample-tag">{children}</span>;
 }

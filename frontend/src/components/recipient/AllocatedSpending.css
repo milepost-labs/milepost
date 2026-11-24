@@ -1,88 +1,78 @@
-/* Allocated spending section. Every value comes from a design token; none are
-   invented here. Light and dark both resolve through the semantic aliases. */
-
+/* The escrow block: an accent-soft ground holding what is in escrow, then the
+   form that sends it to a verified payee. */
 .allocated-spending {
-  display: flex;
-  flex-direction: column;
-  gap: var(--space-3);
+  display: grid;
+  grid-template-columns: minmax(12rem, 16rem) minmax(0, 1fr);
+  gap: var(--space-5);
+  align-items: start;
+  margin-top: var(--space-6);
+  padding: var(--space-5);
+  border-radius: var(--radius-md);
+  background: var(--accent-soft);
 }
 
 .allocated-spending__header {
   display: flex;
-  justify-content: space-between;
-  align-items: baseline;
-  gap: var(--space-3);
-  flex-wrap: wrap;
-}
-
-.allocated-spending__title {
-  font-size: var(--text-md);
-  font-weight: var(--weight-bold);
-  color: var(--text);
+  flex-direction: column;
+  align-items: flex-start;
+  gap: var(--space-2);
 }
 
 .allocated-spending__amount {
-  font-family: var(--font-numeric);
-  font-variant-numeric: tabular-nums;
-  font-size: var(--text-md);
-  font-weight: var(--weight-semibold);
-  color: var(--text);
+  font-size: 1.875rem;
+  font-weight: var(--weight-medium);
+  line-height: 1;
+  letter-spacing: var(--tracking-title);
 }
 
-.allocated-spending__sample {
-  align-self: flex-start;
-  font-size: var(--text-xs);
-  font-weight: var(--weight-bold);
-  border-radius: var(--radius-full);
-  padding: var(--space-1) var(--space-3);
-  background: var(--surface-raised);
-  color: var(--text-muted);
-  white-space: nowrap;
+.allocated-spending__amount small {
+  font-size: var(--text-sm);
+  color: var(--ink-muted);
 }
 
-/* Phase and role gates: the reason an action is unavailable, shown rather than
-   letting the transaction fail. */
+.allocated-spending__title {
+  font-size: var(--text-caption);
+  line-height: var(--leading-body);
+  color: var(--ink-muted);
+}
+
+.allocated-spending__form,
 .allocated-spending__gate {
   display: flex;
   flex-direction: column;
   gap: var(--space-3);
-  align-items: flex-start;
+  min-width: 0;
+}
+
+/* Fields sit on the raised ground so they read against the tint. */
+.allocated-spending .ui-field__control {
+  background: var(--bg-raised);
+}
+
+.allocated-spending__gate,
+.allocated-spending__empty {
+  margin: 0;
+  font-size: var(--text-sm);
+  color: var(--ink-muted);
 }
 
 .allocated-spending__gate-reason {
   margin: 0;
-  font-size: var(--text-sm);
-  line-height: var(--leading-body);
-  color: var(--text-muted);
 }
 
-.allocated-spending__empty {
-  margin: 0;
-  font-size: var(--text-sm);
-  color: var(--text-muted);
-}
-
-.allocated-spending__form {
-  display: flex;
-  flex-direction: column;
-  gap: var(--space-3);
-}
-
-.allocated-spending__note {
-  font-size: var(--text-caption);
-  color: var(--text-muted);
-  line-height: var(--leading-body);
+.allocated-spending__action {
+  align-self: flex-start;
 }
 
 .allocated-spending__verified {
   margin: 0;
   font-size: var(--text-sm);
-  color: var(--success-strong);
-  font-weight: var(--weight-bold);
+  font-weight: var(--weight-semibold);
+  color: var(--accent);
 }
 
-/* Buttons sit left-aligned at their natural width; the 44px tap target is
-   already guaranteed by the ui-button base. */
-.allocated-spending__action {
-  align-self: flex-start;
+@media (max-width: 720px) {
+  .allocated-spending {
+    grid-template-columns: minmax(0, 1fr);
+  }
 }

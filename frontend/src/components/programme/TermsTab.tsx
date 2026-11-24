@@ -1,18 +1,20 @@
 import type { FC } from 'react';
 import { Link } from 'react-router-dom';
+import { ModePill } from '../ui';
+import { formatAmount } from '../../lib/amount';
 import './TermsTab.css';
 
 /** The four payment modes, as `Mode` documents them in the program contract. */
 const MODES = [
   {
-    mode: 'Direct',
-    description:
-      'Paid straight to a verified destination, called a payee, chosen when the award is finalized. The recipient never holds the money.',
-  },
-  {
     mode: 'Allocated',
     description:
       'Held in escrow, locked inside the programme. The recipient chooses which verified payee receives it, and when. This depends on nothing outside the contract.',
+  },
+  {
+    mode: 'Direct',
+    description:
+      'Paid straight to a verified destination, called a payee, chosen when the award is finalized. The recipient never holds the money.',
   },
   {
     mode: 'Restricted',
@@ -26,17 +28,34 @@ export interface TermsTabProps {
   programmeId: string;
   quorum?: number;
   asset?: string;
+  /** Minimum award in stroops. Zero or undefined means no minimum. */
+  minimumAward?: bigint;
 }
 
 export const TermsTab: FC<TermsTabProps> = ({
   programmeId,
   quorum = 1,
   asset = 'USDC',
+  minimumAward,
 }) => {
   const cappedQuorum = Math.min(Math.max(1, quorum), 16);
 
+  const minimumAwardValue = minimumAward ?? 0n;
+  const minimumAwardDisplay =
+    minimumAwardValue === 0n
+      ? 'No minimum'
+      : formatAmount(minimumAwardValue, { asset });
+
   const terms = [
     { k: 'Asset', v: asset },
+    {
+      k: 'Minimum award',
+      v: minimumAwardDisplay,
+      explanation:
+        minimumAwardValue === 0n
+          ? undefined
+          : 'Awards below this amount cannot be finalised.',
+    },
     {
       k: 'Payment mode',
       v: 'Chosen per award',
@@ -51,9 +70,9 @@ export const TermsTab: FC<TermsTabProps> = ({
     },
     {
       k: 'Award rule',
-      v: 'Median of reviewer votes',
+      v: 'Middle vote once the quorum is in',
       explanation:
-        'After enough reviewers have voted, the submitted amounts are sorted and the middle value is selected to protect against outlier votes.',
+        'The votes are kept sorted from lowest, and the award is the middle of the first quorum of them: the lower middle for an even quorum, never an average. One outlier can’t decide it, and votes beyond the quorum can only lower it.',
     },
     {
       k: 'Unpaid money',
@@ -72,25 +91,26 @@ export const TermsTab: FC<TermsTabProps> = ({
       id="panel-terms"
       aria-labelledby="tab-terms"
     >
-      <div className="terms-tab__list">
+      <dl className="terms-tab__list">
         {terms.map((item) => (
           <div key={item.k} className="terms-tab__row">
-            <div className="terms-tab__row-header">
-              <span className="terms-tab__key">{item.k}</span>
+            <dt className="terms-tab__key">{item.k}</dt>
+            <dd className="terms-tab__def">
               <span className="terms-tab__val">{item.v}</span>
-            </div>
-            {item.explanation && (
-              <p className="terms-tab__explanation">{item.explanation}</p>
-            )}
+              {item.explanation && (
+                <span className="terms-tab__explanation">{item.explanation}</span>
+              )}
+            </dd>
           </div>
         ))}
-      </div>
+      </dl>
 
+      <h3 className="terms-tab__modes-title">The payment modes, strongest guarantee first</h3>
       <dl className="terms-tab__mode-card">
         {MODES.map((item) => (
           <div key={item.mode}>
             <dt>
-              <strong>{item.mode}</strong>
+              <ModePill mode={item.mode} />
             </dt>
             <dd>{item.description}</dd>
           </div>

@@ -47,3 +47,30 @@ export function MoneyRow({
     </div>
   );
 }
+
+/**
+ * What the four square colours mean. The squares are decorative; the words
+ * carry it. Shown once per page, near the first money row.
+ */
+export function MoneyLegend() {
+  return (
+    <span className="money-legend">
+      <span>
+        <i className="money-legend__sq money-legend__sq--unawarded" aria-hidden="true" />
+        Unawarded
+      </span>
+      <span>
+        <i className="money-legend__sq money-legend__sq--locked" aria-hidden="true" />
+        Awarded, locked
+      </span>
+      <span>
+        <i className="money-legend__sq money-legend__sq--released" aria-hidden="true" />
+        Released
+      </span>
+      <span>
+        <i className="money-legend__sq money-legend__sq--refundable" aria-hidden="true" />
+        Refundable
+      </span>
+    </span>
+  );
+}

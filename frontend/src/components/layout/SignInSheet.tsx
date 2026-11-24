@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Wallet } from 'lucide-react';
+import { Info, Wallet } from 'lucide-react';
 import { useWallet } from '../../context/useWallet';
 import { explain, isFailure } from '../../lib/errors';
 import { ErrorPanel, PendingState } from '../state/AsyncStates';
@@ -38,17 +38,18 @@ export function SignInSheet({ open, onClose }: { open: boolean; onClose: () => v
   const explained = error ? explain(error, 'registry') : null;
 
   return (
-    <Modal open={open} onClose={close} title="Sign in" busy={step === 'waiting'}>
+    <Modal open={open} onClose={close} title="Connect your wallet" busy={step === 'waiting'}>
       {step === 'waiting' ? (
-        <PendingState title="Approve in Freighter" note="Check the Freighter window to continue." />
+        <PendingState title="Waiting for Freighter" note="Approve the connection in the Freighter window." />
       ) : (
         <div className="sign-in">
-          <button type="button" className="sign-in__option" onClick={signIn} disabled={unavailable}>
-            <Wallet size={20} aria-hidden="true" />
-            <span className="sign-in__text">
-              <span className="sign-in__name">Freighter</span>
-              <span className="sign-in__description">Browser extension wallet for Stellar.</span>
-            </span>
+          <p className="sign-in__lead">
+            Milepost works with <strong>Freighter</strong>, a browser wallet for Stellar. Signing in lets you
+            contribute, apply, verify and release. Browsing programmes never needs sign-in.
+          </p>
+          <button type="button" className="btn-primary sign-in__option" onClick={signIn} disabled={unavailable}>
+            <Wallet aria-hidden="true" />
+            Connect Freighter
           </button>
           {unavailable && (
             <p className="sign-in__note">
@@ -64,7 +65,13 @@ export function SignInSheet({ open, onClose }: { open: boolean; onClose: () => v
             ) : (
               <p className="sign-in__note">{explained.message}</p>
             ))}
-          <p className="sign-in__note">Browsing programmes never needs sign-in.</p>
+          <p className="sign-in__info">
+            <Info aria-hidden="true" />
+            <span>
+              You pay your own network fees in XLM, a small amount per action. This is Stellar{' '}
+              <strong>testnet</strong>: don’t use real funds.
+            </span>
+          </p>
         </div>
       )}
     </Modal>

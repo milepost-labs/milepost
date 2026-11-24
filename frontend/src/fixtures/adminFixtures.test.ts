@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import {
   isHex32Bytes,
   parseProposalParam,
+  proposalParam,
   quorumError,
   tranchesError,
 } from './adminFixtures';
@@ -63,3 +64,21 @@ describe('adminFixtures', () => {
     expect(isHex32Bytes('')).toBe(false);
   });
 });
+
+describe('proposalParam', () => {
+  it('round-trips a proposal, including text outside Latin-1', () => {
+    const proposal = {
+      name: 'Kano clinic stipends · Ọ̀yọ́ ’27',
+      mode: 'Direct' as const,
+      tranches: 6,
+      contact: 'ada@example.org',
+      funder: 'Ada’s foundation',
+      purpose: 'Monthly stipends',
+      condition: 'Shifts worked this month',
+      verifier: 'The district clinic lead',
+      amount: '25,000 XLM',
+    };
+    expect(parseProposalParam(proposalParam(proposal))).toEqual({ ok: true, proposal });
+  });
+});
+

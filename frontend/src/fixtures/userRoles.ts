@@ -1,3 +1,5 @@
+import { SAMPLES_IN_BUILD } from './inBuild';
+
 /**
  * Stand-in role data for the "Yours" directory filter.
  *
@@ -15,11 +17,11 @@ export interface UserProgrammeRole {
 }
 
 /** A signed-in user's roles across programmes, keyed by programme id. */
-export const FIXTURE_USER_ROLES: Record<string, UserRole[]> = {
+export const FIXTURE_USER_ROLES: Record<string, UserRole[]> = SAMPLES_IN_BUILD ? {
   CBJWECZ3EUVNAE73YIMT2KWWNRHRF7NNWVKOLQRVOHSKYRYE32XBRPW7: ['funder'],
   CB7WB66VLFJUD2WHZYHQF7PHM72THVJYMLZ7YPW2XQKUOUUGKVTWVDXI: ['applicant', 'reviewer'],
   CBAVXWACVVQIBYAZ2YCSIPWXA24E3NZ3CIRAWJ2UHEQUQP67POYS6GFM: ['verifier'],
-};
+} : {};
 
 /** Human label for each role, used on the card pill. */
 export const ROLE_LABELS: Record<UserRole, string> = {

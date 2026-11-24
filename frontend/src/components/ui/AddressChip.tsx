@@ -28,7 +28,7 @@ export interface AddressChipProps {
   verified?: boolean;
   /** Whether to render an external link to the Stellar Expert explorer. */
   showExplorerLink?: boolean;
-  /** Network name for explorer link (default: 'testnet'). */
+  /** Network name for explorer link (default: the app's network). */
   network?: string;
 }
 
@@ -39,7 +39,7 @@ export function AddressChip({
   copyLabel = 'Copy address',
   verified,
   showExplorerLink,
-  network = 'testnet',
+  network,
 }: AddressChipProps) {
   const display = truncateAddress(address, lead, tail);
   const verification = verified === undefined ? null : registryVerificationCopy(verified);

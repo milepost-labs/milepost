@@ -10,22 +10,25 @@
     "check:design-system": "node scripts/check-design-system.mjs",
     "test:design-system": "node --test scripts/check-design-system.test.mjs",
     "check:sample-tags": "node scripts/check-sample-tags.mjs",
+    "check:mainnet-build": "bash scripts/check-mainnet-build.sh",
     "test:sample-tags": "node --test scripts/check-sample-tags.test.mjs",
     "test": "vitest run",
     "test:a11y": "vitest run src/test/accessibility.test.tsx",
     "test:coverage": "vitest run --coverage",
     "preview": "vite preview",
     "screenshots": "playwright test",
-    "screenshots:update": "playwright test --update-snapshots"
+    "screenshots:update": "playwright test --update-snapshots",
+    "build:browser": "tsc -b && VITE_FIXTURES=1 VITE_INDEXER_URL=/index vite build --outDir dist-signed-in && VITE_INDEXER_URL=/index vite build --outDir dist-signed-out",
+    "test:browser": "playwright test --config playwright.browser.config.ts"
   },
   "dependencies": {
-    "@fontsource/inter": "^5.3.0",
     "@milepost/attest": "^0.1.1",
     "@milepost/policy-spend": "^0.1.1",
     "@milepost/program": "^0.1.1",
     "@milepost/record": "^0.1.1",
     "@milepost/registry": "^0.1.1",
     "@stellar/freighter-api": "^6.0.1",
+    "@vercel/blob": "2.8.2",
     "buffer": "6.0.3",
     "lucide-react": "^1.31.0",
     "react": "^19.2.8",
@@ -54,6 +57,9 @@
     "vitest": "^4.1.11"
   },
   "overrides": {
-    "axios": "1.20.0"
+    "axios": "1.20.0",
+    "@vercel/cli-config": {
+      "zod": "4.6.6"
+    }
   }
 }

@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
-import { APP_ROUTES, getSectionForPath } from './routes';
-import { ROLES, ROLE_ENTRIES } from './pages/homeContent';
+import { APP_ROUTES, HOME_ANCHORS, NAV_SECTIONS, SECTION_PAGES, getSectionForPath, getSectionPageForPath } from './routes';
+import { FOOTER_GROUPS, ROLE_ENTRIES } from './pages/homeContent';
 
 describe('APP_ROUTES', () => {
   it('has no duplicate paths', () => {
@@ -31,33 +31,62 @@ describe('APP_ROUTES', () => {
   });
 });
 
-describe('landing roles section', () => {
-  it('reaches every app route', () => {
-    const linked = new Set(ROLES.flatMap((role) => role.links.map((link) => link.path)));
-    const missing = APP_ROUTES.map((route) => route.path).filter((path) => !linked.has(path));
-    expect(missing).toEqual([]);
+describe('SECTION_PAGES', () => {
+  it('only lists routes the app serves, each under its own section', () => {
+    const served = new Set(APP_ROUTES.map((route) => route.path));
+    for (const section of NAV_SECTIONS) {
+      for (const page of SECTION_PAGES[section.key]) {
+        expect(served.has(page.path)).toBe(true);
+        expect(getSectionForPath(page.path)).toBe(section.key);
+      }
+    }
   });
 
-  it('only links to routes the app serves', () => {
-    const served = new Set(APP_ROUTES.map((route) => route.path));
-    for (const role of ROLES) {
-      for (const link of role.links) expect(served.has(link.path)).toBe(true);
+  it("opens each section on one of that section's own pages", () => {
+    for (const section of NAV_SECTIONS) {
+      expect(SECTION_PAGES[section.key].map((page) => page.path)).toContain(section.path);
     }
+  });
+
+  it('finds the page a path sits under', () => {
+    expect(getSectionPageForPath('/funders/receipt')?.label).toBe('Receipt lookup');
+    expect(getSectionPageForPath('/recipients/standing')?.label).toBe('My awards');
+    expect(getSectionPageForPath('/programme/CABC')?.label).toBe('Directory');
+    expect(getSectionPageForPath('/admin/standing')?.label).toBe('Standing');
+    expect(getSectionPageForPath('/')).toBeNull();
   });
 });
 
-describe('landing role entry cards', () => {
-  it('sends each role to the route the app serves', () => {
-    const served = new Set(APP_ROUTES.map((route) => route.path));
-    for (const entry of ROLE_ENTRIES) expect(served.has(entry.path)).toBe(true);
+describe('landing footer', () => {
+  const linked = FOOTER_GROUPS.flatMap((group) => group.links.map((link) => link.path));
+
+  it('reaches every app route', () => {
+    const missing = APP_ROUTES.map((route) => route.path).filter((path) => !linked.includes(path));
+    expect(missing).toEqual([]);
   });
 
-  it('offers the four entry points in the design order', () => {
+  it('only links to routes the app serves, each once', () => {
+    const served = new Set(APP_ROUTES.map((route) => route.path));
+    for (const path of linked) expect(served.has(path)).toBe(true);
+    expect(new Set(linked).size).toBe(linked.length);
+  });
+});
+
+describe('landing role lines', () => {
+  it('sends each role to a route the app serves, or to a section of the page', () => {
+    const served = new Set(APP_ROUTES.map((route) => route.path));
+    const anchors = new Set(HOME_ANCHORS.map((anchor) => `#${anchor.id}`));
+    for (const entry of ROLE_ENTRIES) {
+      expect(served.has(entry.path) || anchors.has(entry.path)).toBe(true);
+    }
+  });
+
+  it('offers the four ways in, in the design order', () => {
     expect(ROLE_ENTRIES.map((entry) => entry.path)).toEqual([
       '/funders',
       '/recipients',
       '/verifiers',
-      '/admin',
+      '#developers',
     ]);
   });
 });

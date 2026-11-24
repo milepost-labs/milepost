@@ -1,11 +1,19 @@
 /**
  * Design tokens.
  *
- * Colour already lived in index.css and is left there. What was missing is
- * everything else: spacing, radius, type scale, elevation and the semantic
- * aliases that let a component say what a value is for rather than what it
- * happens to be. Every page CSS file was inventing its own pixel values, which
- * is why nothing lines up between them.
+ * The look is the road: milepost green for released money and "go", road-paint
+ * yellow used sparingly, warm paper grounds. Regions are separated by a
+ * background step (--bg-sunken → --bg → --bg-raised) and space, not borders.
+ * See docs/design/BRAND.md and docs/design/tokens/.
+ *
+ * Two vocabularies live here. The design's own names (--bg-raised, --ink,
+ * --line, --money-*, --signal, …) are what new code should use. The older
+ * names (--surface, --text, --border, --refund, …) are kept as aliases onto
+ * the same values, so every existing page follows the palette too.
+ *
+ * Spacing keeps this app's 4px scale and names, which differ from the design
+ * file's: its space-6/8/12/16/24 (24/32/48/64/96px) are --space-5/6/7/8 and
+ * --space-12 here.
  */
 
 :root {
@@ -26,24 +34,30 @@
   --space-8: 4rem;      /* 64 */
   --space-9: 4.5rem;    /* 72 */
   --space-10: 5rem;     /* 80 */
+  --space-12: 6rem;     /* 96 — between landing sections */
+  --space-16: 8rem;     /* 128 — hero breathing room */
 
   /* Layout */
   --page-max-width: 1200px;
-  --page-gutter: var(--space-5);
+  --page-gutter: var(--space-6);
+  --header-height: 4rem; /* 64px */
   --page-pad-top: var(--space-6);
   --page-pad-bottom: var(--space-10);
   --section-pad-y: var(--space-9);
   --tap-min: 44px;
   /* Where sticky side panels stop, just below the sticky header. */
-  --sticky-offset: 5.25rem;
+  --sticky-offset: 8.75rem; /* header row + sub-navigation */
   /* A row whose action the current phase rules out. */
   --opacity-unavailable: 0.62;
-  /* Sign-in sheet and confirmation dialogs: centered, max-width 440px. */
-  --modal-max-width: 27.5rem;
+  /* Sheets (sign-in, contribute, confirmations): centred, max-width 520px. */
+  --modal-max-width: 32.5rem;
 
-  /* Fonts. UI is Libre Franklin; numbers, addresses, ids and code are
-     IBM Plex Mono so figures line up in columns. */
-  --font-ui: 'Libre Franklin', system-ui, -apple-system, 'Segoe UI', sans-serif;
+  /* Fonts. Headlines are Bricolage Grotesque, UI and reading text Instrument
+     Sans; numbers, addresses, ids and code are IBM Plex Mono so figures line
+     up in columns. */
+  --font-display: 'Bricolage Grotesque', 'Instrument Sans', system-ui, sans-serif;
+  --font-sans: 'Instrument Sans', system-ui, -apple-system, 'Segoe UI', sans-serif;
+  --font-ui: var(--font-sans);
   --font-numeric: 'IBM Plex Mono', ui-monospace, 'SF Mono', 'Cascadia Mono', Menlo, monospace;
   --font-mono: var(--font-numeric);
 
@@ -57,9 +71,16 @@
   --text-2xl: 2rem;      /* 32 — large stat figure */
   --text-3xl: 2.75rem;
   --text-caption: 0.8125rem; /* 13 — eyebrows, field errors */
+  --text-tab: 0.6875rem;     /* 11 — bottom tab bar labels */
+  --text-brand: 1.1875rem;   /* 19 — the wordmark */
   --text-body-lg: 1.0625rem; /* 17 */
   --text-panel: 1.25rem;     /* 20 — panel heading, upper end */
-  --text-amount-input: 1.375rem; /* 22 */
+  --text-amount-input: 2.25rem;  /* 36 — the amount field's figure */
+  --text-figure: 1.75rem;        /* 28 — stat tiles */
+  --text-empty-title: 1.375rem;  /* 22 — empty-state titles, section headings */
+  --text-card-title: 1.3125rem;  /* 21 — programme card names */
+  --text-page-title: clamp(1.875rem, 4vw, 2.5rem); /* 30–40 — app page titles */
+  --text-sheet-title: 1.625rem;  /* 26 — sheet and step titles */
   --text-question: clamp(1.125rem, 2.2vw, 1.375rem); /* 18–22 — landing problem questions */
 
   /* Display sizes for page and landing headings. */
@@ -72,6 +93,7 @@
   --weight-semibold: 600;
   --weight-bold: 700;
   --weight-extrabold: 800;
+  --weight-display: 650; /* Bricolage headlines */
 
   --leading-display: 1.02;
   --leading-heading: 1.08;
@@ -103,61 +125,88 @@
   /* Signed-out explainer and other major panels: 22–36px with the viewport. */
   --panel-pad-lg: clamp(1.375rem, 4vw, 2.25rem);
 
-  --radius-sm: 6px;
-  --radius-md: 10px;
-  --radius-lg: 16px;
-  --radius-square: 3px;   /* money-grid squares */
-  --radius-chip: 8px;
-  --radius-input: 12px;
-  --radius-row: 14px;
-  --radius-row-lg: 16px;
-  --radius-card: 18px;
-  --radius-card-lg: 20px;
-  --radius-hero: 22px;
-  --radius-hero-lg: 24px;
-  --radius-full: 999px;
+  /* The design has five radii: squares 3, inputs and tags 8, panels 14, large
+     bands 28, pills. The finer-grained names below predate it and now land on
+     those five. */
+  --radius-sq: 3px;       /* money squares, logo bars */
+  --radius-sq-lg: 4px;    /* the larger squares on a programme page */
+  --radius-sm: 8px;
+  --radius-md: 14px;
+  --radius-lg: 14px;
+  --radius-band: 28px;    /* the design's radius-lg: hero road, large bands */
+  --radius-pill: 999px;
+  --radius-square: var(--radius-sq);
+  --radius-chip: var(--radius-sm);
+  --radius-input: var(--radius-sm);
+  --radius-row: var(--radius-md);
+  --radius-row-lg: var(--radius-md);
+  --radius-card: var(--radius-md);
+  --radius-card-lg: var(--radius-md);
+  --radius-hero: var(--radius-band);
+  --radius-hero-lg: var(--radius-band);
+  --radius-full: var(--radius-pill);
 
-  --elevation-1: 0 1px 2px rgba(15, 23, 42, 0.06);
-  --elevation-2: 0 4px 12px rgba(15, 23, 42, 0.08);
-  --elevation-3: 0 12px 32px rgba(15, 23, 42, 0.12);
-
-  /* The redesign has no borders; only floating layers cast a shadow. */
-  --shadow-header: 0 1px 0 var(--surface-raised);
-  --shadow-toast: 0 2px 10px rgba(0, 0, 0, 0.12);
-  --shadow-menu: 0 12px 32px rgba(0, 0, 0, 0.18);
-  --shadow-dialog: 0 24px 60px rgba(0, 0, 0, 0.3);
+  /* Only floating layers cast a shadow: shadow-1 for the sticky header and
+     floating controls, shadow-2 for menus, sheets and popovers. */
+  --shadow-1: 0 1px 2px rgba(22, 20, 15, 0.06), 0 4px 16px rgba(22, 20, 15, 0.06);
+  --shadow-2: 0 12px 40px rgba(22, 20, 15, 0.14);
+  --elevation-1: none;
+  --elevation-2: var(--shadow-1);
+  --elevation-3: var(--shadow-2);
+  --shadow-header: var(--shadow-1);
+  --shadow-toast: var(--shadow-2);
+  --shadow-menu: var(--shadow-2);
+  --shadow-dialog: var(--shadow-2);
   --shadow-selected: inset 0 0 0 2px var(--accent);
-  --backdrop: rgba(10, 12, 16, 0.55);
-  --focus-offset: 3px;
+  --backdrop: rgba(10, 12, 10, 0.45);
+  --focus-offset: 2px;
 
-  /* Semantic aliases. Components reference intent, so a palette change lands
-     in one place. */
-  --accent: #4f55dc;
-  --accent-contrast: #ffffff;
-  --accent-soft: #e6e7fc;
-  --danger: var(--color-error);
-  --success: var(--color-success);
-  --warning: var(--color-warning);
-  --border: var(--surface-border);
-  --surface: var(--surface-color);
-  /* The raised step of the redesign's three-step background ladder
-     (--bg → --surface → --surface-raised). It must be a solid, distinct
-     shade: it is what separates chips, tracks and rows now that the design
-     uses no borders or dividers. Glass panels keep their own --glass-bg. */
-  --surface-raised: #eceae4;
+  /* ── Colour: the design's names ───────────────────────────────────────── */
+  --bg: #f5f2ea;          /* page ground: warm paper */
+  --bg-raised: #fbf9f4;   /* one step up: cards, panels, sticky header, popovers */
+  --bg-sunken: #ebe6da;   /* one step down: inputs, tracks, stat tiles, chips */
+  --ink: #16140f;         /* primary text and headlines */
+  --ink-muted: #585346;   /* secondary text; passes 4.5:1 on all three grounds */
+  --ink-faint: #8c8675;   /* non-text only: road dashes, disabled icons */
+  --line: #ddd6c6;        /* the rare hairline: table rows, list dividers */
+  --accent: #0a6b47;      /* milepost green: primary buttons, links, released money */
+  --accent-hover: #07573a;
+  --accent-ink: #ffffff;  /* text and icons on accent */
+  --accent-soft: #d3e7d9; /* tinted ground: selected pills, unawarded money */
+  --signal: #f0b928;      /* road-paint yellow: testnet dot, Sample data tag */
+  --signal-ink: #1d1606;
+  --money-unawarded: var(--accent-soft);
+  --money-locked: #b7b2a3;
+  --money-released: var(--accent);
+  --money-refundable: #c2532a; /* terracotta; differs from accent in lightness too */
+  --danger: #b3261e;
+  --danger-soft: #f6dcd6;
+  --focus: #16140f;       /* focus ring, 2px with a 2px offset */
 
-  /* Design-reference ground and text steps. The redesign separates by
-     background step (--bg → --surface → --surface-raised) with no borders. */
-  --bg: var(--bg-color);
-  --text: var(--text-main);
-  /* --text-muted already lives in index.css; components use it directly. */
-  /* Money colour language + phase/state fills from the design reference. */
-  --accent-soft: #e6e7fc;
-  --locked: #b4b8bf;
-  --refund: var(--color-error);
-  --refund-soft: #fbe6e0;
-  --success-soft: #dcf1e6;
-  --warning-soft: #fbf0d4;
+  /* ── Colour: older names, aliased onto the above ───────────────────────── */
+  --accent-contrast: var(--accent-ink);
+  /* Accent as small text. The green already passes AA on every ground. */
+  --accent-strong: var(--accent);
+  --surface: var(--bg-raised);
+  --surface-raised: var(--bg-sunken);
+  --text: var(--ink);
+  --border: var(--line);
+  --border-strong: var(--ink-faint);
+  --locked: var(--money-locked);
+  --refund: var(--money-refundable);
+  --refund-soft: color-mix(in srgb, var(--money-refundable) 14%, var(--bg));
+  /* Terracotta is 4.1:1 on paper, under AA for small text; this step is 5.8:1. */
+  --refund-strong: #a03f1b;
+  --danger-strong: var(--danger);
+  /* Success is the accent: released, confirmed and "go" are one green. */
+  --success: var(--accent);
+  --success-strong: var(--accent);
+  --success-soft: var(--accent-soft);
+  /* Warning is the signal yellow as a fill and a dark amber as text; the
+     yellow itself is about 1.8:1 on paper and unreadable. */
+  --warning: #a87a00;
+  --warning-strong: #7a5800;
+  --warning-soft: color-mix(in srgb, var(--signal) 22%, var(--bg));
 
   /* Money square forced-colors mode tokens.
      Windows high contrast replaces background colours, rendering all squares
@@ -174,6 +223,21 @@
   --money-fc-empty-border: 1px solid GrayText;
   --money-fc-empty-bg: Canvas;
 
+  /* Forced-colors tokens for the other meaning-in-a-background marks: the mode
+     pill's four-bar meter, the programme phase bar and the highlighted stat
+     tile. As with the money squares, filled is a Highlight fill and empty is a
+     thin GrayText outline on Canvas, so the two differ in shape as well as
+     colour. The tile uses an inset outline, which does not change its size. */
+  --fc-filled-bg: Highlight;
+  --fc-filled-border: 1px solid Highlight;
+  --fc-empty-bg: Canvas;
+  --fc-empty-border: 1px solid GrayText;
+  --fc-current-border: 2px solid Highlight;
+  --fc-tile-outline: 1px solid GrayText;
+  --fc-tile-outline-offset: -1px;
+  --fc-tile-highlight-outline: 3px double Highlight;
+  --fc-tile-highlight-outline-offset: -3px;
+
   /* Money is drawn as a grid of squares, never a bar. Twenty across reads as a
      single band on a wide screen, but at 360px that leaves each square around
      11px — too small to read as a square at all. Narrow viewports halve the
@@ -189,59 +253,59 @@
   --pulse-stagger: 0.15s;
 
   /* Skeleton loading fills. */
-  --skeleton-base: var(--surface-hover);
-  --skeleton-shine: var(--surface-color);
+  --skeleton-base: var(--bg-sunken);
+  --skeleton-shine: var(--bg-raised);
   --skeleton-radius: var(--radius-sm);
   --skeleton-row-height: var(--space-6);
 
-  /* Eyebrow/label text and hover links — a step darker than --accent so it
-     holds up as small, non-bold text. Used first by the landing sections. */
-  --accent-strong: #3a40c4;
-  /* --success is 3.96:1 on white, under AA for small text. Use this for
-     text; keep --success for fills and icons. */
-  --success-strong: hsl(158, 73%, 27%);
-  /* Tinted fills for info notes. */
-  --warning-soft: color-mix(in srgb, var(--warning) 14%, transparent);
-  --danger-soft: color-mix(in srgb, var(--danger) 10%, transparent);
-  /* --warning (amber) is ~2:1 on white, unreadable as text. */
-  --warning-strong: hsl(38, 92%, 26%);
-  --danger-strong: hsl(348, 83%, 38%);
-  /* --refund is the money-language name for --danger, and has the same problem
-     as text. Alias it rather than making every refund-toned line remember
-     which of the two names happens to be the readable one. */
-  --refund-strong: var(--danger-strong);
   /* The developers-section code block is dark in both themes; code is read
      against a fixed console-style background, not the page surface. */
-  --code: #16191e;
-  --code-text: #e6e8ec;
-  /* Logo mark: two released squares and one locked, following the theme. */
-  --logo-released: var(--accent);
-  --logo-locked: var(--locked);
+  --code: var(--ink);
+  --code-text: var(--bg);
+
+  /* Landing page type: display sizes that only the landing page uses. */
+  --text-landing-hero: clamp(2.75rem, 7.6vw, 6rem);     /* 44–96 */
+  --text-landing-h2: clamp(2.125rem, 4.6vw, 3.5rem);    /* 34–56 */
+  --text-landing-final: clamp(2.5rem, 6vw, 5rem);       /* 40–80 */
+  --text-landing-role: clamp(1.625rem, 3.6vw, 2.75rem); /* 26–44 */
+  --text-landing-sentence: clamp(1.875rem, 4.4vw, 3.375rem); /* 30–54 */
+  --text-landing-mode: clamp(2.75rem, 6vw, 4rem);       /* 44–64 */
+  --text-landing-numeral: 4.75rem;                      /* 76, the problem numerals */
+  --text-landing-lead: 1.1875rem;                       /* 19 */
+  --leading-landing-hero: 0.93;
+  --landing-max-width: 1180px;
+
+  /* The accent as text on an ink band. The band is ink in both themes, so it
+     is dark in light mode and light in dark mode; the accent flips with it. */
+  --accent-on-ink: #7be0ad;
 }
 
 [data-theme='dark'] {
-  --accent: #7c82f7;
-  --accent-contrast: #0d0f13;
-  --accent-strong: #9ba1ff;
-  --bg: var(--bg-color);
-  --text: var(--text-main);
-  --surface: #1f242b;
-  --surface-raised: #282e37;
-  --accent-soft: rgba(124, 130, 247, 0.16);
-  --locked: #4b525c;
-  --refund-soft: rgba(240, 160, 139, 0.14);
-  --success-soft: rgba(111, 211, 162, 0.14);
-  --warning-soft: rgba(242, 198, 97, 0.14);
-  --success-strong: hsl(158, 60%, 62%);
-  --warning-strong: hsl(38, 92%, 65%);
-  --danger-strong: hsl(348, 83%, 72%);
-  --refund-strong: var(--danger-strong);
-  --code: #0f1216;
-  --code-text: #d8dce2;
-  --elevation-1: 0 1px 2px rgba(0, 0, 0, 0.4);
-  --elevation-2: 0 4px 12px rgba(0, 0, 0, 0.45);
-  --elevation-3: 0 12px 32px rgba(0, 0, 0, 0.5);
-  --shadow-menu: 0 12px 32px rgba(0, 0, 0, 0.2);
+  --bg: #0e1210;          /* deep road-asphalt green-black */
+  --bg-raised: #161b18;
+  --bg-sunken: #090c0a;
+  --ink: #eef0e9;
+  --ink-muted: #a6ada4;
+  --ink-faint: #68716a;
+  --line: #252c28;
+  --accent: #3fcf8e;
+  --accent-hover: #66dca6;
+  --accent-ink: #04120b;
+  --accent-soft: #1b3a2c;
+  --accent-on-ink: #0a6b47;
+  --signal: #f3c443;
+  --signal-ink: #1d1606;
+  --money-locked: #4a524c;
+  --money-refundable: #e67b4f;
+  --danger: #f2867c;
+  --danger-soft: #3a1a17;
+  --focus: #f3c443;
+  --refund-strong: var(--money-refundable);
+  --warning: var(--signal);
+  --warning-strong: var(--signal);
+  --shadow-1: 0 1px 2px rgba(0, 0, 0, 0.4), 0 6px 20px rgba(0, 0, 0, 0.35);
+  --shadow-2: 0 16px 48px rgba(0, 0, 0, 0.55);
+  color-scheme: dark;
 }
 
 /* Respecting this is not decoration — vestibular disorders are real and
@@ -260,7 +324,7 @@
 /* Every interactive element gets a visible ring. Removing focus outlines
    without replacing them makes an app unusable by keyboard. */
 :is(a, button, summary, input, select, textarea, [tabindex]:not([tabindex="-1"])):focus-visible {
-  outline: 2px solid var(--accent);
+  outline: 2px solid var(--focus);
   outline-offset: var(--focus-offset);
 }
 
@@ -341,5 +405,56 @@ h1[tabindex="-1"]:focus {
   [data-money-state="empty"] {
     border: var(--money-fc-empty-border) !important;
     background-color: var(--money-fc-empty-bg) !important;
+  }
+}
+
+/* The mode pill meter, the phase bar and the highlighted stat tile in
+   forced-colors mode. Each carried its meaning in a background colour alone,
+   which Windows high contrast replaces, so filled and empty looked the same. */
+@media (forced-colors: active) {
+  .ui-mode-pill__meter i {
+    box-sizing: border-box;
+    forced-color-adjust: none;
+    opacity: 1;
+    border: var(--fc-empty-border);
+    background: var(--fc-empty-bg);
+  }
+
+  .ui-mode-pill__meter i.is-filled {
+    border: var(--fc-filled-border);
+    background: var(--fc-filled-bg);
+  }
+
+  .phase-bar__step::before {
+    box-sizing: border-box;
+    forced-color-adjust: none;
+    border: var(--fc-empty-border);
+    background: var(--fc-empty-bg);
+  }
+
+  .phase-bar__step--done::before {
+    border: var(--fc-filled-border);
+    background: var(--fc-filled-bg);
+  }
+
+  /* The current step: a heavier Highlight edge, filled as far as the phase
+     has run, so it reads apart from both passed and upcoming steps. */
+  .phase-bar__step--now::before {
+    border: var(--fc-current-border);
+    background: linear-gradient(
+      90deg,
+      var(--fc-filled-bg) var(--phase-progress, 100%),
+      var(--fc-empty-bg) var(--phase-progress, 100%)
+    );
+  }
+
+  .ui-stat-tile {
+    outline: var(--fc-tile-outline);
+    outline-offset: var(--fc-tile-outline-offset);
+  }
+
+  .ui-stat-tile--highlight {
+    outline: var(--fc-tile-highlight-outline);
+    outline-offset: var(--fc-tile-highlight-outline-offset);
   }
 }

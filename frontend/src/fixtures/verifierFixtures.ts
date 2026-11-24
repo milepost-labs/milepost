@@ -1,3 +1,5 @@
+import { SAMPLES_IN_BUILD } from './inBuild';
+
 /**
  * Stand-in data for the verifier queue screen (`/verifiers`).
  *
@@ -47,7 +49,7 @@ export interface VerifierAttestation {
   revoked?: boolean;
 }
 
-export const FIXTURE_VERIFIER_QUEUE: VerifierQueueItem[] = [
+export const FIXTURE_VERIFIER_QUEUE: VerifierQueueItem[] = SAMPLES_IN_BUILD ? [
   {
     id: 'q1',
     programmeId: 'CBJWECZ3EUVNAE73YIMT2KWWNRHRF7NNWVKOLQRVOHSKYRYE32XBRPW7',
@@ -81,9 +83,9 @@ export const FIXTURE_VERIFIER_QUEUE: VerifierQueueItem[] = [
     tranches: 2,
     requestedLedger: 4849907,
   },
-];
+] : [];
 
-export const FIXTURE_MY_ATTESTATIONS: VerifierAttestation[] = [
+export const FIXTURE_MY_ATTESTATIONS: VerifierAttestation[] = SAMPLES_IN_BUILD ? [
   {
     uid: 'att_9f21c3e0d4a7b8e1f2c3d4a5b6e7f8091a2b3c4d5e6f7',
     programmeId: 'CBJWECZ3EUVNAE73YIMT2KWWNRHRF7NNWVKOLQRVOHSKYRYE32XBRPW7',
@@ -102,4 +104,4 @@ export const FIXTURE_MY_ATTESTATIONS: VerifierAttestation[] = [
     ledger: 4838402,
     used: false,
   },
-];
+] : [];

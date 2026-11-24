@@ -5,81 +5,54 @@ import { useSoroban } from '../../context/useSoroban';
 import { useTransaction } from '../../hooks/useTransaction';
 import { useAnnouncer } from '../../context/useAnnouncer';
 import { sampleSendable, SAMPLE_TX_DELAY_MS } from '../../lib/fundingTx';
-import { ErrorPanel, TransactionOutcome } from '../state/AsyncStates';
-import type { VerifierAttestation } from '../../fixtures/verifierFixtures';
-import './AttestationRevoke.css';
+import { Button, Modal, Notice } from '../ui';
+import { TxDone, TxFailed, TxPending } from '../state/TxStatus';
 
 export interface AttestationRevokeProps {
-  attestation: VerifierAttestation;
-  onRevoked?: (uid: string) => void;
+  /** 64-character hex of the attestation, or null for a sample entry with nothing on the chain. */
+  uidHex: string | null;
+  /** How the row names it, for the sheet and the announcement. */
+  label: string;
+  onRevoked?: () => void;
   sampleDelayMs?: number;
 }
 
 /**
- * Revoke a signed attestation.
+ * Revoke a signed attestation, in a sheet: what revoking does and does not
+ * do, then sending, then the outcome.
  *
  * `attest.revoke({ attester, uid })` withdraws the claim. The contract refuses
  * if the schema is not revocable (error 4), if the caller is not the original
- * attester (error 5), or if it has already been revoked (error 6). Every
- * failure renders through `explain()`.
- *
- * Revoking prevents the proof being used again but never claws back a tranche
- * already released. The copy makes this clear before the action is confirmed.
- *
- * For real attestations (those with a `rawUid` hex string) the action calls
- * the contract; for sample entries it uses `sampleSendable` so the flow is
- * demonstrable without a wallet.
+ * attester (error 5), or if it has already been revoked (error 6), and every
+ * refusal is explained. Revoking stops the proof being used again; it never
+ * claws back a tranche already released.
  */
 export function AttestationRevoke({
-  attestation,
+  uidHex,
+  label,
   onRevoked,
   sampleDelayMs = SAMPLE_TX_DELAY_MS,
 }: AttestationRevokeProps) {
   const announce = useAnnouncer();
   const { address } = useWallet();
   const { attest } = useSoroban();
-
-  const isReal = Boolean(attestation.rawUid);
-  const [confirming, setConfirming] = useState(false);
+  const [open, setOpen] = useState(false);
 
   const tx = useTransaction<void>({
     contract: 'attest',
     onSuccess: () => {
       announce('Attestation revoked.');
-      onRevoked?.(attestation.uid);
+      onRevoked?.();
     },
+    onError: (error) => announce(error.message, 'alert'),
   });
 
-  // Already revoked — no action to show.
-  if (attestation.revoked) {
-    return (
-      <span className="attest-revoke__revoked" role="status">
-        Revoked
-      </span>
-    );
-  }
-
-  // Schema does not allow revocation.
-  if (attestation.revocable === false) {
-    return (
-      <span className="attest-revoke__nonrevocable" aria-label="This schema does not allow revocation">
-        Cannot revoke
-      </span>
-    );
-  }
-
-  const handleRevoke = async () => {
-    const attester = address ?? '';
+  const revoke = async () => {
     await tx.send(async () => {
-      if (!isReal) {
-        return sampleSendable(() => undefined, sampleDelayMs);
-      }
-      const uidBuf = Buffer.from(attestation.rawUid!, 'hex');
-      const assembled = await attest.revoke({ attester, uid: uidBuf });
+      if (!uidHex) return sampleSendable(() => undefined, sampleDelayMs);
+      const assembled = await attest.revoke({ attester: address ?? '', uid: Buffer.from(uidHex, 'hex') });
       return {
-        signAndSend: async (
-          options: Parameters<typeof assembled.signAndSend>[0],
-        ) => {
+        signAndSend: async (options: Parameters<typeof assembled.signAndSend>[0]) => {
           const sent = await assembled.signAndSend(options);
           sent.result.unwrap();
           return { result: undefined as void };
@@ -88,58 +61,53 @@ export function AttestationRevoke({
     });
   };
 
+  const close = () => {
+    if (tx.busy) return;
+    setOpen(false);
+    tx.reset();
+  };
+
   return (
-    <div className="attest-revoke">
-      {!confirming && tx.phase !== 'success' && (
-        <button
-          type="button"
-          className="attest-revoke__trigger"
-          onClick={() => setConfirming(true)}
-          disabled={tx.busy}
-        >
-          Revoke
-        </button>
-      )}
-
-      {confirming && !tx.busy && tx.phase !== 'success' && (
-        <div className="attest-revoke__confirm" role="region" aria-label="Confirm revocation">
-          <p className="attest-revoke__warning">
-            <strong>Revoking stops this proof being used again.</strong> Any tranche already
-            released stays released — revocation never claws money back. Are you sure?
-          </p>
-          <div className="attest-revoke__actions">
-            <button
-              type="button"
-              className="attest-revoke__confirm-btn"
-              onClick={() => void handleRevoke()}
-              disabled={tx.busy}
-            >
-              Yes, revoke
-            </button>
-            <button
-              type="button"
-              className="attest-revoke__cancel-btn"
-              onClick={() => setConfirming(false)}
-            >
-              Cancel
-            </button>
+    <>
+      <Button variant="danger" size="sm" aria-label={`Revoke ${label}`} onClick={() => setOpen(true)}>
+        Revoke
+      </Button>
+      <Modal open={open} onClose={close} busy={tx.busy} eyebrow="Verify" title="Revoke attestation">
+        {tx.phase === 'success' ? (
+          <TxDone title="Attestation revoked" actions={<Button onClick={close}>Done</Button>}>
+            <p>The proof can no longer release a tranche.</p>
+          </TxDone>
+        ) : tx.error && !tx.busy ? (
+          <TxFailed
+            title="Not revoked"
+            explained={tx.error}
+            onRetry={() => void revoke()}
+            actions={
+              <Button variant="secondary" onClick={close}>
+                Close
+              </Button>
+            }
+          />
+        ) : tx.busy ? (
+          <TxPending title="Revoking attestation" phase={tx.phase} />
+        ) : (
+          <div className="revoke-sheet">
+            <p className="numeric revoke-sheet__id">{label}</p>
+            <Notice tone="risk">
+              <strong>Revoking stops this proof being used again.</strong> A tranche it already released stays
+              released. Revoking never claws money back.
+            </Notice>
+            <div className="revoke-sheet__actions">
+              <Button variant="secondary" onClick={close}>
+                Keep it
+              </Button>
+              <Button variant="danger" onClick={() => void revoke()}>
+                Yes, revoke
+              </Button>
+            </div>
           </div>
-        </div>
-      )}
-
-      <TransactionOutcome
-        phase={tx.phase}
-        error={tx.error}
-        successTitle="Attestation revoked"
-        successDescription="The proof can no longer be used to release a tranche."
-        pendingTitle="Revoking attestation…"
-        onRetry={() => void handleRevoke()}
-        onDismiss={() => tx.reset()}
-      />
-
-      {tx.phase === 'error' && tx.error && !confirming && (
-        <ErrorPanel explained={tx.error} onRetry={() => setConfirming(true)} live={false} />
-      )}
-    </div>
+        )}
+      </Modal>
+    </>
   );
 }

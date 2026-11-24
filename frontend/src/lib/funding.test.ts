@@ -3,11 +3,15 @@ import { FIXTURE_CONTRIBUTIONS, type FixtureContribution } from '../fixtures/fun
 import { chainFor, type FixtureChainRead } from '../fixtures/programmes';
 import {
   claimableRefund,
+  formatEstimatedRefund,
+  proportionalRefund,
   contributeBlockedReason,
   contributionCard,
   feeBpsOf,
   formatBps,
   fundingTotals,
+  formatIn,
+  formatShare,
   splitContribution,
 } from './funding';
 import type { DirectoryProgramme } from './programmeView';
@@ -38,7 +42,7 @@ describe('contributionCard', () => {
     );
     expect(card.refundable).toBe(2_200_000_000n);
     expect(card.claimable).toBe(true);
-    expect(card.note).toBe('220 USDC refundable, your share of unawarded budget.');
+    expect(card.note).toBe("220 USDC refundable, your share of what wasn't paid out.");
   });
 
   it('is claimable only once a refund would succeed', () => {
@@ -52,7 +56,7 @@ describe('contributionCard', () => {
 
     const paidOut = contributionCard(contribution(), programme({ phase: 'Settled', refundable: '0' }));
     expect(paidOut.claimable).toBe(false);
-    expect(paidOut.note).toBe('Nothing to refund. Every unit was awarded.');
+    expect(paidOut.note).toBe('Nothing to refund. Every unit was paid out.');
 
     const cancelled = contributionCard(
       contribution(),
@@ -86,11 +90,41 @@ describe('fundingTotals', () => {
         programme({ phase: 'Cancelled', contributed: '5000000000', refundable: '4950000000' }),
       ),
     ];
-    expect(fundingTotals(cards)).toEqual({
+    const totals = fundingTotals(cards);
+    expect(totals).toMatchObject({
       contributed: 15_000_000_000n,
       programmes: 2,
       refundableNow: 4_950_000_000n,
+      refundablePrograms: 1,
     });
+    // Each funder's share of releases: the amount over everything contributed,
+    // times what was released.
+    expect(totals.released).toBe(cards.reduce((sum, card) => sum + card.releasedShare, 0n));
+  });
+
+  it("works out the funder's share and their share of what was released", () => {
+    const card = contributionCard(
+      contribution({ amount: '2500000000' }),
+      programme({ contributed: '10000000000', released: '4000000000' }),
+    );
+    // 250 of 1,000 is 25%, and 25% of 400 released is 100.
+    expect(card.share).toBe(2_500n);
+    expect(card.releasedShare).toBe(1_000_000_000n);
+    expect(formatShare(card.share)).toBe('25%');
+    expect(formatShare(1_333n)).toBe('13.33%');
+    expect(formatShare(4n)).toBe('0.04%');
+    expect(formatIn(9_900_000_000n, 'XLM')).toBe('990 XLM');
+  });
+
+  it('shows a figure without a unit while the asset is unread, never a guessed one', () => {
+    expect(formatIn(9_900_000_000n, null)).toBe('990');
+  });
+
+  it('names no asset for a real programme: the screen reads it from the token', () => {
+    const real = { ...programme({}), sample: false };
+    const card = contributionCard(contribution(), real);
+    expect(card.asset).toBeNull();
+    expect(contributionCard(contribution(), programme({})).asset).toBe('USDC');
   });
 
   it('matches the fixture set', () => {
@@ -195,5 +229,77 @@ describe('claimableRefund', () => {
   it('works at zero fee (fee_bps = 0)', () => {
     // budget = totalContributed; share = donorContributed (sole donor)
     expect(claimableRefund(10_000n, 10_000n, 0n, 0n, 0n, true)).toBe(10_000n);
+  });
+});
+
+describe('proportionalRefund & pre-open estimates (contract execute_refund parity)', () => {
+  it('matches contracts/program/src/lib.rs execute_refund integer division across donors', () => {
+    // Contract formula:
+    //   fee = (total * fee_bps) / 10_000
+    //   unpaid = (total - fee) - released
+    //   total_share = (contributed * unpaid) / total
+    //   remaining = max(0, total_share - claimed)
+    const total = 10_000n;
+    const feeBps = 250n; // 2.5% -> fee = 250, budget = 9_750
+    const released = 1_234n; // unpaid = 8_516
+    // Donor A put in 3_333: (3_333 * 8_516) / 10_000 = 2_838 (truncated)
+    expect(proportionalRefund(3_333n, total, feeBps, released, 0n)).toBe(2_838n);
+    // Donor B put in 6_667: (6_667 * 8_516) / 10_000 = 5_677 (truncated)
+    expect(proportionalRefund(6_667n, total, feeBps, released, 0n)).toBe(5_677n);
+    // Sum of truncated shares (8_515) never exceeds unpaid (8_516).
+    expect(
+      proportionalRefund(3_333n, total, feeBps, released, 0n) +
+        proportionalRefund(6_667n, total, feeBps, released, 0n),
+    ).toBeLessThanOrEqual(8_516n);
+  });
+
+  it('computes the exact same figure before refunds open as claimableRefund when open', () => {
+    const donor = 20_000_000_000n; // 2,000 USDC
+    const total = 100_000_000_000n; // 10,000 USDC
+    const feeBps = 100n; // 1% -> fee = 100, budget = 9,900
+    const released = 40_000_000_000n; // 4,000 released -> unpaid = 5,900
+    // share = (2,000 * 5,900) / 10,000 = 1,180 USDC
+    const expected = 11_800_000_000n;
+
+    expect(claimableRefund(donor, total, feeBps, released, 0n, false)).toBe(0n);
+    expect(proportionalRefund(donor, total, feeBps, released, 0n)).toBe(expected);
+    expect(claimableRefund(donor, total, feeBps, released, 0n, true)).toBe(expected);
+
+    const card = contributionCard(
+      contribution({ amount: donor.toString() }),
+      programme({
+        phase: 'Open',
+        contributed: total.toString(),
+        fee: '1000000000',
+        released: released.toString(),
+        refundable: '0',
+      }),
+    );
+    expect(card.claimable).toBe(false);
+    expect(card.estimatedRefund).toBe(expected);
+    expect(formatEstimatedRefund(card)).toBe('If it closed today: about 1,180 USDC');
+  });
+
+  it('returns 0 estimate once claimable, refunded, or fully paid out', () => {
+    const claimableCard = contributionCard(
+      contribution(),
+      programme({ phase: 'Settled', contributed: '150000000000', refundable: '16500000000' }),
+    );
+    expect(claimableCard.claimable).toBe(true);
+    expect(claimableCard.estimatedRefund).toBe(0n);
+    expect(formatEstimatedRefund(claimableCard)).toBeNull();
+
+    const paidOutCard = contributionCard(
+      contribution({ amount: '10000000000' }),
+      programme({
+        phase: 'Review',
+        contributed: '10000000000',
+        fee: '100000000',
+        released: '9900000000',
+        refundable: '0',
+      }),
+    );
+    expect(paidOutCard.estimatedRefund).toBe(0n);
+    expect(formatEstimatedRefund(paidOutCard)).toBeNull();
   });
 });

@@ -1,6 +1,6 @@
 import { render, screen } from '@testing-library/react';
 import { describe, expect, it } from 'vitest';
-import { PhaseBadge, ModePill } from './Badge';
+import { PhaseBadge, ModePill, SampleTag } from './Badge';
 
 // Every phase and every mode the two components render. 'Open' is in both on
 // purpose: a programme phase, and a payout mode with no escrow or payee limit.
@@ -42,13 +42,13 @@ describe('PhaseBadge', () => {
 describe('ModePill', () => {
   it.each(FIXTURE_MODES)('renders all four modes, including %s', (mode) => {
     render(<ModePill mode={mode} />);
-    expect(screen.getByText(`${mode} mode`)).toBeTruthy();
+    expect(screen.getByText(mode).className).toBe('ui-mode-pill');
   });
 
   it('stays flat and uncoloured regardless of which mode', () => {
     const classes = FIXTURE_MODES.map((mode) => {
       const { unmount } = render(<ModePill mode={mode} />);
-      const cls = screen.getByText(`${mode} mode`).className;
+      const cls = screen.getByText(mode).className;
       unmount();
       return cls;
     });
@@ -57,8 +57,36 @@ describe('ModePill', () => {
     expect(classes[0]).toBe('ui-mode-pill');
   });
 
-  it('distinguishes an "Open" mode from an "Open" phase by its own label', () => {
+  it('distinguishes an "Open" mode from an "Open" phase for screen readers', () => {
     render(<ModePill mode="Open" />);
-    expect(screen.getByText('Open mode')).toBeTruthy();
+    expect(screen.getByText('Open').textContent).toBe('Open mode, simplest, unchecked');
+  });
+
+  it('ranks the four modes on its meter, Allocated strongest', () => {
+    const filled = (mode: string) => {
+      const { container, unmount } = render(<ModePill mode={mode} />);
+      const meter = container.querySelector('.ui-mode-pill__meter') as HTMLElement;
+      expect(meter.getAttribute('aria-hidden')).toBe('true');
+      const count = meter.querySelectorAll('.is-filled').length;
+      unmount();
+      return count;
+    };
+    expect(['Allocated', 'Direct', 'Restricted', 'Open'].map(filled)).toEqual([4, 3, 2, 1]);
+  });
+
+  it('shows a mode it does not know without a meter', () => {
+    const { container } = render(<ModePill mode="Escrowed" />);
+    expect(container.querySelector('.ui-mode-pill__meter')).toBeNull();
+    expect(screen.getByText('Escrowed').textContent).toBe('Escrowed mode');
+  });
+});
+
+describe('SampleTag', () => {
+  it('says "Sample data" unless given other words', () => {
+    const { unmount } = render(<SampleTag />);
+    expect(screen.getByText('Sample data').className).toBe('ui-sample-tag');
+    unmount();
+    render(<SampleTag>Sample chain read</SampleTag>);
+    expect(screen.getByText('Sample chain read')).toBeTruthy();
   });
 });

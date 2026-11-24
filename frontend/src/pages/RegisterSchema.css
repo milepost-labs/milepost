@@ -1,270 +1,188 @@
+/* /schemas/register: the form beside its preview, then lookup across the page. */
 .register-schema {
   display: flex;
   flex-direction: column;
-  gap: var(--space-5);
+  gap: var(--space-6);
+  min-width: 0;
 }
 
-.register-schema__header {
-  display: flex;
-  flex-direction: column;
-  gap: var(--space-2);
-}
-
-.register-schema__header h2 {
-  margin: 0;
-}
-
-.register-schema__header p {
-  margin: 0;
-  max-width: 62ch;
+.register-schema .ui-page-head {
+  margin-bottom: 0;
 }
 
 .register-schema__grid {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(min(100%, var(--grid-min-split)), 1fr));
-  gap: var(--space-5);
+  grid-template-columns: minmax(0, 1fr) minmax(0, 24rem);
+  gap: var(--space-6);
   align-items: start;
 }
 
-.register-schema__form {
+.register-schema__aside {
   display: flex;
   flex-direction: column;
   gap: var(--space-4);
+  min-width: 0;
 }
 
-.schema-check {
+.register-schema__panel {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+  min-width: 0;
+  padding: var(--space-5);
+  border-radius: var(--radius-md);
+  background: var(--bg-raised);
+}
+
+.register-schema__panel--sunk {
+  background: var(--bg-sunken);
+}
+
+.register-schema h2 {
+  margin: 0;
+  font-family: var(--font-display);
+  font-size: var(--text-lg);
+  font-weight: var(--weight-display);
+  letter-spacing: var(--tracking-tight);
+}
+
+.register-schema__mono input {
+  font-family: var(--font-numeric);
+}
+
+.register-schema__check {
   display: flex;
   align-items: flex-start;
   gap: var(--space-3);
-  padding: var(--space-3) var(--space-1);
-  min-height: var(--tap-min);
+  padding: var(--space-4);
+  border-radius: var(--radius-sm);
+  background: var(--bg-sunken);
   cursor: pointer;
-  border-radius: var(--radius-input);
 }
 
-.schema-check input {
-  width: var(--space-5);
-  height: var(--space-5);
+.register-schema__check input {
   flex: none;
-  margin-top: var(--space-1);
+  width: 20px;
+  height: 20px;
+  margin: 0;
   accent-color: var(--accent);
 }
 
-.schema-check__text {
+.register-schema__check > span {
   display: flex;
   flex-direction: column;
   gap: var(--space-1);
-}
-
-.schema-check__label {
-  font-weight: var(--weight-medium);
-  font-size: var(--text-sm);
-}
-
-.schema-check__desc {
-  font-size: var(--text-sm);
-  color: var(--text-muted);
-  line-height: var(--leading-body);
-}
-
-.register-schema__opaque {
-  margin: 0;
-  padding: var(--space-3) var(--space-4);
-  border-radius: var(--radius-row);
-  background: var(--accent-soft);
   font-size: var(--text-sm);
   line-height: var(--leading-body);
+}
+
+.register-schema__check > span span {
+  color: var(--ink-muted);
 }
 
 .register-schema__actions {
   display: flex;
-  gap: var(--space-3);
-  flex-wrap: wrap;
-}
-
-/* Why the register action is unavailable. Neutral, not an error: nothing has
-   gone wrong, the action just needs a signed-in address. */
-.register-schema__requirement {
-  flex: 1 1 auto;
-  align-self: center;
-  margin: 0;
-  padding: var(--space-3) var(--space-4);
-  border-radius: var(--radius-row);
-  background: var(--accent-soft);
-  font-size: var(--text-sm);
-  line-height: var(--leading-body);
-}
-
-.schema-success {
-  padding: var(--space-4);
-  border-radius: var(--radius-row);
-  background: var(--success-soft);
-  display: flex;
   flex-direction: column;
+  align-items: flex-start;
   gap: var(--space-2);
 }
 
-.schema-success__title {
-  color: var(--success);
-  font-size: var(--text-sm);
-}
-
-.schema-success p {
+.register-schema__fine {
   margin: 0;
-  font-size: var(--text-sm);
+  font-size: var(--text-caption);
+  line-height: var(--leading-body);
+  color: var(--ink-muted);
 }
 
-.schema-success__uid {
-  display: flex;
-  align-items: center;
-  gap: var(--space-2);
-  padding: var(--space-3) var(--space-4);
-  background: var(--surface);
-  border-radius: var(--radius-input);
-  overflow: hidden;
-}
-
-.schema-success__value {
-  flex: 1;
-  min-width: 0;
-  font-size: var(--text-sm);
-  word-break: break-all;
+.register-schema__preview {
+  margin: 0;
+  padding: var(--space-4);
+  border-radius: var(--radius-sm);
+  background: var(--bg-raised);
+  font-size: var(--text-xs);
+  line-height: var(--leading-body);
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
 }
 
 .register-schema__list {
   display: flex;
   flex-direction: column;
-  gap: var(--space-3);
-  min-width: 0;
-}
-
-.register-schema__list-title {
-  margin: 0;
-  font-size: var(--text-panel);
-  font-weight: var(--weight-extrabold);
-}
-
-.schema-list {
-  list-style: none;
   margin: 0;
   padding: 0;
-  display: flex;
-  flex-direction: column;
-  gap: var(--space-2);
+  list-style: none;
 }
 
-.schema-list__item {
-  background: var(--surface);
-  border-radius: var(--radius-row);
-  padding: var(--space-4) var(--space-4-5);
+.register-schema__list li {
   display: flex;
-  flex-direction: column;
-  gap: var(--space-1);
-  min-width: 0;
-}
-
-.schema-list__row {
-  display: flex;
-  justify-content: space-between;
+  flex-wrap: wrap;
   align-items: center;
-  gap: var(--space-3);
-  flex-wrap: wrap;
-}
-
-.schema-list__name {
-  font-size: var(--text-base);
-  font-weight: var(--weight-semibold);
-}
-
-.schema-list__fields {
+  gap: var(--space-2);
+  padding: var(--space-2) 0;
+  box-shadow: inset 0 1px 0 var(--line);
   font-size: var(--text-sm);
-  color: var(--text-muted);
 }
 
-.schema-list__uid {
+.register-schema__list a {
   font-size: var(--text-xs);
-  color: var(--text-muted);
-  word-break: break-all;
 }
 
-.register-schema__sample-note {
-  margin: 0;
-  font-size: var(--text-xs);
-  color: var(--text-muted);
-}
-
-.register-schema__lookup-form {
+.register-schema__row {
   display: flex;
   flex-wrap: wrap;
-  align-items: flex-end;
+  align-items: flex-start;
   gap: var(--space-3);
 }
 
-.register-schema__lookup-form .ui-field {
-  flex: 1 1 var(--field-min-width);
+.register-schema__row .ui-field {
+  flex: 1 1 20rem;
   min-width: 0;
+}
+
+.register-schema__row > .ui-button {
+  margin-top: var(--space-6);
+}
+
+.register-schema__uid {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+  overflow-wrap: anywhere;
 }
 
 .schema-details {
   display: flex;
   flex-direction: column;
   gap: var(--space-3);
-  margin-top: var(--space-4);
 }
 
-.schema-details__fields {
-  display: grid;
-  grid-template-columns: minmax(0, max-content) minmax(0, 1fr);
-  gap: var(--space-2) var(--space-4);
-  margin: 0;
-  font-size: var(--text-sm);
-}
-
-.schema-details__fields dt {
-  font-weight: var(--weight-bold);
-}
-
-.schema-details__fields dd {
-  margin: 0;
-  min-width: 0;
+.schema-details .ui-receipt dd {
   overflow-wrap: anywhere;
-}
-
-.schema-details__uid {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: var(--space-2);
 }
 
 .schema-details__history-title {
   margin: 0;
-  font-size: var(--text-md);
-  font-weight: var(--weight-bold);
+  font-size: var(--text-sm);
+  font-weight: var(--weight-semibold);
 }
 
 .schema-details__history {
-  margin: 0;
-  padding-left: var(--space-5);
   display: flex;
   flex-direction: column;
   gap: var(--space-2);
+  margin: 0;
+  padding-left: var(--space-5);
   font-size: var(--text-sm);
-  overflow-wrap: anywhere;
 }
 
 .schema-details__history li {
   display: flex;
-  flex-direction: column;
-  gap: var(--space-1);
+  flex-wrap: wrap;
+  gap: var(--space-2);
 }
 
-.schema-details__history-definition {
-  color: var(--text-muted);
-}
-
-@media (max-width: 30rem) {
-  .schema-details__fields {
+@media (max-width: 1080px) {
+  .register-schema__grid {
     grid-template-columns: minmax(0, 1fr);
   }
 }

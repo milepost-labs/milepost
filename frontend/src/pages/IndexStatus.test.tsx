@@ -1,6 +1,7 @@
 import { render, screen, waitFor } from '@testing-library/react';
 import { describe, expect, it, vi, afterEach, beforeEach } from 'vitest';
 import { MemoryRouter } from 'react-router-dom';
+import { NETWORK } from '../config/network';
 import { IndexStatus } from './IndexStatus';
 
 // Issue #480: the freshness change reaches the shared announcer once, instead
@@ -64,10 +65,36 @@ describe('IndexStatus', () => {
       </MemoryRouter>,
     );
     await waitFor(() => {
-      expect(screen.getByText('Fresh')).toBeTruthy();
+      expect(screen.getByText('Fresh.')).toBeTruthy();
     });
-    expect(screen.getByText('4698280')).toBeTruthy();
+    expect(screen.getByText('4,698,280')).toBeTruthy();
     expect(screen.getByText('Complete')).toBeTruthy();
+  });
+
+  it('refuses an index built for another network, naming both', async () => {
+    stubFetch(meta({ network: 'mainnet' }));
+    render(
+      <MemoryRouter>
+        <IndexStatus />
+      </MemoryRouter>,
+    );
+    const alert = await screen.findByRole('alert');
+    expect(alert.textContent).toContain('different deployment');
+    expect(alert.textContent).toContain(NETWORK.name);
+    expect(alert.textContent).toContain('mainnet');
+    expect(screen.queryByText('Fresh.')).toBeNull();
+  });
+
+  it('refuses an index built for another registry, naming both', async () => {
+    stubFetch(meta({ registry: 'COTHERREGISTRY000000000000000000000000000000000000000000' }));
+    render(
+      <MemoryRouter>
+        <IndexStatus />
+      </MemoryRouter>,
+    );
+    const alert = await screen.findByRole('alert');
+    expect(alert.textContent).toContain(NETWORK.contracts.registry);
+    expect(alert.textContent).toContain('COTHERREGISTRY');
   });
 
   it('renders stale state', async () => {
@@ -78,11 +105,11 @@ describe('IndexStatus', () => {
       </MemoryRouter>,
     );
     await waitFor(() => {
-      expect(screen.getByText('Stale')).toBeTruthy();
+      expect(screen.getByText('Stale.')).toBeTruthy();
     });
   });
 
-  it('binds every figure to its label inside one description list', async () => {
+  it('labels every figure', async () => {
     stubFetch(meta());
     render(
       <MemoryRouter>
@@ -90,20 +117,11 @@ describe('IndexStatus', () => {
       </MemoryRouter>,
     );
     await waitFor(() => {
-      expect(screen.getByText('Fresh')).toBeTruthy();
+      expect(screen.getByText('Fresh.')).toBeTruthy();
     });
-
-    const list = document.querySelector('dl.status-grid');
-    expect(list).toBeTruthy();
-    const terms = list?.querySelectorAll('dt') ?? [];
-    const definitions = list?.querySelectorAll('dd') ?? [];
-    // Five cards, each with a term; each term and definition belongs to the
-    // same list, so a screen reader reads them as label/value pairs.
-    expect(terms).toHaveLength(5);
-    expect(definitions.length).toBeGreaterThanOrEqual(5);
-    for (const term of terms) expect(term.closest('dl')).toBe(list);
-    for (const definition of definitions) expect(definition.closest('dl')).toBe(list);
-    expect(screen.getByText('Last indexed at').tagName).toBe('DT');
+    for (const label of ['Last rebuilt', 'Indexed to ledger', 'Completeness', 'Unhandled event types']) {
+      expect(screen.getByText(label)).toBeTruthy();
+    }
   });
 
   it('announces a change of freshness once, not on every render', async () => {
@@ -134,7 +152,7 @@ describe('IndexStatus', () => {
       </MemoryRouter>,
     );
     await waitFor(() => {
-      expect(screen.getByText('Stale')).toBeTruthy();
+      expect(screen.getByText('Stale.')).toBeTruthy();
       expect(announce).toHaveBeenCalledWith(expect.stringContaining('stale'));
     });
   });
@@ -159,7 +177,7 @@ describe('IndexStatus', () => {
       </MemoryRouter>,
     );
     await waitFor(() => {
-      expect(screen.getByText('Unhandled event types')).toBeTruthy();
+      expect(screen.getByText('Event types not handled yet')).toBeTruthy();
     });
     expect(screen.getByText('program:Created')).toBeTruthy();
     expect(screen.getByText('5')).toBeTruthy();
