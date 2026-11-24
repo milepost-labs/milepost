@@ -1,8 +1,3 @@
-import { Networks } from '@stellar/stellar-sdk';
-import { networks as registryNetworks } from '@milepost/registry';
-import { networks as attestNetworks } from '@milepost/attest';
-import { networks as recordNetworks } from '@milepost/record';
-import { networks as policyNetworks } from '@milepost/policy-spend';
 import { MAINNET_VARS, assertMainnetEnv, selectedNetwork, type EnvSource } from './networkEnv';
 
 /**
@@ -30,6 +25,24 @@ export interface NetworkConfig {
   demoProgrammeId: string | null;
 }
 
+/**
+ * The two network passphrases, and the shared testnet deployment's contract
+ * ids, written out here rather than read from `@stellar/stellar-sdk` and the
+ * `@milepost/*` bindings. This module sits on the landing page's path, and
+ * importing either would pull the whole Stellar SDK into the first load.
+ * `network.test.ts` checks every value against the SDK and the bindings, so
+ * a redeploy that updates `packages/testnet.json` fails there until this file
+ * follows it.
+ */
+const TESTNET_PASSPHRASE = 'Test SDF Network ; September 2015';
+const PUBLIC_PASSPHRASE = 'Public Global Stellar Network ; September 2015';
+const TESTNET_CONTRACTS = Object.freeze({
+  registry: 'CCBQHBNIG5FIJEM6SQZQGTQRO3XXHV2BGVGGUY5JXXZ3Y55ZJSV3HMVF',
+  attest: 'CC3PQUJKHPRSIHIH53GNIC6DIDOIJWCCGQ7NYZROBAS6TZLUGLOM5XQC',
+  record: 'CCQCHPJGDR4VYJQEGCSNO3XQDQ2VT4GARVT4CV25K4AEKCFMATRFGAFF',
+  policy: 'CD2F5HMCPZCPXFHEFRNVNCQFYKYZZND4EIV3BQXK2NP7PYFY57OZIYTS',
+});
+
 const TESTNET_RPC_URL = 'https://soroban-testnet.stellar.org';
 const TESTNET_INDEXER_URL = 'https://milepost-labs.github.io/milepost-indexer/v1';
 const TESTNET_PROGRAMME_ID = 'CD6X33SKLUEMANS67ID3LJL572FFGERMMJCIFRW7P7EKZQLH35XT67C6';
@@ -41,7 +54,7 @@ function resolveMainnet(env: EnvSource): Readonly<NetworkConfig> {
   const get = (name: string) => (env[name] as string).trim();
   return Object.freeze({
     name: 'mainnet',
-    passphrase: Networks.PUBLIC,
+    passphrase: PUBLIC_PASSPHRASE,
     rpcUrl: trimUrl(get(MAINNET_VARS.rpcUrl)),
     indexerUrl: trimUrl(get(MAINNET_VARS.indexerUrl)),
     contracts: Object.freeze({
@@ -59,15 +72,10 @@ function resolveMainnet(env: EnvSource): Readonly<NetworkConfig> {
 function resolveTestnet(env: EnvSource): Readonly<NetworkConfig> {
   return Object.freeze({
     name: 'testnet',
-    passphrase: registryNetworks.testnet.networkPassphrase,
+    passphrase: TESTNET_PASSPHRASE,
     rpcUrl: trimUrl(env.VITE_SOROBAN_RPC_URL?.trim() || TESTNET_RPC_URL),
     indexerUrl: trimUrl(env.VITE_INDEXER_URL?.trim() || TESTNET_INDEXER_URL),
-    contracts: Object.freeze({
-      registry: registryNetworks.testnet.contractId,
-      attest: attestNetworks.testnet.contractId,
-      record: recordNetworks.testnet.contractId,
-      policy: policyNetworks.testnet.contractId,
-    }),
+    contracts: TESTNET_CONTRACTS,
     explorer: 'testnet',
     friendbot: true,
     demoProgrammeId: env.VITE_PROGRAMME_ID?.trim() || TESTNET_PROGRAMME_ID,

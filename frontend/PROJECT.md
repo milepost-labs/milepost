@@ -180,7 +180,11 @@ React 19 + TypeScript + Vite. `react-router-dom` 7, `lucide-react` for icons,
 ```
 
 Providers wrap in this order: `ThemeProvider` → `WalletProvider` →
-`SorobanProvider` → `ErrorBoundary` → `Router`.
+`ErrorBoundary` → `Router`. `SorobanProvider` is not at the root: each app route
+mounts it around its own page (`inSoroban` in `App.tsx`), so the contract clients
+and the Stellar SDK load with the first app route, never with the landing page.
+Keep `@stellar/stellar-sdk` and `@milepost/*` out of anything `/` imports
+statically (`config/network.ts`, `lib/restore.ts` and `useBalances` already do).
 
 ### Building blocks — reuse these, do not reinvent
 

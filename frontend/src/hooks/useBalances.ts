@@ -1,5 +1,4 @@
 import { useEffect } from 'react';
-import { Keypair, rpc, xdr } from '@stellar/stellar-sdk';
 import { NETWORK } from '../config/network';
 import { useWallet } from '../context/useWallet';
 import { useIndexedList } from './useIndexedList';
@@ -25,6 +24,9 @@ interface AccountRead {
  * as an error and never as a zero balance.
  */
 async function readAccount(address: string): Promise<AccountRead> {
+  // Loaded when an account is first read, so the SDK is not part of the page
+  // someone lands on before they have connected a wallet.
+  const { Keypair, rpc, xdr } = await import('@stellar/stellar-sdk');
   const server = new rpc.Server(NETWORK.rpcUrl, { allowHttp: NETWORK.rpcUrl.startsWith('http://') });
   const key = xdr.LedgerKey.account(
     new xdr.LedgerKeyAccount({ accountId: Keypair.fromPublicKey(address).xdrAccountId() }),

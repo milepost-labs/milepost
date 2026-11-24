@@ -5,6 +5,8 @@ import { useWallet } from '../../context/useWallet';
 import { useAnnouncer } from '../../context/useAnnouncer';
 import { useContractRead, useContractResult } from '../../hooks/useContractRead';
 import { useTransaction } from '../../hooks/useTransaction';
+import { useProgrammePaused } from '../../hooks/useProgrammePaused';
+import { PAUSED_REASON } from '../../lib/paused';
 import { explain } from '../../lib/errors';
 import { looksLikeAddress, truncateAddress } from '../../lib/format';
 import { formatIn } from '../../lib/funding';
@@ -240,6 +242,8 @@ export function ReviewerVotes({ reviewerOf, allProgrammes, initialProgrammeId }:
     enabled: Boolean(programmeId),
   });
   const phase = phaseRead.data?.tag ?? null;
+  // `review` is refused while the creator has paused the programme (`Paused`, 39).
+  const pausedState = useProgrammePaused(programmeId ? programme : null);
 
   const samples = samplesEnabled() ? (FIXTURE_REVIEW_APPLICANTS[programmeId] ?? []) : [];
   const applicants = [...(added[programmeId] ?? []), ...samples];
@@ -256,7 +260,9 @@ export function ReviewerVotes({ reviewerOf, allProgrammes, initialProgrammeId }:
             ? 'Checking whether this wallet is a reviewer for the programme…'
             : !isReviewerRead.data
               ? 'The connected wallet is not a registered reviewer for this programme.'
-              : null;
+              : pausedState.paused
+                ? PAUSED_REASON
+                : null;
 
   const options = [
     ...reviewerOf.map((p) => ({ value: p.id, label: `${p.name ?? shortId(p.id)} · ${p.phase ?? 'phase unknown'}` })),

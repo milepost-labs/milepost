@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { programmeActions, type ActionInput, type ActionKey } from './programmeActions';
 import { phaseRequirement, type Phase } from './phaseGate';
+import { PAUSED_REASON } from './paused';
 
 const ID = 'CCOIACASOVO3ZQLXWWJFGZAU3Y545AGPXLBP4NYHYD77RDCBPXRVZ37C';
 
@@ -156,5 +157,39 @@ describe('registry verification gating', () => {
     // Existing behaviour must be unchanged for verified programmes.
     expect(enabledKeys({ phase: 'Open', verified: true })).toEqual(['contribute', 'apply']);
     expect(enabledKeys({ phase: 'Review', verified: true })).toEqual(['finalize']);
+  });
+
+  describe('paused', () => {
+    const PAUSABLE: Array<[ActionKey, Phase]> = [
+      ['contribute', 'Open'],
+      ['apply', 'Open'],
+      ['finalize', 'Review'],
+      ['release', 'Settled'],
+    ];
+
+    it.each(PAUSABLE)('disables %s while paused, with the reason', (key, phase) => {
+      const action = byKey({ phase, paused: true }, key);
+      expect(action.enabled).toBe(false);
+      expect(action.href).toBeNull();
+      expect(action.reason).toBe(PAUSED_REASON);
+      expect(action.reason).toMatch(/refunds stay open/i);
+    });
+
+    it.each(PAUSABLE)('enables %s again once resumed', (key, phase) => {
+      expect(byKey({ phase, paused: false }, key).enabled).toBe(true);
+      expect(byKey({ phase, paused: null }, key).enabled).toBe(true);
+      expect(byKey({ phase }, key).enabled).toBe(true);
+    });
+
+    it('keeps the refund open while paused', () => {
+      expect(byKey({ phase: 'Cancelled', paused: true }, 'refund').enabled).toBe(true);
+      expect(
+        byKey({ phase: 'Settled', paused: true, refundsOpen: true, refundable: '10 XLM' }, 'refund').enabled,
+      ).toBe(true);
+    });
+
+    it('still says the phase is wrong before it says paused', () => {
+      expect(byKey({ phase: 'Review', paused: true }, 'contribute').reason).toBe(phaseRequirement('Open', 'Review'));
+    });
   });
 });

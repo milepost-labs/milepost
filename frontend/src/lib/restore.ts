@@ -1,4 +1,4 @@
-import { rpc } from '@stellar/stellar-sdk';
+import type { rpc } from '@stellar/stellar-sdk';
 
 /**
  * Restoring archived entries before a write.
@@ -20,6 +20,24 @@ export interface RestoreStep {
 }
 
 const BASE_FEE_STROOPS = 100n;
+
+// `rpc.Api.GetTransactionStatus.SUCCESS`, written out so this module, which the
+// landing page reaches through the transaction hook, needs only the SDK's types.
+const TRANSACTION_SUCCESS = 'SUCCESS';
+
+/**
+ * `rpc.Api.isSimulationRestore`, without importing the SDK for it: a successful
+ * simulation (it carries `transactionData`) that also carries a restore preamble.
+ */
+function isSimulationRestore(
+  simulation: rpc.Api.SimulateTransactionResponse,
+): simulation is rpc.Api.SimulateTransactionRestoreResponse {
+  return (
+    'transactionData' in simulation &&
+    'restorePreamble' in simulation &&
+    Boolean((simulation as { restorePreamble?: { transactionData?: unknown } }).restorePreamble?.transactionData)
+  );
+}
 
 interface AssembledLike {
   simulation?: rpc.Api.SimulateTransactionResponse;
@@ -46,7 +64,7 @@ function isAssembled(value: unknown): value is AssembledLike {
 export function restoreFromAssembled(transaction: unknown): RestoreStep | null {
   if (!isAssembled(transaction)) return null;
   const simulation = transaction.simulation!;
-  if (!rpc.Api.isSimulationRestore(simulation)) return null;
+  if (!isSimulationRestore(simulation)) return null;
   const preamble = simulation.restorePreamble;
   return {
     feeStroops: BigInt(preamble.minResourceFee) + BASE_FEE_STROOPS,
@@ -55,7 +73,7 @@ export function restoreFromAssembled(transaction: unknown): RestoreStep | null {
       // clients are built without one and get the wallet's at send time.
       transaction.options.signTransaction = signTransaction;
       const response = await transaction.restoreFootprint(preamble);
-      if (response.status !== rpc.Api.GetTransactionStatus.SUCCESS) {
+      if (response.status !== TRANSACTION_SUCCESS) {
         throw new Error(`The restore did not go through (${response.status}).`);
       }
     },

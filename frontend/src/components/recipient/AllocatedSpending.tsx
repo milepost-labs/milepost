@@ -1,7 +1,8 @@
 import { useMemo, useState } from 'react';
 import { useSoroban } from '../../context/useSoroban';
 import { useWallet } from '../../context/useWallet';
-import { useContractRead, useTransaction } from '../../hooks';
+import { useContractRead, useProgrammePaused, useTransaction } from '../../hooks';
+import { PAUSED_REASON } from '../../lib/paused';
 import { formatAmount, validateAmount } from '../../lib/amount';
 import { explain, explainCode, type Explained } from '../../lib/errors';
 import { looksLikeContractId, truncateAddress } from '../../lib/format';
@@ -32,6 +33,7 @@ type View =
   | { kind: 'phase-blocked'; phase: Phase }
   | { kind: 'allocation-error' }
   | { kind: 'empty' }
+  | { kind: 'paused' }
   | { kind: 'form' };
 
 export interface AllocatedSpendingProps {
@@ -89,6 +91,9 @@ export function AllocatedSpending({ award, sampleDelayMs = SAMPLE_TX_DELAY_MS }:
     { enabled: isReal, contract: 'program' },
   );
 
+  // `spend` is refused while the creator has paused the programme (`Paused`, 39).
+  const pausedState = useProgrammePaused(client);
+
   const sampleAllocation = award.escrow ? BigInt(award.escrow) : 0n;
   const allocation = isReal ? allocationRead.data ?? 0n : sampleAllocation;
 
@@ -141,6 +146,8 @@ export function AllocatedSpending({ award, sampleDelayMs = SAMPLE_TX_DELAY_MS }:
     view = { kind: 'allocation-error' };
   } else if (allocation === 0n) {
     view = { kind: 'empty' };
+  } else if (pausedState.paused) {
+    view = { kind: 'paused' };
   } else {
     view = { kind: 'form' };
   }
@@ -242,6 +249,14 @@ export function AllocatedSpending({ award, sampleDelayMs = SAMPLE_TX_DELAY_MS }:
 
       {view.kind === 'empty' && (
         <p className="allocated-spending__empty">Nothing held in escrow right now.</p>
+      )}
+
+      {view.kind === 'paused' && (
+        <div className="allocated-spending__gate">
+          <p className="allocated-spending__gate-reason" role="status">
+            {PAUSED_REASON}
+          </p>
+        </div>
       )}
 
       {view.kind === 'form' && (

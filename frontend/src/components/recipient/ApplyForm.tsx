@@ -15,8 +15,10 @@ import { SAMPLE_TX_DELAY_MS, sampleSendable, sampleOutcome } from '../../lib/fun
 import { useAnnouncer } from '../../context/useAnnouncer';
 import { Empty, ErrorPanel, ErrorState, Loading } from '../state/AsyncStates';
 import { TxDone, TxPending } from '../state/TxStatus';
-import { AmountField, Button, CopyButton, Notice, SampleTag, Select, TextArea, TxExplorerLink } from '../ui';
+import { AmountField, Button, CopyButton, DisabledReason, Notice, SampleTag, Select, TextArea, TxExplorerLink } from '../ui';
 import { useContractResult } from '../../hooks/useContractRead';
+import { useProgrammePaused } from '../../hooks/useProgrammePaused';
+import { PAUSED_REASON } from '../../lib/paused';
 import { restoreFromAssembled } from '../../lib/restore';
 import './ApplyForm.css';
 
@@ -108,7 +110,10 @@ export function ApplyForm({
   const minimumAward: bigint = configRead.data?.minimum_award ?? 0n;
 
   const amountResult = amountInput.trim() ? validateAmount(amountInput, { asset }) : null;
-  const isValid = amountResult?.ok === true && Boolean(effectiveSelection) && notes.trim().length > 0;
+  // A paused programme refuses applications (`Paused`, 39): say so, don't let it fail at signing.
+  const pausedState = useProgrammePaused(selectedClient);
+  const isValid =
+    amountResult?.ok === true && Boolean(effectiveSelection) && notes.trim().length > 0 && !pausedState.paused;
 
   // Warn when the entered amount is below the programme's minimum award.
   // The submit button stays enabled — apply itself does not enforce the minimum;
@@ -326,9 +331,10 @@ export function ApplyForm({
                   only lower it.
                 </Notice>
 
-                <Button type="submit" disabled={!isValid}>
+                <Button type="submit" disabled={!isValid} aria-describedby={pausedState.paused ? 'apply-paused-why' : undefined}>
                   Submit application
                 </Button>
+                {pausedState.paused && <DisabledReason id="apply-paused-why">{PAUSED_REASON}</DisabledReason>}
 
                 {declined && tx.error && (
                   <Notice tone="info">

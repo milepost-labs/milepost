@@ -159,7 +159,7 @@ Routes are defined in `src/routes.ts` and rendered in `src/App.tsx`.
 | `/admin/payees` | PayeeManagement | Yes (admin) |
 | `/keepalive` | Keepalive | Yes |
 
-Providers wrap in order: `ThemeProvider` → `WalletProvider` → `SorobanProvider` → `ErrorBoundary` → `Router`.
+Providers wrap in order: `ThemeProvider` → `WalletProvider` → `ErrorBoundary` → `Router`. `SorobanProvider` wraps each app route's page (see `inSoroban` in `App.tsx`) rather than the root, so the landing page loads no Stellar SDK code.
 
 ---
 

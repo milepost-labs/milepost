@@ -56,12 +56,31 @@ const programmeClient = {
   is_spent: vi.fn(async ({ attestation }: { attestation: Buffer }) => ({
     result: Buffer.from(attestation).toString('hex') === SPENT_UID,
   })),
+  // The release sheet reads the paused flag before it offers a signature.
+  options: { contractId: PROGRAMME_ID },
+  is_paused: vi.fn(async () => ({ result: false })),
 };
 
 vi.mock('../../context/useSoroban', () => {
   const soroban = {
     programmeAt: () => programmeClient,
-    attest: { options: { contractId: `C${'A'.repeat(55)}` }, get: vi.fn() },
+    // The sheet checks a proof on the chain before signing; these answer "valid".
+    attest: {
+      options: { contractId: `C${'A'.repeat(55)}` },
+      get: vi.fn(async ({ uid }: { uid: Buffer }) => ({
+        result: {
+          unwrap: () => ({
+            uid,
+            schema: Buffer.from(SCHEMA_HEX, 'hex'),
+            subject: RECIPIENT,
+            attester: VERIFIER,
+            revoked_at: undefined,
+            expires_at: undefined,
+          }),
+        },
+      })),
+      verify: vi.fn(async () => ({ result: true })),
+    },
     rpcUrl: 'https://soroban-testnet.stellar.org',
   };
   return { useSoroban: () => soroban, useOptionalSoroban: () => soroban };
@@ -140,7 +159,9 @@ describe('AwardCard ReleaseSheet — attestation finder (#627)', () => {
     const attesterInput = screen.getByLabelText('Attester address') as HTMLInputElement;
     expect(idInput.value).toBe(VALID_UID);
     expect(attesterInput.value).toBe(VERIFIER);
-    expect((screen.getByRole('button', { name: 'Sign and release' }) as HTMLButtonElement).disabled).toBe(false);
+    // Enabled once the sheet's chain reads (phase, window, paused, proof) answer.
+    const sign = screen.getByRole('button', { name: 'Sign and release' }) as HTMLButtonElement;
+    await waitFor(() => expect(sign.disabled).toBe(false));
   });
 
   it('still allows typing an attestation id and attester manually', async () => {
@@ -170,6 +191,8 @@ describe('AwardCard ReleaseSheet — attestation finder (#627)', () => {
 
     expect(idInput.value).toBe('aa'.repeat(32));
     expect(attesterInput.value).toBe(VERIFIER);
-    expect((screen.getByRole('button', { name: 'Sign and release' }) as HTMLButtonElement).disabled).toBe(false);
+    // Enabled once the sheet's chain reads (phase, window, paused, proof) answer.
+    const sign = screen.getByRole('button', { name: 'Sign and release' }) as HTMLButtonElement;
+    await waitFor(() => expect(sign.disabled).toBe(false));
   });
 });
