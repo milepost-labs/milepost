@@ -8,6 +8,7 @@
  */
 
 import { phaseRequirement, type Phase } from './phaseGate';
+import { PAUSED_REASON } from './paused';
 
 export type ActionKey = 'contribute' | 'apply' | 'finalize' | 'release' | 'refund';
 
@@ -47,6 +48,12 @@ export interface ActionInput {
    * network failures never grant unverified programmes write access.
    */
   verified: boolean | null;
+  /**
+   * Whether the creator has paused the programme. Pausing stops contribute,
+   * apply, finalize and release; refunds stay open. Leave it out (or null)
+   * while it is being read: the contract re-checks when the action is sent.
+   */
+  paused?: boolean | null;
 }
 
 interface Rule {
@@ -56,12 +63,14 @@ interface Rule {
   button: string;
   needs: Exclude<Phase, 'Cancelled'>;
   route: string;
+  /** Whether pausing the programme stops it (`Paused`, 39). */
+  pausable: boolean;
 }
 
 const RULES: Rule[] = [
-  { key: 'contribute', label: 'Contribute', who: 'Funders', button: 'Contribute', needs: 'Open', route: '/funders' },
-  { key: 'apply', label: 'Apply for an award', who: 'Recipients', button: 'Apply', needs: 'Open', route: '/recipients' },
-  { key: 'finalize', label: 'Finalize awards', who: 'Anyone', button: 'Finalize', needs: 'Review', route: '/finalize' },
+  { key: 'contribute', label: 'Contribute', who: 'Funders', button: 'Contribute', needs: 'Open', route: '/funders', pausable: true },
+  { key: 'apply', label: 'Apply for an award', who: 'Recipients', button: 'Apply', needs: 'Open', route: '/recipients', pausable: true },
+  { key: 'finalize', label: 'Finalize awards', who: 'Anyone', button: 'Finalize', needs: 'Review', route: '/finalize', pausable: true },
   {
     key: 'release',
     label: 'Release a tranche',
@@ -69,8 +78,9 @@ const RULES: Rule[] = [
     button: 'Release',
     needs: 'Settled',
     route: '/recipients/award-progress',
+    pausable: true,
   },
-  { key: 'refund', label: 'Claim a refund', who: 'Funders', button: 'Refund', needs: 'Settled', route: '/funders' },
+  { key: 'refund', label: 'Claim a refund', who: 'Funders', button: 'Refund', needs: 'Settled', route: '/funders', pausable: false },
 ];
 
 function phaseAllows(rule: Rule, input: ActionInput): boolean {
@@ -136,6 +146,10 @@ export function programmeActions(input: ActionInput): ProgrammeAction[] {
     const allows = phaseAllows(rule, input);
     if (!allows) {
       return { ...base, phaseAllows: false, enabled: false, href: null, reason: blockedReason(rule, input, input.phase) };
+    }
+    // Paused stops every money-forward action; refunds and sweeps stay open.
+    if (rule.pausable && input.paused === true) {
+      return { ...base, phaseAllows: true, enabled: false, href: null, reason: PAUSED_REASON };
     }
     if (!input.signedIn) {
       return { ...base, phaseAllows: true, enabled: false, href: null, reason: `Sign in to ${rule.label.toLowerCase()}.` };

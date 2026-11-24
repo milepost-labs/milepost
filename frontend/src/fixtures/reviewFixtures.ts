@@ -1,3 +1,5 @@
+import { SAMPLES_IN_BUILD } from './inBuild';
+
 /**
  * Stand-in data for the reviewer voting section (issue #339, `/verifiers`).
  *
@@ -15,7 +17,7 @@ export interface ApplicantFixture {
   label: string;
 }
 
-export const FIXTURE_REVIEW_APPLICANTS: Record<string, ApplicantFixture[]> = {
+export const FIXTURE_REVIEW_APPLICANTS: Record<string, ApplicantFixture[]> = SAMPLES_IN_BUILD ? {
   [import.meta.env.VITE_PROGRAMME_ID || 'CD6X33SKLUEMANS67ID3LJL572FFGERMMJCIFRW7P7EKZQLH35XT67C6']: [
     {
       address: 'GAH3D4RM45ETE4W7VDRCWZBPRPT63CJXAGXFYVBC2FGANBZTS4OTKXCA',
@@ -26,4 +28,4 @@ export const FIXTURE_REVIEW_APPLICANTS: Record<string, ApplicantFixture[]> = {
       label: 'Clinic restock request',
     },
   ],
-};
+} : {};

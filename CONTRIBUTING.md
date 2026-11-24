@@ -148,6 +148,52 @@ rule, add an entry to `ACCESSIBILITY_EXCEPTIONS` in
 `frontend/src/test/accessibility.test.tsx` with a `reason`; the suite fails on
 an entry with no reason. Fixing the page is always preferred.
 
+### Browser checks
+
+The `browser` job in [`.github/workflows/ci.yml`](.github/workflows/ci.yml) opens
+the built app in Chromium, served with the headers [`frontend/vercel.json`](frontend/vercel.json)
+sends in production, and checks these on every pull request:
+
+- **Smoke:** every page loads with no uncaught error, no console error and no
+  Content-Security-Policy violation. A page that loads a host the policy does
+  not allow fails the job and names the page.
+- **Reflow:** no page scrolls sideways at 320 CSS px, which is 400% zoom on a
+  1280 px screen (WCAG 1.4.10). The check runs signed in and signed out. A wide
+  table may scroll inside its own container; the page itself may not.
+- **Contrast:** every page, in light and dark, passes axe-core's `color-contrast`
+  rule in Chromium, so text meets 4.5:1 against what is behind it
+  (`frontend/tests/browser/contrast.spec.ts`). Fix a colour in
+  `frontend/src/styles/tokens.css`, not on the page. A failure that cannot be
+  fixed goes in `CONTRAST_EXCEPTIONS` in that file, with a reason. The jsdom suite
+  cannot see colours, which is why this check exists.
+- **Keyboard:** contribute, apply and release each complete using only Tab,
+  Shift+Tab, Enter and typing, and every control the keyboard lands on shows a
+  focus ring (`frontend/tests/browser/keyboard.spec.ts`). Vote and attest are not
+  covered yet: in the fixture build they submit to the Soroban RPC, so they would
+  reach the testnet from CI.
+
+Run it locally from `frontend/`:
+
+```bash
+cd frontend
+npm ci                                        # first time, or after a dependency change
+npx playwright install chromium --with-deps   # first time
+npm run build:browser                         # two builds: signed in, and signed out
+npm run test:browser
+```
+
+The signed-in build uses fixture mode, so the wallet is connected and the index
+is answered from `frontend/tests/fixtures/`. The signed-out build has no
+fixtures and is for layout only. A failure names the page and the element. The
+HTML report is in `frontend/playwright-report/`.
+
+Each allowed console error needs an entry in `ALLOWED_CONSOLE_ERRORS` in
+[`frontend/tests/browser/support.ts`](frontend/tests/browser/support.ts), with a
+reason in the comment above it.
+A request whose 404 is an expected answer (the description store, which is a
+serverless function absent from a static build) goes in `ALLOWED_404_URLS` in the
+same file, matched on its URL, also with a reason.
+
 ### Local Development Modes
 - **Fixture Mode:** Run `VITE_FIXTURES=1 npm --prefix frontend run dev` to run and inspect UI screens locally without requiring an active wallet connection or testnet funds.
 - **Component Gallery:** In dev mode, open `/dev/ui` in the browser to inspect all components from `src/components/ui/` and `src/components/state/`. It is left out of production builds, and CI fails if it ever reaches one (`frontend/scripts/check-no-dev-pages.sh`).
@@ -257,6 +303,23 @@ wrong contract. See the [testing guide](docs/testing-guide.md) for the ordering
 rule, bindings regeneration, and the generated-file and fixture traps that have
 cost review rounds.
 
+### Coverage
+
+CI enforces a minimum line-coverage threshold on every pull request. It uses
+[`cargo-llvm-cov`](https://github.com/taiki-e/cargo-llvm-cov), installed as a
+prebuilt binary.
+
+To run the same check locally:
+
+```bash
+cargo install cargo-llvm-cov --locked   # once, or use a prebuilt binary
+cargo llvm-cov --all-features --summary-only --fail-under-lines 90
+```
+
+Omit `--fail-under-lines` to see the report without enforcing the threshold.
+The threshold and the exact command CI runs are in
+[`.github/workflows/ci.yml`](.github/workflows/ci.yml).
+
 ### Mutation testing
 
 The load-bearing contracts (programme, registry, attest, record, policy-spend)
@@ -302,6 +365,30 @@ Two things the script does that a bare `cargo mutants` does not:
 
 ---
 
+### Licences, duplicate crates and sources
+
+The `check` job runs `cargo deny check licenses bans sources` against
+[`deny.toml`](deny.toml):
+
+- **Licences:** each crate's licence must be on the allow-list. An expression
+  such as `MIT OR Apache-2.0` passes when any alternative is allowed.
+- **Duplicates:** two versions of one crate are reported as warnings, not
+  failures.
+- **Sources:** crates come from crates.io, and from the one git repository the
+  lockfile pins (`stellar/passkey-kit`). Any other source fails the check.
+
+To run it locally, install cargo-deny once and run it from the repository root:
+
+```bash
+cargo install cargo-deny --locked   # once
+cargo deny check licenses bans sources
+```
+
+A new licence or a new git source is a decision for the pull request that needs
+it. Add the entry to `deny.toml` in that PR, and say why in the description.
+
+---
+
 ## 5. Documentation Standards
 
 * **Code comments:** Only add a comment when the *why* is non-obvious — a hidden constraint, a subtle invariant, or a workaround for a specific bug. Do not comment on what the code does; well-named identifiers already do that.
@@ -342,6 +429,32 @@ script, if a package comes from outside the npm or crates.io registries, if a
 workflow uses `pull_request_target`, or if a file contains hidden Unicode. If
 your dependency is legitimately blocked, say why in the PR. A maintainer
 records the exception, with its reason, in `.github/malware-check-allowlist.json`.
+
+**Pinned actions.** Every `uses:` in `ci.yml`, `mutants.yml` and `smoke-test.yml`
+names a full commit SHA, with the version in a trailing comment, for example
+`uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7`. A moved
+tag cannot change the code that runs with the repository's token. To pin a new
+action, resolve the tag to its commit, then put that SHA and the tag in the
+comment:
+
+```bash
+git ls-remote https://github.com/OWNER/ACTION refs/tags/vX refs/tags/vX^{}
+```
+
+An annotated tag lists a second `^{}` line; use that commit, not the tag object.
+`dtolnay/rust-toolchain` has no version tag, so it is pinned to the commit its
+`stable` branch points at, and is the one pin Dependabot cannot bump. Dependabot
+(`.github/dependabot.yml`) proposes updates for the rest. `release.yml` is
+maintainer-owned and not pinned here.
+
+**Workflow permissions.** `ci.yml`, `mutants.yml` and `smoke-test.yml` start with
+`permissions: contents: read`, so a job cannot write to the repository, comment
+on a pull request or change a release unless it grants that to itself. Only
+`release.yml` asks for more, to publish. A new job that needs a write must add
+the grant to that job, and say why in the pull request. These checks cannot run
+locally, so push the change to your fork and read the Actions run: a step that
+needs a write it does not have fails with a 403 or "Resource not accessible by
+integration".
 
 ---
 

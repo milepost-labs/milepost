@@ -424,7 +424,6 @@ fn verify_rejects_an_unknown_id() {
 }
 
 mod proptests {
-    extern crate std;
 
     use super::*;
     use proptest::prelude::*;
@@ -706,6 +705,88 @@ fn a_failed_call_publishes_nothing() {
     assert_events(&f.env, &f.client.address, &[]);
 }
 
+// ---- cost of a long predecessor chain ----
+
+extern crate std;
+
+/// Register `versions` schema versions, each naming the previous one as its
+/// predecessor, and check the cost of registering version `n` for every `n` in
+/// `checked`. Registering version `n` walks the `n - 1` schemas already behind
+/// it, so `n - 1` is the chain depth that registration pays for.
+fn register_chain_checking(f: &Fixture, versions: u32, checked: &[u32]) {
+    f.env.cost_estimate().disable_resource_limits();
+    let mut predecessor: Option<BytesN<32>> = None;
+    for n in 1..=versions {
+        // Distinct definitions give each version its own uid.
+        let name = String::from_str(&f.env, &version_name(n));
+        f.env.cost_estimate().budget().reset_unlimited();
+        let uid = f
+            .client
+            .register_schema(&f.authority, &name, &true, &false, &predecessor);
+        if checked.contains(&n) {
+            milepost_test_utils::assert_within_network_limits!(&chain_label(n - 1), f.env);
+        }
+        predecessor = Some(uid);
+    }
+}
+
+fn version_name(n: u32) -> std::string::String {
+    std::format!("enrolment:v{n}")
+}
+
+fn chain_label(depth: u32) -> std::string::String {
+    std::format!("register_schema behind a chain of {depth}")
+}
+
+/// How the cost of `register_schema` grows with the length of the predecessor
+/// chain behind it, at depths from 0 to past the walk's own cap.
+///
+/// Run with `--nocapture` to see the table. The cycle check stops after 64
+/// links (`check_cycle`), so cost climbs with depth up to 64 and is flat after
+/// that. Every depth printed here is asserted under 80% of the network limits.
+#[test]
+fn schema_registration_cost_by_chain_depth() {
+    let f = setup();
+    // Version n sits behind a chain of n - 1 predecessors.
+    register_chain_checking(&f, 101, &[1, 2, 5, 9, 17, 33, 65, 66, 101]);
+}
+
+/// The depth this contract is pinned to as safe: 64 links, the longest chain
+/// `check_cycle` ever walks. Registering behind a chain this long stays under
+/// 80% of every network limit, and the number of ledger entries it touches is
+/// pinned so a change that makes the walk read more than the chain itself shows
+/// up here.
+#[test]
+fn registering_behind_a_chain_of_the_safe_depth_stays_within_network_limits() {
+    const SAFE_DEPTH: u32 = 64;
+    let f = setup();
+    f.env.cost_estimate().disable_resource_limits();
+
+    let mut predecessor: Option<BytesN<32>> = None;
+    for n in 0..=SAFE_DEPTH {
+        let name = String::from_str(&f.env, &version_name(n + 1));
+        f.env.cost_estimate().budget().reset_unlimited();
+        predecessor =
+            Some(
+                f.client
+                    .register_schema(&f.authority, &name, &true, &false, &predecessor),
+            );
+    }
+    // `register_schema` for version SAFE_DEPTH + 1 above was the last call, so
+    // its resources are the ones the environment holds.
+    milepost_test_utils::assert_within_network_limits!(&chain_label(SAFE_DEPTH), f.env);
+    let r = f.env.cost_estimate().resources();
+    // One entry per link walked plus the instance and the new schema; never
+    // more than the chain plus a small constant.
+    let entries = r.disk_read_entries + r.memory_read_entries + r.write_entries;
+    assert!(
+        entries <= SAFE_DEPTH + 8,
+        "touched {entries} entries for a chain of {SAFE_DEPTH}"
+    );
+    // Pinned: the walk is read-only, so registering writes only what a
+    // registration without a predecessor writes.
+    assert_eq!(r.write_entries, 2);
+}
 // ---- TTL policy (#671) ----
 
 #[test]

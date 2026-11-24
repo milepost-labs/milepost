@@ -17,6 +17,23 @@ const MAINNET_ENV = {
   VITE_MAINNET_POLICY_ID: 'CPOLICY',
 };
 
+describe('the values written out in network.ts', () => {
+  // network.ts avoids importing the SDK and the bindings so the landing page
+  // doesn't load them. These checks are what keep its copies honest.
+  it('match the SDK passphrases and every binding deployment', () => {
+    const testnet = resolveNetwork({});
+    expect(testnet.passphrase).toBe(Networks.TESTNET);
+    expect(testnet.passphrase).toBe(registryNetworks.testnet.networkPassphrase);
+    expect(testnet.contracts).toEqual({
+      registry: registryNetworks.testnet.contractId,
+      attest: attestNetworks.testnet.contractId,
+      record: recordNetworks.testnet.contractId,
+      policy: policyNetworks.testnet.contractId,
+    });
+    expect(resolveNetwork(MAINNET_ENV).passphrase).toBe(Networks.PUBLIC);
+  });
+});
+
 describe('testnet (the default)', () => {
   it('uses what the app used before, when nothing is set', () => {
     const config = resolveNetwork({});

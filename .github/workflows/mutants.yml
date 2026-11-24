@@ -15,6 +15,11 @@ on:
     - cron: "0 4 * * 1"
   workflow_dispatch:
 
+# Read-only by default. Artifact upload and download need no repository
+# permission, so nothing here needs more than reading the code.
+permissions:
+  contents: read
+
 env:
   CARGO_TERM_COLOR: always
 
@@ -24,7 +29,7 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 120
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
           fetch-depth: 0
       # scripts/mutants.sh builds the wasm the registry and record tests import
@@ -34,7 +39,7 @@ jobs:
           targets: wasm32v1-none
       - uses: Swatinem/rust-cache@v2
       # A prebuilt binary; `cargo install cargo-mutants` compiles for minutes.
-      - uses: taiki-e/install-action@v2
+      - uses: taiki-e/install-action@fe3acb53a98b62c772db35de75ce0e4595e7ca8c # v2
         with:
           tool: cargo-mutants
 
@@ -48,7 +53,7 @@ jobs:
       - name: Mutate changed lines
         run: ./scripts/mutants.sh --jobs 2 --in-diff "$RUNNER_TEMP/pr.diff"
 
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         if: always()
         with:
           name: mutants-changed-lines
@@ -79,7 +84,7 @@ jobs:
       - name: Mutate shard ${{ matrix.shard }} of 8
         run: ./scripts/mutants.sh --jobs 2 --shard ${{ matrix.shard }}/8
 
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         if: always()
         with:
           name: mutants-shard-${{ matrix.shard }}
@@ -90,8 +95,8 @@ jobs:
     if: always() && github.event_name != 'pull_request'
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v7
-      - uses: actions/download-artifact@v4
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
         with:
           pattern: mutants-shard-*
           path: shards

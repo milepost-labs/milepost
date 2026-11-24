@@ -2174,9 +2174,9 @@ fn batch_release_rejects_oversize() {
     f.client.allow_payee(&school);
     f.client.finalize(&recipient, &school, &Mode::Direct);
 
-    // MAX_PAYEE_BATCH is 50, so 51 should fail
+    // One past MAX_RELEASE_BATCH is refused before any proof is looked at.
     let mut uids = Vec::new(&f.env);
-    for _ in 0..=MAX_PAYEE_BATCH {
+    for _ in 0..=MAX_RELEASE_BATCH {
         uids.push_back(proof(&f, &recipient, 1));
     }
     assert_eq!(
@@ -2185,25 +2185,22 @@ fn batch_release_rejects_oversize() {
     );
 }
 
-/// The bound is inclusive: a batch of exactly `MAX_PAYEE_BATCH` proofs is not
-/// refused as too large.
+/// The bound is inclusive: a batch of exactly `MAX_RELEASE_BATCH` proofs is not
+/// refused as too large. Cost is covered by the worst-case test at the end of
+/// this file.
 #[test]
 fn batch_release_accepts_the_maximum_size() {
-    let f = setup_with(2, 3, MAX_PAYEE_BATCH);
+    let f = setup_with(2, 3, MAX_RELEASE_BATCH);
     let recipient = Address::generate(&f.env);
     let school = Address::generate(&f.env);
     award_to(&f, &recipient, &school, &5_000);
 
     let mut uids = Vec::new(&f.env);
-    for n in 0..MAX_PAYEE_BATCH {
+    for n in 0..MAX_RELEASE_BATCH {
         uids.push_back(proof(&f, &recipient, n as u8));
     }
-    // Fifty tranches exceed both the CPU budget and the event data one
-    // transaction may carry on the network, so a batch this size is here for
-    // the size check only. What a batch costs is a separate question from
-    // where the bound sits.
+    // The setup above spent the environment's running budget.
     f.env.cost_estimate().budget().reset_unlimited();
-    f.env.cost_estimate().disable_resource_limits();
     assert_eq!(
         f.client.release_batch(&recipient, &uids, &f.verifier),
         5_000
@@ -5334,6 +5331,89 @@ fn keeping_an_entry_alive_publishes_the_subject() {
     );
 }
 
+// ---- worst-case cost against the network's per-transaction limits ----
+
+/// Worst case for `release_batch`: an award with `MAX_RELEASE_BATCH` tranches
+/// left, that many valid attestations from the trusted verifier, all released
+/// in one call. The cap is lower than `MAX_PAYEE_BATCH` (50) because fifty
+/// tranches measured 62,588 event bytes against a 16,384 limit. The award is in `Restricted` mode, so every tranche
+/// also consults the policy contract (`is_installed`) before it pays the
+/// wallet, and credits standing on `record`. Each tranche therefore costs an
+/// attestation `verify`, a policy call, a token transfer, a standing credit and
+/// two events, and the batch repeats that for every tranche in one transaction.
+///
+/// Run with `--nocapture` to see the measured figures.
+#[test]
+fn release_batch_worst_case_stays_within_network_limits() {
+    let f = setup_with(2, 3, MAX_RELEASE_BATCH);
+    let recipient = Address::generate(&f.env);
+    let wallet = Address::generate(&f.env);
+    f.client.contribute(&funded_donor(&f, 100_000), &100_000);
+    f.client.apply(&recipient, &5_000, &hash(&f.env, 1));
+    to_review(&f);
+    for i in 0..f.client.get_config().quorum {
+        f.client
+            .review(&f.reviewers.get(i).unwrap(), &recipient, &5_000);
+    }
+    f.client.finalize(&recipient, &wallet, &Mode::Restricted);
+    f.policy.install(&wallet);
+
+    let mut uids = Vec::new(&f.env);
+    for n in 0..MAX_RELEASE_BATCH {
+        uids.push_back(proof(&f, &recipient, n as u8));
+    }
+    assert_eq!(uids.len(), MAX_RELEASE_BATCH);
+
+    // Measure the real figures rather than trip the SDK's own enforcement, so
+    // an overrun fails below with the numbers instead of a bare host error.
+    f.env.cost_estimate().disable_resource_limits();
+    f.env.cost_estimate().budget().reset_unlimited();
+    assert_eq!(
+        f.client.release_batch(&recipient, &uids, &f.verifier),
+        5_000
+    );
+    milepost_test_utils::assert_within_network_limits!(
+        "release_batch (MAX_RELEASE_BATCH tranches, Restricted)",
+        f.env
+    );
+
+    assert_eq!(f.token.balance(&wallet), 5_000);
+    assert_eq!(
+        f.client.get_award(&recipient).tranches_released,
+        MAX_RELEASE_BATCH
+    );
+}
+
+/// Worst case for `finalize`: `MAX_QUORUM` (16) reviewer votes, so the median
+/// is read out of the longest vote list the contract allows, and a `Direct`
+/// award, which adds the verified-payee lookup. Only the `finalize` call is
+/// measured.
+///
+/// Run with `--nocapture` to see the measured figures.
+#[test]
+fn finalize_worst_case_stays_within_network_limits() {
+    let f = setup(MAX_QUORUM, MAX_QUORUM);
+    let recipient = Address::generate(&f.env);
+    let payee = Address::generate(&f.env);
+    f.client.contribute(&funded_donor(&f, 100_000), &100_000);
+    f.client.apply(&recipient, &900, &hash(&f.env, 1));
+    to_review(&f);
+    // Distinct amounts, voted in descending order, so every vote is inserted
+    // at the front and the stored list is as far from arrival order as it gets.
+    for i in 0..MAX_QUORUM {
+        f.client
+            .review(&f.reviewers.get(i).unwrap(), &recipient, &(900 - i as i128));
+    }
+    f.client.allow_payee(&payee);
+
+    f.env.cost_estimate().disable_resource_limits();
+    f.env.cost_estimate().budget().reset_unlimited();
+    let award = f.client.finalize(&recipient, &payee, &Mode::Direct);
+    milepost_test_utils::assert_within_network_limits!("finalize (16 votes, Direct)", f.env);
+
+    assert_eq!(award.mode, Mode::Direct);
+    assert!(award.granted > 0);
+}
 // ---- TTL policy per write path ----
 
 fn persistent_ttl(f: &Fixture, key: &Key) -> u32 {

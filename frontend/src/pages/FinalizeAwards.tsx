@@ -13,7 +13,7 @@ import { formatFigure, shortId } from '../lib/programmeView';
 import { useProgrammeAsset } from '../hooks/useProgrammeAsset';
 import { FIXTURE_PROGRAMMES, chainFor, isSampleProgrammeId } from '../fixtures/programmes';
 import { samplesEnabled } from '../lib/samples';
-import { FIXTURE_REVIEW_APPLICATIONS } from '../fixtures/finalizeFixtures';
+import { FIXTURE_REVIEW_APPLICATIONS, FIXTURE_REVIEW_PROGRAMME_ID } from '../fixtures/finalizeFixtures';
 import { awardFromVotes } from '../lib/awardRule';
 import { Button, Field, Notice, PageHead, PhaseBadge, SampleTag, Select } from '../components/ui';
 import { ErrorPanel } from '../components/state/AsyncStates';
@@ -22,9 +22,6 @@ import { ProgrammeParamNotice } from '../components/programme/ProgrammeParamNoti
 import { ChainRow, SampleRow, type RowContext, type RowFacts } from '../components/finalize/FinalizeRows';
 import { FinalizeSheet, type FinalizeTarget } from '../components/finalize/FinalizeSheet';
 import './FinalizeAwards.css';
-
-/** The sample programme whose applications stand in for the unwired list. */
-const SAMPLE_REVIEW_ID = 'CCOIACASOVO3ZQLXWWJFGZAU3Y545AGPXLBP4NYHYD77RDCBPXRVZ37C';
 
 interface ProgrammeOption {
   id: string;
@@ -94,7 +91,7 @@ export const FinalizeAwards = () => {
     chosen ??
     linkedProgrammeId ??
     programmes.find((p) => !p.sample)?.id ??
-    (samplesEnabled() ? SAMPLE_REVIEW_ID : null);
+    (samplesEnabled() ? FIXTURE_REVIEW_PROGRAMME_ID : null);
   const selected = programmes.find((p) => p.id === selectedId) ?? {
     id: selectedId ?? '',
     name: null,
@@ -139,7 +136,7 @@ export const FinalizeAwards = () => {
   const awarded = sample ? BigInt(chain.awarded) + sampleAwarded : (grantedRead.data ?? null);
   const left = budget !== null && awarded !== null ? budget - awarded : null;
 
-  const sampleList = sample && selected.id === SAMPLE_REVIEW_ID ? [...sampleRows.entries()] : [];
+  const sampleList = sample && selected.id === FIXTURE_REVIEW_PROGRAMME_ID ? [...sampleRows.entries()] : [];
   const pendingSampleTotal = sampleList.reduce((sum, [, facts]) => {
     const a = !facts.finalized ? awardFromVotes(facts.votes, quorum) : null;
     return sum + (a ?? 0n);

@@ -6,6 +6,7 @@ import { useSoroban } from '../../context/useSoroban';
 import { useWallet } from '../../context/useWallet';
 import { phaseLabel, useTransaction } from '../../hooks/useTransaction';
 import { useContractRead, useContractResult } from '../../hooks/useContractRead';
+import { useProgrammePaused } from '../../hooks/useProgrammePaused';
 import { useProgrammeBalance, type ProgrammeBalanceStatus } from '../../hooks/useProgrammeBalance';
 import { NETWORK } from '../../config/network';
 import { samplesEnabled } from '../../lib/samples';
@@ -30,10 +31,11 @@ import {
   type TxReceipt,
 } from '../../lib/fundingTx';
 import type { Phase } from '../../lib/phaseGate';
+import { PAUSED_REASON } from '../../lib/paused';
 import { shortId, type DirectoryProgramme } from '../../lib/programmeView';
 import { useProgrammeAsset } from '../../hooks/useProgrammeAsset';
 import { TxDone, TxFailed, TxPending } from '../state/TxStatus';
-import { AmountField, Button, CopyButton, Modal, Notice, Receipt, SampleTag, Select, TxExplorerLink } from '../ui';
+import { AmountField, Button, CopyButton, DisabledReason, Modal, Notice, Receipt, SampleTag, Select, TxExplorerLink } from '../ui';
 import { restoreFromAssembled } from '../../lib/restore';
 import './ContributeSheet.css';
 
@@ -155,7 +157,10 @@ export function ContributeSheet({
     value !== null && terms.contributed !== null && terms.contributed + value > 0n
       ? (value * BPS_DENOMINATOR) / (terms.contributed + value)
       : null;
-  const canReview = Boolean(programme && !blocked && value !== null);
+  // A paused programme refuses contributions (`Paused`, 39), so say so here
+  // instead of letting the signature fail. Refunds are not affected.
+  const pausedState = useProgrammePaused(programme && !programme.sample ? programmeAt(programme.id) : null);
+  const canReview = Boolean(programme && !blocked && !pausedState.paused && value !== null);
 
   // A declined signature is a choice, not a failure: it returns to Confirm.
   const declined = tx.error !== null && !isFailure(tx.error);
@@ -217,6 +222,10 @@ export function ContributeSheet({
       refuse(explainCode('program', 2));
       return;
     }
+    if (pausedState.paused) {
+      refuse(explainCode('program', 39));
+      return;
+    }
 
     setStep('outcome');
     await tx.send(async () => {
@@ -257,7 +266,7 @@ export function ContributeSheet({
   };
 
   const programmeHref = programme ? `/programme/${encodeURIComponent(programme.id)}` : '/directory';
-  const phaseOk = check.status === 'read' && check.phase === 'Open';
+  const phaseOk = check.status === 'read' && check.phase === 'Open' && !pausedState.paused;
   const title = view === 'done' ? 'Receipt' : view === 'confirm' ? 'Confirm' : 'Fund this programme';
 
   return (
@@ -325,9 +334,15 @@ export function ContributeSheet({
             </dl>
             <p className="contribute__aside">Network fee: shown by Freighter before you sign, paid by you in XLM.</p>
 
-            <Button fullWidth disabled={!canReview} onClick={toConfirm}>
+            <Button
+              fullWidth
+              disabled={!canReview}
+              aria-describedby={pausedState.paused ? 'contribute-paused-why' : undefined}
+              onClick={toConfirm}
+            >
               Review contribution
             </Button>
+            {pausedState.paused && <DisabledReason id="contribute-paused-why">{PAUSED_REASON}</DisabledReason>}
           </>
         )}
 
@@ -344,6 +359,7 @@ export function ContributeSheet({
               ) : (
                 <Notice tone="warn">{contributeBlockedReason(check.phase)}</Notice>
               ))}
+            {pausedState.paused && <Notice tone="warn">{PAUSED_REASON}</Notice>}
             {check.status === 'failed' && (
               <Notice tone="warn">Couldn't read the phase on-chain. {check.error.message}</Notice>
             )}

@@ -1,8 +1,7 @@
-import type { ReactElement } from "react";
+import type { ComponentType, ReactElement } from "react";
 import { Suspense } from "react";
 import { BrowserRouter as Router, Routes, Route } from "react-router-dom";
 import { ThemeProvider } from "./context/ThemeContext";
-import { SorobanProvider } from "./context/SorobanContext";
 import { WalletProvider } from "./context/WalletContext";
 import { Layout } from "./components/layout/Layout";
 import { Skeleton } from "./components/state/AsyncStates";
@@ -10,6 +9,25 @@ import { Home } from "./pages/Home";
 import { ErrorBoundary } from "./components/ErrorBoundary";
 import { APP_ROUTES } from "./routes";
 import { lazyWithRetry } from "./lib/lazyWithRetry";
+
+/**
+ * An app route that reads the chain: its page and the contract clients are
+ * separate chunks, fetched together when the route is first opened. The clients
+ * (and the Stellar SDK behind them) are not mounted at the root, so the landing
+ * page, which only reads the index's JSON, loads none of it. Navigating from
+ * `/` to an app route costs one parallel fetch, not two in a row.
+ */
+function inSoroban(load: () => Promise<{ default: ComponentType }>) {
+  return lazyWithRetry(async () => {
+    const [{ SorobanProvider }, { default: Page }] = await Promise.all([import("./context/SorobanContext"), load()]);
+    const InSoroban = () => (
+      <SorobanProvider>
+        <Page />
+      </SorobanProvider>
+    );
+    return { default: InSoroban };
+  });
+}
 
 // Route chunks load on navigation, not up front. The shell (providers,
 // layout) and the landing page (`Home`, the most-visited route and the one
@@ -21,71 +39,71 @@ import { lazyWithRetry } from "./lib/lazyWithRetry";
 // tab's route chunks 404 against the old build's file hashes. This recovers
 // with one automatic reload instead of leaving the raw import error to hit
 // `ErrorBoundary` as an ordinary crash.
-const ProgrammeDirectory = lazyWithRetry(() =>
+const ProgrammeDirectory = inSoroban(() =>
   import("./pages/ProgrammeDirectory").then((m) => ({ default: m.ProgrammeDirectory })),
 );
-const ProgrammeDetail = lazyWithRetry(() =>
+const ProgrammeDetail = inSoroban(() =>
   import("./pages/ProgrammeDetail").then((m) => ({ default: m.ProgrammeDetail })),
 );
-const FunderDashboard = lazyWithRetry(() =>
+const FunderDashboard = inSoroban(() =>
   import("./pages/FunderDashboard").then((m) => ({ default: m.FunderDashboard })),
 );
-const ReceiptLookup = lazyWithRetry(() =>
+const ReceiptLookup = inSoroban(() =>
   import("./pages/ReceiptLookup").then((m) => ({ default: m.ReceiptLookup })),
 );
-const ProposeProgramme = lazyWithRetry(() =>
+const ProposeProgramme = inSoroban(() =>
   import("./pages/ProposeProgramme").then((m) => ({ default: m.ProposeProgramme })),
 );
-const RecipientDashboard = lazyWithRetry(() =>
+const RecipientDashboard = inSoroban(() =>
   import("./pages/RecipientDashboard").then((m) => ({ default: m.RecipientDashboard })),
 );
-const Standing = lazyWithRetry(() => import("./pages/Standing").then((m) => ({ default: m.Standing })));
-const AwardProgress = lazyWithRetry(() =>
+const Standing = inSoroban(() => import("./pages/Standing").then((m) => ({ default: m.Standing })));
+const AwardProgress = inSoroban(() =>
   import("./pages/AwardProgress").then((m) => ({ default: m.AwardProgress })),
 );
-const ApplicationTimeline = lazyWithRetry(() =>
+const ApplicationTimeline = inSoroban(() =>
   import("./pages/ApplicationTimeline").then((m) => ({ default: m.ApplicationTimeline })),
 );
-const AwardDetail = lazyWithRetry(() =>
+const AwardDetail = inSoroban(() =>
   import("./pages/AwardDetail").then((m) => ({ default: m.AwardDetail })),
 );
-const VerifierDashboard = lazyWithRetry(() =>
+const VerifierDashboard = inSoroban(() =>
   import("./pages/VerifierDashboard").then((m) => ({ default: m.VerifierDashboard })),
 );
-const FinalizeAwards = lazyWithRetry(() =>
+const FinalizeAwards = inSoroban(() =>
   import("./pages/FinalizeAwards").then((m) => ({ default: m.FinalizeAwards })),
 );
-const SpendPolicy = lazyWithRetry(() =>
+const SpendPolicy = inSoroban(() =>
   import("./pages/SpendPolicy").then((m) => ({ default: m.SpendPolicy })),
 );
-const RegistryAdmin = lazyWithRetry(() =>
+const RegistryAdmin = inSoroban(() =>
   import("./pages/RegistryAdmin").then((m) => ({ default: m.RegistryAdmin })),
 );
-const AdminStanding = lazyWithRetry(() =>
+const AdminStanding = inSoroban(() =>
   import("./pages/AdminStanding").then((m) => ({ default: m.AdminStanding })),
 );
-const AttestationLookup = lazyWithRetry(() =>
+const AttestationLookup = inSoroban(() =>
   import("./pages/AttestationLookup").then((m) => ({ default: m.AttestationLookup })),
 );
-const RegisterSchema = lazyWithRetry(() =>
+const RegisterSchema = inSoroban(() =>
   import("./pages/RegisterSchema").then((m) => ({ default: m.RegisterSchema })),
 );
-const Keepalive = lazyWithRetry(() =>
+const Keepalive = inSoroban(() =>
   import("./pages/Keepalive").then((m) => ({ default: m.Keepalive })),
 );
-const PayeeManagement = lazyWithRetry(() =>
+const PayeeManagement = inSoroban(() =>
   import("./pages/PayeeManagement").then((m) => ({ default: m.PayeeManagement })),
 );
-const IndexStatus = lazyWithRetry(() =>
+const IndexStatus = inSoroban(() =>
   import("./pages/IndexStatus").then((m) => ({ default: m.IndexStatus })),
 );
-const AboutDeployment = lazyWithRetry(() =>
+const AboutDeployment = inSoroban(() =>
   import("./pages/AboutDeployment").then((m) => ({ default: m.AboutDeployment })),
 );
 // Development builds only. Vite replaces `import.meta.env.DEV` with `false` in a
 // production build, so this import and its chunk are dropped entirely.
 const ComponentGallery = import.meta.env.DEV
-  ? lazyWithRetry(() =>
+  ? inSoroban(() =>
       import("./pages/dev/ComponentGallery").then((m) => ({ default: m.ComponentGallery })),
     )
   : null;
@@ -134,36 +152,34 @@ function App() {
   return (
     <ThemeProvider>
       <WalletProvider>
-        <SorobanProvider>
-          <ErrorBoundary>
-            <Router>
-              <Suspense fallback={<RouteFallback />}>
-                <Routes>
-                  <Route path="/" element={<Layout />}>
-                    <Route index element={<Home />} />
-                    {APP_ROUTES.map(({ path }) => (
-                      <Route
-                        key={path}
-                        path={path.slice(1)}
-                        element={ROUTE_ELEMENTS[path]}
-                      />
-                    ))}
+        <ErrorBoundary>
+          <Router>
+            <Suspense fallback={<RouteFallback />}>
+              <Routes>
+                <Route path="/" element={<Layout />}>
+                  <Route index element={<Home />} />
+                  {APP_ROUTES.map(({ path }) => (
                     <Route
-                      path="programme/:programmeId"
-                      element={<ProgrammeDetail />}
+                      key={path}
+                      path={path.slice(1)}
+                      element={ROUTE_ELEMENTS[path]}
                     />
-                    <Route
-                      path="award/:programmeId/:recipient"
-                      element={<AwardDetail />}
-                    />
-                    {ComponentGallery && <Route path="dev/ui" element={<ComponentGallery />} />}
-                    <Route path="*" element={<NotFound />} />
-                  </Route>
-                </Routes>
-              </Suspense>
-            </Router>
-          </ErrorBoundary>
-        </SorobanProvider>
+                  ))}
+                  <Route
+                    path="programme/:programmeId"
+                    element={<ProgrammeDetail />}
+                  />
+                  <Route
+                    path="award/:programmeId/:recipient"
+                    element={<AwardDetail />}
+                  />
+                  {ComponentGallery && <Route path="dev/ui" element={<ComponentGallery />} />}
+                  <Route path="*" element={<NotFound />} />
+                </Route>
+              </Routes>
+            </Suspense>
+          </Router>
+        </ErrorBoundary>
       </WalletProvider>
     </ThemeProvider>
   );

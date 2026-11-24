@@ -5,6 +5,7 @@ import { Buffer } from 'buffer';
 import { ProgrammeDetail } from './ProgrammeDetail';
 import { canonicalize, metadataHash } from '../lib/metadata';
 import { FIXTURE_PROGRAMMES } from '../fixtures/programmes';
+import { forgetPaused } from '../lib/paused';
 
 // Issue #342 — the programme detail page. One page shows a real programme's
 // on-chain reads (phase, money, config, registry), what each phase lets you do,
@@ -149,6 +150,8 @@ function renderProgramme(path: string) {
 const moneyReady = () => screen.findByText('Budget 7,920.00 XLM');
 
 beforeEach(() => {
+  // The paused flag is cached per programme for a few seconds; start each test fresh.
+  forgetPaused();
   // The description store answers "none here" unless a test says otherwise.
   vi.stubGlobal('fetch', async () => new Response('{}', { status: 404 }));
   programme = makeProgramme();

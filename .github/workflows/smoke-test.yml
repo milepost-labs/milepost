@@ -6,6 +6,9 @@ on:
     - cron: "0 6 * * *"
   workflow_dispatch:
 
+permissions:
+  contents: read
+
 # Never block PRs. This only runs on a schedule or manual trigger.
 # Failures report which step broke and with what error.
 env:
@@ -17,11 +20,14 @@ jobs:
     # Don't cancel on failure — we always want the diagnostic output.
     continue-on-error: true
     steps:
-      - uses: actions/checkout@v7
-      - uses: dtolnay/rust-toolchain@stable
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+      - uses: dtolnay/rust-toolchain@39008827e6b4319a349e9a42dfc90579dd25f1ca # stable (branch, pinned at this commit)
         with:
           targets: wasm32v1-none
-      - uses: stellar/stellar-cli@v28.0.0
+      - uses: stellar/stellar-cli@300aaf69ab100536678bdb641428b06f06b318ea # v28.0.0
+        # Pinned by commit, so the action cannot read the CLI version from its ref.
+        with:
+          version: 28.0.0
 
       - name: Build wasm
         run: stellar contract build

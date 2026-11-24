@@ -223,6 +223,21 @@
   --money-fc-empty-border: 1px solid GrayText;
   --money-fc-empty-bg: Canvas;
 
+  /* Forced-colors tokens for the other meaning-in-a-background marks: the mode
+     pill's four-bar meter, the programme phase bar and the highlighted stat
+     tile. As with the money squares, filled is a Highlight fill and empty is a
+     thin GrayText outline on Canvas, so the two differ in shape as well as
+     colour. The tile uses an inset outline, which does not change its size. */
+  --fc-filled-bg: Highlight;
+  --fc-filled-border: 1px solid Highlight;
+  --fc-empty-bg: Canvas;
+  --fc-empty-border: 1px solid GrayText;
+  --fc-current-border: 2px solid Highlight;
+  --fc-tile-outline: 1px solid GrayText;
+  --fc-tile-outline-offset: -1px;
+  --fc-tile-highlight-outline: 3px double Highlight;
+  --fc-tile-highlight-outline-offset: -3px;
+
   /* Money is drawn as a grid of squares, never a bar. Twenty across reads as a
      single band on a wide screen, but at 360px that leaves each square around
      11px — too small to read as a square at all. Narrow viewports halve the
@@ -285,7 +300,10 @@
   --danger: #f2867c;
   --danger-soft: #3a1a17;
   --focus: #f3c443;
-  --refund-strong: var(--money-refundable);
+  /* Lighter than money-refundable: that orange is 4.0 to 4.3:1 on the dark
+     tinted grounds (accent-soft, warning-soft), under AA for text. This step is
+     at least 5.1:1 on every dark ground. */
+  --refund-strong: #f19670;
   --warning: var(--signal);
   --warning-strong: var(--signal);
   --shadow-1: 0 1px 2px rgba(0, 0, 0, 0.4), 0 6px 20px rgba(0, 0, 0, 0.35);
@@ -390,5 +408,56 @@ h1[tabindex="-1"]:focus {
   [data-money-state="empty"] {
     border: var(--money-fc-empty-border) !important;
     background-color: var(--money-fc-empty-bg) !important;
+  }
+}
+
+/* The mode pill meter, the phase bar and the highlighted stat tile in
+   forced-colors mode. Each carried its meaning in a background colour alone,
+   which Windows high contrast replaces, so filled and empty looked the same. */
+@media (forced-colors: active) {
+  .ui-mode-pill__meter i {
+    box-sizing: border-box;
+    forced-color-adjust: none;
+    opacity: 1;
+    border: var(--fc-empty-border);
+    background: var(--fc-empty-bg);
+  }
+
+  .ui-mode-pill__meter i.is-filled {
+    border: var(--fc-filled-border);
+    background: var(--fc-filled-bg);
+  }
+
+  .phase-bar__step::before {
+    box-sizing: border-box;
+    forced-color-adjust: none;
+    border: var(--fc-empty-border);
+    background: var(--fc-empty-bg);
+  }
+
+  .phase-bar__step--done::before {
+    border: var(--fc-filled-border);
+    background: var(--fc-filled-bg);
+  }
+
+  /* The current step: a heavier Highlight edge, filled as far as the phase
+     has run, so it reads apart from both passed and upcoming steps. */
+  .phase-bar__step--now::before {
+    border: var(--fc-current-border);
+    background: linear-gradient(
+      90deg,
+      var(--fc-filled-bg) var(--phase-progress, 100%),
+      var(--fc-empty-bg) var(--phase-progress, 100%)
+    );
+  }
+
+  .ui-stat-tile {
+    outline: var(--fc-tile-outline);
+    outline-offset: var(--fc-tile-outline-offset);
+  }
+
+  .ui-stat-tile--highlight {
+    outline: var(--fc-tile-highlight-outline);
+    outline-offset: var(--fc-tile-highlight-outline-offset);
   }
 }

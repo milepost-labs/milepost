@@ -1,5 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { fireEvent, render, screen, waitFor, within } from '@testing-library/react';
+import { MemoryRouter } from 'react-router-dom';
 import { ProtocolConfigCard } from './ProtocolConfigCard';
 
 // Issue #342 — the registry admin's edit controls now live on the same view
@@ -48,7 +49,11 @@ vi.mock('../../context/useSoroban', () => ({
 }));
 
 function renderCard() {
-  return render(<ProtocolConfigCard />);
+  return render(
+    <MemoryRouter>
+      <ProtocolConfigCard />
+    </MemoryRouter>,
+  );
 }
 
 describe('ProtocolConfigCard', () => {
@@ -62,6 +67,11 @@ describe('ProtocolConfigCard', () => {
     renderCard();
 
     await screen.findByText('2.5%');
+    expect(screen.getByTitle(baseConfig.treasury)).toBeTruthy();
+    expect(screen.getByTitle(baseConfig.attest)).toBeTruthy();
+    expect(screen.getByTitle(baseConfig.record)).toBeTruthy();
+    expect(screen.getByTitle(baseConfig.policy)).toBeTruthy();
+    expect(screen.getAllByTitle(baseConfig.admin).length).toBeGreaterThan(0);
     expect(screen.queryByRole('button', { name: 'Set fee' })).toBeNull();
     expect(screen.getByText(/read-only mode/i)).toBeTruthy();
   });
@@ -99,6 +109,23 @@ describe('ProtocolConfigCard', () => {
     await waitFor(() => expect(registry.set_fee).toHaveBeenCalledWith({ fee_bps: 400 }));
     // get_config is called once on mount and again by the refetch on success.
     await waitFor(() => expect(registry.get_config).toHaveBeenCalledTimes(2));
+  });
+
+  it('sets valid treasury and policy addresses', async () => {
+    mocks.address = ADMIN;
+    renderCard();
+
+    fireEvent.change(await screen.findByLabelText('Treasury address'), {
+      target: { value: 'GTREASURYNEWEXAMPLEEXAMPLEEXAMPLEEXAMPLEEXAMPLEEXAMPLEEX' },
+    });
+    fireEvent.click(screen.getByRole('button', { name: 'Set treasury' }));
+    await waitFor(() => expect(registry.set_treasury).toHaveBeenCalled());
+
+    fireEvent.change(screen.getByLabelText('Default policy contract'), {
+      target: { value: baseConfig.policy },
+    });
+    fireEvent.click(screen.getByRole('button', { name: 'Set policy' }));
+    await waitFor(() => expect(registry.set_policy).toHaveBeenCalled());
   });
 
   it('rejects an invalid treasury address inline', async () => {
@@ -145,5 +172,14 @@ describe('ProtocolConfigCard', () => {
     // unresolved read is a loading state — never sample rows.
     expect(screen.getByText('Loading protocol config')).toBeTruthy();
     expect(screen.queryByRole('button', { name: 'Set fee' })).toBeNull();
+  });
+
+  it('shows a registry read failure with a retry action', async () => {
+    registry.get_config.mockRejectedValue(new Error('Failed to fetch'));
+    renderCard();
+
+    expect(await screen.findByText('Could not reach the network.')).toBeTruthy();
+    expect(screen.getByRole('button', { name: 'Try again' })).toBeTruthy();
+    expect(screen.queryByText('2.5%')).toBeNull();
   });
 });

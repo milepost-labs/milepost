@@ -2,6 +2,7 @@ export { useContractRead, useContractResult, type ContractRead } from './useCont
 export { useTransaction, phaseLabel, type TransactionPhase, type TransactionState } from './useTransaction';
 export { useAnnounceTransaction } from './useAnnounceTransaction';
 export { useProgramme } from './useProgramme';
+export { useProgrammePaused, type ProgrammePaused } from './useProgrammePaused';
 export { useProgrammeParam, type ProgrammeParamState } from './useProgrammeParam';
 export { useIndexedList, type IndexedRead } from './useIndexedList';
 export { useBalances, type BalancesState } from './useBalances';

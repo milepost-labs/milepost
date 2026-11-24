@@ -4,6 +4,13 @@ import { MemoryRouter } from 'react-router-dom';
 import { Buffer } from 'buffer';
 import { DEMO_PROGRAMME_ID } from '../context/sorobanStore';
 import { VerifierDashboard } from './VerifierDashboard';
+import {
+  expectFocusInSheet,
+  expectFocusReturnedTo,
+  expectSheetAccessible,
+  focusAndClick,
+  SHEET_TEST_TIMEOUT,
+} from '../test/sheetAccessibility';
 
 // `/verifiers`: claims reach the review panel from a recipient's request link
 // or the verifier's own lookup, and either way every fact is read from the
@@ -474,4 +481,104 @@ describe('VerifierDashboard — reviewer voting', () => {
     await waitFor(() => expect(within(summary).getByText('1 in Review now')).toBeTruthy());
     expect(await screen.findByRole('option', { name: 'Workforce skills grants, cohort 3 · Review' })).toBeTruthy();
   });
+});
+
+// #696. The vote and attest sheets open on signing: their form and confirm
+// are on the page (the amount field; the facts and the "I checked this myself"
+// box), so the sheet itself has pending, done and failed steps.
+describe('VerifierDashboard — sheets, accessible in every step (#696)', () => {
+  function held<T>() {
+    let settle: (value: T) => void = () => {};
+    let fail: (error: Error) => void = () => {};
+    const sendable = {
+      signAndSend: vi.fn(
+        () =>
+          new Promise<{ result: { unwrap: () => T } }>((resolve, reject) => {
+            settle = (value) => resolve({ result: { unwrap: () => value } });
+            fail = reject;
+          }),
+      ),
+    };
+    return { sendable, settle: (value: T) => settle(value), fail: (error: Error) => fail(error) };
+  }
+
+  async function openAttest() {
+    renderPage(requestUrl());
+    await screen.findByRole('heading', { name: 'Land prepared for planting' });
+    fireEvent.click(screen.getByLabelText(/I checked this myself/));
+    await waitFor(() => expect(signButton().disabled).toBe(false));
+    const opener = signButton();
+    focusAndClick(opener, fireEvent.click);
+    await screen.findAllByText(/^Signing for tranche 2/);
+    return opener;
+  }
+
+  it('attest: pending and done', async () => {
+    const write = held<Buffer>();
+    attest.attest.mockReturnValue(write.sendable);
+    await openAttest();
+    expectFocusInSheet('pending');
+    await expectSheetAccessible('pending');
+
+    write.settle(SIGNED_UID);
+    expect(await screen.findByRole('heading', { name: 'Attestation signed', level: 3 })).toBeTruthy();
+    await expectSheetAccessible('done');
+  }, SHEET_TEST_TIMEOUT);
+
+  it('attest: failed, and Escape returns focus to the sign button', async () => {
+    const write = held<Buffer>();
+    attest.attest.mockReturnValue(write.sendable);
+    const opener = await openAttest();
+    write.fail(new Error('HostError: Error(Contract, #1)'));
+    expect(await screen.findByText('Attestation not signed')).toBeTruthy();
+    expectFocusInSheet('failed');
+    await expectSheetAccessible('failed');
+
+    fireEvent.keyDown(document, { key: 'Escape' });
+    expect(screen.queryByRole('dialog')).toBeNull();
+    expectFocusReturnedTo(opener);
+  }, SHEET_TEST_TIMEOUT);
+
+  async function openVote(write: ReturnType<typeof held<undefined>>) {
+    client(DEMO_PROGRAMME_ID).review.mockReturnValue(write.sendable);
+    renderPage();
+    const rows = await screen.findByRole('list', { name: 'Applicants' });
+    const row = (await within(rows).findByText('Sunrise cooperative')).closest('li')!;
+    await within(row).findByText(/Asked for 500 XLM/);
+    await screen.findByText('Reviewer wallet');
+    const opener = within(row).getByRole('button', { name: 'Vote' }) as HTMLButtonElement;
+    await waitFor(() => expect(opener.disabled).toBe(false));
+    fireEvent.change(within(row).getByLabelText(/Amount to approve/), { target: { value: '250' } });
+    focusAndClick(opener, fireEvent.click);
+    await screen.findByRole('dialog', { name: 'Cast your vote' });
+    return opener;
+  }
+
+  it('vote: pending and done, with focus back on Vote', async () => {
+    const write = held<undefined>();
+    const opener = await openVote(write);
+    expectFocusInSheet('pending');
+    await expectSheetAccessible('pending');
+
+    write.settle(undefined);
+    expect(await screen.findByText('Review vote submitted')).toBeTruthy();
+    await expectSheetAccessible('done');
+
+    fireEvent.click(screen.getByRole('button', { name: 'Done' }));
+    expect(screen.queryByRole('dialog')).toBeNull();
+    expectFocusReturnedTo(opener);
+  }, SHEET_TEST_TIMEOUT);
+
+  it('vote: failed', async () => {
+    const write = held<undefined>();
+    const opener = await openVote(write);
+    write.fail(new Error('HostError: Error(Contract, #2)'));
+    expect(await screen.findByText('Vote not recorded')).toBeTruthy();
+    expectFocusInSheet('failed');
+    await expectSheetAccessible('failed');
+
+    fireEvent.keyDown(document, { key: 'Escape' });
+    expect(screen.queryByRole('dialog')).toBeNull();
+    expectFocusReturnedTo(opener);
+  }, SHEET_TEST_TIMEOUT);
 });

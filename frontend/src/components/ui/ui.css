@@ -589,7 +589,7 @@
   line-height: var(--leading-body);
 }
 .ui-notice > svg { width: 19px; height: 19px; flex: none; margin-top: 1px; }
-.ui-notice__body { min-width: 0; }
+.ui-notice__body { min-width: 0; overflow-wrap: anywhere; }
 .ui-notice__body strong, .ui-notice__body b { font-weight: var(--weight-semibold); }
 .ui-notice--info { background: var(--bg-sunken); }
 .ui-notice--info > svg { color: var(--ink-muted); }

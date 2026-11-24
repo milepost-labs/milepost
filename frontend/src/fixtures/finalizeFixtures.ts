@@ -1,3 +1,5 @@
+import { SAMPLES_IN_BUILD } from './inBuild';
+
 /**
  * Stand-in data for the finalize screen (`/finalize`).
  *
@@ -28,8 +30,16 @@ export interface FixtureReviewApplication {
 }
 
 /**
+ * The Review-phase sample programme whose applications stand in for the
+ * unwired list. Null in a build without samples (mainnet).
+ */
+export const FIXTURE_REVIEW_PROGRAMME_ID: string | null = SAMPLES_IN_BUILD
+  ? 'CCOIACASOVO3ZQLXWWJFGZAU3Y545AGPXLBP4NYHYD77RDCBPXRVZ37C'
+  : null;
+
+/**
  * Applications in review for the Review-phase sample programme
- * (`CCOIACASOVO3ZQLXWWJFGZAU3Y545AGPXLBP4NYHYD77RDCBPXRVZ37C`). Shaped like
+ * (`FIXTURE_REVIEW_PROGRAMME_ID`). Shaped like
  * `program.get_application` + votes.
  */
 export const FIXTURE_REVIEW_APPLICATIONS: FixtureReviewApplication[] = [

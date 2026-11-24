@@ -93,6 +93,13 @@ describe('parseStandingHistory', () => {
     expect(badRoot.ok).toBe(false);
     if (!badRoot.ok) expect(badRoot.error).toMatch(/"root"/);
   });
+
+  it('rejects a JSON object instead of a history array', () => {
+    expect(parseStandingHistory(JSON.stringify({ programme: PROGRAMME }))).toEqual({
+      ok: false,
+      error: 'Expected a JSON array of credit entries.',
+    });
+  });
 });
 
 describe('verifyStandingHistory', () => {
@@ -127,5 +134,32 @@ describe('verifyStandingHistory', () => {
       nextRoot,
     );
     expect(verdict.kind).toBe('mismatch');
+  });
+
+  it('accepts an empty history when the on-chain root is genesis', async () => {
+    await expect(verifyStandingHistory([], Buffer.alloc(32), nextRoot)).resolves.toEqual({
+      kind: 'genesis',
+    });
+  });
+
+  it('detects entries pasted in a different order', async () => {
+    const entries = await buildHistory(['1000', '2500']);
+    const onChain = Buffer.from(entries[entries.length - 1].root!, 'hex');
+    const reordered = [entries[1], entries[0]];
+
+    const verdict = await verifyStandingHistory(reordered, onChain, nextRoot);
+    expect(verdict.kind).toBe('mismatch');
+    if (verdict.kind === 'mismatch') expect(verdict.firstBadIndex).toBe(0);
+  });
+
+  it('reports a final root mismatch when entries have no recorded roots', async () => {
+    const entries = await buildHistory(['1000']).then((history) => history.map((entry) => {
+      const withoutRoot = { ...entry };
+      delete withoutRoot.root;
+      return withoutRoot;
+    }));
+    const verdict = await verifyStandingHistory(entries, Buffer.alloc(32), nextRoot);
+    expect(verdict.kind).toBe('mismatch');
+    if (verdict.kind === 'mismatch') expect(verdict.claimedRoot).toBeNull();
   });
 });

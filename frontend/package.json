@@ -10,6 +10,7 @@
     "check:design-system": "node scripts/check-design-system.mjs",
     "test:design-system": "node --test scripts/check-design-system.test.mjs",
     "check:sample-tags": "node scripts/check-sample-tags.mjs",
+    "check:mainnet-build": "bash scripts/check-mainnet-build.sh",
     "test:sample-tags": "node --test scripts/check-sample-tags.test.mjs",
     "check:csp": "node scripts/check-csp.mjs",
     "test:csp": "node --test scripts/check-csp.test.mjs",
@@ -18,7 +19,9 @@
     "test:coverage": "vitest run --coverage",
     "preview": "vite preview",
     "screenshots": "playwright test",
-    "screenshots:update": "playwright test --update-snapshots"
+    "screenshots:update": "playwright test --update-snapshots",
+    "build:browser": "tsc -b && VITE_FIXTURES=1 VITE_INDEXER_URL=/index vite build --outDir dist-signed-in && VITE_INDEXER_URL=/index vite build --outDir dist-signed-out",
+    "test:browser": "playwright test --config playwright.browser.config.ts"
   },
   "dependencies": {
     "@milepost/attest": "^0.1.1",

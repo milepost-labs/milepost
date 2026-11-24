@@ -5,6 +5,7 @@ import { useAnnouncer } from '../../context/useAnnouncer';
 import { useSoroban } from '../../context/useSoroban';
 import { useWallet } from '../../context/useWallet';
 import { useTransaction } from '../../hooks/useTransaction';
+import { useProgrammePaused } from '../../hooks/useProgrammePaused';
 import { RELEASE_BATCH_ERRORS, type Explained } from '../../lib/errors';
 import { formatIn } from '../../lib/funding';
 import { receiptOf } from '../../lib/fundingTx';
@@ -19,7 +20,7 @@ import {
 import { restoreFromAssembled } from '../../lib/restore';
 import type { ReleaseReply } from '../../lib/verifyLinks';
 import { TxSheet } from '../state/TxSheet';
-import { Button, CopyButton, Field, Modal, Notice, TextArea, TxExplorerLink } from '../ui';
+import { Button, CopyButton, DisabledReason, Field, Modal, Notice, TextArea, TxExplorerLink } from '../ui';
 import './AwardCard.css';
 
 interface BatchReleased {
@@ -110,7 +111,9 @@ export function ReleaseBatchSheet({
   const attester = attesterInput.trim();
   const attesterOk = /^G[A-Z2-7]{55}$/.test(attester);
   const attesterError = attester.length > 0 && !attesterOk ? 'Enter a valid Stellar address (starts with G).' : '';
-  const canContinue = check.ready && attesterOk;
+  // Paused stops `release_batch` (`Paused`, 39): say so before anything is signed.
+  const pausedState = useProgrammePaused(programmeAt(award.programmeId));
+  const canContinue = check.ready && attesterOk && !pausedState.paused;
 
   const prepare = () => {
     const uids = check.uids;
@@ -219,9 +222,15 @@ export function ReleaseBatchSheet({
             autoComplete="off"
             spellCheck={false}
           />
-          <Button fullWidth disabled={!canContinue} onClick={start}>
+          <Button
+            fullWidth
+            disabled={!canContinue}
+            aria-describedby={pausedState.reason ? 'batch-paused-why' : undefined}
+            onClick={start}
+          >
             Continue
           </Button>
+          {pausedState.reason && <DisabledReason id="batch-paused-why">{pausedState.reason}</DisabledReason>}
         </div>
       </Modal>
     );
