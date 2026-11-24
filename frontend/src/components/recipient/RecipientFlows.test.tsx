@@ -7,6 +7,7 @@ import { ApplyForm } from './ApplyForm';
 import { ApplicationTimelineList } from './ApplicationTimelineList';
 import type { RecipientAwardFixture, RecipientApplicationFixture } from '../../fixtures/recipientFixtures';
 import { explainCode } from '../../lib/errors';
+import { forgetPaused } from '../../lib/paused';
 import {
   expectFocusInSheet,
   expectFocusReturnedTo,
@@ -139,12 +140,28 @@ function makeProgramme(opts: {
       result: { unwrap: () => freshAward },
     })),
     get_config: vi.fn(async () => ({
-      result: { unwrap: () => ({ minimum_award: opts.minimumAward ?? 0n }) },
+      // Release is gated on the window: keep it open well past the test clock.
+      result: { unwrap: () => ({ minimum_award: opts.minimumAward ?? 0n, release_deadline: 4_102_444_800n }) },
     })),
+    // The release sheet reads these before it offers a signature.
+    options: { contractId: 'CPROGRAMMEUNDERTEST' },
+    is_paused: vi.fn(async () => ({ result: false })),
+    is_verifier: vi.fn(async () => ({ result: true })),
+    is_spent: vi.fn(async () => ({ result: false })),
   };
 }
 
 let programme = makeProgramme();
+
+/**
+ * The release sheet reads the phase, window, paused flag and proof before it
+ * enables signing, so wait for the button the way a person would.
+ */
+async function signAndRelease() {
+  const button = screen.getByRole('button', { name: /sign and release/i }) as HTMLButtonElement;
+  await waitFor(() => expect(button.disabled).toBe(false));
+  fireEvent.click(button);
+}
 
 vi.mock('../../context/useSoroban', () => {
   // Built once: reads key on the clients, and the real context is memoized.
@@ -155,6 +172,7 @@ vi.mock('../../context/useSoroban', () => {
 describe('Recipient Issues Suite (#272, #273, #274, #275)', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    forgetPaused();
     walletMocks.address = RECIPIENT;
     programme = makeProgramme();
   });
@@ -260,7 +278,7 @@ describe('Recipient Issues Suite (#272, #273, #274, #275)', () => {
       // "Where this goes" confirmation is shown before signing.
       expect(screen.getByText(/Where this goes:/i)).toBeDefined();
 
-      fireEvent.click(screen.getByRole('button', { name: /sign and release/i }));
+      await signAndRelease();
 
       expect(await screen.findByText('Tranche 2 released')).toBeDefined();
       expect(programme.release).toHaveBeenCalledWith({
@@ -316,7 +334,7 @@ describe('Recipient Issues Suite (#272, #273, #274, #275)', () => {
       expect((screen.getByLabelText(/attestation id/i) as HTMLInputElement).value).toBe(ATTEST_HEX);
       expect((screen.getByLabelText(/attester address/i) as HTMLInputElement).value).toBe(ATTESTER);
 
-      fireEvent.click(screen.getByRole('button', { name: /sign and release/i }));
+      await signAndRelease();
       expect(await screen.findByText('Tranche 2 released')).toBeDefined();
       expect(programme.release).toHaveBeenCalledWith({
         recipient: RECIPIENT,
@@ -341,7 +359,7 @@ describe('Recipient Issues Suite (#272, #273, #274, #275)', () => {
       fireEvent.change(screen.getByLabelText(/attester address/i), {
         target: { value: ATTESTER },
       });
-      fireEvent.click(screen.getByRole('button', { name: /sign and release/i }));
+      await signAndRelease();
 
       const err22 = explainCode('program', 22);
       expect(await screen.findByText(err22.message)).toBeDefined();
@@ -364,7 +382,7 @@ describe('Recipient Issues Suite (#272, #273, #274, #275)', () => {
       fireEvent.change(screen.getByLabelText(/attester address/i), {
         target: { value: ATTESTER },
       });
-      fireEvent.click(screen.getByRole('button', { name: /sign and release/i }));
+      await signAndRelease();
 
       const err21 = explainCode('program', 21);
       expect(await screen.findByText(err21.message)).toBeDefined();
@@ -390,7 +408,7 @@ describe('Recipient Issues Suite (#272, #273, #274, #275)', () => {
       fireEvent.change(screen.getByLabelText(/attester address/i), {
         target: { value: ATTESTER },
       });
-      fireEvent.click(screen.getByRole('button', { name: /sign and release/i }));
+      await signAndRelease();
 
       const err34 = explainCode('program', 34);
       expect(await screen.findByText(err34.message)).toBeDefined();
@@ -1153,7 +1171,8 @@ describe('Recipient Issues Suite (#272, #273, #274, #275)', () => {
 
       expect(await screen.findByText(/Application withdrawn/i)).toBeDefined();
       expect(programme.withdraw).toHaveBeenCalledWith({ applicant: RECIPIENT });
-      expect(mockAnnounce).toHaveBeenCalledWith('Application withdrawn');
+      // The receipt can render a tick before the announcement lands.
+      await waitFor(() => expect(mockAnnounce).toHaveBeenCalledWith('Application withdrawn'));
 
       // Withdraw button is gone once confirmed.
       expect(screen.queryByRole('button', { name: /withdraw application/i })).toBeNull();
@@ -1259,7 +1278,7 @@ describe('AwardCard release sheet — accessibility in every step (#696)', () =>
     openAndFill();
     await expectSheetAccessible('form');
 
-    fireEvent.click(screen.getByRole('button', { name: /sign and release/i }));
+    await signAndRelease();
     await screen.findByText('Releasing tranche 2');
     await expectSheetAccessible('pending');
 
@@ -1271,7 +1290,7 @@ describe('AwardCard release sheet — accessibility in every step (#696)', () =>
   it('failed, and Escape returns focus to the opener', async () => {
     programme = makeProgramme({ releaseResult: 'invalidAttestation' });
     const opener = openAndFill();
-    fireEvent.click(screen.getByRole('button', { name: /sign and release/i }));
+    await signAndRelease();
     expect(await screen.findByText('Tranche not released')).toBeTruthy();
     expectFocusInSheet('failed');
     await expectSheetAccessible('failed');
