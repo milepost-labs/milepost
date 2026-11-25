@@ -67,7 +67,7 @@ Every public function across the five Milepost contracts, with who must authoris
 ## Notes
 
 - **Permissionless functions** (`finalize`, `release`, `sweep`, `verify`, `read_standing`, `read_config`) require no authorisation by design — this is documented, not a bug.
-- **Pause blocks** the forward money-path (`contribute`, `apply`, `review`, `finalize`, `spend`, `release`) but not reads, refunds, or sweeps.
+- **Pause blocks** the forward money-path (`contribute`, `apply`, `review`, `finalize`, `spend`, `release`, `release_batch`) but not reads, refunds, or sweeps.
 - All error codes are defined in each contract's `errors.rs` and mapped to human messages in `frontend/src/lib/errors.ts`.
 
 ---

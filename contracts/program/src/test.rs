@@ -57,6 +57,12 @@ fn setup(quorum: u32, reviewer_count: u32) -> Fixture {
 }
 
 fn setup_with(quorum: u32, reviewer_count: u32, tranches: u32) -> Fixture {
+    setup_full(quorum, reviewer_count, tranches, FEE_BPS)
+}
+
+/// The one place a programme fixture is built. The narrower `setup*` helpers
+/// fix the arguments most tests do not care about.
+fn setup_full(quorum: u32, reviewer_count: u32, tranches: u32, fee_bps: u32) -> Fixture {
     let env = milepost_test_utils::new_test_env();
 
     let asset = milepost_test_utils::register_token(&env);
@@ -101,7 +107,7 @@ fn setup_with(quorum: u32, reviewer_count: u32, tranches: u32) -> Fixture {
                 record: record_id,
                 policy: policy_id,
                 schema: schema.clone(),
-                fee_bps: FEE_BPS,
+                fee_bps,
                 apply_deadline: APPLY_DEADLINE,
                 review_deadline: REVIEW_DEADLINE,
                 release_deadline: RELEASE_DEADLINE,
@@ -142,79 +148,7 @@ fn funded_donor(f: &Fixture, amount: i128) -> Address {
 }
 
 fn setup_with_fee(quorum: u32, reviewer_count: u32, fee_bps: u32) -> Fixture {
-    let env = milepost_test_utils::new_test_env();
-
-    let asset = milepost_test_utils::register_token(&env);
-    let token = TokenClient::new(&env, &asset);
-    let mint = StellarAssetClient::new(&env, &asset);
-
-    let creator = Address::generate(&env);
-    let treasury = Address::generate(&env);
-    let verifier = Address::generate(&env);
-
-    let attest_id = env.register(milepost_attest::Attest, ());
-    let attest = milepost_attest::AttestClient::new(&env, &attest_id);
-    let schema = attest.register_schema(
-        &verifier,
-        &String::from_str(&env, "milestone-met:v1"),
-        &true,
-        &true,
-        &None,
-    );
-
-    let policy_id = env.register(policy::FakePolicy, ());
-    let policy = policy::FakePolicyClient::new(&env, &policy_id);
-
-    let record_id = env.register(milepost_record::Record, (creator.clone(),));
-    let record = milepost_record::RecordClient::new(&env, &record_id);
-
-    let mut reviewers = Vec::new(&env);
-    for _ in 0..reviewer_count {
-        reviewers.push_back(Address::generate(&env));
-    }
-
-    let id = env.register(
-        Programme,
-        (
-            ProgrammeConfig {
-                creator: creator.clone(),
-                token: asset,
-                treasury: treasury.clone(),
-                attest: attest_id,
-                record: record_id,
-                policy: policy_id,
-                schema: schema.clone(),
-                fee_bps,
-                apply_deadline: APPLY_DEADLINE,
-                review_deadline: REVIEW_DEADLINE,
-                release_deadline: RELEASE_DEADLINE,
-                sweep_deadline: SWEEP_DEADLINE,
-                quorum,
-                tranches: 3,
-                minimum_award: 0,
-                metadata_hash: BytesN::from_array(&env, &[7u8; 32]),
-            },
-            reviewers.clone(),
-            vec![&env, verifier.clone()],
-        ),
-    );
-    record.add_writer(&id);
-
-    let client = ProgrammeClient::new(&env, &id);
-    Fixture {
-        env: env.clone(),
-        client,
-        token,
-        mint,
-        attest,
-        policy,
-        record,
-        schema,
-        creator,
-        treasury,
-        reviewers,
-        verifier,
-    }
+    setup_full(quorum, reviewer_count, 3, fee_bps)
 }
 
 fn to_review(f: &Fixture) {
@@ -619,31 +553,126 @@ fn only_registered_reviewers_may_review() {
     );
 }
 
-/// A pause has to actually stop things, or it is worse than no pause at all —
-/// a creator would believe the programme was contained while it kept taking
-/// money.
-#[test]
-fn pausing_blocks_the_money_path() {
-    let f = setup(2, 3);
-    let donor = funded_donor(&f, 10_000);
-    f.client.contribute(&donor, &1_000);
+/// Everything a refused call could have moved: the contract's balance, the
+/// running totals, and the recipient's escrow. Equal before and after a
+/// `Paused` refusal, or the refusal was not really a refusal.
+fn money_snapshot(f: &Fixture, recipient: &Address) -> [i128; 5] {
+    [
+        f.token.balance(&f.client.address),
+        f.client.total_contributed(),
+        f.client.total_granted(),
+        f.client.total_released(),
+        f.client.allocation_of(recipient),
+    ]
+}
 
+/// Pause, check `call` is refused with `Paused` and changes nothing, then
+/// unpause and check the *same* call goes through.
+///
+/// Running the identical call on both sides is what makes the refusal mean
+/// something: the arguments are known to be good, so `Paused` cannot be
+/// standing in for some other error the call would have hit anyway.
+fn refused_while_paused_then_works<T: core::fmt::Debug, C: core::fmt::Debug>(
+    f: &Fixture,
+    name: &str,
+    watched: &Address,
+    call: impl Fn() -> Result<Result<T, C>, Result<Error, soroban_sdk::InvokeError>>,
+) -> T {
     f.client.pause();
     assert!(f.client.is_paused());
-
+    let before = money_snapshot(f, watched);
     assert_eq!(
-        f.client.try_contribute(&donor, &1_000),
-        Err(Ok(Error::Paused))
+        call().map(|_| ()).map_err(|e| e.ok()),
+        Err(Some(Error::Paused)),
+        "{name} must be refused while paused"
     );
-    let applicant = Address::generate(&f.env);
     assert_eq!(
-        f.client.try_apply(&applicant, &500, &hash(&f.env, 1)),
-        Err(Ok(Error::Paused))
+        money_snapshot(f, watched),
+        before,
+        "{name} moved money while paused"
     );
 
     f.client.unpause();
     assert!(!f.client.is_paused());
-    f.client.contribute(&donor, &1_000);
+    match call() {
+        Ok(Ok(value)) => value,
+        other => panic!("{name} must work again after unpause, got {other:?}"),
+    }
+}
+
+/// A pause has to actually stop things, or it is worse than no pause at all —
+/// a creator would believe the programme was contained while it kept taking
+/// money.
+///
+/// Walks one programme through every call `pause` documents as covered —
+/// `contribute`, `apply`, `review`, `finalize`, `spend`, `release` and
+/// `release_batch` — at the point in its life where that call would otherwise
+/// succeed, and checks each one twice: refused with `Paused` while paused, and
+/// accepted once unpaused. Dropping `require_not_paused` from any of the seven
+/// fails here.
+#[test]
+fn pausing_blocks_the_money_path() {
+    let f = setup(2, 3);
+    let donor = funded_donor(&f, 10_000);
+    // Allocated, so `spend` has escrow to direct and `release` keeps it in the
+    // contract where the snapshot can see it.
+    let allocated = Address::generate(&f.env);
+    // Direct, with a payee, for `release_batch`.
+    let direct = Address::generate(&f.env);
+    let school = Address::generate(&f.env);
+    f.client.allow_payee(&school);
+
+    // ---- Open phase ----
+    refused_while_paused_then_works(&f, "contribute", &allocated, || {
+        f.client.try_contribute(&donor, &10_000)
+    });
+    assert_eq!(f.client.total_contributed(), 10_000);
+
+    refused_while_paused_then_works(&f, "apply", &allocated, || {
+        f.client.try_apply(&allocated, &900, &hash(&f.env, 1))
+    });
+    assert!(f.client.try_get_application(&allocated).is_ok());
+    f.client.apply(&direct, &900, &hash(&f.env, 2));
+
+    // ---- Review phase ----
+    to_review(&f);
+    let r0 = f.reviewers.get(0).unwrap();
+    let r1 = f.reviewers.get(1).unwrap();
+    refused_while_paused_then_works(&f, "review", &allocated, || {
+        f.client.try_review(&r0, &allocated, &900)
+    });
+    assert_eq!(f.client.get_application(&allocated).votes.len(), 1);
+    f.client.review(&r1, &allocated, &900);
+    f.client.review(&r0, &direct, &900);
+    f.client.review(&r1, &direct, &900);
+
+    let award = refused_while_paused_then_works(&f, "finalize", &allocated, || {
+        f.client
+            .try_finalize(&allocated, &allocated, &Mode::Allocated)
+    });
+    assert_eq!(award.granted, 900);
+    f.client.finalize(&direct, &school, &Mode::Direct);
+
+    // ---- Release window ----
+    let first = proof(&f, &allocated, 1);
+    let released = refused_while_paused_then_works(&f, "release", &allocated, || {
+        f.client.try_release(&allocated, &first, &f.verifier)
+    });
+    assert_eq!(released, 300);
+    assert_eq!(f.client.allocation_of(&allocated), 300);
+
+    let uids = vec![&f.env, proof(&f, &direct, 2), proof(&f, &direct, 3)];
+    let batch = refused_while_paused_then_works(&f, "release_batch", &allocated, || {
+        f.client.try_release_batch(&direct, &uids, &f.verifier)
+    });
+    assert_eq!(batch, 600);
+    assert_eq!(f.token.balance(&school), 600);
+
+    let remaining = refused_while_paused_then_works(&f, "spend", &allocated, || {
+        f.client.try_spend(&allocated, &school, &100)
+    });
+    assert_eq!(remaining, 200);
+    assert_eq!(f.token.balance(&school), 700);
 }
 
 /// Refunds are deliberately outside the pause: trapping donors' money during
@@ -5719,3 +5748,8 @@ fn keepalive_bumps_instance_and_all_subject_entries_but_not_verifier() {
     f.client.keepalive(&f.verifier);
     assert!(persistent_ttl(&f, &Key::Verifier(f.verifier.clone())) < BUMP_THRESHOLD);
 }
+
+// Property suites large enough to want a file of their own. Children of this
+// module, so they share its fixture rather than growing a second one.
+mod allocated_properties;
+mod conservation_properties;

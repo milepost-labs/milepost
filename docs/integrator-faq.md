@@ -294,7 +294,7 @@ which states the general principle the other contracts follow too.
 
 ---
 
-### Why does `pause` block `contribute`/`apply`/`review`/`finalize`/`spend`/`release` but not `refund`/`sweep_fee`/`sweep_unclaimed`?
+### Why does `pause` block `contribute`/`apply`/`review`/`finalize`/`spend`/`release`/`release_batch` but not `refund`/`sweep_fee`/`sweep_unclaimed`?
 
 Because pause is an emergency containment tool, and trapping donor money
 during an emergency would be strictly worse than whatever the pause is

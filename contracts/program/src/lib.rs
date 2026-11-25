@@ -72,7 +72,8 @@
 //! ## Pause and deadlines: the clock keeps running
 //!
 //! Pausing halts the forward money-path (`contribute`, `apply`, `review`,
-//! `finalize`, `spend`, `release`) but **does not pause the ledger clock**.
+//! `finalize`, `spend`, `release`, `release_batch`) but **does not pause the
+//! ledger clock**.
 //! The programme deadlines (`apply_deadline`, `review_deadline`,
 //! `release_deadline`, `sweep_deadline`) are absolute wall-clock timestamps and
 //! continue to tick down during a pause.
@@ -1468,6 +1469,9 @@ impl Programme {
         uids: Vec<BytesN<32>>,
         attester: Address,
     ) -> Result<i128, Error> {
+        // First, as in `release`: a paused programme refuses the call before
+        // anything else is looked at, whatever else is wrong with it.
+        Self::require_not_paused(&env)?;
         if uids.len() > MAX_RELEASE_BATCH {
             return Err(Error::BatchTooLarge);
         }
@@ -1906,7 +1910,7 @@ impl Programme {
     /// Emergency pause: temporarily halt money-forward operations while leaving
     /// refund and sweep paths open so donors are never trapped.
     ///
-    /// Covers: contribute, apply, review, finalize, spend, release.
+    /// Covers: contribute, apply, review, finalize, spend, release, release_batch.
     /// Does NOT cover: refund, refund_partial, sweep_fee, sweep_unclaimed
     /// (donors must always be able to reclaim their money, even during an emergency).
     ///
