@@ -811,3 +811,192 @@ fn policy_check_bumps_policy_but_not_payee_or_installed() {
     assert!(ttl(&Key::Payee(f.wallet.clone(), f.school.clone())) < BUMP_THRESHOLD);
     assert!(ttl(&Key::Installed(f.wallet)) < BUMP_THRESHOLD);
 }
+
+// ---- worst-case cost against the network's per-transaction limits ----
+
+/// A stand-in for a passkey-kit smart wallet, cut down to the one thing this
+/// measurement needs: its `__check_auth` hands every authorisation context to
+/// the policy signer, exactly as the real wallet does for a `Policy` signer.
+/// The host then runs `policy__` as part of the wallet's own authorisation,
+/// which is where it runs on mainnet, rather than as a free-standing call
+/// with auth mocked away.
+mod wallet {
+    use crate::PolicySpendClient;
+    use smart_wallet_interface::types::SignerKey;
+    use soroban_sdk::{
+        auth::{Context, CustomAccountInterface},
+        contract, contractimpl, contracttype,
+        crypto::Hash,
+        Address, Env, Vec,
+    };
+
+    #[contracttype]
+    enum Key {
+        Policy,
+    }
+
+    #[contract]
+    pub struct FakeWallet;
+
+    #[contractimpl]
+    impl FakeWallet {
+        pub fn __constructor(env: Env, policy: Address) {
+            env.storage().instance().set(&Key::Policy, &policy);
+        }
+    }
+
+    #[contractimpl]
+    impl CustomAccountInterface for FakeWallet {
+        type Signature = ();
+        type Error = soroban_sdk::Error;
+
+        fn __check_auth(
+            env: Env,
+            _signature_payload: Hash<32>,
+            _signature: (),
+            auth_contexts: Vec<Context>,
+        ) -> Result<(), soroban_sdk::Error> {
+            let policy: Address = env.storage().instance().get(&Key::Policy).unwrap();
+            PolicySpendClient::new(&env, &policy).policy__(
+                &env.current_contract_address(),
+                &SignerKey::Policy(policy.clone()),
+                &auth_contexts,
+            );
+            Ok(())
+        }
+    }
+}
+
+/// Payees on the worst-case wallet's allowlist. Payees are stored one entry per
+/// `(wallet, payee)`, so the length of the list does not enter `policy__`'s
+/// footprint — the check is one keyed lookup whatever the length. The list is
+/// filled anyway, and the transfer goes to the last payee added, so the figures
+/// are for a wallet a steward has actually used.
+const WORST_CASE_PAYEES: u32 = 64;
+
+/// A token transfer out of `wallet`, signed for by `wallet` itself, so the
+/// host calls the wallet's `__check_auth` rather than taking a mocked auth.
+fn wallet_signed_transfer(
+    env: &Env,
+    token: &Address,
+    wallet: &Address,
+    to: &Address,
+    amount: i128,
+    nonce: i64,
+) -> soroban_sdk::xdr::SorobanAuthorizationEntry {
+    extern crate std;
+    use soroban_sdk::xdr::{
+        InvokeContractArgs, ScAddress, ScSymbol, ScVal, SorobanAddressCredentials,
+        SorobanAuthorizationEntry, SorobanAuthorizedFunction, SorobanAuthorizedInvocation,
+        SorobanCredentials,
+    };
+
+    let args: std::vec::Vec<ScVal> = std::vec![wallet.into(), to.into(), ScVal::from(amount),];
+    SorobanAuthorizationEntry {
+        credentials: SorobanCredentials::Address(SorobanAddressCredentials {
+            address: ScAddress::from(wallet),
+            nonce,
+            signature_expiration_ledger: env.ledger().sequence() + 100,
+            signature: ScVal::Void,
+        }),
+        root_invocation: SorobanAuthorizedInvocation {
+            function: SorobanAuthorizedFunction::ContractFn(InvokeContractArgs {
+                contract_address: ScAddress::from(token),
+                function_name: ScSymbol("transfer".try_into().unwrap()),
+                args: args.try_into().unwrap(),
+            }),
+            sub_invocations: std::vec![].try_into().unwrap(),
+        },
+    }
+}
+
+/// Worst case for `policy__`, the check that runs inside every `Restricted`
+/// payment's authorisation:
+///
+/// - **Inside a smart wallet's auth.** The wallet is a custom account whose
+///   `__check_auth` calls `policy__`, and the measured call is a real token
+///   `transfer` out of it under `set_auths`, so the figures include the
+///   transfer, the wallet's check, and the policy check inside it — what the
+///   network bills a recipient's payment for.
+/// - **A full payee list**, [`WORST_CASE_PAYEES`] long, paying the last one.
+/// - **A transfer at the cap**, so the cap comparison is at its boundary.
+/// - **A lapsed window** with an earlier spend in it, so `policy__` takes the
+///   reset branch as well as recording the new spend and bumping the policy
+///   entry's TTL — every write it can make.
+///
+/// Run with `--nocapture` to see the measured figures.
+#[test]
+fn policy_check_worst_case_stays_within_network_limits() {
+    use soroban_sdk::token::{StellarAssetClient, TokenClient};
+
+    let env = milepost_test_utils::new_test_env();
+    let policy_id = env.register(PolicySpend, ());
+    let policy = PolicySpendClient::new(&env, &policy_id);
+    let wallet = env.register(wallet::FakeWallet, (policy_id.clone(),));
+    let steward = Address::generate(&env);
+    let token = milepost_test_utils::register_token(&env);
+
+    policy.configure(&steward, &wallet, &token, &CAP, &PERIOD);
+    let mut payee = Address::generate(&env);
+    for _ in 0..WORST_CASE_PAYEES {
+        payee = Address::generate(&env);
+        policy.allow_payee(&steward, &wallet, &payee);
+    }
+    policy.install(&wallet);
+    StellarAssetClient::new(&env, &token).mint(&wallet, &(CAP * 2));
+
+    // Spend part of the first window, then let it lapse.
+    policy.policy__(
+        &wallet,
+        &SignerKey::Policy(policy_id.clone()),
+        &vec![
+            &env,
+            Context::Contract(ContractContext {
+                contract: token.clone(),
+                fn_name: Symbol::new(&env, "transfer"),
+                args: vec![
+                    &env,
+                    wallet.into_val(&env),
+                    payee.into_val(&env),
+                    400i128.into_val(&env),
+                ],
+            }),
+        ],
+    );
+    assert_eq!(policy.get_policy(&wallet).spent, 400);
+    env.ledger().set_timestamp(PERIOD + 1);
+
+    // From here on, auth is real: the wallet must approve the transfer through
+    // its own `__check_auth`, which defers to the policy.
+    env.set_auths(&[wallet_signed_transfer(
+        &env, &token, &wallet, &payee, CAP, 1,
+    )]);
+    env.cost_estimate().disable_resource_limits();
+    env.cost_estimate().budget().reset_unlimited();
+    TokenClient::new(&env, &token).transfer(&wallet, &payee, &CAP);
+    milepost_test_utils::assert_within_network_limits!(
+        "policy__ (inside wallet auth, 64 payees, transfer at cap, lapsed window)",
+        env
+    );
+
+    // The policy really ran inside that authorisation: the window was reset and
+    // the whole cap is now spent.
+    assert_eq!(TokenClient::new(&env, &token).balance(&payee), CAP);
+    let after = policy.get_policy(&wallet);
+    assert_eq!(after.spent, CAP);
+    assert_eq!(after.window_start, PERIOD + 1);
+
+    // And it is what decides. One more stroop through the same path is
+    // refused; the identical transfer goes through once the window lapses, so
+    // the refusal was the cap and not the way the authorisation was built.
+    let token_client = TokenClient::new(&env, &token);
+    env.set_auths(&[wallet_signed_transfer(&env, &token, &wallet, &payee, 1, 2)]);
+    assert!(token_client.try_transfer(&wallet, &payee, &1).is_err());
+    assert_eq!(policy.get_policy(&wallet).spent, CAP);
+
+    env.ledger().set_timestamp(2 * PERIOD + 2);
+    env.set_auths(&[wallet_signed_transfer(&env, &token, &wallet, &payee, 1, 3)]);
+    token_client.transfer(&wallet, &payee, &1);
+    assert_eq!(policy.get_policy(&wallet).spent, 1);
+    assert_eq!(token_client.balance(&payee), CAP + 1);
+}
