@@ -57,6 +57,12 @@ fn setup(quorum: u32, reviewer_count: u32) -> Fixture {
 }
 
 fn setup_with(quorum: u32, reviewer_count: u32, tranches: u32) -> Fixture {
+    setup_full(quorum, reviewer_count, tranches, FEE_BPS)
+}
+
+/// The one place a programme fixture is built. The narrower `setup*` helpers
+/// fix the arguments most tests do not care about.
+fn setup_full(quorum: u32, reviewer_count: u32, tranches: u32, fee_bps: u32) -> Fixture {
     let env = milepost_test_utils::new_test_env();
 
     let asset = milepost_test_utils::register_token(&env);
@@ -101,7 +107,7 @@ fn setup_with(quorum: u32, reviewer_count: u32, tranches: u32) -> Fixture {
                 record: record_id,
                 policy: policy_id,
                 schema: schema.clone(),
-                fee_bps: FEE_BPS,
+                fee_bps,
                 apply_deadline: APPLY_DEADLINE,
                 review_deadline: REVIEW_DEADLINE,
                 release_deadline: RELEASE_DEADLINE,
@@ -142,79 +148,7 @@ fn funded_donor(f: &Fixture, amount: i128) -> Address {
 }
 
 fn setup_with_fee(quorum: u32, reviewer_count: u32, fee_bps: u32) -> Fixture {
-    let env = milepost_test_utils::new_test_env();
-
-    let asset = milepost_test_utils::register_token(&env);
-    let token = TokenClient::new(&env, &asset);
-    let mint = StellarAssetClient::new(&env, &asset);
-
-    let creator = Address::generate(&env);
-    let treasury = Address::generate(&env);
-    let verifier = Address::generate(&env);
-
-    let attest_id = env.register(milepost_attest::Attest, ());
-    let attest = milepost_attest::AttestClient::new(&env, &attest_id);
-    let schema = attest.register_schema(
-        &verifier,
-        &String::from_str(&env, "milestone-met:v1"),
-        &true,
-        &true,
-        &None,
-    );
-
-    let policy_id = env.register(policy::FakePolicy, ());
-    let policy = policy::FakePolicyClient::new(&env, &policy_id);
-
-    let record_id = env.register(milepost_record::Record, (creator.clone(),));
-    let record = milepost_record::RecordClient::new(&env, &record_id);
-
-    let mut reviewers = Vec::new(&env);
-    for _ in 0..reviewer_count {
-        reviewers.push_back(Address::generate(&env));
-    }
-
-    let id = env.register(
-        Programme,
-        (
-            ProgrammeConfig {
-                creator: creator.clone(),
-                token: asset,
-                treasury: treasury.clone(),
-                attest: attest_id,
-                record: record_id,
-                policy: policy_id,
-                schema: schema.clone(),
-                fee_bps,
-                apply_deadline: APPLY_DEADLINE,
-                review_deadline: REVIEW_DEADLINE,
-                release_deadline: RELEASE_DEADLINE,
-                sweep_deadline: SWEEP_DEADLINE,
-                quorum,
-                tranches: 3,
-                minimum_award: 0,
-                metadata_hash: BytesN::from_array(&env, &[7u8; 32]),
-            },
-            reviewers.clone(),
-            vec![&env, verifier.clone()],
-        ),
-    );
-    record.add_writer(&id);
-
-    let client = ProgrammeClient::new(&env, &id);
-    Fixture {
-        env: env.clone(),
-        client,
-        token,
-        mint,
-        attest,
-        policy,
-        record,
-        schema,
-        creator,
-        treasury,
-        reviewers,
-        verifier,
-    }
+    setup_full(quorum, reviewer_count, 3, fee_bps)
 }
 
 fn to_review(f: &Fixture) {
@@ -5818,3 +5752,4 @@ fn keepalive_bumps_instance_and_all_subject_entries_but_not_verifier() {
 // Property suites large enough to want a file of their own. Children of this
 // module, so they share its fixture rather than growing a second one.
 mod allocated_properties;
+mod conservation_properties;
