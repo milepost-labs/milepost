@@ -5814,3 +5814,7 @@ fn keepalive_bumps_instance_and_all_subject_entries_but_not_verifier() {
     f.client.keepalive(&f.verifier);
     assert!(persistent_ttl(&f, &Key::Verifier(f.verifier.clone())) < BUMP_THRESHOLD);
 }
+
+// Property suites large enough to want a file of their own. Children of this
+// module, so they share its fixture rather than growing a second one.
+mod allocated_properties;
